@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SignalState, Bias, Market, Killzone, type EdgeSetup } from '../types';
-import { useVoice } from '../context/VoiceContext';
 import { API_BASE } from '../config';
 
 const MOCK_SETUPS: EdgeSetup[] = [
@@ -51,10 +50,6 @@ export function useSetups() {
   const [setups, setSetups] = useState<EdgeSetup[]>(MOCK_SETUPS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const { speak } = useVoice();
-  const prevSetupsRef = useRef<Map<string, EdgeSetup>>(new Map());
-  const isInitialLoad = useRef(true);
 
   const fetchSetups = useCallback(async () => {
     try {
@@ -63,64 +58,6 @@ export function useSetups() {
       const data = await res.json();
       const currentList: EdgeSetup[] = data.setups || [];
       
-      const newMap = new Map<string, EdgeSetup>();
-      currentList.forEach(s => newMap.set(s.id, s));
-
-      // Skip voice alerts on initial page load
-      if (!isInitialLoad.current) {
-        // 1. Check current setups against previous state
-        for (const setup of currentList) {
-          const prev = prevSetupsRef.current.get(setup.id);
-          const biasText = setup.bias ? setup.bias.toUpperCase() : 'LONG';
-
-          if (!prev) {
-            // Brand new signal discovered
-            speak(`New Signal Discovered. ${biasText} ${setup.instrument}.`);
-          } else {
-            const prevState = prev.signal_state || prev.state;
-            const currState = setup.signal_state || setup.state;
-
-            // 2. Check for entry filled (awaiting_entry -> active)
-            if (prevState === 'awaiting_entry' && currState === 'active') {
-              speak(`Entry Triggered for ${setup.instrument}. Position Filled.`);
-            }
-
-            // 3. Check for Breakeven threshold (+1.0R reached)
-            const prevR = prev.unrealizedR ?? 0;
-            const currR = setup.unrealizedR ?? 0;
-            if (currR >= 1.0 && prevR < 1.0 && currState === 'active') {
-              speak(`Move Stop Loss to Break Even for ${setup.instrument}. Profit locked.`);
-            }
-
-            // 4. Check for resolved outcomes
-            if (prevState !== 'resolved' && currState === 'resolved') {
-              if (setup.invalidation_reason === 'tp2_hit') {
-                speak(`Take Profit 2 Reached for ${setup.instrument} in Full Profit.`);
-              } else if (setup.invalidation_reason === 'tp1_hit') {
-                speak(`Take Profit 1 Reached for ${setup.instrument} in Profit. Move Stop Loss to Break Even.`);
-              } else if (setup.invalidation_reason === 'sl_hit') {
-                speak(`Stop Loss Hit for ${setup.instrument} in Loss.`);
-              }
-            }
-
-            // 5. Check for invalidations / removals
-            if (prevState !== 'invalidated' && currState === 'invalidated') {
-              const reason = setup.invalidation_reason || '';
-              if (reason.includes('displaced')) {
-                speak(`Signal Cancelled for ${setup.instrument} due to Price Displacement.`);
-              } else if (reason.includes('expired')) {
-                speak(`Entry Expired for ${setup.instrument}.`);
-              } else {
-                speak(`Signal Invalidated for ${setup.instrument}.`);
-              }
-            }
-          }
-        }
-      } else {
-        isInitialLoad.current = false;
-      }
-
-      prevSetupsRef.current = newMap;
       setSetups(currentList);
       setError(null);
     } catch (err) {
@@ -129,7 +66,7 @@ export function useSetups() {
     } finally {
       setLoading(false);
     }
-  }, [speak]);
+  }, []);
 
   useEffect(() => {
     fetchSetups();

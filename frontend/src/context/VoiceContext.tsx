@@ -15,9 +15,13 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved !== null ? JSON.parse(saved) : true;
   });
 
-  // Pre-load system voices on mount (macOS loads them async)
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const queueRef = useRef<string[]>([]);
+  const isSpeakingRef = useRef<boolean>(false);
+  const recentSpokenRef = useRef<Map<string, number>>(new Map());
+  const watchdogTimerRef = useRef<any>(null);
 
+  // Pre-load system voices on mount
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
 
@@ -27,7 +31,6 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       console.log('[Manna Voice] Voices loaded:', voices.length);
 
-      // Prefer high-quality English voices on macOS
       const preferred = [
         'Samantha', 'Alex', 'Daniel', 'Karen', 'Moira', 'Tessa',
         'Google US English', 'Google UK English Male',
@@ -59,13 +62,24 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleVoice = () => setVoiceEnabled(prev => !prev);
 
   /**
-   * Core speak function.
-   * IMPORTANT: No cancel() before speak() — Chrome fires cancel async which kills the new utterance.
+   * Process queue sequentially so messages never overlap or lock up Chrome
    */
-  const doSpeak = useCallback((message: string) => {
+  const processQueue = useCallback(() => {
     if (!('speechSynthesis' in window)) return;
+    if (isSpeakingRef.current) return;
+    if (queueRef.current.length === 0) return;
 
-    const utterance = new SpeechSynthesisUtterance(message);
+    const nextMessage = queueRef.current.shift();
+    if (!nextMessage) return;
+
+    isSpeakingRef.current = true;
+
+    // Safety check: clear any residual stuck state in Chrome before starting new utterance
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(nextMessage);
     utterance.lang = 'en-US';
     utterance.rate = 0.95;
     utterance.pitch = 1.0;
@@ -75,33 +89,75 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       utterance.voice = selectedVoiceRef.current;
     }
 
-    utterance.onstart = () => console.log('[Manna Voice] ✅ Speaking:', message);
-    utterance.onend = () => {
-      console.log('[Manna Voice] ✅ Finished');
+    const finishCurrent = () => {
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
       (window as any).__mannaUtterance = null;
-    };
-    utterance.onerror = (e) => {
-      console.error('[Manna Voice] ❌ Error:', e.error);
-      (window as any).__mannaUtterance = null;
+      isSpeakingRef.current = false;
+      // Wait 300ms pause between sequential announcements
+      setTimeout(() => processQueue(), 300);
     };
 
-    // Prevent GC from killing the utterance mid-speech
+    utterance.onstart = () => {
+      console.log('[Manna Voice] 📢 Speaking:', nextMessage);
+    };
+
+    utterance.onend = () => {
+      console.log('[Manna Voice] ✅ Finished:', nextMessage);
+      finishCurrent();
+    };
+
+    utterance.onerror = (e) => {
+      console.error('[Manna Voice] ❌ Error speaking:', nextMessage, e.error);
+      finishCurrent();
+    };
+
+    // Watchdog timer: If Chrome fails to trigger onend/onerror within 8 seconds, force finish
+    watchdogTimerRef.current = setTimeout(() => {
+      console.warn('[Manna Voice] ⚠️ Watchdog timeout triggered, unlocking queue.');
+      finishCurrent();
+    }, 8000);
+
+    // Prevent GC from collecting utterance mid-speech
     (window as any).__mannaUtterance = utterance;
 
     window.speechSynthesis.speak(utterance);
   }, []);
 
+  /**
+   * Public speak call — deduplicates & adds to sequential queue
+   */
   const speak = useCallback((message: string, force: boolean = false) => {
     if (!voiceEnabled && !force) return;
-    console.log('[Manna Voice] speak() →', message);
-    doSpeak(message);
-  }, [voiceEnabled, doSpeak]);
+
+    const now = Date.now();
+    const lastSpokenTime = recentSpokenRef.current.get(message) || 0;
+
+    // Ignore exact duplicate messages spoken within the last 4 seconds
+    if (now - lastSpokenTime < 4000) {
+      console.log('[Manna Voice] Suppressed duplicate announcement:', message);
+      return;
+    }
+
+    recentSpokenRef.current.set(message, now);
+
+    // Clean old entries from deduplication map periodically
+    if (recentSpokenRef.current.size > 50) {
+      recentSpokenRef.current.clear();
+    }
+
+    console.log('[Manna Voice] Queued:', message);
+    queueRef.current.push(message);
+    processQueue();
+  }, [voiceEnabled, processQueue]);
 
   const testVoice = useCallback(() => {
-    console.log('[Manna Voice] Test button clicked');
+    console.log('[Manna Voice] Test voice triggered');
     setVoiceEnabled(true);
-    doSpeak('Manna Edge Markets Voice System online. Signal alerts active.');
-  }, [doSpeak]);
+    speak('Manna Edge Markets Voice System online. Signal alerts active.', true);
+  }, [speak]);
 
   return (
     <VoiceContext.Provider value={{ voiceEnabled, toggleVoice, speak, testVoice }}>
