@@ -62,14 +62,28 @@ export async function executePublishRun(
       ];
       
       for (const market of markets) {
-        const candidateInstruments = [...new Set(market.candidates.map(c => c.instrument))];
         const activeSetups = queries.getActiveSetups(market.name);
-        const activeInstruments = [...new Set(activeSetups.map(s => s.instrument))];
-        const allInstruments = [...new Set([...candidateInstruments, ...activeInstruments])];
-        
-        for (const instrument of allInstruments) {
-          const instCandidates = market.candidates.filter(c => c.instrument === instrument);
-          const existingSetup = activeSetups.find(s => s.instrument === instrument) || null;
+
+        // Build list of unique (instrument, strategy_id) keys
+        const keysSet = new Set<string>();
+        for (const c of market.candidates) {
+          const strat = c.strategy_id || 'manna_basic';
+          keysSet.add(`${c.instrument}::${strat}`);
+        }
+        for (const s of activeSetups) {
+          const strat = s.strategy_id || 'manna_basic';
+          keysSet.add(`${s.instrument}::${strat}`);
+        }
+
+        for (const key of Array.from(keysSet)) {
+          const [instrument, strategyId] = key.split('::');
+
+          const instCandidates = market.candidates.filter(
+            c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === strategyId
+          );
+          const existingSetup = activeSetups.find(
+            s => s.instrument === instrument && (s.strategy_id || 'manna_basic') === strategyId
+          ) || null;
           
           const currentPrice = getCurrentPrice(instrument);
           const candles = getLatestCandles(instrument, '15m', 20);
@@ -163,6 +177,8 @@ export async function executePublishRun(
               tradable: 1,
               conviction_score: dedupeResult.selectedCandidate.conviction_score,
               liquidity_score: dedupeResult.selectedCandidate.liquidity_score,
+              strategy_id: dedupeResult.selectedCandidate.strategy_id || 'manna_basic',
+              strategy_tier: dedupeResult.selectedCandidate.strategy_tier || 'basic',
               metadata: dedupeResult.selectedCandidate.metadata
             };
             queries.insertSetup(newSetup, market.name);
@@ -172,14 +188,15 @@ export async function executePublishRun(
         }
       }
       
-      // CONSTRAINT CHECK: Ensure max 1 active/non-superseded per instrument
+      // CONSTRAINT CHECK: Ensure max 1 active/non-superseded per (instrument + strategy)
       for (const market of markets) {
         const checkActive = queries.getActiveSetups(market.name);
         const counts: Record<string, number> = {};
         for (const s of checkActive) {
-          counts[s.instrument] = (counts[s.instrument] || 0) + 1;
-          if (counts[s.instrument] > 1) {
-            throw new Error(`Constraint violated: Multiple active setups for ${s.instrument} in ${market.name}`);
+          const key = `${s.instrument}_${s.strategy_id || 'manna_basic'}`;
+          counts[key] = (counts[key] || 0) + 1;
+          if (counts[key] > 1) {
+            throw new Error(`Constraint violated: Multiple active setups for ${key} in ${market.name}`);
           }
         }
       }
