@@ -8,7 +8,7 @@ export function startScheduler(
     onKillzoneBoundary: (kz: KillzoneInfo) => Promise<void>,
     onKillzoneMidpoint?: (kz: KillzoneInfo) => Promise<void>
 ): void {
-    // 1. Killzone Start Boundaries (02:00, 08:00, 14:00, 20:00 ET)
+    // 1. Killzone Start Boundaries (02:00, 08:00, 13:00/14:00, 20:00 ET)
     const boundaries: Array<{ cron: string; expected: Killzone }> = [
         { cron: '0 2 * * *', expected: 'london' },
         { cron: '0 8 * * *', expected: 'ny_am' },
@@ -36,19 +36,19 @@ export function startScheduler(
         scheduledTasks.push(task);
     });
 
-    // 2. Killzone Midpoint Booster Boundaries (05:00, 11:00, 17:00, 23:00 ET)
-    const midpoints: Array<{ cron: string; expected: Killzone }> = [
-        { cron: '0 5 * * *', expected: 'london' },
-        { cron: '0 11 * * *', expected: 'ny_am' },
-        { cron: '0 17 * * *', expected: 'ny_pm' },
-        { cron: '0 23 * * *', expected: 'asia' }
+    // 2. Killzone Midpoint Booster Boundaries (03:30 ET London, 09:30 ET NY AM, 14:30 ET NY PM, 21:30 ET Asia)
+    const midpoints: Array<{ cron: string; expected: Killzone; label: string }> = [
+        { cron: '30 3 * * *', expected: 'london', label: '03:30 ET (London Midpoint)' },
+        { cron: '30 9 * * *', expected: 'ny_am', label: '09:30 ET (NY AM Midpoint)' },
+        { cron: '30 14 * * *', expected: 'ny_pm', label: '14:30 ET (NY PM Midpoint)' },
+        { cron: '30 21 * * *', expected: 'asia', label: '21:30 ET (Asia Midpoint)' }
     ];
 
     midpoints.forEach(m => {
         const task = cron.schedule(m.cron, async () => {
             const now = new Date();
             const kzInfo = mapTimestampToKillzone(now);
-            console.log(`⏳ Killzone MIDPOINT boundary cron triggered for ${m.expected} at ${now.toISOString()}`);
+            console.log(`⏳ Killzone MIDPOINT boundary cron triggered for ${m.expected} (${m.label}) at ${now.toISOString()}`);
             
             if (onKillzoneMidpoint && kzInfo && kzInfo.killzone === m.expected) {
                 try {
