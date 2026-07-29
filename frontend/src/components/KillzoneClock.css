@@ -1,0 +1,74 @@
+.killzone-clock {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clock-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kz-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--gray);
+}
+
+.kz-indicator.active {
+  background-color: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s infinite;
+}
+
+.kz-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.clock-time {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-left: 2px;
+}
+
+.clock-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.clock-next-scan {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.scan-label {
+  color: var(--text-muted);
+}
+
+.scan-target {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.scan-countdown {
+  color: var(--gold);
+  font-weight: 700;
+  background: rgba(255, 215, 0, 0.12);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}

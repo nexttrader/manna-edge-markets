@@ -1,0 +1,42 @@
+.circuit-breaker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+}
+
+.cb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.circuit-breaker.ok .cb-dot {
+  background-color: var(--green);
+}
+
+.circuit-breaker.ok .cb-label {
+  color: var(--text-secondary);
+}
+
+.circuit-breaker.tripped {
+  border-color: rgba(255, 23, 68, 0.5);
+  background: var(--red-dim);
+}
+
+.circuit-breaker.tripped .cb-dot {
+  background-color: var(--red);
+  box-shadow: 0 0 10px var(--red);
+  animation: pulse 1s infinite;
+}
+
+.circuit-breaker.tripped .cb-label {
+  color: var(--red);
+  animation: pulse 1s infinite;
+}

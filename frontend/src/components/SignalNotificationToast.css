@@ -1,0 +1,207 @@
+.toast-container-global {
+  position: fixed;
+  top: 84px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.toast-card-item {
+  pointer-events: auto;
+  position: relative;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 122, 255, 0.2);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-card-item.toast-new_signal {
+  border-left: 4px solid var(--blue);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 122, 255, 0.3);
+}
+
+.toast-card-item.toast-entry_filled {
+  border-left: 4px solid #ffb703;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 183, 3, 0.3);
+}
+
+.toast-card-item.toast-breakeven {
+  border-left: 4px solid #00e676;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 230, 118, 0.3);
+}
+
+.toast-card-item.toast-tp_hit {
+  border-left: 4px solid #00e676;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(0, 230, 118, 0.4);
+}
+
+.toast-card-item.toast-sl_hit {
+  border-left: 4px solid #ff1744;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 23, 68, 0.3);
+}
+
+.toast-card-item.toast-invalidated {
+  border-left: 4px solid #94a3b8;
+}
+
+.toast-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.toast-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast-icon {
+  font-size: 1.1rem;
+}
+
+.toast-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.toast-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.toast-close-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toast-asset-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.toast-symbol {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: white;
+}
+
+.toast-bias-chip {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.toast-bias-chip.long {
+  background: rgba(0, 230, 118, 0.2);
+  color: #00e676;
+}
+
+.toast-bias-chip.short {
+  background: rgba(255, 23, 68, 0.2);
+  color: #ff1744;
+}
+
+.toast-market-chip {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.toast-detail-text {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.toast-levels-grid {
+  display: flex;
+  gap: 12px;
+  font-size: 0.76rem;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.toast-levels-grid span {
+  color: var(--text-muted);
+}
+
+.toast-r-badge {
+  margin-top: 8px;
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 122, 255, 0.15);
+  color: var(--blue);
+}
+
+.toast-r-badge.profit {
+  background: rgba(0, 230, 118, 0.2);
+  color: #00e676;
+}
+
+.toast-r-badge.loss {
+  background: rgba(255, 23, 68, 0.2);
+  color: #ff1744;
+}
+
+.toast-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--blue);
+  width: 100%;
+  animation: toastProgress 4.5s linear forwards;
+}
+
+.toast-tp_hit .toast-progress-bar,
+.toast-breakeven .toast-progress-bar {
+  background: #00e676;
+}
+
+.toast-entry_filled .toast-progress-bar {
+  background: #ffb703;
+}
+
+.toast-sl_hit .toast-progress-bar {
+  background: #ff1744;
+}
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

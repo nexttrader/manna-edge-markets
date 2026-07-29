@@ -1,0 +1,166 @@
+/* CSS Reset & Normalize */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+/* Color palette & Variables */
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: rgba(17, 24, 39, 0.85);
+  --bg-glass: rgba(17, 24, 39, 0.6);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.12);
+
+  --text-primary: #f0f2f5;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --green: #00E676;
+  --green-dim: rgba(0, 230, 118, 0.15);
+  --red: #FF1744;
+  --red-dim: rgba(255, 23, 68, 0.15);
+  --amber: #FFD600;
+  --amber-dim: rgba(255, 214, 0, 0.15);
+  --blue: #448AFF;
+  --blue-dim: rgba(68, 138, 255, 0.15);
+  --purple: #B388FF;
+  --gray: #6b7280;
+  --gray-dim: rgba(107, 114, 128, 0.15);
+
+  /* Typography */
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Shadows and effects */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow-green: 0 0 20px rgba(0, 230, 118, 0.3);
+  --shadow-glow-red: 0 0 20px rgba(255, 23, 68, 0.3);
+  --shadow-glow-amber: 0 0 20px rgba(255, 214, 0, 0.3);
+  --shadow-glow-blue: 0 0 20px rgba(68, 138, 255, 0.3);
+  --glass-blur: blur(16px);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Typography utilities */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+.text-amber { color: var(--amber); }
+.text-blue { color: var(--blue); }
+
+/* Card Base Styles */
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+.animate-slide-up { animation: slideUp 0.4s ease-out; }
+.animate-pulse { animation: pulse 2s infinite; }
+
+/* Responsive Breakpoints Utils */
+.container {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (min-width: 768px) {
+  .container { padding: 0 24px; }
+}
+
+@media (min-width: 1440px) {
+  .container { padding: 0 32px; }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+}

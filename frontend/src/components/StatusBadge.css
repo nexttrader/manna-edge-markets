@@ -1,0 +1,46 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+.status-active {
+  background-color: var(--green-dim);
+  color: var(--green);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  box-shadow: 0 0 10px rgba(0, 230, 118, 0.15);
+}
+
+.status-awaiting {
+  background-color: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid rgba(255, 214, 0, 0.3);
+  animation: pulse 2s infinite;
+}
+
+.status-invalidated {
+  background-color: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(255, 23, 68, 0.3);
+}
+
+.status-superseded {
+  background-color: var(--gray-dim);
+  color: var(--gray);
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.status-resolved {
+  background-color: var(--blue-dim);
+  color: var(--blue);
+  border: 1px solid rgba(68, 138, 255, 0.3);
+}
