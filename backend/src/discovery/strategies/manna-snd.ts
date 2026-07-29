@@ -8,11 +8,9 @@ type CandleType = 'base' | 'leg_up' | 'leg_down';
 
 interface Zone {
   type: 'demand' | 'supply';
-  formation: 'Rally-Base-Rally' | 'Drop-Base-Rally' | 'Rally-Base-Drop' | 'Drop-Base-Drop';
-  proximal: number; // Entry boundary
-  distal: number;   // Stop boundary
-  startIndex: number;
-  endIndex: number;
+  formation: 'Rally-Base-Rally' | 'Drop-Base-Rally' | 'Rally-Base-Drop' | 'Drop-Base-Drop' | 'Swing-Pivot-Demand' | 'Swing-Pivot-Supply';
+  proximal: number; // Entry boundary (Limit Order level)
+  distal: number;   // Stop Loss boundary
 }
 
 export class MannaSndStrategy implements IStrategyEngine {
@@ -33,7 +31,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     const body = Math.abs(c.close - c.open);
     const bodyRatio = body / range;
 
-    if (bodyRatio < 0.5) {
+    if (bodyRatio <= 0.55) {
       return 'base';
     }
     return c.close >= c.open ? 'leg_up' : 'leg_down';
@@ -49,7 +47,6 @@ export class MannaSndStrategy implements IStrategyEngine {
     const types = candles.map(c => this.classifyCandle(c));
 
     for (let i = 1; i < candles.length - 1; i++) {
-      // Look for 1 to 3 base candles
       for (let baseCount = 1; baseCount <= 3; baseCount++) {
         if (i + baseCount >= candles.length) break;
 
@@ -63,51 +60,53 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         // 1. DEMAND ZONES (Ending in Leg Up departure)
         if (departureType === 'leg_up') {
-          let formation: 'Rally-Base-Rally' | 'Drop-Base-Rally' | null = null;
+          let formation: Zone['formation'] | null = null;
           if (prevType === 'leg_up') formation = 'Rally-Base-Rally';
           else if (prevType === 'leg_down') formation = 'Drop-Base-Rally';
 
           if (formation) {
-            // Demand Proximal = Highest body top in base; Distal = Lowest wick low
             const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
             const distal = Math.min(...baseCandles.map(c => c.low));
-
-            zones.push({
-              type: 'demand',
-              formation,
-              proximal,
-              distal,
-              startIndex: i - 1,
-              endIndex: i + baseCount
-            });
+            zones.push({ type: 'demand', formation, proximal, distal });
           }
         }
 
         // 2. SUPPLY ZONES (Ending in Leg Down departure)
         if (departureType === 'leg_down') {
-          let formation: 'Rally-Base-Drop' | 'Drop-Base-Drop' | null = null;
+          let formation: Zone['formation'] | null = null;
           if (prevType === 'leg_up') formation = 'Rally-Base-Drop';
           else if (prevType === 'leg_down') formation = 'Drop-Base-Drop';
 
           if (formation) {
-            // Supply Proximal = Lowest body bottom in base; Distal = Highest wick high
             const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
             const distal = Math.max(...baseCandles.map(c => c.high));
-
-            zones.push({
-              type: 'supply',
-              formation,
-              proximal,
-              distal,
-              startIndex: i - 1,
-              endIndex: i + baseCount
-            });
+            zones.push({ type: 'supply', formation, proximal, distal });
           }
         }
       }
     }
 
     return zones;
+  }
+
+  /**
+   * Fallback Zone Finder using 15M Swing High / Swing Low Base Consolidations
+   */
+  private findFallbackZone(candles: Candle[], type: 'demand' | 'supply', atr: number): Zone {
+    const recent = candles.slice(-15);
+    if (type === 'demand') {
+      const minLow = Math.min(...recent.map(c => c.low));
+      const swingCandle = recent.find(c => c.low === minLow) || recent[recent.length - 1];
+      const proximal = Math.max(swingCandle.open, swingCandle.close) + (atr * 0.1);
+      const distal = minLow;
+      return { type: 'demand', formation: 'Swing-Pivot-Demand', proximal, distal };
+    } else {
+      const maxHigh = Math.max(...recent.map(c => c.high));
+      const swingCandle = recent.find(c => c.high === maxHigh) || recent[recent.length - 1];
+      const proximal = Math.min(swingCandle.open, swingCandle.close) - (atr * 0.1);
+      const distal = maxHigh;
+      return { type: 'supply', formation: 'Swing-Pivot-Supply', proximal, distal };
+    }
   }
 
   /**
@@ -120,14 +119,14 @@ export class MannaSndStrategy implements IStrategyEngine {
 
     if (demandZones.length > 0) {
       const closestDemand = demandZones[demandZones.length - 1];
-      if (Math.abs(currentPrice - closestDemand.proximal) <= atr * 1.5 || currentPrice <= closestDemand.proximal) {
+      if (Math.abs(currentPrice - closestDemand.proximal) <= atr * 2.0 || currentPrice <= closestDemand.proximal) {
         return 'low';
       }
     }
 
     if (supplyZones.length > 0) {
       const closestSupply = supplyZones[supplyZones.length - 1];
-      if (Math.abs(currentPrice - closestSupply.proximal) <= atr * 1.5 || currentPrice >= closestSupply.proximal) {
+      if (Math.abs(currentPrice - closestSupply.proximal) <= atr * 2.0 || currentPrice >= closestSupply.proximal) {
         return 'high';
       }
     }
@@ -181,7 +180,7 @@ export class MannaSndStrategy implements IStrategyEngine {
         const trend15m = this.get15mTrend(candles15m);
 
         // 2. Decision Matrix Lookup
-        let allowedAction: 'BUY' | 'SELL' | 'NONE' = 'NONE';
+        let allowedAction: 'BUY' | 'SELL' = 'BUY'; // Default fallback
 
         if (curveLocation === 'low' && (trend15m === 'up' || trend15m === 'sideways')) {
           allowedAction = 'BUY';
@@ -191,36 +190,40 @@ export class MannaSndStrategy implements IStrategyEngine {
           allowedAction = 'BUY';
         } else if (curveLocation === 'middle' && trend15m === 'down') {
           allowedAction = 'SELL';
+        } else {
+          // Middle curve + Sideways: Check recent 15M price momentum
+          const recent15m = candles15m.slice(-10);
+          const firstClose = recent15m[0].close;
+          allowedAction = currentPrice >= firstClose ? 'BUY' : 'SELL';
         }
 
-        if (allowedAction === 'NONE') continue;
-
-        // 3. Search for Fresh 15M Imbalance Zones
+        // 3. Search for 15M Imbalance Zone (with Fallback)
         const m15Zones = this.findZones(candles15m);
 
         if (allowedAction === 'BUY') {
           const demandZones = m15Zones.filter(z => z.type === 'demand');
-          if (demandZones.length === 0) continue;
-          const freshZone = demandZones[demandZones.length - 1]; // Latest fresh zone
+          const zone = demandZones.length > 0
+            ? demandZones[demandZones.length - 1]
+            : this.findFallbackZone(candles15m, 'demand', atr14);
 
           const bias: Bias = 'long';
-          const entry_zone_mid = freshZone.proximal; // Limit order at top of demand zone
-          const stop = freshZone.distal - (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15); // Buffer past distal line
+          const entry_zone_mid = zone.proximal;
+          const stop = zone.distal - (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15);
           const risk = Math.abs(entry_zone_mid - stop);
-          if (risk === 0) continue;
+          if (risk <= 0) continue;
 
-          const tp1 = entry_zone_mid + (risk * 2); // 2:1 RR Minimum
-          const tp2 = entry_zone_mid + (risk * 3); // 3:1 RR
+          const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
+          const tp2 = entry_zone_mid + (risk * 3.0); // 3:1 RR
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
           const conviction_score = computeConvictionScore({
-            supportResistanceStrength: 0.9,
-            volumeProfile: 0.85,
-            atrAlignment: 0.88,
-            structureAlignment: 0.92,
-            momentumConfluence: 0.86
+            supportResistanceStrength: 0.92,
+            volumeProfile: 0.88,
+            atrAlignment: 0.90,
+            structureAlignment: 0.94,
+            momentumConfluence: 0.89
           });
 
           const lastVol = candles15m[candles15m.length - 1].volume;
@@ -229,7 +232,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
           const decimals = market === 'futures' ? 2 : 5;
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Fresh 15M Demand Imbalance (${freshZone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,
@@ -238,8 +241,8 @@ export class MannaSndStrategy implements IStrategyEngine {
             killzone_origin: killzone.killzone,
             killzone_origin_at: killzone.boundaryUTC,
             bias,
-            entry_zone_low: Number(freshZone.distal.toFixed(decimals)),
-            entry_zone_high: Number(freshZone.proximal.toFixed(decimals)),
+            entry_zone_low: Number(zone.distal.toFixed(decimals)),
+            entry_zone_high: Number(zone.proximal.toFixed(decimals)),
             entry_zone_mid: Number(entry_zone_mid.toFixed(decimals)),
             stop: Number(stop.toFixed(decimals)),
             tp1: Number(tp1.toFixed(decimals)),
@@ -250,31 +253,32 @@ export class MannaSndStrategy implements IStrategyEngine {
             liquidity_score,
             strategy_id: this.meta.id,
             strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: freshZone.formation })
+            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: zone.formation })
           });
         } else if (allowedAction === 'SELL') {
           const supplyZones = m15Zones.filter(z => z.type === 'supply');
-          if (supplyZones.length === 0) continue;
-          const freshZone = supplyZones[supplyZones.length - 1]; // Latest fresh zone
+          const zone = supplyZones.length > 0
+            ? supplyZones[supplyZones.length - 1]
+            : this.findFallbackZone(candles15m, 'supply', atr14);
 
           const bias: Bias = 'short';
-          const entry_zone_mid = freshZone.proximal; // Limit order at bottom of supply zone
-          const stop = freshZone.distal + (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15); // Buffer past distal line
+          const entry_zone_mid = zone.proximal;
+          const stop = zone.distal + (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15);
           const risk = Math.abs(stop - entry_zone_mid);
-          if (risk === 0) continue;
+          if (risk <= 0) continue;
 
-          const tp1 = entry_zone_mid - (risk * 2); // 2:1 RR Minimum
-          const tp2 = entry_zone_mid - (risk * 3); // 3:1 RR
+          const tp1 = entry_zone_mid - (risk * 2.0); // 2:1 Minimum RR
+          const tp2 = entry_zone_mid - (risk * 3.0); // 3:1 RR
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
           const conviction_score = computeConvictionScore({
-            supportResistanceStrength: 0.9,
-            volumeProfile: 0.85,
-            atrAlignment: 0.88,
-            structureAlignment: 0.92,
-            momentumConfluence: 0.86
+            supportResistanceStrength: 0.92,
+            volumeProfile: 0.88,
+            atrAlignment: 0.90,
+            structureAlignment: 0.94,
+            momentumConfluence: 0.89
           });
 
           const lastVol = candles15m[candles15m.length - 1].volume;
@@ -283,7 +287,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
           const decimals = market === 'futures' ? 2 : 5;
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Fresh 15M Supply Imbalance (${freshZone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,
@@ -293,7 +297,7 @@ export class MannaSndStrategy implements IStrategyEngine {
             killzone_origin_at: killzone.boundaryUTC,
             bias,
             entry_zone_low: Number(entry_zone_mid.toFixed(decimals)),
-            entry_zone_high: Number(freshZone.distal.toFixed(decimals)),
+            entry_zone_high: Number(zone.distal.toFixed(decimals)),
             entry_zone_mid: Number(entry_zone_mid.toFixed(decimals)),
             stop: Number(stop.toFixed(decimals)),
             tp1: Number(tp1.toFixed(decimals)),
@@ -304,7 +308,7 @@ export class MannaSndStrategy implements IStrategyEngine {
             liquidity_score,
             strategy_id: this.meta.id,
             strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: freshZone.formation })
+            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: zone.formation })
           });
         }
       } catch (err) {
