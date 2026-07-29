@@ -11,6 +11,7 @@ type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
 type BiasFilter = 'all' | 'long' | 'short';
 type OrderTypeFilter = 'all' | 'market' | 'limit';
+type StrategyFilter = 'all' | 'manna_basic' | 'manna_snd';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 export const Dashboard: React.FC = () => {
@@ -21,6 +22,7 @@ export const Dashboard: React.FC = () => {
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [biasFilter, setBiasFilter] = useState<BiasFilter>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('all');
+  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('conviction');
 
   // Filter Logic
@@ -28,6 +30,7 @@ export const Dashboard: React.FC = () => {
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
     const biasStr = (setup.bias || 'long').toLowerCase();
+    const stratId = (setup.strategy_id || 'manna_basic').toLowerCase();
     const currentPrice = setup.current_price;
     const entryLow = setup.entry_zone_low ?? setup.levels?.entryMin ?? 0;
     const entryHigh = setup.entry_zone_high ?? setup.levels?.entryMax ?? 0;
@@ -54,6 +57,9 @@ export const Dashboard: React.FC = () => {
     const isLimit = setup.order_type === 'limit' || Boolean(setup.entry_zone_low && setup.entry_zone_high);
     const orderTypeStr = isLimit ? 'limit' : 'market';
     if (orderTypeFilter !== 'all' && orderTypeStr !== orderTypeFilter) return false;
+
+    // 5. Strategy Tier Filter
+    if (strategyFilter !== 'all' && stratId !== strategyFilter) return false;
 
     return true;
   });
@@ -92,10 +98,11 @@ export const Dashboard: React.FC = () => {
     setStateFilter('all');
     setBiasFilter('all');
     setOrderTypeFilter('all');
+    setStrategyFilter('all');
     setSortBy('conviction');
   };
 
-  const hasActiveFilter = marketFilter !== 'all' || stateFilter !== 'all' || biasFilter !== 'all' || orderTypeFilter !== 'all' || sortBy !== 'conviction';
+  const hasActiveFilter = marketFilter !== 'all' || stateFilter !== 'all' || biasFilter !== 'all' || orderTypeFilter !== 'all' || strategyFilter !== 'all' || sortBy !== 'conviction';
 
   return (
     <div className="dashboard">
@@ -142,6 +149,15 @@ export const Dashboard: React.FC = () => {
 
           {/* Secondary Controls: Dropdown Filters & Sort Options */}
           <div className="filter-controls-row">
+            <div className="filter-group">
+              <label>Strategy Tier:</label>
+              <select value={strategyFilter} onChange={(e) => setStrategyFilter(e.target.value as StrategyFilter)}>
+                <option value="all">⚡ All Strategies</option>
+                <option value="manna_basic">🔵 Manna Basic</option>
+                <option value="manna_snd">🟡 Manna SnD</option>
+              </select>
+            </div>
+
             <div className="filter-group">
               <label>State:</label>
               <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value as StateFilter)}>

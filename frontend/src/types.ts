@@ -89,6 +89,8 @@ export interface EdgeSetup {
   is_breakeven?: boolean | number;
   initial_stop?: number;
   order_type?: string;
+  strategy_id?: string;
+  strategy_tier?: string;
   metadata?: string;
 }
 

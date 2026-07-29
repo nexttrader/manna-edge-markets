@@ -28,11 +28,14 @@ CREATE TABLE IF NOT EXISTS edge_setups (
     tradable INTEGER DEFAULT 1,
     conviction_score REAL,
     liquidity_score REAL,
+    strategy_id TEXT DEFAULT 'manna_basic',
+    strategy_tier TEXT DEFAULT 'basic',
     metadata TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_edge_setups_instrument_state ON edge_setups(instrument, signal_state, superseded);
 CREATE INDEX IF NOT EXISTS idx_edge_setups_killzone_origin ON edge_setups(killzone_origin);
+CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id);
 
 CREATE TABLE IF NOT EXISTS forex_edge_setups (
     id TEXT PRIMARY KEY,
@@ -62,11 +65,14 @@ CREATE TABLE IF NOT EXISTS forex_edge_setups (
     tradable INTEGER DEFAULT 1,
     conviction_score REAL,
     liquidity_score REAL,
+    strategy_id TEXT DEFAULT 'manna_basic',
+    strategy_tier TEXT DEFAULT 'basic',
     metadata TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_instrument_state ON forex_edge_setups(instrument, signal_state, superseded);
 CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_killzone_origin ON forex_edge_setups(killzone_origin);
+CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id);
 
 CREATE TABLE IF NOT EXISTS invalidation_audit (
     id TEXT PRIMARY KEY,
@@ -106,6 +112,7 @@ CREATE TABLE IF NOT EXISTS outcomes (
     execution_time TEXT,
     realized_pl REAL,
     mae REAL,
+    strategy_id TEXT DEFAULT 'manna_basic',
     notes TEXT,
     created_at TEXT NOT NULL
 );

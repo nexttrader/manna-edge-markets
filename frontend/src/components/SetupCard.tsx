@@ -107,6 +107,9 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
           </div>
           <div className="sc-badges-row">
+            <span className={`strategy-badge strat-${(setup.strategy_id || 'manna_basic').toLowerCase()}`}>
+              {(setup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC')}
+            </span>
             <span className="tf-badge htf">1H Context</span>
             <span className="tf-badge ltf">15M Entry</span>
             {isBreakeven && (

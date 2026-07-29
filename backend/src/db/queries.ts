@@ -228,11 +228,12 @@ export function getSetupsByRun(runId: string): EdgeSetup[] {
 
 export function insertOutcome(outcome: Outcome): void {
     const db = getDb();
-    db.prepare(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, notes, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, strategy_id, notes, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         outcome.id, outcome.setup_id, outcome.setup_market, outcome.run_id || null,
         outcome.outcome_type, outcome.execution_price || null, outcome.execution_time || null,
-        outcome.realized_pl || null, outcome.mae || null, outcome.notes || null, outcome.created_at
+        outcome.realized_pl || null, outcome.mae || null, outcome.strategy_id || 'manna_basic',
+        outcome.notes || null, outcome.created_at
     );
 }
 

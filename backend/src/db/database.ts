@@ -45,6 +45,21 @@ export function initializeDatabase(): void {
     try {
         db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`);
     } catch {}
+    try {
+        db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
+    } catch {}
+    try {
+        db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`);
+    } catch {}
+    try {
+        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
+    } catch {}
+    try {
+        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`);
+    } catch {}
+    try {
+        db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
+    } catch {}
 
     // Analytics archives table for resetting and exporting dataset epochs
     db.exec(`

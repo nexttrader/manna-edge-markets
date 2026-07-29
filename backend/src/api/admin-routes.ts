@@ -601,4 +601,108 @@ router.get('/analytics/archives/:id/download', (req: Request, res: Response) => 
   }
 });
 
+// ── GET /api/admin/analytics/strategies — Strategy Performance Matrix ──
+router.get('/analytics/strategies', (_req: Request, res: Response) => {
+  try {
+    const db = getDb();
+
+    // Fetch all active strategy setups & outcomes
+    const futuresSetups = db.prepare(`SELECT * FROM edge_setups`).all() as any[];
+    const forexSetups = db.prepare(`SELECT * FROM forex_edge_setups`).all() as any[];
+    const allSetups = [...futuresSetups, ...forexSetups];
+    const allOutcomes = db.prepare(`SELECT * FROM outcomes`).all() as any[];
+
+    const strategyStats: Record<string, {
+      id: string;
+      name: string;
+      tier: string;
+      totalSignals: number;
+      activeSignals: number;
+      resolvedSignals: number;
+      wins: number;
+      losses: number;
+      winRate: number;
+      totalRealizedR: number;
+    }> = {
+      manna_basic: {
+        id: 'manna_basic',
+        name: 'Manna Basic',
+        tier: 'basic',
+        totalSignals: 0,
+        activeSignals: 0,
+        resolvedSignals: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        totalRealizedR: 0
+      },
+      manna_snd: {
+        id: 'manna_snd',
+        name: 'Manna SnD',
+        tier: 'pro',
+        totalSignals: 0,
+        activeSignals: 0,
+        resolvedSignals: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        totalRealizedR: 0
+      }
+    };
+
+    // Aggregate setups by strategy
+    for (const setup of allSetups) {
+      const stratId = setup.strategy_id || 'manna_basic';
+      if (!strategyStats[stratId]) {
+        strategyStats[stratId] = {
+          id: stratId,
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic',
+          tier: setup.strategy_tier || 'basic',
+          totalSignals: 0,
+          activeSignals: 0,
+          resolvedSignals: 0,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+          totalRealizedR: 0
+        };
+      }
+      strategyStats[stratId].totalSignals += 1;
+      if (['awaiting_entry', 'active'].includes(setup.signal_state)) {
+        strategyStats[stratId].activeSignals += 1;
+      } else if (setup.signal_state === 'resolved') {
+        strategyStats[stratId].resolvedSignals += 1;
+      }
+    }
+
+    // Aggregate outcomes by strategy
+    for (const outcome of allOutcomes) {
+      const stratId = outcome.strategy_id || 'manna_basic';
+      if (strategyStats[stratId]) {
+        if (['tp1_hit', 'tp2_hit'].includes(outcome.outcome_type)) {
+          strategyStats[stratId].wins += 1;
+          strategyStats[stratId].totalRealizedR += (outcome.realized_pl || 2.0);
+        } else if (outcome.outcome_type === 'sl_hit') {
+          strategyStats[stratId].losses += 1;
+          strategyStats[stratId].totalRealizedR -= 1.0;
+        }
+      }
+    }
+
+    // Calculate win rates
+    for (const stratId of Object.keys(strategyStats)) {
+      const s = strategyStats[stratId];
+      const totalResolved = s.wins + s.losses;
+      s.winRate = totalResolved > 0 ? Number(((s.wins / totalResolved) * 100).toFixed(1)) : 0;
+      s.totalRealizedR = Number(s.totalRealizedR.toFixed(2));
+    }
+
+    res.json({
+      strategies: Object.values(strategyStats)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch strategy analytics', details: String(error) });
+  }
+});
+
 export default router;

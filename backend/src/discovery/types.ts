@@ -53,6 +53,8 @@ export interface EdgeSetup {
     tradable: number;
     conviction_score?: number;
     liquidity_score?: number;
+    strategy_id?: string;
+    strategy_tier?: string;
     metadata?: string;
 }
 
@@ -97,6 +99,7 @@ export interface Outcome {
     execution_time?: string;
     realized_pl?: number;
     mae?: number;
+    strategy_id?: string;
     notes?: string;
     created_at: string;
 }

@@ -1,8 +1,7 @@
 import { CandidateSetup, KillzoneInfo } from './types';
 import { FUTURES_INSTRUMENTS, FOREX_INSTRUMENTS } from './mock-data';
-import { discoverFuturesSetups } from './futures-discovery';
-import { discoverForexSetups } from './forex-discovery';
 import { getUnifiedMarketBiases } from './bias-engine';
+import { strategyRegistry } from './strategies/strategy-registry';
 
 export async function discoverUnifiedSetups(
   killzone: KillzoneInfo,
@@ -10,7 +9,7 @@ export async function discoverUnifiedSetups(
   marketScope: 'both' | 'futures' | 'forex' = 'both',
   excludedInstruments: string[] = []
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
-  // 1. Single Source of Truth: Compute Unified Biases ONCE for all instruments
+  // 1. Single Source of Truth: Compute Unified Biases ONCE for all target instruments
   const allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
   const targetInstruments = excludedInstruments.length > 0
     ? allInstruments.filter(inst => !excludedInstruments.includes(inst))
@@ -18,14 +17,29 @@ export async function discoverUnifiedSetups(
 
   const unifiedBiases = await getUnifiedMarketBiases(targetInstruments);
 
-  // 2. Discover candidates using synchronized biases
-  let futures = (marketScope === 'both' || marketScope === 'futures')
-    ? await discoverFuturesSetups(killzone, runId, unifiedBiases)
-    : [];
+  const futuresCandidates: CandidateSetup[] = [];
+  const forexCandidates: CandidateSetup[] = [];
 
-  let forex = (marketScope === 'both' || marketScope === 'forex')
-    ? await discoverForexSetups(killzone, runId, unifiedBiases)
-    : [];
+  const activeStrategies = strategyRegistry.getActiveStrategies();
+
+  const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
+  const targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
+
+  // 2. Execute all active registered strategy engines
+  for (const strategy of activeStrategies) {
+    if (marketScope === 'both' || marketScope === 'futures') {
+      const futuresSetups = await strategy.evaluateSetups(killzone, runId, 'futures', targetFutures, unifiedBiases);
+      futuresCandidates.push(...futuresSetups);
+    }
+
+    if (marketScope === 'both' || marketScope === 'forex') {
+      const forexSetups = await strategy.evaluateSetups(killzone, runId, 'forex', targetForex, unifiedBiases);
+      forexCandidates.push(...forexSetups);
+    }
+  }
+
+  let futures = futuresCandidates;
+  let forex = forexCandidates;
 
   if (excludedInstruments.length > 0) {
     const excludedUpper = excludedInstruments.map(s => s.toUpperCase());
