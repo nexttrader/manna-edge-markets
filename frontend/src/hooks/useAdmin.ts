@@ -3,13 +3,13 @@ import { type SystemStatus, type PublishRun } from '../types';
 import { API_BASE } from '../config';
 
 export function useAdmin() {
-  const triggerRun = async (mode: 'live' | 'dry_run', market: 'FUTURES' | 'FOREX' | 'ALL') => {
+  const triggerRun = async (mode: 'live' | 'dry_run', market: 'FUTURES' | 'FOREX' | 'ALL', strategyId?: string) => {
     try {
       const scope = market === 'ALL' ? 'both' : market.toLowerCase();
       const res = await fetch(`${API_BASE}/api/admin/scheduled/session-boundary-revalidation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, market: scope })
+        body: JSON.stringify({ mode, market: scope, strategyId })
       });
       return res.ok;
     } catch {

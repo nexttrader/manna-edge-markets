@@ -7,7 +7,8 @@ export async function discoverUnifiedSetups(
   killzone: KillzoneInfo,
   runId: string,
   marketScope: 'both' | 'futures' | 'forex' = 'both',
-  excludedInstruments: string[] = []
+  excludedInstruments: string[] = [],
+  targetStrategyId?: string
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
   // 1. Single Source of Truth: Compute Unified Biases ONCE for all target instruments
   const allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
@@ -20,12 +21,16 @@ export async function discoverUnifiedSetups(
   const futuresCandidates: CandidateSetup[] = [];
   const forexCandidates: CandidateSetup[] = [];
 
-  const activeStrategies = strategyRegistry.getActiveStrategies();
+  let activeStrategies = strategyRegistry.getActiveStrategies();
+
+  if (targetStrategyId && targetStrategyId !== 'all') {
+    activeStrategies = activeStrategies.filter(s => s.meta.id === targetStrategyId);
+  }
 
   const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
   const targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
 
-  // 2. Execute all active registered strategy engines
+  // 2. Execute selected strategy engines
   for (const strategy of activeStrategies) {
     if (marketScope === 'both' || marketScope === 'futures') {
       const futuresSetups = await strategy.evaluateSetups(killzone, runId, 'futures', targetFutures, unifiedBiases);

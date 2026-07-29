@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.post('/scheduled/session-boundary-revalidation', async (req: Request, res: Response) => {
   try {
-    const { mode = 'live', market = 'both' } = req.body || {};
+    const { mode = 'live', market = 'both', strategyId } = req.body || {};
     const now = new Date();
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
@@ -22,7 +22,7 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
     
     const runId = `manual_${Date.now()}`;
     const scope = (market.toLowerCase() as 'both' | 'futures' | 'forex');
-    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope);
+    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], strategyId);
     
     const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
     res.json(result);

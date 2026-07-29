@@ -40,9 +40,11 @@ export const AdminPanel: React.FC = () => {
     fetchArchives();
   }, []);
 
+  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+
   const handleTrigger = async () => {
     setIsTriggering(true);
-    await triggerRun(mode, market);
+    await triggerRun(mode, market, triggerStrategy);
     setTimeout(() => setIsTriggering(false), 1000);
   };
 
@@ -502,6 +504,15 @@ export const AdminPanel: React.FC = () => {
                 <option value="ALL">All Markets</option>
                 <option value="FUTURES">Futures Only</option>
                 <option value="FOREX">Forex Only</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Strategy Scope</label>
+              <select value={triggerStrategy} onChange={e => setTriggerStrategy(e.target.value as any)}>
+                <option value="all">⚡ All Strategies</option>
+                <option value="manna_basic">🔵 Manna Basic Strategy</option>
+                <option value="manna_snd">🟡 Manna SnD Strategy</option>
               </select>
             </div>
             
