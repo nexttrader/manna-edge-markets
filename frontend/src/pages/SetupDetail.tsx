@@ -75,7 +75,7 @@ export const SetupDetail: React.FC = () => {
                 <div className="history-empty">No invalidation records for this setup.</div>
               ) : (
                 <div className="timeline">
-                  {history.map((record) => (
+                  {history.map((record: any) => (
                     <div key={record.id} className="timeline-item">
                       <div className="timeline-dot"></div>
                       <div className="timeline-content">

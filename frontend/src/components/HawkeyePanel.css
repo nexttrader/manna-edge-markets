@@ -1,7 +1,9 @@
 .hawkeye-toggle {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  left: auto !important;
+  top: auto !important;
   padding: 12px 22px;
   border-radius: 99px;
   display: flex;
@@ -16,8 +18,9 @@
   border: 1px solid var(--kdt-gold);
   color: var(--kdt-gold);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 20px rgba(201, 168, 76, 0.3);
-  z-index: 9999;
+  z-index: 999999 !important;
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .hawkeye-toggle:hover {
@@ -36,18 +39,20 @@
 }
 
 .hawkeye-panel {
-  position: fixed;
-  bottom: 80px;
-  right: 24px;
+  position: fixed !important;
+  bottom: 80px !important;
+  right: 24px !important;
+  left: auto !important;
+  top: auto !important;
   width: 420px;
   max-width: calc(100vw - 48px);
   max-height: 65vh;
   display: flex;
   flex-direction: column;
-  z-index: 10000;
+  z-index: 1000000 !important;
   background: var(--kdt-purple-card);
   border: 1px solid var(--kdt-gold);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(201, 168, 76, 0.25);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -96,6 +101,8 @@
   font-size: 1.2rem;
   color: var(--kdt-white-muted);
   cursor: pointer;
+  background: none;
+  border: none;
 }
 
 .hp-close:hover {

@@ -67,7 +67,7 @@ export const HawkeyePanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
 
-  const filtered = invalidations.filter(inv => {
+  const filtered = invalidations.filter((inv: any) => {
     const inst = inv.instrument || inv.setup_id || '';
     const reason = inv.reasonCode || inv.reason_code || '';
     return inst.toLowerCase().includes(filter.toLowerCase()) || 
@@ -103,7 +103,7 @@ export const HawkeyePanel: React.FC = () => {
               <div className="hp-empty font-mono">No AI Assistant audit records logged yet.</div>
             ) : (
               <div className="hp-list">
-                {filtered.map(inv => {
+                {filtered.map((inv: any) => {
                   let inst = inv.instrument || inv.setup_id || 'Setup';
                   if (inst.includes('-') && inst.length > 20) {
                     inst = (inv.setup_market || inv.market || 'futures').toUpperCase() === 'FOREX' ? 'Forex Setup' : 'Futures Setup';
