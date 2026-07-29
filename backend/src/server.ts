@@ -49,6 +49,25 @@ app.use((err: any, req: any, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: 'Internal server error', reqId: req.id });
 });
 
+async function runStartupDiscoveryIfEmpty() {
+    try {
+        const activeCount = queries.getAllActiveSetups().length;
+        if (activeCount < 5) {
+            logger.info({ activeCount }, '⚡ Active setups < 5 on startup. Running immediate initial discovery scan...');
+            const now = new Date();
+            const kzInfo = getCurrentKillzone(now);
+            const runId = `startup_run_${Date.now()}`;
+            const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
+            const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
+            logger.info({ result }, '🚀 Initial startup discovery run completed successfully.');
+        } else {
+            logger.info({ activeCount }, '🟢 Existing active setups found in database.');
+        }
+    } catch (err) {
+        logger.error({ err }, '⚠️ Startup discovery run failed');
+    }
+}
+
 async function startServer() {
     try {
         logger.info('Initializing database...');
@@ -98,6 +117,9 @@ async function startServer() {
                 }
             }
         );
+
+        // Run automatic initial discovery scan on boot if DB is empty
+        runStartupDiscoveryIfEmpty();
 
         app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();
