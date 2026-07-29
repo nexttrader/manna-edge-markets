@@ -27,11 +27,8 @@ export const DashboardHeader: React.FC = () => {
               <Link to="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}>
                 🏠 Home
               </Link>
-              <Link to="/client" className={`nav-link ${location.pathname === '/client' ? 'active' : ''}`}>
-                👤 Client Desk
-              </Link>
               <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
-                📊 Pro Desk
+                📊 Dashboard
               </Link>
               <button 
                 className="nav-link font-mono" 
