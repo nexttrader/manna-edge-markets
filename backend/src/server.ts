@@ -70,7 +70,7 @@ async function startServer() {
             }
         });
 
-        app.listen(PORT as number, '127.0.0.1', () => {
+        app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();
             const currentKz = getCurrentKillzone(now);
             const nextBoundary = getNextKillzoneBoundary(now);
