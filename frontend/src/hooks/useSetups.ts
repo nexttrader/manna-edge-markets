@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignalState, Bias, Market, Killzone, type EdgeSetup } from '../types';
+import { useVoice } from '../context/VoiceContext';
 import { API_BASE } from '../config';
 
 const MOCK_SETUPS: EdgeSetup[] = [
@@ -51,13 +52,32 @@ export function useSetups() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { speak } = useVoice();
+  const knownSetupIdsRef = useRef<Set<string>>(new Set());
+  const isInitialFetchRef = useRef<boolean>(true);
+
   const fetchSetups = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/accelerate/active-setups`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       const currentList: EdgeSetup[] = data.setups || [];
-      
+
+      // Check for newly discovered signals
+      if (!isInitialFetchRef.current && currentList.length > 0) {
+        currentList.forEach(setup => {
+          if (!knownSetupIdsRef.current.has(setup.id)) {
+            const biasStr = (setup.bias || 'long').toUpperCase();
+            const inst = setup.instrument || 'Asset';
+            speak(`New ${biasStr} signal discovered for ${inst}.`);
+          }
+        });
+      }
+
+      // Update known set
+      currentList.forEach(s => knownSetupIdsRef.current.add(s.id));
+      isInitialFetchRef.current = false;
+
       setSetups(currentList);
       setError(null);
     } catch (err) {
@@ -66,7 +86,7 @@ export function useSetups() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [speak]);
 
   useEffect(() => {
     fetchSetups();
