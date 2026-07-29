@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import { initializeDatabase } from './db/database';
+import * as queries from './db/queries';
 import { startScheduler, stopScheduler } from './scheduler/scheduler';
 import { getCurrentKillzone, getNextKillzoneBoundary } from './scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from './discovery/unified-discovery';
@@ -59,18 +60,44 @@ async function startServer() {
         logger.info('Starting outcome detector...');
         outcomeDetector.start(15000);
 
-        logger.info('Starting scheduler...');
-        startScheduler(async (kzInfo) => {
-            logger.info({ killzone: kzInfo.killzone }, 'Killzone boundary triggered');
-            try {
-                const runId = `run_${Date.now()}`;
-                const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
-                const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
-                logger.info({ result }, 'Publish run completed');
-            } catch (err) {
-                logger.error({ err }, 'Killzone boundary handler failed');
+        logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
+        startScheduler(
+            // 1. Killzone Start Handler
+            async (kzInfo) => {
+                logger.info({ killzone: kzInfo.killzone }, 'Killzone start boundary triggered');
+                try {
+                    const runId = `run_${Date.now()}`;
+                    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
+                    const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
+                    logger.info({ result }, 'Killzone boundary publish run completed');
+                } catch (err) {
+                    logger.error({ err }, 'Killzone boundary handler failed');
+                }
+            },
+            // 2. Killzone Midpoint Booster Handler
+            async (kzInfo) => {
+                logger.info({ killzone: kzInfo.killzone }, 'Killzone midpoint boundary triggered');
+                try {
+                    const activeSetups = queries.getAllActiveSetups();
+                    if (activeSetups.length < 5) {
+                        const activeInstruments = activeSetups.map((s: any) => s.instrument).filter(Boolean);
+                        logger.info({
+                            activeCount: activeSetups.length,
+                            excludedInstruments: activeInstruments
+                        }, '🔍 Killzone midpoint active setups < 5. Running targeted scan for un-represented symbols.');
+
+                        const runId = `mid_run_${Date.now()}`;
+                        const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both', activeInstruments);
+                        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
+                        logger.info({ result }, 'Mid-killzone booster publish run completed');
+                    } else {
+                        logger.info({ activeCount: activeSetups.length }, 'Killzone midpoint active setups >= 5. No booster scan required.');
+                    }
+                } catch (err) {
+                    logger.error({ err }, 'Killzone midpoint handler failed');
+                }
             }
-        });
+        );
 
         app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();

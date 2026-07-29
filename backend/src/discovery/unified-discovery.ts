@@ -7,20 +7,31 @@ import { getUnifiedMarketBiases } from './bias-engine';
 export async function discoverUnifiedSetups(
   killzone: KillzoneInfo,
   runId: string,
-  marketScope: 'both' | 'futures' | 'forex' = 'both'
+  marketScope: 'both' | 'futures' | 'forex' = 'both',
+  excludedInstruments: string[] = []
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
   // 1. Single Source of Truth: Compute Unified Biases ONCE for all instruments
   const allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
-  const unifiedBiases = await getUnifiedMarketBiases(allInstruments);
+  const targetInstruments = excludedInstruments.length > 0
+    ? allInstruments.filter(inst => !excludedInstruments.includes(inst))
+    : allInstruments;
+
+  const unifiedBiases = await getUnifiedMarketBiases(targetInstruments);
 
   // 2. Discover candidates using synchronized biases
-  const futures = (marketScope === 'both' || marketScope === 'futures')
+  let futures = (marketScope === 'both' || marketScope === 'futures')
     ? await discoverFuturesSetups(killzone, runId, unifiedBiases)
     : [];
 
-  const forex = (marketScope === 'both' || marketScope === 'forex')
+  let forex = (marketScope === 'both' || marketScope === 'forex')
     ? await discoverForexSetups(killzone, runId, unifiedBiases)
     : [];
+
+  if (excludedInstruments.length > 0) {
+    const excludedUpper = excludedInstruments.map(s => s.toUpperCase());
+    futures = futures.filter(s => !excludedUpper.includes(s.instrument.toUpperCase()));
+    forex = forex.filter(s => !excludedUpper.includes(s.instrument.toUpperCase()));
+  }
 
   return { futures, forex };
 }
