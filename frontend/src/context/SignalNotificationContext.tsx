@@ -5,7 +5,7 @@ import { API_BASE } from '../config';
 
 export interface SignalToastItem {
   id: string;
-  type: 'new_signal' | 'entry_filled' | 'breakeven' | 'tp_hit' | 'sl_hit' | 'invalidated';
+  type: 'new_signal' | 'entry_filled' | 'breakeven' | 'tp_hit' | 'sl_hit' | 'invalidated' | 'resolved';
   title: string;
   icon: string;
   instrument: string;
