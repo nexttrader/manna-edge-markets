@@ -15,8 +15,8 @@
   background: var(--kdt-purple-card);
   border: 1px solid var(--kdt-gold);
   color: var(--kdt-gold);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 15px rgba(201, 168, 76, 0.25);
-  z-index: 40;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 20px rgba(201, 168, 76, 0.3);
+  z-index: 9999;
   transition: all 0.2s;
 }
 
@@ -44,7 +44,7 @@
   max-height: 65vh;
   display: flex;
   flex-direction: column;
-  z-index: 50;
+  z-index: 10000;
   background: var(--kdt-purple-card);
   border: 1px solid var(--kdt-gold);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
