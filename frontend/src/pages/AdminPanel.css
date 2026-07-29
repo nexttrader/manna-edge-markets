@@ -1,6 +1,136 @@
-.admin-main {
-  padding-top: 24px;
-  padding-bottom: 64px;
+.strategy-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  background: rgba(18, 12, 38, 0.7);
+  border: 1px solid var(--kdt-purple-border);
+}
+
+.strategy-filter-tabs .filter-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--kdt-gold);
+  letter-spacing: 1px;
+}
+
+.strat-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--kdt-white-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.strat-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.strat-tab.active {
+  background: var(--kdt-gold);
+  color: #0b071e;
+  border-color: var(--kdt-gold);
+  font-weight: 900;
+}
+
+.strategy-matrix-container {
+  margin-bottom: 28px;
+}
+
+.strategy-matrix-container .section-title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--kdt-gold);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.strategy-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.strategy-card {
+  padding: 18px 22px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--kdt-purple-card);
+  border: 1px solid var(--kdt-purple-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.strategy-card.strat-border-manna_basic::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #00e5ff;
+}
+
+.strategy-card.strat-border-manna_snd::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #ffab00;
+}
+
+.strat-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.strat-badge {
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.strat-badge.badge-manna_basic {
+  color: #00e5ff;
+}
+
+.strat-badge.badge-manna_snd {
+  color: #ffab00;
+}
+
+.strat-tier-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--kdt-white-muted);
+}
+
+.strat-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.strat-metric-row .stat-val {
+  font-weight: 700;
 }
 
 .admin-header {

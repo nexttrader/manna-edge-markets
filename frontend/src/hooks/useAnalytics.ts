@@ -1,5 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_BASE } from '../config';
+
+export interface StrategyStat {
+  id: string;
+  name: string;
+  tier: string;
+  totalSignals: number;
+  activeSignals: number;
+  resolvedSignals: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalRealizedR: number;
+}
 
 export interface AnalyticsData {
   summary: {
@@ -20,6 +33,7 @@ export interface AnalyticsData {
     avgTimeToFillMinutes?: number;
     avgHoldingDurationMinutes?: number;
   };
+  strategies?: StrategyStat[];
   currentSession?: {
     activeKillzone: any;
     nextBoundary: any;
@@ -48,6 +62,7 @@ export interface AnalyticsData {
     market?: string;
     bias?: string;
     setup_market?: string;
+    strategy_id?: string;
     outcome_type: string;
     realized_r?: number;
     realized_pl?: number;
@@ -62,16 +77,31 @@ export interface AnalyticsData {
   }>;
 }
 
-export function useAnalytics(pollIntervalMs: number = 10000) {
+export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number = 10000) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/analytics`);
+      const url = strategyId && strategyId !== 'all'
+        ? `${API_BASE}/api/admin/analytics?strategy_id=${encodeURIComponent(strategyId)}`
+        : `${API_BASE}/api/admin/analytics`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+
+      // Also fetch strategy matrix if not already included
+      if (!data.strategies) {
+        try {
+          const stratRes = await fetch(`${API_BASE}/api/admin/analytics/strategies`);
+          if (stratRes.ok) {
+            const stratData = await stratRes.json();
+            data.strategies = stratData.strategies;
+          }
+        } catch {}
+      }
+
       setAnalytics(data);
       setError(null);
     } catch (err: any) {
@@ -79,13 +109,13 @@ export function useAnalytics(pollIntervalMs: number = 10000) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [strategyId]);
 
   useEffect(() => {
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, pollIntervalMs);
     return () => clearInterval(interval);
-  }, [pollIntervalMs]);
+  }, [fetchAnalytics, pollIntervalMs]);
 
   return { analytics, loading, error, refetch: fetchAnalytics };
 }

@@ -11,7 +11,8 @@ export const AdminPanel: React.FC = () => {
   const { triggerRun } = useAdmin();
   const { runs } = usePublishRuns(15);
   const { resetCircuitBreaker, status } = useSystemStatus();
-  const { analytics, refetch } = useAnalytics();
+  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+  const { analytics, refetch } = useAnalytics(strategyFilter);
   
   const [mode, setMode] = useState<'live' | 'dry_run'>('dry_run');
   const [market, setMarket] = useState<'FUTURES' | 'FOREX' | 'ALL'>('ALL');
@@ -46,7 +47,10 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleExportLiveCSV = () => {
-    window.open(`${API_BASE}/api/admin/analytics/export-csv`, '_blank');
+    const url = strategyFilter && strategyFilter !== 'all'
+      ? `${API_BASE}/api/admin/analytics/export-csv?strategy_id=${strategyFilter}`
+      : `${API_BASE}/api/admin/analytics/export-csv`;
+    window.open(url, '_blank');
   };
 
   const handleResetAnalytics = async (e: React.FormEvent) => {
@@ -60,7 +64,6 @@ export const AdminPanel: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        // Trigger automatic CSV download for the newly archived dataset
         window.open(`${API_BASE}/api/admin/analytics/archives/${data.archiveId}/download`, '_blank');
         setShowResetModal(false);
         setArchiveName('');
@@ -75,6 +78,7 @@ export const AdminPanel: React.FC = () => {
   };
 
   const summary = analytics?.summary;
+  const strategies = analytics?.strategies || [];
   const invalidations = analytics?.invalidations;
   const killzones = analytics?.killzones;
   const recentOutcomes = analytics?.recentOutcomes || [];
@@ -86,22 +90,89 @@ export const AdminPanel: React.FC = () => {
       <header className="admin-header glass-card">
         <div className="container header-container">
           <Link to="/" className="back-btn">← Back to Dashboard</Link>
-          <h1 className="admin-title">Mana Edge Markets — Session & Trigger Analytics</h1>
+          <h1 className="admin-title">Manna Edge Markets — Strategy & Performance Analytics</h1>
         </div>
       </header>
 
       <main className="container admin-main">
+        {/* Strategy Filter Tabs */}
+        <div className="strategy-filter-tabs glass-card font-mono">
+          <span className="filter-title">STRATEGY FILTER:</span>
+          <button 
+            className={`strat-tab ${strategyFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setStrategyFilter('all')}
+          >
+            ⚡ All Strategies
+          </button>
+          <button 
+            className={`strat-tab strat-basic ${strategyFilter === 'manna_basic' ? 'active' : ''}`}
+            onClick={() => setStrategyFilter('manna_basic')}
+          >
+            🔵 Manna Basic
+          </button>
+          <button 
+            className={`strat-tab strat-snd ${strategyFilter === 'manna_snd' ? 'active' : ''}`}
+            onClick={() => setStrategyFilter('manna_snd')}
+          >
+            🟡 Manna SnD
+          </button>
+        </div>
+
         <MetricsPanel />
+
+        {/* Strategy Performance Matrix Comparison Cards */}
+        <div className="strategy-matrix-container">
+          <h2 className="section-title font-mono">⚡ STRATEGY PERFORMANCE MATRIX</h2>
+          <div className="strategy-cards-grid font-mono">
+            {strategies.map((strat) => (
+              <div key={strat.id} className={`strategy-card glass-card strat-border-${strat.id}`}>
+                <div className="strat-card-header">
+                  <span className={`strat-badge badge-${strat.id}`}>{strat.name}</span>
+                  <span className="strat-tier-tag">{strat.tier.toUpperCase()} TIER</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Total Signals Generated:</span>
+                  <span className="stat-val">{strat.totalSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Active Positions:</span>
+                  <span className="stat-val text-gold">{strat.activeSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Resolved Trades:</span>
+                  <span className="stat-val">{strat.resolvedSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Win Rate (%):</span>
+                  <span className="stat-val text-green">{strat.winRate}% ({strat.wins}W / {strat.losses}L)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Net Realized Return:</span>
+                  <span className={`stat-val ${strat.totalRealizedR >= 0 ? 'text-green' : 'text-red'}`}>
+                    {strat.totalRealizedR > 0 ? '+' : ''}{strat.totalRealizedR}R
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Action Header for CSV Export & Reset */}
         <div className="analytics-action-bar glass-card font-mono">
           <div className="action-bar-left">
             <span className="bar-title">📊 ANALYTICS TRACKING ENGINE</span>
-            <span className="bar-desc">Track strategy performance, export raw CSV records, or reset tracking anew when testing system changes.</span>
+            <span className="bar-desc">
+              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Basic Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
+            </span>
           </div>
           <div className="action-bar-btns">
             <button className="btn-export-csv font-mono" onClick={handleExportLiveCSV}>
-              📥 Export Live CSV
+              📥 Export CSV ({strategyFilter.toUpperCase()})
             </button>
             <button className="btn-reset-analytics font-mono" onClick={() => setShowResetModal(true)}>
               🔄 Save & Reset Analytics

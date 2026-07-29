@@ -82,18 +82,35 @@ router.get('/publish-runs', (req: Request, res: Response) => {
   }
 });
 
-router.get('/analytics', (_req: Request, res: Response) => {
+router.get('/analytics', (req: Request, res: Response) => {
   try {
     const db = getDb();
     const now = new Date();
 
-    const futuresTotal = (db.prepare(`SELECT COUNT(*) as c FROM edge_setups`).get() as any).c;
-    const forexTotal = (db.prepare(`SELECT COUNT(*) as c FROM forex_edge_setups`).get() as any).c;
+    const selectedStrategy = req.query.strategy_id as string | undefined;
+
+    let futuresQuery = `SELECT COUNT(*) as c FROM edge_setups`;
+    let forexQuery = `SELECT COUNT(*) as c FROM forex_edge_setups`;
+    let outcomesQuery = `SELECT * FROM outcomes ORDER BY created_at DESC`;
+
+    if (selectedStrategy && selectedStrategy !== 'all') {
+      futuresQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
+      forexQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
+      outcomesQuery = `SELECT * FROM outcomes WHERE strategy_id = '${selectedStrategy}' ORDER BY created_at DESC`;
+    }
+
+    const futuresTotal = (db.prepare(futuresQuery).get() as any).c;
+    const forexTotal = (db.prepare(forexQuery).get() as any).c;
     
-    const futuresActive = queries.getActiveSetups('futures').length;
-    const forexActive = queries.getActiveSetups('forex').length;
+    let futuresActive = queries.getActiveSetups('futures').length;
+    let forexActive = queries.getActiveSetups('forex').length;
+
+    if (selectedStrategy && selectedStrategy !== 'all') {
+      futuresActive = queries.getActiveSetups('futures').filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
+      forexActive = queries.getActiveSetups('forex').filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
+    }
     
-    const outcomes = db.prepare(`SELECT * FROM outcomes ORDER BY created_at DESC`).all() as any[];
+    let outcomes = db.prepare(outcomesQuery).all() as any[];
     let wins = 0;
     let losses = 0;
     let totalRealizedR = 0;
@@ -338,13 +355,17 @@ function buildAnalyticsCSV(
     `# Avg Trade Duration: ${summary.avgHoldingDurationMinutes} min`,
     `# Export Generated At: ${new Date().toISOString()}`,
     `# ==============================================================================`,
-    `Outcome ID,Setup ID,Instrument,Market,Killzone Origin,Bias,Outcome Type,Realized R,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Time to Fill (min),Trade Duration (min),Conviction Score (%)`
+    `Outcome ID,Setup ID,Strategy ID,Strategy Name,Instrument,Market,Killzone Origin,Bias,Outcome Type,Realized R,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Time to Fill (min),Trade Duration (min),Conviction Score (%)`
   ];
 
   for (const o of outcomes) {
+    const stratId = o.strategy_id || 'manna_basic';
+    const stratName = stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic';
     const row = [
       `"${o.id || ''}"`,
       `"${o.setup_id || ''}"`,
+      `"${stratId}"`,
+      `"${stratName}"`,
       `"${o.instrument || ''}"`,
       `"${o.market || ''}"`,
       `"${o.killzone_origin || ''}"`,
