@@ -9,6 +9,39 @@ interface VoiceContextType {
 
 const VoiceContext = createContext<VoiceContextType | undefined>(undefined);
 
+// Web Audio API Synthesized Chime (Fallback & Signal Alert Tone)
+function playSignalChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    // Arpeggio chime 523Hz (C5) -> 659Hz (E5) -> 784Hz (G5)
+    osc.frequency.setValueAtTime(523.25, now);
+    osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(784.00, now + 0.16);
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.45);
+  } catch (err) {
+    console.warn('[Manna Audio] Chime error:', err);
+  }
+}
+
 export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('manna_voice_alerts');
@@ -20,8 +53,44 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const isSpeakingRef = useRef<boolean>(false);
   const recentSpokenRef = useRef<Map<string, number>>(new Map());
   const watchdogTimerRef = useRef<any>(null);
+  const isUnlockedRef = useRef<boolean>(false);
 
-  // Pre-load system voices on mount
+  // Global Audio & Speech Synthesis Unlocker on User Interaction
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (isUnlockedRef.current) return;
+      isUnlockedRef.current = true;
+
+      console.log('[Manna Voice] 🔓 User gesture detected — unlocking audio engine');
+
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.resume();
+          // Speak a silent empty string to prime the browser's speech synthesizer
+          const dummy = new SpeechSynthesisUtterance('');
+          dummy.volume = 0;
+          window.speechSynthesis.speak(dummy);
+        } catch {}
+      }
+
+      // Remove global listeners once unlocked
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+
+    window.addEventListener('pointerdown', unlockAudio);
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
+  // Pre-load system voices
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
 
@@ -59,10 +128,18 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('manna_voice_alerts', JSON.stringify(voiceEnabled));
   }, [voiceEnabled]);
 
-  const toggleVoice = () => setVoiceEnabled(prev => !prev);
+  const toggleVoice = () => {
+    setVoiceEnabled(prev => {
+      const next = !prev;
+      if (next) {
+        playSignalChime();
+      }
+      return next;
+    });
+  };
 
   /**
-   * Process queue sequentially so messages never overlap or lock up Chrome
+   * Process speech queue sequentially
    */
   const processQueue = useCallback(() => {
     if (!('speechSynthesis' in window)) return;
@@ -74,10 +151,15 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     isSpeakingRef.current = true;
 
-    // Safety check: clear any residual stuck state in Chrome before starting new utterance
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
+    // Reset speech engine state before new utterance
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    } catch {}
+
+    // Always play alert chime at the start of an announcement
+    playSignalChime();
 
     const utterance = new SpeechSynthesisUtterance(nextMessage);
     utterance.lang = 'en-US';
@@ -96,7 +178,6 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       (window as any).__mannaUtterance = null;
       isSpeakingRef.current = false;
-      // Wait 300ms pause between sequential announcements
       setTimeout(() => processQueue(), 300);
     };
 
@@ -114,20 +195,28 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       finishCurrent();
     };
 
-    // Watchdog timer: If Chrome fails to trigger onend/onerror within 8 seconds, force finish
+    // Watchdog timer (7 sec limit per sentence)
     watchdogTimerRef.current = setTimeout(() => {
-      console.warn('[Manna Voice] ⚠️ Watchdog timeout triggered, unlocking queue.');
+      console.warn('[Manna Voice] ⚠️ Watchdog timeout, forcing queue unlock.');
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
       finishCurrent();
-    }, 8000);
+    }, 7000);
 
-    // Prevent GC from collecting utterance mid-speech
+    // Keep utterance reference in memory to avoid Chrome GC bug
     (window as any).__mannaUtterance = utterance;
 
-    window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.error('[Manna Voice] speak() exception:', err);
+      finishCurrent();
+    }
   }, []);
 
   /**
-   * Public speak call — deduplicates & adds to sequential queue
+   * Public speak call — deduplicates & adds to queue
    */
   const speak = useCallback((message: string, force: boolean = false) => {
     if (!voiceEnabled && !force) return;
@@ -135,15 +224,13 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const now = Date.now();
     const lastSpokenTime = recentSpokenRef.current.get(message) || 0;
 
-    // Ignore exact duplicate messages spoken within the last 4 seconds
+    // Suppress exact duplicates spoken within 4 seconds
     if (now - lastSpokenTime < 4000) {
       console.log('[Manna Voice] Suppressed duplicate announcement:', message);
       return;
     }
 
     recentSpokenRef.current.set(message, now);
-
-    // Clean old entries from deduplication map periodically
     if (recentSpokenRef.current.size > 50) {
       recentSpokenRef.current.clear();
     }
@@ -154,9 +241,22 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [voiceEnabled, processQueue]);
 
   const testVoice = useCallback(() => {
-    console.log('[Manna Voice] Test voice triggered');
+    console.log('[Manna Voice] Test voice button clicked');
+    isUnlockedRef.current = true;
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.cancel(); // Clear any stale Chrome speech queue
+    } catch {}
+
+    playSignalChime();
     setVoiceEnabled(true);
-    speak('Manna Edge Markets Voice System online. Signal alerts active.', true);
+
+    setTimeout(() => {
+      speak('Manna Edge Markets audio system online. Signal voice alerts active.', true);
+    }, 150);
   }, [speak]);
 
   return (
