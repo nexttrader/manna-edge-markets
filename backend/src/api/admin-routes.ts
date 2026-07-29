@@ -172,6 +172,17 @@ router.get('/analytics', (_req: Request, res: Response) => {
       };
     });
 
+    let grossWinR = 0;
+    let grossLossR = 0;
+    let currentStreak = 0;
+    let maxWinsStreak = 0;
+    let maxLossesStreak = 0;
+    let peakR = 0;
+    let runningR = 0;
+    let maxDrawdownR = 0;
+
+    const assetPerformance: Record<string, { total: number; wins: number; losses: number; plR: number; market: string }> = {};
+
     for (const o of outcomes) {
       const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       let tradeR = 0;
@@ -191,12 +202,37 @@ router.get('/analytics', (_req: Request, res: Response) => {
         if (risk > 0) tradeR = Number((diff / risk).toFixed(2));
       }
 
-      if (isWin) wins++;
-      else if (isLoss) losses++;
+      if (isWin) {
+        wins++;
+        grossWinR += tradeR;
+        if (currentStreak > 0) currentStreak++;
+        else currentStreak = 1;
+        if (currentStreak > maxWinsStreak) maxWinsStreak = currentStreak;
+      } else if (isLoss) {
+        losses++;
+        grossLossR += Math.abs(tradeR);
+        if (currentStreak < 0) currentStreak--;
+        else currentStreak = -1;
+        if (Math.abs(currentStreak) > maxLossesStreak) maxLossesStreak = Math.abs(currentStreak);
+      }
+
+      runningR += tradeR;
+      if (runningR > peakR) peakR = runningR;
+      const dd = peakR - runningR;
+      if (dd > maxDrawdownR) maxDrawdownR = dd;
 
       totalRealizedR += tradeR;
       if (o.setup_market === 'forex') forexR += tradeR;
       else futuresR += tradeR;
+
+      const inst = setup?.instrument || 'OTHER';
+      if (!assetPerformance[inst]) {
+        assetPerformance[inst] = { total: 0, wins: 0, losses: 0, plR: 0, market: setup?.market || 'futures' };
+      }
+      assetPerformance[inst].total++;
+      assetPerformance[inst].plR += tradeR;
+      if (isWin) assetPerformance[inst].wins++;
+      else if (isLoss) assetPerformance[inst].losses++;
 
       if (setup && setup.killzone_origin && killzonePerformance[setup.killzone_origin]) {
         killzonePerformance[setup.killzone_origin].total++;
@@ -208,6 +244,11 @@ router.get('/analytics', (_req: Request, res: Response) => {
 
     const totalTrades = wins + losses;
     const winRate = totalTrades > 0 ? Number((wins / totalTrades).toFixed(4)) : 0;
+    const avgWinR = wins > 0 ? grossWinR / wins : 0;
+    const avgLossR = losses > 0 ? grossLossR / losses : 0;
+    const profitFactor = grossLossR > 0 ? Number((grossWinR / grossLossR).toFixed(2)) : Number(grossWinR.toFixed(2));
+    const expectancyR = Number(((winRate * avgWinR) - ((1 - winRate) * avgLossR)).toFixed(2));
+
     const invStats = queries.getInvalidationStats();
 
     // ── Separate Scheduled Runs vs Manual Triggers ──
@@ -242,6 +283,11 @@ router.get('/analytics', (_req: Request, res: Response) => {
         winRate,
         wins,
         losses,
+        profitFactor,
+        expectancyR,
+        maxDrawdownR: Number(maxDrawdownR.toFixed(2)),
+        maxWinsStreak,
+        maxLossesStreak,
         totalRealizedR: Number(totalRealizedR.toFixed(2)),
         futuresR: Number(futuresR.toFixed(2)),
         forexR: Number(forexR.toFixed(2)),
@@ -262,6 +308,7 @@ router.get('/analytics', (_req: Request, res: Response) => {
         futures: { total: futuresTotal, active: futuresActive },
         forex: { total: forexTotal, active: forexActive },
       },
+      assetPerformance,
       invalidations: invStats,
       killzones: killzonePerformance,
       recentOutcomes: enrichedOutcomes

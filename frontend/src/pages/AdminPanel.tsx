@@ -211,30 +211,44 @@ export const AdminPanel: React.FC = () => {
 
         {/* Analytics Breakdown Grid */}
         <div className="admin-grid analytics-grid">
-          {/* Performance Summary in R */}
+          {/* Advanced Quantitative Performance Metrics */}
           <div className="admin-card glass-card">
-            <h2>Performance Breakdown (Risk-to-Reward R)</h2>
+            <h2>Quantitative Edge Metrics</h2>
+            <div className="analytics-stat-row">
+              <span className="stat-label">🔥 Profit Factor:</span>
+              <span className="stat-val text-gold font-mono">
+                {summary?.profitFactor !== undefined ? summary.profitFactor.toFixed(2) : 'N/A'}
+              </span>
+            </div>
+            <div className="analytics-stat-row">
+              <span className="stat-label">🎯 Trade Expectancy:</span>
+              <span className={`stat-val ${(summary?.expectancyR || 0) >= 0 ? 'text-green' : 'text-red'} font-mono`}>
+                {(summary?.expectancyR || 0) > 0 ? '+' : ''}{summary?.expectancyR || 0.0}R / trade
+              </span>
+            </div>
+            <div className="analytics-stat-row">
+              <span className="stat-label">📉 Max Peak-to-Trough Drawdown:</span>
+              <span className="stat-val text-red font-mono">
+                -{summary?.maxDrawdownR || 0.0}R
+              </span>
+            </div>
+            <div className="analytics-stat-row">
+              <span className="stat-label">🏆 Max Win Streak:</span>
+              <span className="stat-val text-green font-mono">
+                {summary?.maxWinsStreak || 0} in a row
+              </span>
+            </div>
+            <div className="analytics-stat-row">
+              <span className="stat-label">🛑 Max Loss Streak:</span>
+              <span className="stat-val text-red font-mono">
+                {summary?.maxLossesStreak || 0} in a row
+              </span>
+            </div>
             <div className="analytics-stat-row">
               <span className="stat-label">Total Realized Return:</span>
               <span className={`stat-val ${(summary?.totalRealizedR || 0) >= 0 ? 'text-green' : 'text-red'} font-mono`}>
                 {(summary?.totalRealizedR || 0) > 0 ? '+' : ''}{(summary?.totalRealizedR || 0).toFixed(2)}R
               </span>
-            </div>
-            <div className="analytics-stat-row">
-              <span className="stat-label">Futures Return:</span>
-              <span className={`stat-val ${(summary?.futuresR || 0) >= 0 ? 'text-green' : 'text-red'} font-mono`}>
-                {(summary?.futuresR || 0) > 0 ? '+' : ''}{(summary?.futuresR || 0).toFixed(2)}R
-              </span>
-            </div>
-            <div className="analytics-stat-row">
-              <span className="stat-label">Forex Return:</span>
-              <span className={`stat-val ${(summary?.forexR || 0) >= 0 ? 'text-green' : 'text-red'} font-mono`}>
-                {(summary?.forexR || 0) > 0 ? '+' : ''}{(summary?.forexR || 0).toFixed(2)}R
-              </span>
-            </div>
-            <div className="analytics-stat-row">
-              <span className="stat-label">Total Resolved Trades:</span>
-              <span className="stat-val font-mono">{summary?.totalTradesResolved || 0}</span>
             </div>
             <div className="analytics-stat-row">
               <span className="stat-label">⚡ Avg Time to Fill:</span>
@@ -267,6 +281,44 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Asset Performance Breakdown Table */}
+        {analytics?.assetPerformance && Object.keys(analytics.assetPerformance).length > 0 && (
+          <div className="runs-card glass-card">
+            <h2>Asset Performance Matrix</h2>
+            <div className="table-responsive">
+              <table className="runs-table">
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Market</th>
+                    <th>Total Trades</th>
+                    <th>Wins / Losses</th>
+                    <th>Win Rate</th>
+                    <th>Net Return (R)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analytics.assetPerformance).map(([inst, perf]: [string, any]) => {
+                    const wr = perf.total > 0 ? ((perf.wins / perf.total) * 100).toFixed(1) : '0.0';
+                    return (
+                      <tr key={inst}>
+                        <td className="font-mono" style={{ fontWeight: 800 }}>{inst}</td>
+                        <td className="mode-badge">{perf.market.toUpperCase()}</td>
+                        <td className="font-mono">{perf.total}</td>
+                        <td className="font-mono">{perf.wins}W / {perf.losses}L</td>
+                        <td className="font-mono text-green">{wr}%</td>
+                        <td className={`font-mono ${perf.plR >= 0 ? 'text-green' : 'text-red'}`} style={{ fontWeight: 800 }}>
+                          {perf.plR > 0 ? '+' : ''}{perf.plR.toFixed(2)}R
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Historical Saved Archives Section */}
         {archives.length > 0 && (

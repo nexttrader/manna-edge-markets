@@ -12,6 +12,11 @@ export interface AnalyticsData {
     totalRealizedR: number;
     futuresR: number;
     forexR: number;
+    profitFactor?: number;
+    expectancyR?: number;
+    maxDrawdownR?: number;
+    maxWinsStreak?: number;
+    maxLossesStreak?: number;
     avgTimeToFillMinutes?: number;
     avgHoldingDurationMinutes?: number;
   };
@@ -29,6 +34,7 @@ export interface AnalyticsData {
     futures: { total: number; active: number };
     forex: { total: number; active: number };
   };
+  assetPerformance?: Record<string, { total: number; wins: number; losses: number; plR: number; market: string }>;
   invalidations: {
     total: number;
     byReason: Record<string, number>;

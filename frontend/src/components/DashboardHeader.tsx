@@ -24,8 +24,11 @@ export const DashboardHeader: React.FC = () => {
             <Link to="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}>
               🏠 Home
             </Link>
+            <Link to="/client" className={`nav-link ${location.pathname === '/client' ? 'active' : ''}`}>
+              👤 Client View
+            </Link>
             <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
-              📊 Dashboard
+              📊 Pro Desk
             </Link>
             <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
               ⚙️ Admin

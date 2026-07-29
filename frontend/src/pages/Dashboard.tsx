@@ -5,6 +5,7 @@ import { SetupCard } from '../components/SetupCard';
 import { HawkeyePanel } from '../components/HawkeyePanel';
 import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { NewsWarningBanner } from '../components/NewsWarningBanner';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
@@ -47,42 +48,39 @@ export const Dashboard: React.FC = () => {
     }
 
     // 3. Bias Filter
-    if (biasFilter !== 'all' && biasStr !== biasFilter) {
-      return false;
-    }
+    if (biasFilter !== 'all' && biasStr !== biasFilter) return false;
 
     // 4. Order Type Filter
-    const isMarketOrder = setup.created_at && setup.entry_triggered_at
-      ? (new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime()) <= 60000
-      : false;
-
-    if (orderTypeFilter === 'market' && !isMarketOrder) return false;
-    if (orderTypeFilter === 'limit' && isMarketOrder) return false;
+    const isLimit = setup.order_type === 'limit' || Boolean(setup.entry_zone_low && setup.entry_zone_high);
+    const orderTypeStr = isLimit ? 'limit' : 'market';
+    if (orderTypeFilter !== 'all' && orderTypeStr !== orderTypeFilter) return false;
 
     return true;
   });
 
-  // Sort Logic
+  // Sorting Logic
   const sortedSetups = [...filteredSetups].sort((a, b) => {
+    if (sortBy === 'conviction') {
+      return (b.conviction_score || b.conviction || 0) - (a.conviction_score || a.conviction || 0);
+    }
     if (sortBy === 'newest') {
-      const tA = new Date(a.created_at || 0).getTime();
-      const tB = new Date(b.created_at || 0).getTime();
-      return tB - tA;
+      return new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime();
     }
     if (sortBy === 'live_rr') {
-      const rrA = a.unrealizedR ?? -999;
-      const rrB = b.unrealizedR ?? -999;
-      return rrB - rrA;
+      return (b.unrealizedR || 0) - (a.unrealizedR || 0);
     }
     if (sortBy === 'closest_entry') {
-      const distA = a.distance_to_entry_r ?? 999;
-      const distB = b.distance_to_entry_r ?? 999;
-      return distA - distB;
+      const aCurrent = a.current_price || 0;
+      const aMid = a.entry_zone_mid || ((a.entry_zone_low || 0) + (a.entry_zone_high || 0)) / 2;
+      const aDist = aCurrent > 0 ? Math.abs(aCurrent - aMid) : 999999;
+
+      const bCurrent = b.current_price || 0;
+      const bMid = b.entry_zone_mid || ((b.entry_zone_low || 0) + (b.entry_zone_high || 0)) / 2;
+      const bDist = bCurrent > 0 ? Math.abs(bCurrent - bMid) : 999999;
+
+      return aDist - bDist;
     }
-    // Default: highest conviction score
-    const scoreA = a.conviction_score ?? a.conviction ?? 0;
-    const scoreB = b.conviction_score ?? b.conviction ?? 0;
-    return scoreB - scoreA;
+    return 0;
   });
 
   const watchlistCount = setups.filter(s => watchlistIds.includes(s.id)).length;
@@ -101,6 +99,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
+      <NewsWarningBanner />
       <DashboardHeader />
       
       <main className="container dashboard-main">

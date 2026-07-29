@@ -15,6 +15,7 @@ import adminRoutes from './api/admin-routes';
 import hawkeyeRoutes from './api/hawkeye-routes';
 import runRoutes from './api/run-routes';
 import eventsRouter from './api/events';
+import newsRoutes from './api/news-routes';
 
 const logger = createLogger('server');
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api', setupRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin', runRoutes);
 app.use('/api/hawkeye', hawkeyeRoutes);
+app.use('/api/news', newsRoutes);
 app.use('/api', eventsRouter);
 
 // Health check
