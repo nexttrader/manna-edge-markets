@@ -1,5 +1,6 @@
 .setup-detail-page {
   min-height: 100vh;
+  background: var(--kdt-purple-deep);
 }
 
 .sd-header {
@@ -10,21 +11,30 @@
   border-top: none;
   border-left: none;
   border-right: none;
+  background: rgba(20, 9, 38, 0.96);
+  border-bottom: 1px solid var(--kdt-purple-border);
 }
 
 .back-link {
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--kdt-white-muted);
+  font-family: var(--font-headline);
+  font-weight: 700;
   font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .back-link:hover {
-  color: var(--text-primary);
+  color: var(--kdt-gold);
 }
 
 .sd-title {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-family: var(--font-headline);
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kdt-gold);
   margin-left: 16px;
 }
 
@@ -53,10 +63,18 @@
 
 .outcome-section {
   padding: 24px;
+  background: var(--kdt-purple-card);
+  border: 1px solid var(--kdt-purple-border);
+  border-radius: 10px;
 }
 
 .outcome-section h3 {
-  font-size: 1.2rem;
+  font-family: var(--font-headline);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kdt-gold);
   margin-bottom: 16px;
 }
 
@@ -68,47 +86,59 @@
 
 .stat-box {
   flex: 1;
-  background: var(--bg-secondary);
+  background: var(--kdt-purple-deep);
   padding: 16px;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--kdt-purple-border);
 }
 
 .stat-label {
+  font-family: var(--font-label);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--kdt-white-muted);
   text-transform: uppercase;
 }
 
 .stat-val {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   font-family: var(--font-mono);
+  color: var(--kdt-white);
 }
 
 .execution-details {
-  background: var(--bg-secondary);
+  background: var(--kdt-purple-deep);
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--kdt-purple-border);
 }
 
 .exec-label {
+  font-family: var(--font-label);
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--kdt-white-muted);
   display: block;
   margin-bottom: 4px;
+  text-transform: uppercase;
 }
 
 .history-card {
   padding: 24px;
+  background: var(--kdt-purple-card);
+  border: 1px solid var(--kdt-purple-border);
+  border-radius: 10px;
 }
 
 .history-card h3 {
-  font-size: 1.1rem;
+  font-family: var(--font-headline);
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kdt-gold);
   margin-bottom: 20px;
 }
 
@@ -126,7 +156,7 @@
   bottom: 0;
   left: 7px;
   width: 2px;
-  background: var(--border-subtle);
+  background: var(--kdt-purple-border);
 }
 
 .timeline-item {
@@ -147,47 +177,55 @@
   height: 16px;
   border-radius: 50%;
   background: var(--red);
-  border: 3px solid var(--bg-card);
+  border: 3px solid var(--kdt-purple-card);
   z-index: 1;
 }
 
 .tl-time {
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--kdt-white-muted);
   margin-bottom: 4px;
 }
 
 .tl-state {
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   margin-bottom: 4px;
 }
 
 .tl-reason {
   display: inline-block;
-  padding: 2px 6px;
-  background: var(--amber-dim);
-  color: var(--amber);
+  padding: 2px 8px;
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--kdt-gold);
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-family: var(--font-mono);
   margin-bottom: 6px;
 }
 
 .tl-detail {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
+  font-size: 0.88rem;
+  color: var(--kdt-white-muted);
+  line-height: 1.45;
 }
 
 .setup-detail-loading, .setup-detail-error {
   padding: 64px 20px;
   text-align: center;
+  font-family: var(--font-headline);
+  font-size: 1.2rem;
+  color: var(--kdt-white-muted);
 }
 
 .history-loading, .history-empty {
-  color: var(--text-muted);
-  font-size: 0.9rem;
+  color: var(--kdt-white-muted);
+  font-family: var(--font-headline);
+  font-size: 0.95rem;
   text-align: center;
   padding: 24px 0;
 }

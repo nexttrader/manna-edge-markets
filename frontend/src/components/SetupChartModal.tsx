@@ -80,12 +80,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#080d1a' },
-        textColor: '#94a3b8',
+        background: { type: ColorType.Solid, color: '#140926' },
+        textColor: '#C5BCDA',
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
+        vertLines: { color: 'rgba(180, 130, 255, 0.08)' },
+        horzLines: { color: 'rgba(180, 130, 255, 0.08)' },
       },
       width: container.clientWidth,
       height: containerHeight,

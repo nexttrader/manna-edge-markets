@@ -25,90 +25,193 @@ p, h1, h2, h3, h4, h5, h6 {
   overflow-wrap: break-word;
 }
 
-/* Color palette & Variables */
+/* KDT Institute Color Palette & Design Tokens */
 :root {
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: rgba(17, 24, 39, 0.85);
-  --bg-glass: rgba(17, 24, 39, 0.6);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glass: rgba(255, 255, 255, 0.12);
+  /* Brand Core Colors */
+  --kdt-purple-deep: #140926;       /* Deep Imperial Royal Purple (Body BG) */
+  --kdt-purple-mid: #1a0a2e;        /* Dark Purple Navigation / Sections */
+  --kdt-purple-card: #1e0d38;       /* Rich Royal Purple Surface Cards */
+  --kdt-purple-border: rgba(180, 130, 255, 0.18); /* Purple Glow Borders */
+  
+  /* Gold Accents */
+  --kdt-gold: #C9A84C;              /* Primary Kingdom Brushed Gold */
+  --kdt-gold-light: #DFC46B;        /* Bright Gold Highlight */
+  --kdt-gold-dark: #A38534;         /* Deep Antique Gold */
+  --kdt-gold-dim: rgba(201, 168, 76, 0.15); /* Translucent Gold Glow */
 
-  --text-primary: #f0f2f5;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  /* Text & Neutral Colors */
+  --kdt-white: #FFFFFF;
+  --kdt-white-muted: #C5BCDA;       /* Soft Purple-tinted Silver */
+  --text-primary: #FFFFFF;
+  --text-secondary: #C5BCDA;
+  --text-muted: #9589B3;
 
-  --green: #00E676;
+  /* Trading State Colors */
+  --green: #00E676;                 /* Long / Target Met */
   --green-dim: rgba(0, 230, 118, 0.15);
-  --red: #FF1744;
-  --red-dim: rgba(255, 23, 68, 0.15);
-  --amber: #FFD600;
-  --amber-dim: rgba(255, 214, 0, 0.15);
-  --blue: #448AFF;
+  --red: #FF5252;                   /* Short / Stop Loss */
+  --red-dim: rgba(255, 82, 82, 0.15);
+  --amber: #FFC107;                 /* Pending / Warning */
+  --amber-dim: rgba(255, 193, 7, 0.15);
+  --blue: #448AFF;                  /* Execution Info */
   --blue-dim: rgba(68, 138, 255, 0.15);
-  --purple: #B388FF;
-  --gray: #6b7280;
-  --gray-dim: rgba(107, 114, 128, 0.15);
 
-  /* Typography */
-  --font-body: 'Inter', sans-serif;
+  /* Legacy Variable Mapping for Compatibility */
+  --bg-primary: var(--kdt-purple-deep);
+  --bg-secondary: var(--kdt-purple-mid);
+  --bg-card: var(--kdt-purple-card);
+  --bg-glass: rgba(30, 13, 56, 0.85);
+  --border-subtle: var(--kdt-purple-border);
+  --border-glass: rgba(201, 168, 76, 0.25);
+
+  /* Brand Typography */
+  --font-headline: 'Barlow Condensed', sans-serif;
+  --font-label: 'Barlow Semi Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Shadows and effects */
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  /* Shadows and Glass Effects */
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.25);
   --shadow-glow-green: 0 0 20px rgba(0, 230, 118, 0.3);
-  --shadow-glow-red: 0 0 20px rgba(255, 23, 68, 0.3);
-  --shadow-glow-amber: 0 0 20px rgba(255, 214, 0, 0.3);
-  --shadow-glow-blue: 0 0 20px rgba(68, 138, 255, 0.3);
+  --shadow-glow-red: 0 0 20px rgba(255, 82, 82, 0.3);
   --glass-blur: blur(16px);
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--kdt-purple-deep);
   color: var(--text-primary);
   font-family: var(--font-body);
+  background-image: 
+    radial-gradient(circle at 15% 20%, rgba(201, 168, 76, 0.04) 0%, transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(120, 50, 200, 0.08) 0%, transparent 50%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
-/* Scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: var(--kdt-purple-deep);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-secondary);
+  background: rgba(201, 168, 76, 0.3);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--kdt-gold);
 }
 
-/* Typography utilities */
+/* Typography Utilities */
+h1, h2, h3, h4, h5, h6, .font-headline {
+  font-family: var(--font-headline);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .font-mono {
   font-family: var(--font-mono);
+}
+
+.font-label {
+  font-family: var(--font-label);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .text-primary { color: var(--text-primary); }
 .text-secondary { color: var(--text-secondary); }
 .text-muted { color: var(--text-muted); }
+.text-gold { color: var(--kdt-gold); }
 .text-green { color: var(--green); }
 .text-red { color: var(--red); }
 .text-amber { color: var(--amber); }
 .text-blue { color: var(--blue); }
 
-/* Card Base Styles */
+/* KDT Global Utilities */
+.kdt-gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, var(--kdt-gold) 0%, transparent 100%);
+  width: 100%;
+}
+
 .glass-card {
-  background: var(--bg-card);
+  background: var(--kdt-purple-card);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-glass);
-  border-radius: 12px;
+  border: 1px solid var(--kdt-purple-border);
+  border-radius: 10px;
   box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--kdt-gold) 0%, transparent 80%);
+  opacity: 0.7;
+}
+
+.glass-card:hover {
+  border-color: var(--kdt-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(201, 168, 76, 0.15);
+}
+
+/* KDT Buttons */
+.kdt-btn-primary {
+  background-color: var(--kdt-gold);
+  color: var(--kdt-purple-deep);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: none;
+  padding: 10px 24px;
+  font-family: var(--font-headline);
+  font-size: 0.95rem;
+  font-weight: 800;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kdt-btn-primary:hover {
+  background-color: var(--kdt-gold-light);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.35);
+}
+
+.kdt-btn-outline {
+  color: var(--kdt-white);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background-color: transparent;
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  padding: 9px 22px;
+  font-family: var(--font-headline);
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.kdt-btn-outline:hover {
+  border-color: var(--kdt-gold);
+  color: var(--kdt-gold);
+  background: rgba(201, 168, 76, 0.08);
 }
 
 /* Animations */
@@ -122,22 +225,16 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.05); opacity: 0.8; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+@keyframes pulseGold {
+  0% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(201, 168, 76, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0); }
 }
 
 .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
 .animate-slide-up { animation: slideUp 0.4s ease-out; }
-.animate-pulse { animation: pulse 2s infinite; }
 
-/* Responsive Breakpoints Utils */
+/* Responsive Container */
 .container {
   width: 100%;
   max-width: 1440px;

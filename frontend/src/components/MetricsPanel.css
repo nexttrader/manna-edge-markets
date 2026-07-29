@@ -6,27 +6,47 @@
 }
 
 .metric-card {
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: var(--kdt-purple-card);
+  border: 1px solid var(--kdt-purple-border);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--kdt-gold) 0%, transparent 80%);
 }
 
 .metric-title {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-family: var(--font-headline);
+  font-size: 0.9rem;
+  color: var(--kdt-white-muted);
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .metric-val {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-family: var(--font-headline);
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--kdt-gold);
   line-height: 1;
+  letter-spacing: 0.02em;
 }
 
 .metric-sub {
+  font-family: var(--font-label);
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  color: var(--kdt-white-muted);
 }
