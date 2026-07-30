@@ -39,10 +39,29 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Find fresh Supply and Demand imbalance zones in candle history
+   * Check if a Supply/Demand zone is FRESH (no subsequent candles cut through proximal boundary)
    */
-  private findZones(candles: Candle[]): Zone[] {
-    const zones: Zone[] = [];
+  private isFreshZone(zone: Zone, candles: Candle[], zoneIndex: number): boolean {
+    if (zoneIndex < 0 || zoneIndex >= candles.length - 1) return true;
+    const subsequentCandles = candles.slice(zoneIndex + 1);
+
+    for (const c of subsequentCandles) {
+      if (zone.type === 'demand') {
+        // If a subsequent candle low penetrated below proximal line, zone is tested/cut-through
+        if (c.low < zone.proximal) return false;
+      } else {
+        // If a subsequent candle high penetrated above proximal line, zone is tested/cut-through
+        if (c.high > zone.proximal) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Find fresh Supply and Demand imbalance zones in candle history with candle index
+   */
+  private findZonesWithIndex(candles: Candle[]): (Zone & { index: number })[] {
+    const zones: (Zone & { index: number })[] = [];
     if (candles.length < 5) return zones;
 
     const types = candles.map(c => this.classifyCandle(c));
@@ -70,7 +89,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
             const distal = Math.min(...baseCandles.map(c => c.low));
-            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime });
+            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime, index: i });
           }
         }
 
@@ -83,13 +102,17 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
             const distal = Math.max(...baseCandles.map(c => c.high));
-            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime });
+            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime, index: i });
           }
         }
       }
     }
 
     return zones;
+  }
+
+  private findZones(candles: Candle[]): Zone[] {
+    return this.findZonesWithIndex(candles);
   }
 
   /**
@@ -113,30 +136,46 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Determine HTF (1H) Curve Location relative to major HTF zones
+   * Determine HTF (1H) Curve Location relative to fresh HTF zones without cutting through candles
    */
   private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone } {
-    const htfZones = this.findZones(htfCandles);
-    const demandZones = htfZones.filter(z => z.type === 'demand');
-    const supplyZones = htfZones.filter(z => z.type === 'supply');
+    const indexedZones = this.findZonesWithIndex(htfCandles);
 
-    if (demandZones.length > 0) {
-      const closestDemand = demandZones[demandZones.length - 1];
-      if (Math.abs(currentPrice - closestDemand.proximal) <= atr * 2.0 || currentPrice <= closestDemand.proximal) {
-        return { location: 'low', htfZone: closestDemand };
-      }
+    // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (below price, unbroken by wicks)
+    const freshDemandZones = indexedZones.filter(z => z.type === 'demand' && z.proximal <= currentPrice && this.isFreshZone(z, htfCandles, z.index));
+    
+    // 2. Look UP and to the LEFT for nearest fresh Supply zone (above price, unbroken by wicks)
+    const freshSupplyZones = indexedZones.filter(z => z.type === 'supply' && z.proximal >= currentPrice && this.isFreshZone(z, htfCandles, z.index));
+
+    const nearestDemand = freshDemandZones.length > 0 
+      ? freshDemandZones[freshDemandZones.length - 1]
+      : this.findFallbackZone(htfCandles, 'demand', atr);
+
+    const nearestSupply = freshSupplyZones.length > 0 
+      ? freshSupplyZones[freshSupplyZones.length - 1]
+      : this.findFallbackZone(htfCandles, 'supply', atr);
+
+    // Calculate percentage range between fresh Demand & fresh Supply
+    const range = Math.max(0.0001, nearestSupply.proximal - nearestDemand.proximal);
+    const curvePct = Math.max(0, Math.min(100, ((currentPrice - nearestDemand.proximal) / range) * 100));
+
+    let location: 'low' | 'high' | 'middle' = 'middle';
+    let htfZone = nearestDemand;
+
+    if (curvePct <= 33.3 || currentPrice <= nearestDemand.proximal) {
+      location = 'low';
+      htfZone = nearestDemand;
+    } else if (curvePct >= 66.7 || currentPrice >= nearestSupply.proximal) {
+      location = 'high';
+      htfZone = nearestSupply;
+    } else {
+      location = 'middle';
+      const distToDemand = Math.abs(currentPrice - nearestDemand.proximal);
+      const distToSupply = Math.abs(nearestSupply.proximal - currentPrice);
+      htfZone = distToDemand <= distToSupply ? nearestDemand : nearestSupply;
     }
 
-    if (supplyZones.length > 0) {
-      const closestSupply = supplyZones[supplyZones.length - 1];
-      if (Math.abs(currentPrice - closestSupply.proximal) <= atr * 2.0 || currentPrice >= closestSupply.proximal) {
-        return { location: 'high', htfZone: closestSupply };
-      }
-    }
-
-    const fallbackDemand = demandZones.length > 0 ? demandZones[demandZones.length - 1] : undefined;
-    const fallbackSupply = supplyZones.length > 0 ? supplyZones[supplyZones.length - 1] : undefined;
-    return { location: 'middle', htfZone: fallbackDemand || fallbackSupply };
+    return { location, htfZone };
   }
 
   /**
