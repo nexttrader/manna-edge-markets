@@ -142,18 +142,18 @@ export class MannaSndStrategy implements IStrategyEngine {
   private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone; htfDemand?: Zone; htfSupply?: Zone } {
     const indexedZones = this.findZonesWithIndex(htfCandles);
 
-    // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (RBR or DBR, unbroken by wicks)
+    // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (highest proximal line below currentPrice)
     const freshDemandZones = indexedZones.filter(z => z.type === 'demand' && z.proximal <= currentPrice && this.isFreshZone(z, htfCandles, z.index));
     
-    // 2. Look UP and to the LEFT for nearest fresh Supply zone (RBD or DBD, unbroken by wicks)
+    // 2. Look UP and to the LEFT for nearest fresh Supply zone (lowest proximal line above currentPrice)
     const freshSupplyZones = indexedZones.filter(z => z.type === 'supply' && z.proximal >= currentPrice && this.isFreshZone(z, htfCandles, z.index));
 
     const nearestDemand = freshDemandZones.length > 0 
-      ? freshDemandZones[freshDemandZones.length - 1]
+      ? freshDemandZones.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, freshDemandZones[0])
       : this.findFallbackZone(htfCandles, 'demand', atr);
 
     const nearestSupply = freshSupplyZones.length > 0 
-      ? freshSupplyZones[freshSupplyZones.length - 1]
+      ? freshSupplyZones.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, freshSupplyZones[0])
       : this.findFallbackZone(htfCandles, 'supply', atr);
 
     // Calculate percentage range between fresh Demand & fresh Supply

@@ -212,22 +212,20 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         // Dynamically find Supply & Demand zones from candles if missing from metadata
         const refPrice = currentPrice > 0 ? currentPrice : entryMid;
         if (!metadata.htf_demand_proximal) {
-          const lowerCandles = data.candles.filter((c: any) => Number(c.low) <= refPrice);
+          const lowerCandles = data.candles.filter((c: any) => Number(c.low) < refPrice);
           if (lowerCandles.length > 0) {
-            const minLow = Math.min(...lowerCandles.slice(-30).map((c: any) => Number(c.low)));
-            const candle = lowerCandles.find((c: any) => Number(c.low) === minLow) || lowerCandles[lowerCandles.length - 1];
+            const candle = lowerCandles.reduce((closest: any, c: any) => Number(c.low) > Number(closest.low) ? c : closest, lowerCandles[0]);
             const dProx = Math.max(Number(candle.open), Number(candle.close));
-            const dDist = minLow;
+            const dDist = Number(candle.low);
             setDynamicDemand({ prox: dProx, dist: dDist, time: candle.timestamp });
           }
         }
         if (!metadata.htf_supply_proximal) {
-          const higherCandles = data.candles.filter((c: any) => Number(c.high) >= refPrice);
+          const higherCandles = data.candles.filter((c: any) => Number(c.high) > refPrice);
           if (higherCandles.length > 0) {
-            const maxHigh = Math.max(...higherCandles.slice(-30).map((c: any) => Number(c.high)));
-            const candle = higherCandles.find((c: any) => Number(c.high) === maxHigh) || higherCandles[higherCandles.length - 1];
+            const candle = higherCandles.reduce((closest: any, c: any) => Number(c.high) < Number(closest.high) ? c : closest, higherCandles[0]);
             const sProx = Math.min(Number(candle.open), Number(candle.close));
-            const sDist = maxHigh;
+            const sDist = Number(candle.high);
             setDynamicSupply({ prox: sProx, dist: sDist, time: candle.timestamp });
           }
         }
