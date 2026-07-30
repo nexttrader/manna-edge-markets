@@ -262,6 +262,9 @@ export class MannaSndStrategy implements IStrategyEngine {
           const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
           const tp2 = entry_zone_mid + (risk * 3.0); // 3:1 RR
 
+          // Discard setup if current market price has already reached TP1 or breached Stop Loss
+          if (currentPrice >= tp1 || currentPrice <= stop) continue;
+
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
@@ -334,6 +337,9 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const tp1 = entry_zone_mid - (risk * 2.0); // 2:1 Minimum RR
           const tp2 = entry_zone_mid - (risk * 3.0); // 3:1 RR
+
+          // Discard setup if current market price has already reached TP1 or breached Stop Loss
+          if (currentPrice <= tp1 || currentPrice >= stop) continue;
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
