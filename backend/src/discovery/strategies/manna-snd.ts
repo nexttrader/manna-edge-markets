@@ -117,10 +117,10 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Fallback Zone Finder using Swing High / Swing Low Base Consolidations
+   * Fallback Zone Finder using Swing High / Swing Low Base Consolidations (30 candle lookback)
    */
   private findFallbackZone(candles: Candle[], type: 'demand' | 'supply', atr: number): Zone {
-    const recent = candles.slice(-20);
+    const recent = candles.slice(-30);
     if (type === 'demand') {
       const minLow = Math.min(...recent.map(c => c.low));
       const swingCandle = recent.find(c => c.low === minLow) || recent[recent.length - 1];
@@ -180,11 +180,11 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Determine 15M Trend Direction
+   * Determine 15M Trend Direction (30 candle lookback)
    */
   private get15mTrend(candles15m: Candle[]): 'up' | 'down' | 'sideways' {
-    if (candles15m.length < 10) return 'sideways';
-    const recent = candles15m.slice(-10);
+    if (candles15m.length < 5) return 'sideways';
+    const recent = candles15m.slice(-30);
 
     let higherHighs = 0;
     let lowerLows = 0;
@@ -213,9 +213,9 @@ export class MannaSndStrategy implements IStrategyEngine {
 
     for (const instrument of instruments) {
       try {
-        const candles15m = await getLiveCandles(instrument, '15m', 50);
-        const candles1h = await getLiveCandles(instrument, '1h', 120);
-        if (candles15m.length < 15 || candles1h.length < 10) continue;
+        const candles15m = await getLiveCandles(instrument, '15m', 30);
+        const candles1h = await getLiveCandles(instrument, '1h', 30);
+        if (candles15m.length < 10 || candles1h.length < 10) continue;
 
         const atr14 = computeATR(candles15m, 14);
         const currentPrice = await getLiveCurrentPrice(instrument);
