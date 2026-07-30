@@ -61,6 +61,27 @@ export function initializeDatabase(): void {
         db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
     } catch {}
 
+    // Self-healing migration: Sync strategy_id on outcomes from parent edge_setups / forex_edge_setups
+    try {
+        db.exec(`
+            UPDATE outcomes 
+            SET strategy_id = (
+                SELECT COALESCE(e.strategy_id, f.strategy_id, 'manna_basic')
+                FROM outcomes o
+                LEFT JOIN edge_setups e ON o.setup_id = e.id
+                LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
+                WHERE o.id = outcomes.id
+            )
+            WHERE EXISTS (
+                SELECT 1 FROM edge_setups e WHERE e.id = outcomes.setup_id AND e.strategy_id IS NOT NULL AND e.strategy_id != outcomes.strategy_id
+            ) OR EXISTS (
+                SELECT 1 FROM forex_edge_setups f WHERE f.id = outcomes.setup_id AND f.strategy_id IS NOT NULL AND f.strategy_id != outcomes.strategy_id
+            );
+        `);
+    } catch (e) {
+        console.error('Failed to sync outcome strategy_ids:', e);
+    }
+
     // Analytics archives table for resetting and exporting dataset epochs
     db.exec(`
         CREATE TABLE IF NOT EXISTS analytics_archives (

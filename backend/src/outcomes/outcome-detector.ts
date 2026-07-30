@@ -109,6 +109,7 @@ export class OutcomeDetector {
             id: `out_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             setup_id: setup.id,
             setup_market: setup.market || 'futures',
+            strategy_id: setup.strategy_id || 'manna_basic',
             outcome_type: outcomeType,
             realized_pl: realizedPL,
             mae: mae,

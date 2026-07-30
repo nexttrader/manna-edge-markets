@@ -96,7 +96,13 @@ router.get('/analytics', (req: Request, res: Response) => {
     if (selectedStrategy && selectedStrategy !== 'all') {
       futuresQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
       forexQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
-      outcomesQuery = `SELECT * FROM outcomes WHERE strategy_id = '${selectedStrategy}' ORDER BY created_at DESC`;
+      outcomesQuery = `
+        SELECT o.* FROM outcomes o
+        LEFT JOIN edge_setups e ON o.setup_id = e.id
+        LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
+        WHERE COALESCE(o.strategy_id, e.strategy_id, f.strategy_id, 'manna_basic') = '${selectedStrategy}'
+        ORDER BY o.created_at DESC
+      `;
     }
 
     const futuresTotal = (db.prepare(futuresQuery).get() as any).c;
@@ -698,7 +704,8 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
 
     // Aggregate outcomes by strategy
     for (const outcome of allOutcomes) {
-      const stratId = outcome.strategy_id || 'manna_basic';
+      const parentSetup = allSetups.find(s => s.id === outcome.setup_id);
+      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
       if (strategyStats[stratId]) {
         if (['tp1_hit', 'tp2_hit'].includes(outcome.outcome_type)) {
           strategyStats[stratId].wins += 1;
