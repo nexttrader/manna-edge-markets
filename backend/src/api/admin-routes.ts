@@ -204,7 +204,7 @@ router.get('/analytics', (req: Request, res: Response) => {
     let runningR = 0;
     let maxDrawdownR = 0;
 
-    const assetPerformance: Record<string, { total: number; wins: number; losses: number; plR: number; market: string }> = {};
+    const assetPerformance: Record<string, { instrument: string; strategy_id: string; total: number; wins: number; losses: number; plR: number; market: string }> = {};
 
     for (const o of outcomes) {
       const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
@@ -249,13 +249,23 @@ router.get('/analytics', (req: Request, res: Response) => {
       else futuresR += tradeR;
 
       const inst = setup?.instrument || 'OTHER';
-      if (!assetPerformance[inst]) {
-        assetPerformance[inst] = { total: 0, wins: 0, losses: 0, plR: 0, market: setup?.market || 'futures' };
+      const stratId = o.strategy_id || setup?.strategy_id || 'manna_basic';
+      const key = `${inst}__${stratId}`;
+      if (!assetPerformance[key]) {
+        assetPerformance[key] = { 
+          instrument: inst, 
+          strategy_id: stratId, 
+          total: 0, 
+          wins: 0, 
+          losses: 0, 
+          plR: 0, 
+          market: setup?.market || 'futures' 
+        };
       }
-      assetPerformance[inst].total++;
-      assetPerformance[inst].plR += tradeR;
-      if (isWin) assetPerformance[inst].wins++;
-      else if (isLoss) assetPerformance[inst].losses++;
+      assetPerformance[key].total++;
+      assetPerformance[key].plR += tradeR;
+      if (isWin) assetPerformance[key].wins++;
+      else if (isLoss) assetPerformance[key].losses++;
 
       if (setup && setup.killzone_origin && killzonePerformance[setup.killzone_origin]) {
         killzonePerformance[setup.killzone_origin].total++;
@@ -704,7 +714,7 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
 
     // Aggregate outcomes by strategy
     for (const outcome of allOutcomes) {
-      const parentSetup = allSetups.find(s => s.id === outcome.setup_id);
+      const parentSetup = allSetups.find(s => String(s.id) === String(outcome.setup_id));
       const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
       if (strategyStats[stratId]) {
         if (['tp1_hit', 'tp2_hit'].includes(outcome.outcome_type)) {
@@ -725,11 +735,34 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
       s.totalRealizedR = Number(s.totalRealizedR.toFixed(2));
     }
 
+    const stratsArray = Object.values(strategyStats);
+
+    // Collective Portfolio-Wide Aggregate Metrics
+    const collectiveWins = stratsArray.reduce((acc, s) => acc + s.wins, 0);
+    const collectiveLosses = stratsArray.reduce((acc, s) => acc + s.losses, 0);
+    const collectiveResolvedCount = collectiveWins + collectiveLosses;
+    const collectiveWinRate = collectiveResolvedCount > 0 ? Number(((collectiveWins / collectiveResolvedCount) * 100).toFixed(1)) : 0;
+    const collectiveRealizedR = Number(stratsArray.reduce((acc, s) => acc + s.totalRealizedR, 0).toFixed(2));
+
+    const collectiveStats = {
+      id: 'collective',
+      name: '🌐 Collective (All Strategies)',
+      tier: 'portfolio',
+      totalSignals: stratsArray.reduce((acc, s) => acc + s.totalSignals, 0),
+      activeSignals: stratsArray.reduce((acc, s) => acc + s.activeSignals, 0),
+      resolvedSignals: stratsArray.reduce((acc, s) => acc + s.resolvedSignals, 0),
+      wins: collectiveWins,
+      losses: collectiveLosses,
+      winRate: collectiveWinRate,
+      totalRealizedR: collectiveRealizedR
+    };
+
     res.json({
-      strategies: Object.values(strategyStats)
+      collective: collectiveStats,
+      strategies: stratsArray
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch strategy analytics', details: String(error) });
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
 });
 

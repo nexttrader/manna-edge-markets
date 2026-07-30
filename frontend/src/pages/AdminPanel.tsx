@@ -126,6 +126,42 @@ export const AdminPanel: React.FC = () => {
         <div className="strategy-matrix-container">
           <h2 className="section-title font-mono">⚡ STRATEGY PERFORMANCE MATRIX</h2>
           <div className="strategy-cards-grid font-mono">
+            {analytics?.collective && (
+              <div className="strategy-card glass-card strat-border-collective" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
+                <div className="strat-card-header">
+                  <span className="strat-badge" style={{ background: '#00e5ff', color: '#090314', fontWeight: 800 }}>🌐 COLLECTIVE (ALL STRATEGIES)</span>
+                  <span className="strat-tier-tag" style={{ borderColor: '#00e5ff', color: '#00e5ff' }}>PORTFOLIO WIDE</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Total Signals Generated:</span>
+                  <span className="stat-val">{analytics.collective.totalSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Active Positions:</span>
+                  <span className="stat-val text-gold">{analytics.collective.activeSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Resolved Trades:</span>
+                  <span className="stat-val">{analytics.collective.resolvedSignals}</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Win Rate (%):</span>
+                  <span className="stat-val text-green">{analytics.collective.winRate}% ({analytics.collective.wins}W / {analytics.collective.losses}L)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Net Realized Return:</span>
+                  <span className={`stat-val ${analytics.collective.totalRealizedR >= 0 ? 'text-green' : 'text-red'}`}>
+                    {analytics.collective.totalRealizedR > 0 ? '+' : ''}{analytics.collective.totalRealizedR}R
+                  </span>
+                </div>
+              </div>
+            )}
+
             {strategies.map((strat) => (
               <div key={strat.id} className={`strategy-card glass-card strat-border-${strat.id}`}>
                 <div className="strat-card-header">
@@ -358,12 +394,28 @@ export const AdminPanel: React.FC = () => {
         {/* Asset Performance Breakdown Table */}
         {analytics?.assetPerformance && Object.keys(analytics.assetPerformance).length > 0 && (
           <div className="runs-card glass-card">
-            <h2>Asset Performance Matrix</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2>Asset Performance Matrix</h2>
+              <div className="font-mono" style={{ fontSize: 13, color: '#C5BCDA' }}>
+                Filter Strategy: {' '}
+                <select 
+                  value={strategyFilter} 
+                  onChange={(e) => setStrategyFilter(e.target.value as any)}
+                  className="font-mono"
+                  style={{ background: '#140926', color: '#00e5ff', border: '1px solid rgba(224, 86, 253, 0.3)', padding: '4px 8px', borderRadius: 4, cursor: 'pointer' }}
+                >
+                  <option value="all">🌐 All Strategies (Collective)</option>
+                  <option value="manna_snd">🟡 Manna SnD</option>
+                  <option value="manna_basic">⚡ Manna Basic</option>
+                </select>
+              </div>
+            </div>
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
                   <tr>
                     <th>Instrument</th>
+                    <th>Strategy</th>
                     <th>Market</th>
                     <th>Total Trades</th>
                     <th>Wins / Losses</th>
@@ -372,21 +424,28 @@ export const AdminPanel: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analytics.assetPerformance).map(([inst, perf]: [string, any]) => {
-                    const wr = perf.total > 0 ? ((perf.wins / perf.total) * 100).toFixed(1) : '0.0';
-                    return (
-                      <tr key={inst}>
-                        <td className="font-mono" style={{ fontWeight: 800 }}>{inst}</td>
-                        <td className="mode-badge">{perf.market.toUpperCase()}</td>
-                        <td className="font-mono">{perf.total}</td>
-                        <td className="font-mono">{perf.wins}W / {perf.losses}L</td>
-                        <td className="font-mono text-green">{wr}%</td>
-                        <td className={`font-mono ${perf.plR >= 0 ? 'text-green' : 'text-red'}`} style={{ fontWeight: 800 }}>
-                          {perf.plR > 0 ? '+' : ''}{perf.plR.toFixed(2)}R
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {Object.entries(analytics.assetPerformance)
+                    .filter(([_, perf]: [string, any]) => strategyFilter === 'all' || (perf.strategy_id || 'manna_basic') === strategyFilter)
+                    .map(([key, perf]: [string, any]) => {
+                      const wr = perf.total > 0 ? ((perf.wins / perf.total) * 100).toFixed(1) : '0.0';
+                      const stratName = perf.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic';
+                      const badgeClass = perf.strategy_id === 'manna_snd' ? 'badge-manna_snd' : 'badge-manna_basic';
+                      return (
+                        <tr key={key}>
+                          <td className="font-mono" style={{ fontWeight: 800 }}>{perf.instrument || key.split('__')[0]}</td>
+                          <td>
+                            <span className={`strat-badge ${badgeClass}`} style={{ fontSize: 11, padding: '2px 6px' }}>{stratName}</span>
+                          </td>
+                          <td className="mode-badge">{perf.market.toUpperCase()}</td>
+                          <td className="font-mono">{perf.total}</td>
+                          <td className="font-mono">{perf.wins}W / {perf.losses}L</td>
+                          <td className="font-mono text-green">{wr}%</td>
+                          <td className={`font-mono ${perf.plR >= 0 ? 'text-green' : 'text-red'}`} style={{ fontWeight: 800 }}>
+                            {perf.plR > 0 ? '+' : ''}{perf.plR.toFixed(2)}R
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

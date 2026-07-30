@@ -33,6 +33,7 @@ export interface AnalyticsData {
     avgTimeToFillMinutes?: number;
     avgHoldingDurationMinutes?: number;
   };
+  collective?: StrategyStat;
   strategies?: StrategyStat[];
   currentSession?: {
     activeKillzone: any;
@@ -48,7 +49,7 @@ export interface AnalyticsData {
     futures: { total: number; active: number };
     forex: { total: number; active: number };
   };
-  assetPerformance?: Record<string, { total: number; wins: number; losses: number; plR: number; market: string }>;
+  assetPerformance?: Record<string, { instrument: string; strategy_id?: string; total: number; wins: number; losses: number; plR: number; market: string }>;
   invalidations: {
     total: number;
     byReason: Record<string, number>;
@@ -92,15 +93,14 @@ export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number 
       const data = await res.json();
 
       // Also fetch strategy matrix if not already included
-      if (!data.strategies) {
-        try {
-          const stratRes = await fetch(`${API_BASE}/api/admin/analytics/strategies`);
-          if (stratRes.ok) {
-            const stratData = await stratRes.json();
-            data.strategies = stratData.strategies;
-          }
-        } catch {}
-      }
+      try {
+        const stratRes = await fetch(`${API_BASE}/api/admin/analytics/strategies`);
+        if (stratRes.ok) {
+          const stratData = await stratRes.json();
+          data.collective = stratData.collective;
+          data.strategies = stratData.strategies;
+        }
+      } catch {}
 
       setAnalytics(data);
       setError(null);
