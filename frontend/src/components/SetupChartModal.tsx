@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { createChart, ColorType, LineStyle, CandlestickSeries, type IChartApi } from 'lightweight-charts';
 import type { EdgeSetup } from '../types';
@@ -23,6 +23,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const priceLinesRef = useRef<any[]>([]);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [loading, setLoading] = useState(true);
@@ -286,42 +287,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           }));
         }
 
-        if (currentPrice > 0) {
-          lines.push(candleSeries.createPriceLine({
-            price: currentPrice,
-            color: '#00d4ff',
-            lineWidth: 2,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: true,
-            title: `🌐 LIVE PRICE (${currentPrice})`,
-          }));
-        }
-
-        // Render MANNA SND Specific HTF Curve Indicators
-        if (isMannaSnd) {
-          if (htfProximal > 0) {
-            lines.push(candleSeries.createPriceLine({
-              price: htfProximal,
-              color: '#e056fd',
-              lineWidth: 2,
-              lineStyle: LineStyle.Solid,
-              axisLabelVisible: true,
-              title: `🔮 1H HTF CURVE ${htfType.toUpperCase()} PROXIMAL (${htfProximal})`,
-            }));
-          }
-
-          if (htfDistal > 0) {
-            lines.push(candleSeries.createPriceLine({
-              price: htfDistal,
-              color: '#be2edd',
-              lineWidth: 2,
-              lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true,
-              title: `🔮 1H HTF CURVE ${htfType.toUpperCase()} DISTAL (${htfDistal})`,
-            }));
-          }
-        }
-
         priceLinesRef.current = lines;
 
         // Auto Scale to fit candles and price lines
@@ -345,6 +310,116 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       isMounted = false;
     };
   }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, currentPrice, timeframe, isPending, isActive]);
+
+  const drawZones = useCallback(() => {
+    if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const container = chartContainerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width <= 0 || height <= 0) return;
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+
+    if (!isMannaSnd) return;
+
+    const series = candleSeriesRef.current;
+    const timeScale = chartRef.current.timeScale();
+
+    const getY = (price: number) => {
+      if (!price || price <= 0) return null;
+      return series.priceToCoordinate(price);
+    };
+
+    const getX = (timeStr?: string) => {
+      if (!timeStr) return 0;
+      try {
+        const unixTime = Math.floor(new Date(timeStr).getTime() / 1000);
+        const coord = timeScale.timeToCoordinate(unixTime as any);
+        return coord !== null && coord > 0 ? coord : 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    // 1. Draw 1H HTF Curve Zone Shaded Box
+    if (htfProximal > 0 && htfDistal > 0) {
+      const y1 = getY(htfProximal);
+      const y2 = getY(htfDistal);
+
+      if (y1 !== null && y2 !== null) {
+        const topY = Math.min(y1, y2);
+        const boxHeight = Math.max(3, Math.abs(y2 - y1));
+        const startX = getX(metadata.htf_curve_base_time);
+        const boxWidth = width - startX;
+
+        ctx.save();
+        const isDemand = htfType === 'demand';
+        ctx.fillStyle = isDemand ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.18)';
+        ctx.strokeStyle = isDemand ? '#00e676' : '#ff1744';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+        // Label inside box
+        ctx.fillStyle = isDemand ? '#00e676' : '#ff1744';
+        ctx.font = 'bold 11px monospace';
+        const labelStr = `🔮 1H HTF ${htfType.toUpperCase()} CURVE (${Math.min(htfProximal, htfDistal)} - ${Math.max(htfProximal, htfDistal)})`;
+        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
+        ctx.restore();
+      }
+    }
+
+    // 2. Draw 15M Entry Zone Shaded Box
+    if (entryLow > 0 && entryHigh > 0) {
+      const y1 = getY(entryHigh);
+      const y2 = getY(entryLow);
+
+      if (y1 !== null && y2 !== null) {
+        const topY = Math.min(y1, y2);
+        const boxHeight = Math.max(3, Math.abs(y2 - y1));
+        const startX = getX(metadata.entry_zone_base_time);
+        const boxWidth = width - startX;
+
+        ctx.save();
+        ctx.fillStyle = isLong ? 'rgba(255, 171, 0, 0.22)' : 'rgba(255, 82, 82, 0.22)';
+        ctx.strokeStyle = isLong ? '#ffab00' : '#ff5252';
+        ctx.lineWidth = 2;
+
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+        // Label inside box
+        ctx.fillStyle = isLong ? '#ffab00' : '#ff5252';
+        ctx.font = 'bold 11px monospace';
+        const labelStr = `⚡ 15M ENTRY ZONE (${formation}: ${entryLow} - ${entryHigh})`;
+        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
+        ctx.restore();
+      }
+    }
+  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata]);
+
+  // Sync canvas zone overlay on scroll & resize
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const timeScale = chartRef.current.timeScale();
+    
+    drawZones();
+    timeScale.subscribeVisibleLogicalRangeChange(drawZones);
+
+    window.addEventListener('resize', drawZones);
+    return () => {
+      try { timeScale.unsubscribeVisibleLogicalRangeChange(drawZones); } catch {}
+      window.removeEventListener('resize', drawZones);
+    };
+  }, [drawZones]);
 
   return createPortal(
     <div className="chart-modal-backdrop font-sans">
@@ -445,6 +520,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           {loading && <div className="chart-overlay-loader">Loading TradingView {timeframe.toUpperCase()} Live Candles & Levels...</div>}
           {error && <div className="chart-overlay-error">Unable to load live candles: {error}</div>}
           <div ref={chartContainerRef} className="chart-canvas-container" />
+          <canvas ref={overlayCanvasRef} className="zone-overlay-canvas" />
         </div>
       </div>
     </div>,

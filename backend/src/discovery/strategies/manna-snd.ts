@@ -11,6 +11,7 @@ interface Zone {
   formation: 'Rally-Base-Rally' | 'Drop-Base-Rally' | 'Rally-Base-Drop' | 'Drop-Base-Drop' | 'Swing-Pivot-Demand' | 'Swing-Pivot-Supply';
   proximal: number; // Entry boundary (Limit Order level)
   distal: number;   // Stop Loss boundary
+  timestamp?: string; // Base candle timestamp
 }
 
 export class MannaSndStrategy implements IStrategyEngine {
@@ -58,6 +59,8 @@ export class MannaSndStrategy implements IStrategyEngine {
         const allBase = baseTypes.every(t => t === 'base');
         if (!allBase) continue;
 
+        const baseTime = baseCandles[0].timestamp;
+
         // 1. DEMAND ZONES (Ending in Leg Up departure)
         if (departureType === 'leg_up') {
           let formation: Zone['formation'] | null = null;
@@ -67,7 +70,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
             const distal = Math.min(...baseCandles.map(c => c.low));
-            zones.push({ type: 'demand', formation, proximal, distal });
+            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime });
           }
         }
 
@@ -80,7 +83,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
             const distal = Math.max(...baseCandles.map(c => c.high));
-            zones.push({ type: 'supply', formation, proximal, distal });
+            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime });
           }
         }
       }
@@ -99,13 +102,13 @@ export class MannaSndStrategy implements IStrategyEngine {
       const swingCandle = recent.find(c => c.low === minLow) || recent[recent.length - 1];
       const proximal = Math.max(swingCandle.open, swingCandle.close) + (atr * 0.1);
       const distal = minLow;
-      return { type: 'demand', formation: 'Swing-Pivot-Demand', proximal, distal };
+      return { type: 'demand', formation: 'Swing-Pivot-Demand', proximal, distal, timestamp: swingCandle.timestamp };
     } else {
       const maxHigh = Math.max(...recent.map(c => c.high));
       const swingCandle = recent.find(c => c.high === maxHigh) || recent[recent.length - 1];
       const proximal = Math.min(swingCandle.open, swingCandle.close) - (atr * 0.1);
       const distal = maxHigh;
-      return { type: 'supply', formation: 'Swing-Pivot-Supply', proximal, distal };
+      return { type: 'supply', formation: 'Swing-Pivot-Supply', proximal, distal, timestamp: swingCandle.timestamp };
     }
   }
 
@@ -270,9 +273,11 @@ export class MannaSndStrategy implements IStrategyEngine {
               htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
               htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
               htf_curve_type: selectedHtfZone?.type || 'demand',
+              htf_curve_base_time: selectedHtfZone?.timestamp,
               entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
               entry_zone_distal: Number(zone.distal.toFixed(decimals)),
-              entry_zone_formation: zone.formation
+              entry_zone_formation: zone.formation,
+              entry_zone_base_time: zone.timestamp
             })
           });
         } else if (allowedAction === 'SELL') {
@@ -341,9 +346,11 @@ export class MannaSndStrategy implements IStrategyEngine {
               htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
               htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
               htf_curve_type: selectedHtfZone?.type || 'supply',
+              htf_curve_base_time: selectedHtfZone?.timestamp,
               entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
               entry_zone_distal: Number(zone.distal.toFixed(decimals)),
-              entry_zone_formation: zone.formation
+              entry_zone_formation: zone.formation,
+              entry_zone_base_time: zone.timestamp
             })
           });
         }
