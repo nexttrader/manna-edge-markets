@@ -181,8 +181,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     });
     priceLinesRef.current = [];
 
-    // Determine count based on timeframe for optimal scroll range
-    const count = timeframe === '1m' ? 240 : timeframe === '5m' ? 180 : timeframe === '15m' ? 150 : timeframe === '1h' ? 120 : 90;
+    // Determine count based on timeframe for deep historical chart scrolling
+    const count = timeframe === '1m' ? 1000 : timeframe === '5m' ? 1000 : timeframe === '15m' ? 800 : timeframe === '1h' ? 720 : timeframe === '4h' ? 500 : 365;
 
     // Fetch candles from backend
     const encodedInst = encodeURIComponent(setup.instrument);
