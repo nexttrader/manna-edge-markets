@@ -66,6 +66,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const trend15m = metadata.trend15m || 'up';
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
+  const htfDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0));
+  const htfDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0));
+  const htfDemandTime = metadata.htf_demand_base_time || metadata.htf_curve_base_time;
+
+  const htfSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0));
+  const htfSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0));
+  const htfSupplyTime = metadata.htf_supply_base_time || metadata.htf_curve_base_time;
+
   // Zoom control helpers
   const handleZoom = (zoomIn: boolean) => {
     if (!chartRef.current) return;
@@ -347,31 +355,59 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     };
 
-    // 1. Draw 1H HTF Curve Zone Shaded Box
-    if (htfProximal > 0 && htfDistal > 0) {
-      const y1 = getY(htfProximal);
-      const y2 = getY(htfDistal);
+    // 1. Draw 1H HTF Demand Curve Zone (Emerald Green, Below Price)
+    if (htfDemandProx > 0 && htfDemandDist > 0) {
+      const y1 = getY(htfDemandProx);
+      const y2 = getY(htfDemandDist);
 
       if (y1 !== null && y2 !== null) {
         const topY = Math.min(y1, y2);
         const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(metadata.htf_curve_base_time);
+        const startX = getX(htfDemandTime);
         const boxWidth = width - startX;
 
         ctx.save();
-        const isDemand = htfType === 'demand';
-        ctx.fillStyle = isDemand ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.18)';
-        ctx.strokeStyle = isDemand ? '#00e676' : '#ff1744';
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
+        ctx.strokeStyle = '#00e676';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
 
         ctx.fillRect(startX, topY, boxWidth, boxHeight);
         ctx.strokeRect(startX, topY, boxWidth, boxHeight);
 
-        // Label inside box
-        ctx.fillStyle = isDemand ? '#00e676' : '#ff1744';
+        ctx.fillStyle = '#00e676';
         ctx.font = 'bold 11px monospace';
-        const labelStr = `🔮 1H HTF ${htfType.toUpperCase()} CURVE (${Math.min(htfProximal, htfDistal)} - ${Math.max(htfProximal, htfDistal)})`;
+        const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
+        const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(htfDemandProx, htfDemandDist)} - ${Math.max(htfDemandProx, htfDemandDist)}`;
+        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
+        ctx.restore();
+      }
+    }
+
+    // 2. Draw 1H HTF Supply Curve Zone (Rose Red, Above Price)
+    if (htfSupplyProx > 0 && htfSupplyDist > 0) {
+      const y1 = getY(htfSupplyProx);
+      const y2 = getY(htfSupplyDist);
+
+      if (y1 !== null && y2 !== null) {
+        const topY = Math.min(y1, y2);
+        const boxHeight = Math.max(3, Math.abs(y2 - y1));
+        const startX = getX(htfSupplyTime);
+        const boxWidth = width - startX;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
+        ctx.strokeStyle = '#ff1744';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+        ctx.fillStyle = '#ff1744';
+        ctx.font = 'bold 11px monospace';
+        const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
+        const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(htfSupplyProx, htfSupplyDist)} - ${Math.max(htfSupplyProx, htfSupplyDist)}`;
         ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
         ctx.restore();
       }
@@ -504,8 +540,18 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           <div className="manna-snd-legend-bar font-mono">
             <span className="snd-badge">🟡 MANNA SND INDICATORS</span>
             <span className="snd-item curve">
-              🔮 1H HTF Curve: <strong>{curveLocation.toUpperCase()}</strong> {htfProximal > 0 ? `(1H ${htfType.toUpperCase()} Zone: ${htfProximal} – ${htfDistal})` : ''}
+              🔮 1H Curve Location: <strong>{curveLocation.toUpperCase()}</strong>
             </span>
+            {htfDemandProx > 0 && (
+              <span className="snd-item demand">
+                🟢 1H Demand Curve: {htfDemandProx} – {htfDemandDist}
+              </span>
+            )}
+            {htfSupplyProx > 0 && (
+              <span className="snd-item supply">
+                🔴 1H Supply Curve: {htfSupplyProx} – {htfSupplyDist}
+              </span>
+            )}
             <span className="snd-item trend">
               📈 15M Trend: <strong>{trend15m.toUpperCase()}</strong>
             </span>

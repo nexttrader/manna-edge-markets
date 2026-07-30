@@ -274,6 +274,14 @@
   color: #e056fd;
 }
 
+.snd-item.demand {
+  color: #00e676;
+}
+
+.snd-item.supply {
+  color: #ff1744;
+}
+
 .snd-item.trend {
   color: #00e5ff;
 }

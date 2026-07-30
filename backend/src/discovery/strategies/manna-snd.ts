@@ -139,7 +139,7 @@ export class MannaSndStrategy implements IStrategyEngine {
   /**
    * Determine HTF (1H) Curve Location relative to fresh HTF RBR, DBR, RBD, DBD zones without cutting through candles
    */
-  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone } {
+  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone; htfDemand?: Zone; htfSupply?: Zone } {
     const indexedZones = this.findZonesWithIndex(htfCandles);
 
     // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (RBR or DBR, unbroken by wicks)
@@ -176,7 +176,7 @@ export class MannaSndStrategy implements IStrategyEngine {
       htfZone = distToDemand <= distToSupply ? nearestDemand : nearestSupply;
     }
 
-    return { location, htfZone };
+    return { location, htfZone, htfDemand: nearestDemand, htfSupply: nearestSupply };
   }
 
   /**
@@ -224,6 +224,8 @@ export class MannaSndStrategy implements IStrategyEngine {
         const curveInfo = this.getCurveLocation(currentPrice, candles1h, atr14);
         const curveLocation = curveInfo.location;
         const selectedHtfZone = curveInfo.htfZone;
+        const htfDemand = curveInfo.htfDemand;
+        const htfSupply = curveInfo.htfSupply;
         const trend15m = this.get15mTrend(candles15m);
 
         // 2. Decision Matrix Lookup
@@ -313,6 +315,14 @@ export class MannaSndStrategy implements IStrategyEngine {
               curveLocation,
               trend15m,
               formation: zone.formation,
+              htf_demand_proximal: htfDemand?.proximal ? Number(htfDemand.proximal.toFixed(decimals)) : undefined,
+              htf_demand_distal: htfDemand?.distal ? Number(htfDemand.distal.toFixed(decimals)) : undefined,
+              htf_demand_formation: htfDemand?.formation,
+              htf_demand_base_time: htfDemand?.timestamp,
+              htf_supply_proximal: htfSupply?.proximal ? Number(htfSupply.proximal.toFixed(decimals)) : undefined,
+              htf_supply_distal: htfSupply?.distal ? Number(htfSupply.distal.toFixed(decimals)) : undefined,
+              htf_supply_formation: htfSupply?.formation,
+              htf_supply_base_time: htfSupply?.timestamp,
               htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
               htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
               htf_curve_type: selectedHtfZone?.type || 'demand',
@@ -389,6 +399,14 @@ export class MannaSndStrategy implements IStrategyEngine {
               curveLocation,
               trend15m,
               formation: zone.formation,
+              htf_demand_proximal: htfDemand?.proximal ? Number(htfDemand.proximal.toFixed(decimals)) : undefined,
+              htf_demand_distal: htfDemand?.distal ? Number(htfDemand.distal.toFixed(decimals)) : undefined,
+              htf_demand_formation: htfDemand?.formation,
+              htf_demand_base_time: htfDemand?.timestamp,
+              htf_supply_proximal: htfSupply?.proximal ? Number(htfSupply.proximal.toFixed(decimals)) : undefined,
+              htf_supply_distal: htfSupply?.distal ? Number(htfSupply.distal.toFixed(decimals)) : undefined,
+              htf_supply_formation: htfSupply?.formation,
+              htf_supply_base_time: htfSupply?.timestamp,
               htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
               htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
               htf_curve_type: selectedHtfZone?.type || 'supply',
