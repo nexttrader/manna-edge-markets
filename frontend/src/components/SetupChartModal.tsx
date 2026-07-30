@@ -66,17 +66,45 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const trend15m = metadata.trend15m || 'up';
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
-  const [dynamicDemand, setDynamicDemand] = useState<{ prox: number; dist: number; time?: string } | null>(null);
-  const [dynamicSupply, setDynamicSupply] = useState<{ prox: number; dist: number; time?: string } | null>(null);
+  // 1. Demand Curve Zone (Always strictly BELOW or AT entry for LONG, at target for SHORT)
+  let rawDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0));
+  let rawDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0));
 
-  // Robust 100% Guaranteed Dual HTF Zone Resolution
-  const activeDemandProx: number = parseNum(dynamicDemand?.prox || metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0)) || (entryLow > 0 ? entryLow : (stopVal > 0 ? stopVal : 0));
-  const activeDemandDist: number = parseNum(dynamicDemand?.dist || metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0)) || (stopVal > 0 ? stopVal : (entryLow > 0 ? entryLow * 0.995 : 0));
-  const activeDemandTime = dynamicDemand?.time || metadata.htf_demand_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
+  if (isLong) {
+    if (rawDemandProx <= 0 || rawDemandProx > entryHigh * 1.001) {
+      rawDemandProx = entryHigh > 0 ? entryHigh : (entryLow > 0 ? entryLow : stopVal);
+      rawDemandDist = stopVal > 0 ? stopVal : rawDemandProx * 0.995;
+    }
+  } else {
+    if (rawDemandProx <= 0 || rawDemandProx > entryLow * 0.998) {
+      rawDemandProx = tp1Val > 0 ? tp1Val : entryLow * 0.99;
+      rawDemandDist = (tp2Val && tp2Val > 0) ? tp2Val : rawDemandProx * 0.995;
+    }
+  }
 
-  const activeSupplyProx: number = parseNum(dynamicSupply?.prox || metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0)) || (tp1Val > 0 ? tp1Val : (entryHigh > 0 ? entryHigh * 1.005 : 0));
-  const activeSupplyDist: number = parseNum(dynamicSupply?.dist || metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0)) || (tp2Val || (tp1Val > 0 ? tp1Val * 1.006 : 0));
-  const activeSupplyTime = dynamicSupply?.time || metadata.htf_supply_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
+  // 2. Supply Curve Zone (Always strictly ABOVE or AT target for LONG, at entry for SHORT)
+  let rawSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0));
+  let rawSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0));
+
+  if (isLong) {
+    if (rawSupplyProx <= 0 || rawSupplyProx < entryHigh * 1.001) {
+      rawSupplyProx = tp1Val > 0 ? tp1Val : entryHigh * 1.01;
+      rawSupplyDist = (tp2Val && tp2Val > 0) ? tp2Val : rawSupplyProx * 1.005;
+    }
+  } else {
+    if (rawSupplyProx <= 0 || rawSupplyProx < entryLow * 0.999) {
+      rawSupplyProx = entryLow > 0 ? entryLow : (entryHigh > 0 ? entryHigh : stopVal);
+      rawSupplyDist = stopVal > 0 ? stopVal : rawSupplyProx * 1.005;
+    }
+  }
+
+  const activeDemandProx: number = rawDemandProx;
+  const activeDemandDist: number = rawDemandDist;
+  const activeDemandTime = metadata.htf_demand_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
+
+  const activeSupplyProx: number = rawSupplyProx;
+  const activeSupplyDist: number = rawSupplyDist;
+  const activeSupplyTime = metadata.htf_supply_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
   // Zoom control helpers
   const handleZoom = (zoomIn: boolean) => {
@@ -208,27 +236,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }));
 
         candleSeries.setData(formattedCandles);
-
-        // Dynamically find Supply & Demand zones from candles if missing from metadata
-        const refPrice = currentPrice > 0 ? currentPrice : entryMid;
-        if (!metadata.htf_demand_proximal) {
-          const lowerCandles = data.candles.filter((c: any) => Number(c.low) < refPrice);
-          if (lowerCandles.length > 0) {
-            const candle = lowerCandles.reduce((closest: any, c: any) => Number(c.low) > Number(closest.low) ? c : closest, lowerCandles[0]);
-            const dProx = Math.max(Number(candle.open), Number(candle.close));
-            const dDist = Number(candle.low);
-            setDynamicDemand({ prox: dProx, dist: dDist, time: candle.timestamp });
-          }
-        }
-        if (!metadata.htf_supply_proximal) {
-          const higherCandles = data.candles.filter((c: any) => Number(c.high) > refPrice);
-          if (higherCandles.length > 0) {
-            const candle = higherCandles.reduce((closest: any, c: any) => Number(c.high) < Number(closest.high) ? c : closest, higherCandles[0]);
-            const sProx = Math.min(Number(candle.open), Number(candle.close));
-            const sDist = Number(candle.high);
-            setDynamicSupply({ prox: sProx, dist: sDist, time: candle.timestamp });
-          }
-        }
 
         // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, resolved)
         const lines: any[] = [];
