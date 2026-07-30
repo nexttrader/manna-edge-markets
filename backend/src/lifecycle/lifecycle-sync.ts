@@ -42,20 +42,27 @@ export class LifecycleSync {
           logger.warn({ instrument: setup.instrument }, 'Failed to fetch 1m candles for wick entry detection');
         }
         
-        if (minLow <= setup.entry_zone_high && maxHigh >= setup.entry_zone_low) {
+        const isLong = (setup.bias || 'long').toLowerCase() === 'long';
+        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+
+        // Entry fill check:
+        // LONG (Limit Buy): Price must touch/drop down to entry (minLow <= entryPrice)
+        // SHORT (Limit Sell): Price must touch/rally up to entry (maxHigh >= entryPrice)
+        let isFilled = false;
+        if (isLong) {
+          isFilled = minLow <= setup.entry_zone_high || currentPrice <= setup.entry_zone_high;
+        } else {
+          isFilled = maxHigh >= setup.entry_zone_low || currentPrice >= setup.entry_zone_low;
+        }
+
+        if (isFilled) {
           let executionPrice = currentPrice;
-          if (currentPrice > setup.entry_zone_high) executionPrice = setup.entry_zone_high;
-          if (currentPrice < setup.entry_zone_low) executionPrice = setup.entry_zone_low;
+          if (isLong && currentPrice > setup.entry_zone_high) executionPrice = setup.entry_zone_high;
+          if (!isLong && currentPrice < setup.entry_zone_low) executionPrice = setup.entry_zone_low;
 
           const nowTime = new Date();
-          let entryTriggeredAt = nowTime;
-          
-          // T_max (60s) backfill check
-          const createdTime = new Date(setup.created_at);
-          if (nowTime.getTime() - createdTime.getTime() <= 60000) {
-            entryTriggeredAt = createdTime;
-          }
-          
+          const entryTriggeredAt = nowTime;
+
           const market = setup.market || 'futures';
           queries.updateSetupState(setup.id, market, 'active', {
             entry_triggered_at: entryTriggeredAt.toISOString(),

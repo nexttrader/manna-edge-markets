@@ -71,21 +71,34 @@ export class OutcomeDetector {
           publishEvents.emit('setup_breakeven', { ...setup, stop: entryPrice, is_breakeven: 1 });
         }
 
+        // Protection against instant false win resolution right on scan/entry
+        const entryTriggeredTime = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
+        const nowMs = Date.now();
+        const secondsSinceEntry = entryTriggeredTime > 0 ? (nowMs - entryTriggeredTime) / 1000 : 999;
+        
         let hitDetected = false;
         let outcomeType = '';
         let executionPrice = currentPrice;
         
         if (isLong) {
-          if (setup.tp2 && maxHigh >= setup.tp2) { hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, setup.tp2); }
-          else if (maxHigh >= setup.tp1) { hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1); }
+          if (setup.tp2 && maxHigh >= setup.tp2 && secondsSinceEntry >= 15) { 
+            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, setup.tp2); 
+          }
+          else if (maxHigh >= setup.tp1 && secondsSinceEntry >= 15) { 
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1); 
+          }
           else if (minLow <= setup.stop) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
             executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop); 
           }
         } else {
-          if (setup.tp2 && minLow <= setup.tp2) { hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, setup.tp2); }
-          else if (minLow <= setup.tp1) { hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1); }
+          if (setup.tp2 && minLow <= setup.tp2 && secondsSinceEntry >= 15) { 
+            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, setup.tp2); 
+          }
+          else if (minLow <= setup.tp1 && secondsSinceEntry >= 15) { 
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1); 
+          }
           else if (maxHigh >= setup.stop) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 

@@ -12,54 +12,36 @@ export function initializeDatabase(): void {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
 
-    // Read and execute schema
+    // Read and execute schema statements line-by-line or statement-by-statement
     let schemaPath = path.join(__dirname, 'schema.sql');
     if (!fs.existsSync(schemaPath)) {
         schemaPath = path.join(__dirname, '../../src/db/schema.sql');
     }
     
     const schema = fs.readFileSync(schemaPath, 'utf8');
-    db.exec(schema);
+    const statements = schema.split(';').map(s => s.trim()).filter(Boolean);
 
-    try {
-        db.exec(`ALTER TABLE publish_runs ADD COLUMN trigger_type TEXT DEFAULT 'scheduled'`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE edge_setups ADD COLUMN resolved_at TEXT`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN resolved_at TEXT`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE edge_setups ADD COLUMN initial_stop REAL`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN initial_stop REAL`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`);
-    } catch {}
-    try {
-        db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`);
-    } catch {}
+    for (const stmt of statements) {
+        try {
+            db.exec(stmt + ';');
+        } catch (e) {
+            // Ignore index or column exists errors
+        }
+    }
+
+    try { db.exec(`ALTER TABLE publish_runs ADD COLUMN trigger_type TEXT DEFAULT 'scheduled'`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+    try { db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
 
     // Self-healing migration: Sync strategy_id on outcomes from parent edge_setups / forex_edge_setups
     try {
