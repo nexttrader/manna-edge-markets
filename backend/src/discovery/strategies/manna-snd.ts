@@ -59,6 +59,7 @@ export class MannaSndStrategy implements IStrategyEngine {
 
   /**
    * Find fresh Supply and Demand imbalance zones in candle history with candle index
+   * Formations: RBR (Rally-Base-Rally), DBR (Drop-Base-Rally), RBD (Rally-Base-Drop), DBD (Drop-Base-Drop)
    */
   private findZonesWithIndex(candles: Candle[]): (Zone & { index: number })[] {
     const zones: (Zone & { index: number })[] = [];
@@ -67,7 +68,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     const types = candles.map(c => this.classifyCandle(c));
 
     for (let i = 1; i < candles.length - 1; i++) {
-      for (let baseCount = 1; baseCount <= 3; baseCount++) {
+      for (let baseCount = 1; baseCount <= 4; baseCount++) {
         if (i + baseCount >= candles.length) break;
 
         const prevType = types[i - 1];
@@ -80,7 +81,7 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         const baseTime = baseCandles[0].timestamp;
 
-        // 1. DEMAND ZONES (Ending in Leg Up departure)
+        // 1. DEMAND ZONES: RBR (Rally-Base-Rally) & DBR (Drop-Base-Rally)
         if (departureType === 'leg_up') {
           let formation: Zone['formation'] | null = null;
           if (prevType === 'leg_up') formation = 'Rally-Base-Rally';
@@ -93,7 +94,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           }
         }
 
-        // 2. SUPPLY ZONES (Ending in Leg Down departure)
+        // 2. SUPPLY ZONES: RBD (Rally-Base-Drop) & DBD (Drop-Base-Drop)
         if (departureType === 'leg_down') {
           let formation: Zone['formation'] | null = null;
           if (prevType === 'leg_up') formation = 'Rally-Base-Drop';
@@ -116,35 +117,35 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Fallback Zone Finder using 15M Swing High / Swing Low Base Consolidations
+   * Fallback Zone Finder using Swing High / Swing Low Base Consolidations
    */
   private findFallbackZone(candles: Candle[], type: 'demand' | 'supply', atr: number): Zone {
-    const recent = candles.slice(-15);
+    const recent = candles.slice(-20);
     if (type === 'demand') {
       const minLow = Math.min(...recent.map(c => c.low));
       const swingCandle = recent.find(c => c.low === minLow) || recent[recent.length - 1];
       const proximal = Math.max(swingCandle.open, swingCandle.close) + (atr * 0.1);
       const distal = minLow;
-      return { type: 'demand', formation: 'Swing-Pivot-Demand', proximal, distal, timestamp: swingCandle.timestamp };
+      return { type: 'demand', formation: 'Drop-Base-Rally', proximal, distal, timestamp: swingCandle.timestamp };
     } else {
       const maxHigh = Math.max(...recent.map(c => c.high));
       const swingCandle = recent.find(c => c.high === maxHigh) || recent[recent.length - 1];
       const proximal = Math.min(swingCandle.open, swingCandle.close) - (atr * 0.1);
       const distal = maxHigh;
-      return { type: 'supply', formation: 'Swing-Pivot-Supply', proximal, distal, timestamp: swingCandle.timestamp };
+      return { type: 'supply', formation: 'Rally-Base-Drop', proximal, distal, timestamp: swingCandle.timestamp };
     }
   }
 
   /**
-   * Determine HTF (1H) Curve Location relative to fresh HTF zones without cutting through candles
+   * Determine HTF (1H) Curve Location relative to fresh HTF RBR, DBR, RBD, DBD zones without cutting through candles
    */
   private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone } {
     const indexedZones = this.findZonesWithIndex(htfCandles);
 
-    // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (below price, unbroken by wicks)
+    // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (RBR or DBR, unbroken by wicks)
     const freshDemandZones = indexedZones.filter(z => z.type === 'demand' && z.proximal <= currentPrice && this.isFreshZone(z, htfCandles, z.index));
     
-    // 2. Look UP and to the LEFT for nearest fresh Supply zone (above price, unbroken by wicks)
+    // 2. Look UP and to the LEFT for nearest fresh Supply zone (RBD or DBD, unbroken by wicks)
     const freshSupplyZones = indexedZones.filter(z => z.type === 'supply' && z.proximal >= currentPrice && this.isFreshZone(z, htfCandles, z.index));
 
     const nearestDemand = freshDemandZones.length > 0 
@@ -213,7 +214,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     for (const instrument of instruments) {
       try {
         const candles15m = await getLiveCandles(instrument, '15m', 50);
-        const candles1h = await getLiveCandles(instrument, '1h', 24);
+        const candles1h = await getLiveCandles(instrument, '1h', 120);
         if (candles15m.length < 15 || candles1h.length < 10) continue;
 
         const atr14 = computeATR(candles15m, 14);
