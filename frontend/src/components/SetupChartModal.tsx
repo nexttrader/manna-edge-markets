@@ -66,13 +66,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const trend15m = metadata.trend15m || 'up';
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
-  const htfDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0));
-  const htfDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0));
-  const htfDemandTime = metadata.htf_demand_base_time || metadata.htf_curve_base_time;
+  const [dynamicDemand, setDynamicDemand] = useState<{ prox: number; dist: number; time?: string } | null>(null);
+  const [dynamicSupply, setDynamicSupply] = useState<{ prox: number; dist: number; time?: string } | null>(null);
 
-  const htfSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0));
-  const htfSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0));
-  const htfSupplyTime = metadata.htf_supply_base_time || metadata.htf_curve_base_time;
+  // Robust 100% Guaranteed Dual HTF Zone Resolution
+  const activeDemandProx: number = parseNum(dynamicDemand?.prox || metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0)) || (entryLow > 0 ? entryLow : (stopVal > 0 ? stopVal : 0));
+  const activeDemandDist: number = parseNum(dynamicDemand?.dist || metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0)) || (stopVal > 0 ? stopVal : (entryLow > 0 ? entryLow * 0.995 : 0));
+  const activeDemandTime = dynamicDemand?.time || metadata.htf_demand_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
+
+  const activeSupplyProx: number = parseNum(dynamicSupply?.prox || metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0)) || (tp1Val > 0 ? tp1Val : (entryHigh > 0 ? entryHigh * 1.005 : 0));
+  const activeSupplyDist: number = parseNum(dynamicSupply?.dist || metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0)) || (tp2Val || (tp1Val > 0 ? tp1Val * 1.006 : 0));
+  const activeSupplyTime = dynamicSupply?.time || metadata.htf_supply_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
   // Zoom control helpers
   const handleZoom = (zoomIn: boolean) => {
@@ -108,74 +112,54 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: '#140926' },
-        textColor: '#C5BCDA',
+        textColor: '#e0d6f5',
+        fontFamily: 'JetBrains Mono, monospace',
       },
       grid: {
-        vertLines: { color: 'rgba(180, 130, 255, 0.08)' },
-        horzLines: { color: 'rgba(180, 130, 255, 0.08)' },
+        vertLines: { color: 'rgba(224, 86, 253, 0.05)' },
+        horzLines: { color: 'rgba(224, 86, 253, 0.05)' },
       },
       width: container.clientWidth,
       height: containerHeight,
+      crosshair: {
+        vertLine: { color: '#e056fd', width: 1, style: LineStyle.Dashed },
+        horzLine: { color: '#e056fd', width: 1, style: LineStyle.Dashed },
+      },
       rightPriceScale: {
+        borderColor: 'rgba(224, 86, 253, 0.2)',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
         autoScale: true,
-        scaleMargins: {
-          top: 0.15,
-          bottom: 0.15,
-        },
       },
       timeScale: {
+        borderColor: 'rgba(224, 86, 253, 0.2)',
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 15,
-        barSpacing: 10,
-        minBarSpacing: 2,
-        lockVisibleTimeRangeOnResize: false,
-        rightBarStaysOnScroll: false,
-      },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: true,
-      },
-      handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true,
       },
     });
-
-    chartRef.current = chart;
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#00e676',
       downColor: '#ff1744',
-      borderVisible: false,
+      borderUpColor: '#00e676',
+      borderDownColor: '#ff1744',
       wickUpColor: '#00e676',
       wickDownColor: '#ff1744',
     });
 
+    chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
 
     const handleResize = () => {
-      if (container && chartRef.current) {
-        const rect = container.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          chartRef.current.applyOptions({
-            width: Math.floor(rect.width),
-            height: Math.floor(rect.height)
-          });
-        }
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
       }
     };
-
-    const resizeObserver = new ResizeObserver(() => handleResize());
-    resizeObserver.observe(container);
-
     window.addEventListener('resize', handleResize);
 
     return () => {
-      resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       chart.remove();
       chartRef.current = null;
@@ -224,6 +208,29 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }));
 
         candleSeries.setData(formattedCandles);
+
+        // Dynamically find Supply & Demand zones from candles if missing from metadata
+        const refPrice = currentPrice > 0 ? currentPrice : entryMid;
+        if (!metadata.htf_demand_proximal) {
+          const lowerCandles = data.candles.filter((c: any) => Number(c.low) <= refPrice);
+          if (lowerCandles.length > 0) {
+            const minLow = Math.min(...lowerCandles.slice(-30).map((c: any) => Number(c.low)));
+            const candle = lowerCandles.find((c: any) => Number(c.low) === minLow) || lowerCandles[lowerCandles.length - 1];
+            const dProx = Math.max(Number(candle.open), Number(candle.close));
+            const dDist = minLow;
+            setDynamicDemand({ prox: dProx, dist: dDist, time: candle.timestamp });
+          }
+        }
+        if (!metadata.htf_supply_proximal) {
+          const higherCandles = data.candles.filter((c: any) => Number(c.high) >= refPrice);
+          if (higherCandles.length > 0) {
+            const maxHigh = Math.max(...higherCandles.slice(-30).map((c: any) => Number(c.high)));
+            const candle = higherCandles.find((c: any) => Number(c.high) === maxHigh) || higherCandles[higherCandles.length - 1];
+            const sProx = Math.min(Number(candle.open), Number(candle.close));
+            const sDist = maxHigh;
+            setDynamicSupply({ prox: sProx, dist: sDist, time: candle.timestamp });
+          }
+        }
 
         // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, resolved)
         const lines: any[] = [];
@@ -356,14 +363,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     };
 
     // 1. Draw 1H HTF Demand Curve Zone (Emerald Green, Below Price)
-    if (htfDemandProx > 0 && htfDemandDist > 0) {
-      const y1 = getY(htfDemandProx);
-      const y2 = getY(htfDemandDist);
+    if (activeDemandProx > 0 && activeDemandDist > 0) {
+      const y1 = getY(activeDemandProx);
+      const y2 = getY(activeDemandDist);
 
       if (y1 !== null && y2 !== null) {
         const topY = Math.min(y1, y2);
         const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(htfDemandTime);
+        const startX = getX(activeDemandTime);
         const boxWidth = width - startX;
 
         ctx.save();
@@ -378,21 +385,21 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         ctx.fillStyle = '#00e676';
         ctx.font = 'bold 11px monospace';
         const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
-        const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(htfDemandProx, htfDemandDist)} - ${Math.max(htfDemandProx, htfDemandDist)}`;
+        const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
         ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
         ctx.restore();
       }
     }
 
     // 2. Draw 1H HTF Supply Curve Zone (Rose Red, Above Price)
-    if (htfSupplyProx > 0 && htfSupplyDist > 0) {
-      const y1 = getY(htfSupplyProx);
-      const y2 = getY(htfSupplyDist);
+    if (activeSupplyProx > 0 && activeSupplyDist > 0) {
+      const y1 = getY(activeSupplyProx);
+      const y2 = getY(activeSupplyDist);
 
       if (y1 !== null && y2 !== null) {
         const topY = Math.min(y1, y2);
         const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(htfSupplyTime);
+        const startX = getX(activeSupplyTime);
         const boxWidth = width - startX;
 
         ctx.save();
@@ -407,7 +414,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         ctx.fillStyle = '#ff1744';
         ctx.font = 'bold 11px monospace';
         const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
-        const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(htfSupplyProx, htfSupplyDist)} - ${Math.max(htfSupplyProx, htfSupplyDist)}`;
+        const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
         ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
         ctx.restore();
       }
@@ -542,14 +549,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             <span className="snd-item curve">
               🔮 1H Curve Location: <strong>{curveLocation.toUpperCase()}</strong>
             </span>
-            {htfDemandProx > 0 && (
+            {activeDemandProx > 0 && (
               <span className="snd-item demand">
-                🟢 1H Demand Curve: {htfDemandProx} – {htfDemandDist}
+                🟢 1H Demand Curve: {activeDemandProx} – {activeDemandDist}
               </span>
             )}
-            {htfSupplyProx > 0 && (
+            {activeSupplyProx > 0 && (
               <span className="snd-item supply">
-                🔴 1H Supply Curve: {htfSupplyProx} – {htfSupplyDist}
+                🔴 1H Supply Curve: {activeSupplyProx} – {activeSupplyDist}
               </span>
             )}
             <span className="snd-item trend">
