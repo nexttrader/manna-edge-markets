@@ -248,6 +248,40 @@
 .legend-item.tp { color: var(--green); }
 .legend-item.live { color: #00d4ff; }
 
+.manna-snd-legend-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  background: rgba(30, 15, 60, 0.9);
+  border-bottom: 1px solid rgba(224, 86, 253, 0.4);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.snd-badge {
+  background: #ffab00;
+  color: #0b071e;
+  font-weight: 900;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+.snd-item.curve {
+  color: #e056fd;
+}
+
+.snd-item.trend {
+  color: #00e5ff;
+}
+
+.snd-item.zone {
+  color: #ffab00;
+}
+
 .chart-container-wrapper {
   position: relative;
   flex: 1;

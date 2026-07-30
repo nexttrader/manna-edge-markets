@@ -112,7 +112,7 @@ export class MannaSndStrategy implements IStrategyEngine {
   /**
    * Determine HTF (1H) Curve Location relative to major HTF zones
    */
-  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): 'low' | 'high' | 'middle' {
+  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone } {
     const htfZones = this.findZones(htfCandles);
     const demandZones = htfZones.filter(z => z.type === 'demand');
     const supplyZones = htfZones.filter(z => z.type === 'supply');
@@ -120,18 +120,20 @@ export class MannaSndStrategy implements IStrategyEngine {
     if (demandZones.length > 0) {
       const closestDemand = demandZones[demandZones.length - 1];
       if (Math.abs(currentPrice - closestDemand.proximal) <= atr * 2.0 || currentPrice <= closestDemand.proximal) {
-        return 'low';
+        return { location: 'low', htfZone: closestDemand };
       }
     }
 
     if (supplyZones.length > 0) {
       const closestSupply = supplyZones[supplyZones.length - 1];
       if (Math.abs(currentPrice - closestSupply.proximal) <= atr * 2.0 || currentPrice >= closestSupply.proximal) {
-        return 'high';
+        return { location: 'high', htfZone: closestSupply };
       }
     }
 
-    return 'middle';
+    const fallbackDemand = demandZones.length > 0 ? demandZones[demandZones.length - 1] : undefined;
+    const fallbackSupply = supplyZones.length > 0 ? supplyZones[supplyZones.length - 1] : undefined;
+    return { location: 'middle', htfZone: fallbackDemand || fallbackSupply };
   }
 
   /**
@@ -176,7 +178,9 @@ export class MannaSndStrategy implements IStrategyEngine {
         const currentPrice = await getLiveCurrentPrice(instrument);
 
         // 1. Evaluate HTF Curve Location & 15M Trend
-        const curveLocation = this.getCurveLocation(currentPrice, candles1h, atr14);
+        const curveInfo = this.getCurveLocation(currentPrice, candles1h, atr14);
+        const curveLocation = curveInfo.location;
+        const selectedHtfZone = curveInfo.htfZone;
         const trend15m = this.get15mTrend(candles15m);
 
         // 2. Decision Matrix Lookup
@@ -253,7 +257,23 @@ export class MannaSndStrategy implements IStrategyEngine {
             liquidity_score,
             strategy_id: this.meta.id,
             strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: zone.formation })
+            metadata: JSON.stringify({
+              source: `yahoo_finance_${market}`,
+              atr14,
+              htf: '1H',
+              ltf: '15M',
+              selection_rationale,
+              strategy_name: this.meta.name,
+              curveLocation,
+              trend15m,
+              formation: zone.formation,
+              htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
+              htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
+              htf_curve_type: selectedHtfZone?.type || 'demand',
+              entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
+              entry_zone_distal: Number(zone.distal.toFixed(decimals)),
+              entry_zone_formation: zone.formation
+            })
           });
         } else if (allowedAction === 'SELL') {
           const supplyZones = m15Zones.filter(z => z.type === 'supply');
@@ -308,7 +328,23 @@ export class MannaSndStrategy implements IStrategyEngine {
             liquidity_score,
             strategy_id: this.meta.id,
             strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({ source: `yahoo_finance_${market}`, atr14, htf: '1H', ltf: '15M', selection_rationale, strategy_name: this.meta.name, curveLocation, trend15m, formation: zone.formation })
+            metadata: JSON.stringify({
+              source: `yahoo_finance_${market}`,
+              atr14,
+              htf: '1H',
+              ltf: '15M',
+              selection_rationale,
+              strategy_name: this.meta.name,
+              curveLocation,
+              trend15m,
+              formation: zone.formation,
+              htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
+              htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
+              htf_curve_type: selectedHtfZone?.type || 'supply',
+              entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
+              entry_zone_distal: Number(zone.distal.toFixed(decimals)),
+              entry_zone_formation: zone.formation
+            })
           });
         }
       } catch (err) {

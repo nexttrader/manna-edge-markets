@@ -47,6 +47,24 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const isActive = setup.signal_state === 'active';
   const isResolved = setup.signal_state === 'resolved' || setup.signal_state === 'invalidated';
 
+  const isMannaSnd = setup.strategy_id === 'manna_snd';
+
+  let metadata: any = {};
+  try {
+    if (typeof setup.metadata === 'string') {
+      metadata = JSON.parse(setup.metadata);
+    } else if (setup.metadata) {
+      metadata = setup.metadata;
+    }
+  } catch {}
+
+  const htfProximal = parseNum(metadata.htf_curve_proximal);
+  const htfDistal = parseNum(metadata.htf_curve_distal);
+  const htfType = (metadata.htf_curve_type || (isLong ? 'demand' : 'supply')).toLowerCase();
+  const curveLocation = metadata.curveLocation || (isLong ? 'low' : 'high');
+  const trend15m = metadata.trend15m || 'up';
+  const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
+
   // Zoom control helpers
   const handleZoom = (zoomIn: boolean) => {
     if (!chartRef.current) return;
@@ -279,6 +297,31 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           }));
         }
 
+        // Render MANNA SND Specific HTF Curve Indicators
+        if (isMannaSnd) {
+          if (htfProximal > 0) {
+            lines.push(candleSeries.createPriceLine({
+              price: htfProximal,
+              color: '#e056fd',
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: `🔮 1H HTF CURVE ${htfType.toUpperCase()} PROXIMAL (${htfProximal})`,
+            }));
+          }
+
+          if (htfDistal > 0) {
+            lines.push(candleSeries.createPriceLine({
+              price: htfDistal,
+              color: '#be2edd',
+              lineWidth: 2,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `🔮 1H HTF CURVE ${htfType.toUpperCase()} DISTAL (${htfDistal})`,
+            }));
+          }
+        }
+
         priceLinesRef.current = lines;
 
         // Auto Scale to fit candles and price lines
@@ -380,6 +423,22 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           {tp2Val && tp2Val > 0 && <span className="legend-item tp">🎯 Target 2: {tp2Val} (+{setup.r_multiple_2 || 3.0}R)</span>}
           {currentPrice > 0 && <span className="legend-item live">🌐 Live Price: {currentPrice}</span>}
         </div>
+
+        {/* MANNA SND Specific Visual Indicator Overlay Bar */}
+        {isMannaSnd && (
+          <div className="manna-snd-legend-bar font-mono">
+            <span className="snd-badge">🟡 MANNA SND INDICATORS</span>
+            <span className="snd-item curve">
+              🔮 1H HTF Curve: <strong>{curveLocation.toUpperCase()}</strong> {htfProximal > 0 ? `(1H ${htfType.toUpperCase()} Zone: ${htfProximal} – ${htfDistal})` : ''}
+            </span>
+            <span className="snd-item trend">
+              📈 15M Trend: <strong>{trend15m.toUpperCase()}</strong>
+            </span>
+            <span className="snd-item zone">
+              ⚡ 15M Entry Zone: <strong>{formation}</strong> ({entryLow} – {entryHigh})
+            </span>
+          </div>
+        )}
 
         {/* Fullscreen Chart Container */}
         <div className="chart-container-wrapper">
