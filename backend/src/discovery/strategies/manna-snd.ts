@@ -213,8 +213,8 @@ export class MannaSndStrategy implements IStrategyEngine {
 
     for (const instrument of instruments) {
       try {
-        const candles15m = await getLiveCandles(instrument, '15m', 30);
-        const candles1h = await getLiveCandles(instrument, '1h', 30);
+        const candles15m = await getLiveCandles(instrument, '15m', 50);
+        const candles1h = await getLiveCandles(instrument, '1h', 720);
         if (candles15m.length < 10 || candles1h.length < 10) continue;
 
         const atr14 = computeATR(candles15m, 14);
