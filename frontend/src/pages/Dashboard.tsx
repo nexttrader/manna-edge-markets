@@ -6,6 +6,7 @@ import { HawkeyePanel } from '../components/HawkeyePanel';
 import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
+import { FaqModal } from '../components/FaqModal';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
@@ -24,6 +25,7 @@ export const Dashboard: React.FC = () => {
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('all');
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('conviction');
+  const [showFaq, setShowFaq] = useState(false);
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
@@ -143,6 +145,19 @@ export const Dashboard: React.FC = () => {
               >
                 ⭐ Watchlist ({watchlistCount})
               </button>
+              <button 
+                className="tab tab-faq font-mono"
+                onClick={() => setShowFaq(true)}
+                style={{
+                  background: 'rgba(224, 86, 253, 0.15)',
+                  color: '#e056fd',
+                  border: '1px solid rgba(224, 86, 253, 0.45)',
+                  fontWeight: 800
+                }}
+                title="Open Platform FAQ & Knowledge Base Guide"
+              >
+                ❓ FAQ
+              </button>
             </div>
 
             <div className="auto-refresh">
@@ -249,6 +264,8 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
       </main>
+
+      {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
 
       <HawkeyePanel />
     </div>

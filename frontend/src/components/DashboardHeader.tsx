@@ -4,6 +4,7 @@ import './DashboardHeader.css';
 import { KillzoneClock } from './KillzoneClock';
 import { CircuitBreakerIndicator } from './CircuitBreakerIndicator';
 import { EconomicCalendarModal } from './EconomicCalendarModal';
+import { FaqModal } from './FaqModal';
 import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
 
@@ -12,6 +13,7 @@ export const DashboardHeader: React.FC = () => {
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
   const location = useLocation();
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showFaq, setShowFaq] = useState(false);
 
   return (
     <>
@@ -36,6 +38,13 @@ export const DashboardHeader: React.FC = () => {
                 onClick={() => setShowCalendar(true)}
               >
                 📅 Calendar
+              </button>
+              <button 
+                className="nav-link font-mono" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e056fd' }}
+                onClick={() => setShowFaq(true)}
+              >
+                ❓ FAQ
               </button>
               <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
                 ⚙️ Admin
@@ -88,6 +97,10 @@ export const DashboardHeader: React.FC = () => {
 
       {showCalendar && (
         <EconomicCalendarModal onClose={() => setShowCalendar(false)} />
+      )}
+
+      {showFaq && (
+        <FaqModal onClose={() => setShowFaq(false)} />
       )}
     </>
   );

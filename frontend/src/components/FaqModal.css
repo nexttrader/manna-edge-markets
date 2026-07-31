@@ -1,0 +1,380 @@
+.faq-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(9, 3, 20, 0.88);
+  backdrop-filter: blur(12px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.faq-modal-content {
+  width: 100%;
+  max-width: 920px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #140926;
+  border: 1px solid rgba(224, 86, 253, 0.35);
+  border-radius: 16px;
+  padding: 28px;
+  color: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(224, 86, 253, 0.18);
+  overflow: hidden;
+}
+
+.faq-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 16px;
+}
+
+.faq-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.role-badge {
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.role-badge.trader {
+  background: rgba(0, 229, 255, 0.15);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+}
+
+.role-badge.admin {
+  background: rgba(255, 171, 0, 0.18);
+  color: #ffab00;
+  border: 1px solid rgba(255, 171, 0, 0.45);
+}
+
+.faq-subtitle {
+  font-size: 0.88rem;
+  color: #b0a5c4;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.faq-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.faq-close-btn:hover {
+  background: rgba(255, 23, 68, 0.25);
+  border-color: #ff1744;
+  color: #ff1744;
+}
+
+/* Search & Role Toggle Controls */
+.faq-controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.faq-search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.faq-search-input {
+  width: 100%;
+  padding: 10px 36px 10px 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.88rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.faq-search-input:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.clear-search {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #a095b5;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.faq-role-toggle {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.role-tab {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: none;
+  border: none;
+  color: #a095b5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.role-tab.active {
+  background: rgba(0, 229, 255, 0.18);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+}
+
+.role-tab.admin-tab.active {
+  background: rgba(255, 171, 0, 0.2);
+  color: #ffab00;
+  border-color: rgba(255, 171, 0, 0.4);
+}
+
+/* Category Pills Bar */
+.faq-categories-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.cat-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b0a5c4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.cat-pill:hover {
+  border-color: #e056fd;
+  color: #fff;
+}
+
+.cat-pill.active {
+  background: linear-gradient(135deg, rgba(224, 86, 253, 0.3) 0%, rgba(112, 0, 255, 0.3) 100%);
+  border-color: #e056fd;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(224, 86, 253, 0.25);
+}
+
+/* Accordion List */
+.faq-accordion-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 6px;
+}
+
+.faq-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.faq-card:hover {
+  border-color: rgba(224, 86, 253, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.faq-card.open {
+  border-color: #e056fd;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(224, 86, 253, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.faq-card.admin-card {
+  border-left: 3px solid #ffab00;
+}
+
+.faq-question-btn {
+  width: 100%;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.question-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.category-tag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e056fd;
+  border: 1px solid rgba(224, 86, 253, 0.25);
+}
+
+.admin-tag {
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 171, 0, 0.15);
+  color: #ffab00;
+  border: 1px solid rgba(255, 171, 0, 0.3);
+}
+
+.question-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #f0eafb;
+}
+
+.chevron-icon {
+  font-size: 0.75rem;
+  color: #e056fd;
+  transition: transform 0.2s ease;
+}
+
+.faq-answer-body {
+  padding: 0 20px 18px 20px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.answer-text {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #d8cfea;
+  white-space: pre-line;
+  margin: 0 0 14px 0;
+}
+
+.faq-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: #8e80a9;
+}
+
+.tags-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-chip {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #b0a5c4;
+}
+
+.updated-at {
+  opacity: 0.7;
+}
+
+.faq-empty {
+  padding: 40px;
+  text-align: center;
+  color: #b0a5c4;
+  font-size: 0.88rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+/* Modal Footer */
+.faq-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  color: #8e80a9;
+}
+
+.btn-close-bottom {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-close-bottom:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
