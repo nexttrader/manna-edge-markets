@@ -387,6 +387,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     canvas.height = height;
     ctx.clearRect(0, 0, width, height);
 
+    if (!isMannaSnd) return;
+
     const series = candleSeriesRef.current;
     const timeScale = chartRef.current.timeScale();
 
