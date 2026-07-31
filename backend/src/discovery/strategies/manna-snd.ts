@@ -286,6 +286,14 @@ export class MannaSndStrategy implements IStrategyEngine {
           const decimals = market === 'futures' ? 2 : 5;
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
+          // LONG zone layout: entry is at proximal (top of demand base candles)
+          // entry_zone_low = zone.distal (bottom of zone / where SL is anchored above)
+          // entry_zone_high = zone.proximal (the actual entry level — proximal edge of demand)
+          // entry_zone_mid = midpoint between distal and proximal
+          const ez_low = Number(zone.distal.toFixed(decimals));
+          const ez_high = Number(zone.proximal.toFixed(decimals));
+          const ez_mid = Number(((zone.distal + zone.proximal) / 2).toFixed(decimals));
+
           candidates.push({
             instrument,
             market,
@@ -293,9 +301,9 @@ export class MannaSndStrategy implements IStrategyEngine {
             killzone_origin: killzone.killzone,
             killzone_origin_at: killzone.boundaryUTC,
             bias,
-            entry_zone_low: Number(zone.distal.toFixed(decimals)),
-            entry_zone_high: Number(zone.proximal.toFixed(decimals)),
-            entry_zone_mid: Number(entry_zone_mid.toFixed(decimals)),
+            entry_zone_low: ez_low,
+            entry_zone_high: ez_high,
+            entry_zone_mid: ez_mid,
             stop: Number(stop.toFixed(decimals)),
             tp1: Number(tp1.toFixed(decimals)),
             tp2: Number(tp2.toFixed(decimals)),
@@ -370,6 +378,14 @@ export class MannaSndStrategy implements IStrategyEngine {
           const decimals = market === 'futures' ? 2 : 5;
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
+          // SHORT zone layout: entry is at proximal (bottom of supply base candles)
+          // entry_zone_low = zone.proximal (the actual entry level — proximal edge of supply, price rallies up to here)
+          // entry_zone_high = zone.distal (top of zone / where SL is anchored below)
+          // entry_zone_mid = midpoint between proximal and distal
+          const ez_low = Number(zone.proximal.toFixed(decimals));
+          const ez_high = Number(zone.distal.toFixed(decimals));
+          const ez_mid = Number(((zone.proximal + zone.distal) / 2).toFixed(decimals));
+
           candidates.push({
             instrument,
             market,
@@ -377,9 +393,9 @@ export class MannaSndStrategy implements IStrategyEngine {
             killzone_origin: killzone.killzone,
             killzone_origin_at: killzone.boundaryUTC,
             bias,
-            entry_zone_low: Number(entry_zone_mid.toFixed(decimals)),
-            entry_zone_high: Number(zone.distal.toFixed(decimals)),
-            entry_zone_mid: Number(entry_zone_mid.toFixed(decimals)),
+            entry_zone_low: ez_low,
+            entry_zone_high: ez_high,
+            entry_zone_mid: ez_mid,
             stop: Number(stop.toFixed(decimals)),
             tp1: Number(tp1.toFixed(decimals)),
             tp2: Number(tp2.toFixed(decimals)),

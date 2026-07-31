@@ -88,10 +88,12 @@ async function runStartupDiscoveryIfEmpty() {
     try {
         const activeSetups = await queries.getAllActiveSetups();
         const activeCount = activeSetups.length;
-        const sndCount = activeSetups.filter(s => s.strategy_id === 'manna_snd').length;
 
-        if (activeCount < 5 || sndCount === 0) {
-            logger.info({ activeCount, sndCount }, '⚡ Active setups low or Manna SnD has 0 setups. Running immediate discovery scan...');
+        // Only auto-scan on startup if the database has NO active or awaiting_entry setups at all.
+        // Do NOT scan just because the count is "low" (e.g. < 5) — active trades ARE expected
+        // during normal operation and a restart must not re-trigger a full discovery scan.
+        if (activeCount === 0) {
+            logger.info({ activeCount }, '⚡ No active setups found on startup. Running initial discovery scan...');
             const now = new Date();
             const kzInfo = getCurrentKillzone(now);
             const runId = `startup_run_${Date.now()}`;
@@ -99,7 +101,7 @@ async function runStartupDiscoveryIfEmpty() {
             const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
             logger.info({ result }, '🚀 Initial startup discovery run completed successfully.');
         } else {
-            logger.info({ activeCount, sndCount }, '🟢 Existing active setups found in database for all strategies.');
+            logger.info({ activeCount }, `🟢 ${activeCount} active setup(s) already exist in database — skipping startup scan.`);
         }
     } catch (err) {
         logger.error({ err }, '⚠️ Startup discovery run failed');

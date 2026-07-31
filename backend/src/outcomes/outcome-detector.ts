@@ -30,6 +30,12 @@ export class OutcomeDetector {
       for (const setup of setups) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         
+        // Skip if price data unavailable — never resolve a trade on a bad price feed
+        if (!currentPrice || currentPrice <= 0) {
+          logger.warn({ instrument: setup.instrument }, 'Skipping outcome check: live price unavailable');
+          continue;
+        }
+        
         let maxHigh = currentPrice;
         let minLow = currentPrice;
         try {

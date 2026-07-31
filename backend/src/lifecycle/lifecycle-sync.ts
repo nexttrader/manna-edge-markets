@@ -30,6 +30,12 @@ export class LifecycleSync {
       for (const setup of setups) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         
+        // Skip if price data unavailable — never fill a trade on a bad price feed
+        if (!currentPrice || currentPrice <= 0) {
+          logger.warn({ instrument: setup.instrument }, 'Skipping entry check: live price unavailable');
+          continue;
+        }
+        
         const createdTimeMs = new Date(setup.created_at).getTime();
         let maxHigh = currentPrice;
         let minLow = currentPrice;
