@@ -1,5 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { initializeDatabase } from './db/database';
 import * as queries from './db/queries';
@@ -57,6 +59,16 @@ app.get('/api/health', async (_req: Request, res: Response) => {
         });
     }
 });
+
+// Serve compiled frontend assets if present
+const frontendDistPath = path.resolve(__dirname, '../../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get('*', (req: Request, res: Response, next: NextFunction) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(path.join(frontendDistPath, 'index.html'));
+    });
+}
 
 // Error handling
 app.use((err: any, req: any, res: Response, _next: NextFunction) => {
