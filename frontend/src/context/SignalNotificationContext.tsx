@@ -214,6 +214,21 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
                 });
               }
             }
+
+            // 6. SIGNAL REPLACED BY ADMIN
+            const reasonStr = setup.invalidation_reason || '';
+            if (prevState === 'awaiting_entry' && (currState === 'superseded' || currState === 'invalidated' || reasonStr.includes('replaced'))) {
+              speak(`Attention: Pending signal for ${setup.instrument} has been updated and replaced by Admin.`);
+              addToast({
+                type: 'invalidated',
+                title: 'WATCHLIST SIGNAL REPLACED BY ADMIN',
+                icon: '⚡',
+                instrument: setup.instrument,
+                market: marketText,
+                bias: biasText,
+                detail: `The pending signal for ${setup.instrument} was replaced with a new setup candidate.`
+              });
+            }
           }
         }
       } else {

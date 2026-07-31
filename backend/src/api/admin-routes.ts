@@ -4,8 +4,9 @@ import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { metrics } from '../telemetry/metrics';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
-import { executePublishRun } from '../publish-gate/publish-gate';
+import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
+import { v4 as uuidv4 } from 'uuid';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
@@ -74,6 +75,167 @@ router.post('/signals/:id/invalidate', async (req: Request, res: Response) => {
     res.json({ success: true, message: `Signal ${id} disabled and invalidated successfully.` });
   } catch (error) {
     res.status(500).json({ error: 'Failed to disable signal', details: String(error) });
+  }
+});
+
+let isSingleRescanActive = false;
+
+router.post('/single-asset-rescan', async (req: Request, res: Response) => {
+  if (isSingleRescanActive) {
+    return res.status(400).json({ error: 'A single-asset rescan is currently in progress. Please wait.' });
+  }
+
+  try {
+    const { setupId, instrument, market = 'futures' } = req.body || {};
+    if (!setupId || !instrument) {
+      return res.status(400).json({ error: 'Missing setupId or instrument' });
+    }
+
+    let existingSetup = await queries.getSetupById(setupId, market);
+    let targetMarket = market;
+    if (!existingSetup) {
+      const altMarket = market === 'futures' ? 'forex' : 'futures';
+      existingSetup = await queries.getSetupById(setupId, altMarket);
+      if (existingSetup) targetMarket = altMarket;
+    }
+
+    if (!existingSetup) {
+      return res.status(404).json({ error: 'Setup not found' });
+    }
+
+    const stateStr = (existingSetup.signal_state || (existingSetup as any).state || '').toLowerCase();
+    if (stateStr !== 'awaiting_entry') {
+      return res.status(400).json({ error: `Single asset rescan is only permitted for pending (awaiting_entry) signals. Current state: ${stateStr}` });
+    }
+
+    isSingleRescanActive = true;
+
+    // Run unified discovery ONLY for this specific instrument
+    const now = new Date();
+    const currentKz = getCurrentKillzone(now);
+    const kzInfo = currentKz || {
+      killzone: 'ny_am' as const,
+      boundaryET: '08:00',
+      boundaryUTC: now.toISOString()
+    };
+    const runId = `single_rescan_${Date.now()}`;
+    const scope = (targetMarket.toLowerCase() as 'both' | 'futures' | 'forex');
+
+    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], undefined);
+
+    const candidates = targetMarket === 'futures' ? futures : forex;
+    const matchingCandidate = candidates.find(c => c.instrument === instrument);
+
+    isSingleRescanActive = false;
+
+    if (!matchingCandidate) {
+      return res.json({
+        found: false,
+        message: `No new signal candidate discovered for ${instrument}. Current setup remains untouched.`,
+        currentSetup: existingSetup,
+        candidate: null
+      });
+    }
+
+    return res.json({
+      found: true,
+      message: `New signal candidate discovered for ${instrument}! Review and confirm replacement.`,
+      currentSetup: existingSetup,
+      candidate: matchingCandidate
+    });
+  } catch (error: any) {
+    isSingleRescanActive = false;
+    res.status(500).json({ error: 'Single asset rescan failed', details: error?.message || String(error) });
+  }
+});
+
+router.post('/confirm-replace-signal', async (req: Request, res: Response) => {
+  try {
+    const { existingSetupId, candidate, market = 'futures' } = req.body || {};
+    if (!existingSetupId || !candidate) {
+      return res.status(400).json({ error: 'Missing existingSetupId or candidate setup data' });
+    }
+
+    let existingSetup = await queries.getSetupById(existingSetupId, market);
+    let targetMarket = market;
+    if (!existingSetup) {
+      const altMarket = market === 'futures' ? 'forex' : 'futures';
+      existingSetup = await queries.getSetupById(existingSetupId, altMarket);
+      if (existingSetup) targetMarket = altMarket;
+    }
+
+    if (!existingSetup) {
+      return res.status(404).json({ error: 'Existing setup not found' });
+    }
+
+    // 1. Mark existing setup as superseded
+    await queries.updateSetupState(existingSetupId, targetMarket, 'superseded', {
+      superseded: 1,
+      tradable: 0,
+      invalidation_reason: 'manual_replaced_by_admin',
+      invalidation_detail: 'Manually replaced by Admin via Single-Asset Rescan',
+      resolved_at: new Date().toISOString()
+    });
+
+    await hawkeyeService.logInvalidation({
+      setupId: existingSetup.id,
+      instrument: existingSetup.instrument,
+      setupMarket: targetMarket,
+      runId: `manual_replace_${Date.now()}`,
+      reasonCode: 'manual_replaced_by_admin',
+      detail: 'Replaced by Admin with higher conviction setup candidate',
+      previousState: existingSetup.signal_state,
+      newState: 'superseded',
+      createdBy: 'admin_panel'
+    });
+
+    // 2. Insert new setup into database
+    const runId = `manual_replace_${Date.now()}`;
+    const newSetup: any = {
+      id: uuidv4(),
+      instrument: candidate.instrument,
+      market: targetMarket,
+      created_at: new Date().toISOString(),
+      created_by_run: runId,
+      killzone_origin: existingSetup.killzone_origin || 'ny_am',
+      killzone_origin_at: existingSetup.killzone_origin_at || new Date().toISOString(),
+      bias: candidate.bias,
+      entry_zone_low: candidate.entry_zone_low,
+      entry_zone_high: candidate.entry_zone_high,
+      entry_zone_mid: candidate.entry_zone_mid,
+      stop: candidate.stop,
+      tp1: candidate.tp1,
+      tp2: candidate.tp2,
+      r_multiple_1: candidate.r_multiple_1,
+      r_multiple_2: candidate.r_multiple_2,
+      signal_state: 'awaiting_entry',
+      superseded: 0,
+      tradable: 1,
+      conviction_score: candidate.conviction_score,
+      liquidity_score: candidate.liquidity_score,
+      strategy_id: candidate.strategy_id || 'manna_basic',
+      strategy_tier: candidate.strategy_tier || 'basic',
+      metadata: typeof candidate.metadata === 'string' ? candidate.metadata : JSON.stringify(candidate.metadata || {})
+    };
+
+    await queries.insertSetup(newSetup, targetMarket);
+
+    // 3. Emit replacement event for Watchlist & Toast notifications
+    publishEvents.emit('setup_replaced', {
+      previousSetupId: existingSetupId,
+      newSetup,
+      instrument: candidate.instrument,
+      replacedAt: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully replaced ${candidate.instrument} signal!`,
+      previousSetupId: existingSetupId,
+      newSetup
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to replace signal', details: error?.message || String(error) });
   }
 });
 

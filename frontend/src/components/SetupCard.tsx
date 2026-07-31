@@ -25,6 +25,9 @@ function getSelectionRationale(setup: EdgeSetup): string {
   return `Selected during ${kzName} session scan. Key ${biasStr} liquidity sweep & Order Block alignment identified at ${setup.entry_zone_mid || setup.entry_zone_low}. ${conviction}% conviction score offering ${rTarget} target.`;
 }
 
+import { SignalReplaceModal } from './SignalReplaceModal';
+import { API_BASE } from '../config';
+
 interface SetupCardProps {
   setup: EdgeSetup;
   isWatchlisted?: boolean;
@@ -35,8 +38,41 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
+  const [rescanMessage, setRescanMessage] = useState<string | null>(null);
 
   if (!setup) return null;
+
+  const handleSingleRescan = async () => {
+    try {
+      setRescanning(true);
+      setRescanMessage(null);
+      const res = await fetch(`${API_BASE}/api/admin/single-asset-rescan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setupId: setup.id,
+          instrument: setup.instrument,
+          market: setup.market || 'futures'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Rescan failed');
+
+      if (data.found && data.candidate) {
+        setReplacementCandidate(data.candidate);
+      } else {
+        setRescanMessage(data.message || `No new signal candidate discovered for ${setup.instrument}.`);
+        setTimeout(() => setRescanMessage(null), 4000);
+      }
+    } catch (err: any) {
+      setRescanMessage(`⚠️ ${err.message || 'Rescan failed'}`);
+      setTimeout(() => setRescanMessage(null), 4000);
+    } finally {
+      setRescanning(false);
+    }
+  };
 
   const biasRaw = (setup.bias || 'long').toLowerCase();
   const isLong = biasRaw === 'long';
@@ -238,6 +274,12 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         </div>
       )}
 
+      {rescanMessage && (
+        <div style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'rgba(0, 229, 255, 0.1)', border: '1px solid #00e5ff', borderRadius: '6px', color: '#00e5ff', marginBottom: '12px' }} className="font-mono animate-fade-in">
+          {rescanMessage}
+        </div>
+      )}
+
       <div className="sc-actions font-mono">
         <button className="btn-action btn-copy" onClick={handleCopy}>
           {copied ? 'Copied! ✓' : '📋 Copy'}
@@ -245,6 +287,17 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <button className="btn-action btn-chart" onClick={() => setShowChart(true)}>
           📈 Chart
         </button>
+        {stateStr === 'awaiting_entry' && (
+          <button 
+            className="btn-action btn-rescan" 
+            onClick={handleSingleRescan} 
+            disabled={rescanning}
+            style={{ background: 'rgba(0, 229, 255, 0.12)', color: '#00e5ff', border: '1px solid rgba(0, 229, 255, 0.4)' }}
+            title="Run single-asset rescan for this pending setup"
+          >
+            {rescanning ? '⏳ Scanning...' : '🔍 Rescan'}
+          </button>
+        )}
         <button className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide Details' : 'Show Details'}
         </button>
@@ -252,6 +305,18 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
       {showChart && (
         <SetupChartModal setup={setup} onClose={() => setShowChart(false)} />
+      )}
+
+      {replacementCandidate && (
+        <SignalReplaceModal
+          currentSetup={setup}
+          candidate={replacementCandidate}
+          onClose={() => setReplacementCandidate(null)}
+          onSuccess={() => {
+            setReplacementCandidate(null);
+            window.location.reload();
+          }}
+        />
       )}
 
       {expanded && (

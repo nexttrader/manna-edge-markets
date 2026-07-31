@@ -1,0 +1,221 @@
+.replace-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(9, 3, 20, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.replace-modal-content {
+  width: 100%;
+  max-width: 820px;
+  background: #140926;
+  border: 1px solid rgba(224, 86, 253, 0.3);
+  border-radius: 14px;
+  padding: 28px;
+  color: #fff;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(224, 86, 253, 0.15);
+}
+
+.replace-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.replace-modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.text-cyan { color: #00e5ff; }
+.text-gold { color: #ffab00; }
+.text-green { color: #00e676; }
+.text-red { color: #ff1744; }
+
+.replace-subtitle {
+  font-size: 0.9rem;
+  color: #b0a5c4;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.replace-error {
+  background: rgba(255, 23, 68, 0.15);
+  border: 1px solid #ff1744;
+  color: #ff1744;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.compare-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.compare-card.current {
+  border-color: rgba(255, 171, 0, 0.4);
+}
+
+.compare-card.candidate {
+  border-color: rgba(0, 229, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.12);
+}
+
+.card-badge {
+  position: absolute;
+  top: -11px;
+  left: 14px;
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.current-badge {
+  background: #ffab00;
+  color: #090314;
+}
+
+.candidate-badge {
+  background: #00e5ff;
+  color: #090314;
+}
+
+.inst-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+  margin: 8px 0 6px 0;
+}
+
+.bias-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.bias-pill.long {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.bias-pill.short {
+  background: rgba(255, 23, 68, 0.15);
+  color: #ff1744;
+  border: 1px solid rgba(255, 23, 68, 0.3);
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+}
+
+.metric-label {
+  color: #8e80a9;
+}
+
+.metric-value {
+  font-weight: 700;
+}
+
+.vs-divider {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #e056fd;
+  text-align: center;
+}
+
+.replace-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.right-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.chart-preview-btn {
+  background: rgba(224, 86, 253, 0.15);
+  color: #e056fd;
+  border: 1px solid rgba(224, 86, 253, 0.4);
+}
+
+.chart-preview-btn:hover {
+  background: rgba(224, 86, 253, 0.3);
+  color: #fff;
+}
+
+.discard-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c0b5d8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.discard-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.confirm-replace-btn {
+  background: linear-gradient(135deg, #00e5ff 0%, #7000ff 100%);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+}
+
+.confirm-replace-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 229, 255, 0.5);
+}
+
+.confirm-replace-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
