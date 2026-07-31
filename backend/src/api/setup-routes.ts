@@ -15,20 +15,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       rawSetups = await queries.getActiveSetups(market);
     }
 
-    // Auto-replenish if active setups in DB drop below 3
-    if (rawSetups.length < 3) {
-      setTimeout(async () => {
-        try {
-          const { discoverUnifiedSetups } = await import('../discovery/unified-discovery');
-          const { executePublishRun } = await import('../publish-gate/publish-gate');
-          const now = new Date();
-          const kzInfo = getCurrentKillzone(now);
-          const runId = `auto_replenish_${Date.now()}`;
-          const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
-          await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
-        } catch {}
-      }, 50);
-    }
+
 
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
