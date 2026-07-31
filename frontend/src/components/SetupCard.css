@@ -22,6 +22,25 @@
   opacity: 0.85;
 }
 
+/* Strategy-specific Distinct Border Colors */
+.setup-card.strat-border-manna_basic {
+  border: 1.5px solid rgba(0, 229, 255, 0.45) !important;
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.08);
+}
+
+.setup-card.strat-border-manna_basic::before {
+  background: linear-gradient(90deg, #00e5ff 0%, transparent 85%);
+}
+
+.setup-card.strat-border-manna_snd {
+  border: 1.5px solid rgba(255, 171, 0, 0.55) !important;
+  box-shadow: 0 4px 20px rgba(255, 171, 0, 0.12);
+}
+
+.setup-card.strat-border-manna_snd::before {
+  background: linear-gradient(90deg, #ffab00 0%, transparent 85%);
+}
+
 .setup-card:hover {
   transform: translateY(-3px);
   border-color: var(--kdt-gold);

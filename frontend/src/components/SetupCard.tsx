@@ -27,6 +27,7 @@ function getSelectionRationale(setup: EdgeSetup): string {
 
 import { SignalReplaceModal } from './SignalReplaceModal';
 import { API_BASE } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 interface SetupCardProps {
   setup: EdgeSetup;
@@ -35,6 +36,9 @@ interface SetupCardProps {
 }
 
 export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
@@ -136,8 +140,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     (stateStr === 'active' || stateStr === 'awaiting_entry')
   );
 
+  const stratId = (setup.strategy_id || 'manna_basic').toLowerCase();
+
   return (
-    <div className={`setup-card glass-card state-${stateStr.toLowerCase()}`}>
+    <div className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${stratId}`}>
       <div className="sc-header">
         <div className="sc-title-group">
           <div className="sc-symbol-row">
@@ -287,13 +293,13 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <button className="btn-action btn-chart" onClick={() => setShowChart(true)}>
           📈 Chart
         </button>
-        {stateStr === 'awaiting_entry' && (
+        {isAdmin && stateStr === 'awaiting_entry' && (
           <button 
             className="btn-action btn-rescan" 
             onClick={handleSingleRescan} 
             disabled={rescanning}
             style={{ background: 'rgba(0, 229, 255, 0.12)', color: '#00e5ff', border: '1px solid rgba(0, 229, 255, 0.4)' }}
-            title="Run single-asset rescan for this pending setup"
+            title="Run single-asset rescan for this pending setup (Admin Only)"
           >
             {rescanning ? '⏳ Scanning...' : '🔍 Rescan'}
           </button>
