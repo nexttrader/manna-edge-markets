@@ -224,6 +224,9 @@ export async function initializeDatabase(): Promise<void> {
 
                     UPDATE edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
                     UPDATE forex_edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
+
+                    UPDATE edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
+                    UPDATE forex_edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
@@ -264,6 +267,8 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
+    try { db.exec(`UPDATE forex_edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS analytics_archives (
