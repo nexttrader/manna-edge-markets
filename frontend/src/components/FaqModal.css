@@ -11,6 +11,7 @@
   justify-content: center;
   align-items: center;
   padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .faq-modal-content {
@@ -62,6 +63,7 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .role-badge {
@@ -70,6 +72,7 @@
   padding: 3px 9px;
   border-radius: 4px;
   letter-spacing: 0.05em;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .role-badge.trader {
@@ -115,13 +118,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: 8px 14px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .ribbon-divider {
@@ -158,13 +162,14 @@
 
 .faq-search-input {
   width: 100%;
-  padding: 9px 34px 9px 34px;
+  padding: 10px 34px 10px 34px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: #fff;
   font-size: 0.88rem;
   outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .faq-search-input:focus {
@@ -191,7 +196,7 @@
 }
 
 .role-tab {
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: 6px;
   font-size: 0.76rem;
   font-weight: 800;
@@ -199,6 +204,7 @@
   border: none;
   color: #a095b5;
   cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .role-tab.active {
@@ -224,15 +230,16 @@
 }
 
 .cat-pill {
-  padding: 5px 12px;
-  border-radius: 16px;
-  font-size: 0.76rem;
+  padding: 6px 14px;
+  border-radius: 18px;
+  font-size: 0.78rem;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #b0a5c4;
   cursor: pointer;
   white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .cat-pill:hover {
@@ -256,7 +263,7 @@
   padding-right: 4px;
 }
 
-/* Clean Card Styles - No Pseudo-element Glitches */
+/* Clean Card Styles - Explicit Sans-Serif Font System & Robust Flex Layout */
 .faq-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -266,11 +273,11 @@
 }
 
 .faq-card.trader-card {
-  border-left: 3px solid #00e5ff;
+  border-left: 3.5px solid #00e5ff;
 }
 
 .faq-card.admin-card {
-  border-left: 3px solid #ffab00;
+  border-left: 3.5px solid #ffab00;
   background: rgba(255, 171, 0, 0.03);
 }
 
@@ -287,6 +294,7 @@
 
 .faq-question-btn {
   width: 100%;
+  min-height: 52px;
   padding: 14px 18px;
   background: none;
   border: none;
@@ -297,6 +305,7 @@
   text-align: left;
   cursor: pointer;
   gap: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .question-left {
@@ -308,9 +317,10 @@
 }
 
 .category-badge {
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 3px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 10px;
   border-radius: 4px;
   background: rgba(0, 229, 255, 0.12);
   color: #00e5ff;
@@ -325,9 +335,10 @@
 }
 
 .admin-tag {
-  font-size: 0.68rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.7rem;
   font-weight: 900;
-  padding: 3px 7px;
+  padding: 4px 8px;
   border-radius: 4px;
   background: #ffab00;
   color: #090314;
@@ -335,14 +346,16 @@
 }
 
 .question-text {
-  font-size: 0.92rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.94rem;
   font-weight: 800;
   color: #f4effd;
   flex: 1;
+  line-height: 1.4;
 }
 
 .chevron-icon {
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   color: #e056fd;
   transition: transform 0.2s ease;
 }
@@ -360,8 +373,9 @@
 }
 
 .answer-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.88rem;
-  line-height: 1.6;
+  line-height: 1.65;
   color: #ded6f0;
   white-space: pre-line;
   margin: 0 0 14px 0;
@@ -371,12 +385,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: #9c8fb8;
   gap: 10px;
   flex-wrap: wrap;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   padding-top: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .tags-group {
@@ -387,7 +402,7 @@
 
 .tag-chip {
   background: rgba(255, 255, 255, 0.04);
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
   color: #b0a5c4;
 }
@@ -406,7 +421,7 @@
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #ccc;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.72rem;
@@ -455,7 +470,7 @@
   background: rgba(0, 229, 255, 0.15);
   color: #00e5ff;
   border: 1px solid rgba(0, 229, 255, 0.35);
-  padding: 5px 14px;
+  padding: 6px 14px;
   border-radius: 6px;
   font-weight: 700;
   font-size: 0.78rem;

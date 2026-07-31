@@ -138,7 +138,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
         </div>
 
         {/* Category Pills Bar */}
-        <div className="faq-categories-bar font-mono">
+        <div className="faq-categories-bar">
           {categories.map(cat => (
             <button
               key={cat}
@@ -162,8 +162,8 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
                 <div key={item.id} className={`faq-card ${isOpen ? 'open' : ''} ${isAdminOnly ? 'admin-card' : 'trader-card'}`}>
                   <button className="faq-question-btn" onClick={() => toggleAccordion(item.id)}>
                     <div className="question-left">
-                      <span className={`category-badge font-mono ${isAdminOnly ? 'admin-cat' : ''}`}>{item.category}</span>
-                      {isAdminOnly && <span className="admin-tag font-mono">🛡️ ADMIN ONLY</span>}
+                      <span className={`category-badge ${isAdminOnly ? 'admin-cat' : ''}`}>{item.category}</span>
+                      {isAdminOnly && <span className="admin-tag">🛡️ ADMIN ONLY</span>}
                       <span className="question-text">{item.question}</span>
                     </div>
                     <span className={`chevron-icon ${isOpen ? 'rotated' : ''}`}>▼</span>
