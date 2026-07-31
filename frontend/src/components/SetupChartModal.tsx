@@ -23,6 +23,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const priceLinesRef = useRef<any[]>([]);
+  const lastFittedTimeframeRef = useRef<string | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
@@ -350,14 +351,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           }
         }
 
-        // Auto Scale to fit candles and price lines
-        chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-        chartRef.current?.timeScale().fitContent();
-        
-        // Unlock vertical dragging after initial scale calculation
-        setTimeout(() => {
-          chartRef.current?.priceScale('right').applyOptions({ autoScale: false });
-        }, 100);
+        // Auto Scale to fit candles ONCE per timeframe selection
+        if (lastFittedTimeframeRef.current !== timeframe) {
+          chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
+          chartRef.current?.timeScale().fitContent();
+          lastFittedTimeframeRef.current = timeframe;
+        }
 
         setLoading(false);
       })
@@ -370,7 +369,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, currentPrice, timeframe, isPending, isActive]);
+  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive]);
 
   const drawZones = useCallback(() => {
     if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
