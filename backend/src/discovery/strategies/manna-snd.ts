@@ -286,13 +286,13 @@ export class MannaSndStrategy implements IStrategyEngine {
           const decimals = market === 'futures' ? 2 : 5;
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
-          // LONG zone layout: entry is at proximal (top of demand base candles)
-          // entry_zone_low = zone.distal (bottom of zone / where SL is anchored above)
-          // entry_zone_high = zone.proximal (the actual entry level — proximal edge of demand)
-          // entry_zone_mid = midpoint between distal and proximal
+          // LONG zone layout:
+          // entry_zone_mid  = zone.proximal  (actual limit-buy price; TP1/TP2 anchor — must stay as proximal)
+          // entry_zone_high = zone.proximal + ATR buffer (top of fill zone; fill triggers when price is HERE)
+          // entry_zone_low  = zone.distal    (bottom of demand zone; SL sits below this)
+          const ez_mid = Number(zone.proximal.toFixed(decimals));
           const ez_low = Number(zone.distal.toFixed(decimals));
-          const ez_high = Number(zone.proximal.toFixed(decimals));
-          const ez_mid = Number(((zone.distal + zone.proximal) / 2).toFixed(decimals));
+          const ez_high = Number((zone.proximal + atr14 * 0.25).toFixed(decimals));
 
           candidates.push({
             instrument,
@@ -378,13 +378,13 @@ export class MannaSndStrategy implements IStrategyEngine {
           const decimals = market === 'futures' ? 2 : 5;
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
-          // SHORT zone layout: entry is at proximal (bottom of supply base candles)
-          // entry_zone_low = zone.proximal (the actual entry level — proximal edge of supply, price rallies up to here)
-          // entry_zone_high = zone.distal (top of zone / where SL is anchored below)
-          // entry_zone_mid = midpoint between proximal and distal
-          const ez_low = Number(zone.proximal.toFixed(decimals));
+          // SHORT zone layout:
+          // entry_zone_mid  = zone.proximal   (actual limit-sell price; TP1/TP2 anchor — must stay as proximal)
+          // entry_zone_low  = zone.proximal - ATR buffer (bottom of fill zone; fill triggers when price is HERE)
+          // entry_zone_high = zone.distal     (top of supply zone; SL sits above this)
+          const ez_mid = Number(zone.proximal.toFixed(decimals));
           const ez_high = Number(zone.distal.toFixed(decimals));
-          const ez_mid = Number(((zone.proximal + zone.distal) / 2).toFixed(decimals));
+          const ez_low = Number((zone.proximal - atr14 * 0.25).toFixed(decimals));
 
           candidates.push({
             instrument,

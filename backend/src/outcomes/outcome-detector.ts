@@ -39,10 +39,18 @@ export class OutcomeDetector {
         let maxHigh = currentPrice;
         let minLow = currentPrice;
         try {
-          const candles = await getLiveCandles(setup.instrument, '1m', 2);
+          const candles = await getLiveCandles(setup.instrument, '1m', 5);
+          const entryTimeMs = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
           if (candles && candles.length > 0) {
-            maxHigh = Math.max(currentPrice, ...candles.map(c => c.high));
-            minLow = Math.min(currentPrice, ...candles.map(c => c.low));
+            // Only use candles that formed AFTER this trade was entered.
+            // Pre-entry candle wicks (from when the zone formed) must not trigger SL/TP.
+            const postEntryCandles = entryTimeMs > 0
+              ? candles.filter(c => new Date(c.timestamp).getTime() >= entryTimeMs)
+              : candles;
+            if (postEntryCandles.length > 0) {
+              maxHigh = Math.max(currentPrice, ...postEntryCandles.map(c => c.high));
+              minLow = Math.min(currentPrice, ...postEntryCandles.map(c => c.low));
+            }
           }
         } catch (e) {
           logger.warn({ instrument: setup.instrument }, 'Failed to fetch 1m candles for wick detection');

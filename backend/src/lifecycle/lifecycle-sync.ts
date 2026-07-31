@@ -42,10 +42,13 @@ export class LifecycleSync {
         try {
           const candles = await getLiveCandles(setup.instrument, '1m', 5);
           if (candles && candles.length > 0) {
-            // Filter ONLY candles that formed after setup creation
+            // Filter ONLY candles that opened strictly AFTER this setup was created.
+            // The -5000ms window was including the current in-progress candle (opened before setup
+            // creation), whose wick instantly satisfied fill conditions. Strict >= createdTimeMs ensures
+            // only NEW price action (formed after the setup was published) triggers entry fills.
             const postCreationCandles = candles.filter(c => {
               const candleTime = new Date(c.timestamp).getTime();
-              return candleTime >= (createdTimeMs - 5000);
+              return candleTime >= createdTimeMs;
             });
 
             if (postCreationCandles.length > 0) {
