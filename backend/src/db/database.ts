@@ -221,6 +221,9 @@ export async function initializeDatabase(): Promise<void> {
                         UNION 
                         SELECT id FROM forex_edge_setups WHERE strategy_id = 'manna_snd'
                     );
+
+                    UPDATE edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
+                    UPDATE forex_edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
