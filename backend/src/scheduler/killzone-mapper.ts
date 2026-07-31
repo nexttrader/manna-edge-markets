@@ -140,3 +140,24 @@ export function getKillzoneBoundariesForDate(date: Date): KillzoneInfo[] {
     
     return boundaries;
 }
+
+export function isMarketOpen(timestamp: Date = new Date()): boolean {
+    const formatOptions: Intl.DateTimeFormatOptions = { 
+        timeZone: 'America/New_York', 
+        weekday: 'short',
+        hour: '2-digit', 
+        hour12: false 
+    };
+    const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
+    const parts = formatter.formatToParts(timestamp);
+    const weekday = parts.find(p => p.type === 'weekday')?.value;
+    const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+
+    // Global Forex & CME Futures Market Close:
+    // Closes Friday 17:00 ET (5 PM) and re-opens Sunday 17:00 ET (5 PM)
+    if (weekday === 'Fri' && hour >= 17) return false;
+    if (weekday === 'Sat') return false;
+    if (weekday === 'Sun' && hour < 17) return false;
+
+    return true;
+}

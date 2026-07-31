@@ -3,6 +3,7 @@ import * as queries from '../db/queries';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
+import { isMarketOpen } from '../scheduler/killzone-mapper';
 
 const logger = createLogger('OutcomeDetector');
 
@@ -25,6 +26,11 @@ export class OutcomeDetector {
   
   private async tick(): Promise<void> {
     try {
+      if (!isMarketOpen()) {
+        logger.debug('Skipping OutcomeDetector tick: Market is closed for the weekend');
+        return;
+      }
+
       const setups = await queries.getSetupsByState('active');
       
       for (const setup of setups) {

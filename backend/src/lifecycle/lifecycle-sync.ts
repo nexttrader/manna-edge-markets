@@ -3,6 +3,7 @@ import * as queries from '../db/queries';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
+import { isMarketOpen } from '../scheduler/killzone-mapper';
 
 const logger = createLogger('LifecycleSync');
 
@@ -25,6 +26,11 @@ export class LifecycleSync {
   
   private async tick(): Promise<void> {
     try {
+      if (!isMarketOpen()) {
+        logger.debug('Skipping LifecycleSync tick: Market is closed for the weekend');
+        return;
+      }
+
       const setups = await queries.getSetupsByState('awaiting_entry');
       
       for (const setup of setups) {

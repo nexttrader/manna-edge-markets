@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { metrics } from '../telemetry/metrics';
-import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen } from '../scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
@@ -292,6 +292,7 @@ router.get('/system-status', async (_req: Request, res: Response) => {
     
     res.json({
       status: cbStatus.tripped ? 'tripped' : 'ok',
+      isMarketOpen: isMarketOpen(now),
       circuitBreaker: cbStatus,
       metrics: metrics.getAll(),
       currentKillzone: getCurrentKillzone(now),
