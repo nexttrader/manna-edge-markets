@@ -1,8 +1,7 @@
 import { EventEmitter } from 'events';
 import * as queries from '../db/queries';
 import { KillzoneInfo, CandidateSetup, EdgeSetup, RunMode } from '../discovery/types';
-import { getCurrentPrice } from '../discovery/mock-data';
-import { getLatestCandles } from '../discovery/mock-data';
+import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { computeATR } from '../discovery/atr';
 import { createLogger } from '../telemetry/logger';
 import { metrics } from '../telemetry/metrics';
@@ -82,14 +81,14 @@ export async function executePublishRun(
           s => s.instrument === instrument && (s.strategy_id || 'manna_basic') === strategyId
         ) || null;
         
-        const currentPrice = getCurrentPrice(instrument);
-        const candles = getLatestCandles(instrument, '15m', 20);
-        const atr14 = computeATR(candles, 14);
+        const currentPrice = await getLiveCurrentPrice(instrument);
+        const candles = await getLiveCandles(instrument, '15m', 20);
+        const atr14 = candles.length > 0 ? computeATR(candles, 14) : 3.0;
         
         let effectiveExisting = existingSetup;
         
-        // 1. Revalidate existing setup
-        if (existingSetup) {
+        // 1. Revalidate existing setup (ONLY when valid live price > 0 is fetched)
+        if (existingSetup && currentPrice > 0) {
           const revalResult = revalidateSetup(existingSetup, currentPrice, atr14);
           if (!revalResult.isValid) {
             await queries.updateSetupState(existingSetup.id, market.name, 'invalidated', {

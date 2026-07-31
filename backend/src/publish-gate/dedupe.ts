@@ -51,7 +51,12 @@ export function dedupeAndSelect(
   }
 
   if (existingSetup && existingSetup.signal_state !== 'invalidated' && existingSetup.signal_state !== 'resolved') {
-    // Check for opposing signal
+    // 1. ACTIVE trades currently live in trade MUST be preserved and never auto-superseded by new candidates
+    if (existingSetup.signal_state === 'active') {
+      return { action: 'preserve', invalidations };
+    }
+
+    // 2. Pending AWAITING_ENTRY setups: Check for opposing signal
     if (shouldInvalidateForOpposingSignal(existingSetup, selected)) {
        invalidations.push({
          setupId: existingSetup.id,
@@ -61,7 +66,7 @@ export function dedupeAndSelect(
        return { action: 'replace', selectedCandidate: selected, invalidations };
     }
     
-    // Check for significantly higher conviction (>15 points)
+    // 3. Pending AWAITING_ENTRY setups: Check for significantly higher conviction (>15 points)
     if ((selected.conviction_score || 0) > (existingSetup.conviction_score || 0) + 15) {
        invalidations.push({
          setupId: existingSetup.id,
