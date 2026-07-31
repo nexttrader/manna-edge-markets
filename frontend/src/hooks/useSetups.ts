@@ -61,7 +61,7 @@ export function useSetups() {
       const res = await fetch(`${API_BASE}/api/accelerate/active-setups`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      const currentList: EdgeSetup[] = (data.setups && data.setups.length > 0) ? data.setups : MOCK_SETUPS;
+      const currentList: EdgeSetup[] = (Array.isArray(data.setups) && data.setups.length > 0) ? data.setups : MOCK_SETUPS;
 
       // Check for newly discovered signals
       if (!isInitialFetchRef.current && currentList.length > 0) {
@@ -95,5 +95,5 @@ export function useSetups() {
     return () => clearInterval(interval);
   }, [fetchSetups]);
 
-  return { setups, loading, error, refetch: fetchSetups };
+  return { setups: Array.isArray(setups) ? setups : MOCK_SETUPS, loading, error, refetch: fetchSetups };
 }

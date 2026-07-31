@@ -67,7 +67,10 @@ export const HawkeyePanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
 
-  const filtered = invalidations.filter((inv: any) => {
+  const safeInvalidations = Array.isArray(invalidations) ? invalidations : [];
+
+  const filtered = safeInvalidations.filter((inv: any) => {
+    if (!inv) return false;
     const inst = inv.instrument || inv.setup_id || '';
     const reason = inv.reasonCode || inv.reason_code || '';
     return inst.toLowerCase().includes(filter.toLowerCase()) || 
@@ -77,7 +80,7 @@ export const HawkeyePanel: React.FC = () => {
   return (
     <>
       <button className="hawkeye-toggle glass-card font-mono" onClick={() => setIsOpen(!isOpen)}>
-        🤖 Manna AI Assistant <span className="badge">{invalidations.length}</span>
+        🤖 Manna AI Assistant <span className="badge">{safeInvalidations.length}</span>
       </button>
 
       {isOpen && (

@@ -25,8 +25,12 @@ export const Dashboard: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('conviction');
 
+  const safeSetups = Array.isArray(setups) ? setups : [];
+  const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
+
   // Filter Logic
-  const filteredSetups = setups.filter(setup => {
+  const filteredSetups = safeSetups.filter(setup => {
+    if (!setup) return false;
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
     const biasStr = (setup.bias || 'long').toLowerCase();
@@ -38,7 +42,7 @@ export const Dashboard: React.FC = () => {
 
     // 1. Market / Watchlist Filter
     if (marketFilter === 'watchlist') {
-      if (!watchlistIds.includes(setup.id)) return false;
+      if (!safeWatchlist.includes(setup.id)) return false;
     } else if (marketFilter !== 'all' && market !== marketFilter) {
       return false;
     }

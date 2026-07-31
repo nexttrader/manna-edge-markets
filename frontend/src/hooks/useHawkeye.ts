@@ -13,11 +13,12 @@ export function useHawkeye() {
       const res = await fetch(`${API_BASE}/api/hawkeye/recent-invalidations`);
       if (!res.ok) throw new Error('Failed to fetch hawkeye data');
       const data = await res.json();
-      setInvalidations(data.invalidations || []);
+      setInvalidations(Array.isArray(data.invalidations) ? data.invalidations : []);
       setError(null);
     } catch (err) {
       console.warn('Backend unavailable, retrying hawkeye sync.');
       setError(err instanceof Error ? err.message : 'Unknown error');
+      setInvalidations([]);
     } finally {
       setLoading(false);
     }
@@ -29,7 +30,7 @@ export function useHawkeye() {
     return () => clearInterval(interval);
   }, [fetchInvalidations]);
 
-  return { invalidations, loading, error, refetch: fetchInvalidations };
+  return { invalidations: Array.isArray(invalidations) ? invalidations : [], loading, error, refetch: fetchInvalidations };
 }
 
 export function useSetupHistory(setupId: string, market: Market) {
@@ -45,10 +46,10 @@ export function useSetupHistory(setupId: string, market: Market) {
         if (!res.ok) return;
         const data = await res.json();
         if (isMounted) {
-          setHistory(data.history || []);
+          setHistory(Array.isArray(data.history) ? data.history : []);
         }
       } catch {
-        // Fallback gracefully
+        if (isMounted) setHistory([]);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -57,5 +58,5 @@ export function useSetupHistory(setupId: string, market: Market) {
     return () => { isMounted = false; };
   }, [setupId, market]);
 
-  return { history, loading };
+  return { history: Array.isArray(history) ? history : [], loading };
 }
