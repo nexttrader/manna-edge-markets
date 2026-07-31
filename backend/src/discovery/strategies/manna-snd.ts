@@ -120,19 +120,16 @@ export class MannaSndStrategy implements IStrategyEngine {
    * Fallback Zone Finder using Swing High / Swing Low Base Consolidations (30 candle lookback)
    */
   private findFallbackZone(candles: Candle[], type: 'demand' | 'supply', atr: number): Zone {
-    const recent = candles.slice(-30);
+    const lastCandle = candles[candles.length - 1] || { close: 100, timestamp: new Date().toISOString() };
+    const currentPrice = lastCandle.close;
     if (type === 'demand') {
-      const minLow = Math.min(...recent.map(c => c.low));
-      const swingCandle = recent.find(c => c.low === minLow) || recent[recent.length - 1];
-      const proximal = Math.max(swingCandle.open, swingCandle.close) + (atr * 0.1);
-      const distal = minLow;
-      return { type: 'demand', formation: 'Drop-Base-Rally', proximal, distal, timestamp: swingCandle.timestamp };
+      const proximal = currentPrice - (atr * 0.4);
+      const distal = proximal - (atr * 0.3);
+      return { type: 'demand', formation: 'Drop-Base-Rally', proximal, distal, timestamp: lastCandle.timestamp };
     } else {
-      const maxHigh = Math.max(...recent.map(c => c.high));
-      const swingCandle = recent.find(c => c.high === maxHigh) || recent[recent.length - 1];
-      const proximal = Math.min(swingCandle.open, swingCandle.close) - (atr * 0.1);
-      const distal = maxHigh;
-      return { type: 'supply', formation: 'Rally-Base-Drop', proximal, distal, timestamp: swingCandle.timestamp };
+      const proximal = currentPrice + (atr * 0.4);
+      const distal = proximal + (atr * 0.3);
+      return { type: 'supply', formation: 'Rally-Base-Drop', proximal, distal, timestamp: lastCandle.timestamp };
     }
   }
 
@@ -250,7 +247,7 @@ export class MannaSndStrategy implements IStrategyEngine {
         const m15Zones = this.findZones(candles15m);
 
         if (allowedAction === 'BUY') {
-          const demandZones = m15Zones.filter(z => z.type === 'demand');
+          const demandZones = m15Zones.filter(z => z.type === 'demand' && z.proximal < currentPrice);
           const zone = demandZones.length > 0
             ? demandZones[demandZones.length - 1]
             : this.findFallbackZone(candles15m, 'demand', atr14);
@@ -341,7 +338,7 @@ export class MannaSndStrategy implements IStrategyEngine {
             })
           });
         } else if (allowedAction === 'SELL') {
-          const supplyZones = m15Zones.filter(z => z.type === 'supply');
+          const supplyZones = m15Zones.filter(z => z.type === 'supply' && z.proximal > currentPrice);
           const zone = supplyZones.length > 0
             ? supplyZones[supplyZones.length - 1]
             : this.findFallbackZone(candles15m, 'supply', atr14);

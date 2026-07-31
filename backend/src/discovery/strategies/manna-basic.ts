@@ -34,30 +34,15 @@ export class MannaBasicStrategy implements IStrategyEngine {
         let entry_zone_mid: number;
         let stop: number;
 
-        if (market === 'futures') {
-          if (bias === 'long') {
-            const swingLow = Math.min(...candles15m.slice(-10).map(c => c.low));
-            entry_zone_mid = swingLow + (atr14 * 0.5);
-            stop = swingLow - (atr14 * 0.2);
-          } else {
-            const swingHigh = Math.max(...candles15m.slice(-10).map(c => c.high));
-            entry_zone_mid = swingHigh - (atr14 * 0.5);
-            stop = swingHigh + (atr14 * 0.2);
-          }
+        if (bias === 'long') {
+          entry_zone_mid = currentPrice - (atr14 * 0.4);
+          stop = entry_zone_mid - (atr14 * 0.3);
         } else {
-          // Forex precision & buffers
-          if (bias === 'long') {
-            const swingLow = Math.min(...candles15m.slice(-10).map(c => c.low));
-            entry_zone_mid = swingLow + (atr14 * 0.4);
-            stop = swingLow - (atr14 * 0.1);
-          } else {
-            const swingHigh = Math.max(...candles15m.slice(-10).map(c => c.high));
-            entry_zone_mid = swingHigh - (atr14 * 0.4);
-            stop = swingHigh + (atr14 * 0.1);
-          }
+          entry_zone_mid = currentPrice + (atr14 * 0.4);
+          stop = entry_zone_mid + (atr14 * 0.3);
         }
 
-        const zoneWidth = market === 'futures' ? atr14 * 0.2 : atr14 * 0.15;
+        const zoneWidth = market === 'futures' ? atr14 * 0.15 : atr14 * 0.1;
         const entry_zone_low = entry_zone_mid - zoneWidth;
         const entry_zone_high = entry_zone_mid + zoneWidth;
 
