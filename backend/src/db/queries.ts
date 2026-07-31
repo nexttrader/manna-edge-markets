@@ -221,6 +221,7 @@ export const createOutcome = async (outcome: any): Promise<void> => {
         id: outcome.id,
         setup_id: outcome.setup_id,
         setup_market: outcome.setup_market || 'futures',
+        strategy_id: outcome.strategy_id || 'manna_basic',
         outcome_type: outcome.outcome_type,
         execution_price: outcome.execution_price,
         execution_time: outcome.execution_time || outcome.resolved_at || new Date().toISOString(),

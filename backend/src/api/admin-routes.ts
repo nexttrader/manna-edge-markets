@@ -751,7 +751,7 @@ router.get('/analytics/strategies', async (_req: Request, res: Response) => {
         strategyStats[stratId] = {
           id: stratId,
           name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic',
-          tier: setup.strategy_tier || 'basic',
+          tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'basic'),
           totalSignals: 0,
           activeSignals: 0,
           resolvedSignals: 0,
@@ -764,29 +764,58 @@ router.get('/analytics/strategies', async (_req: Request, res: Response) => {
       strategyStats[stratId].totalSignals += 1;
       if (['awaiting_entry', 'active'].includes(setup.signal_state)) {
         strategyStats[stratId].activeSignals += 1;
-      } else if (setup.signal_state === 'resolved') {
+      } else if (['resolved', 'invalidated', 'superseded'].includes(setup.signal_state)) {
         strategyStats[stratId].resolvedSignals += 1;
       }
     }
 
     for (const outcome of allOutcomes) {
-      const parentSetup = allSetups.find(s => String(s.id) === String(outcome.setup_id));
-      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
-      if (strategyStats[stratId]) {
-        if (['tp1_hit', 'tp2_hit'].includes(outcome.outcome_type)) {
-          strategyStats[stratId].wins += 1;
-          strategyStats[stratId].totalRealizedR += (outcome.realized_pl || 2.0);
-        } else if (outcome.outcome_type === 'sl_hit') {
-          strategyStats[stratId].losses += 1;
-          strategyStats[stratId].totalRealizedR -= 1.0;
-        }
+      let parentSetup = allSetups.find(s => String(s.id) === String(outcome.setup_id));
+      if (!parentSetup) {
+        parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market || 'futures');
       }
+      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
+      
+      if (!strategyStats[stratId]) {
+        strategyStats[stratId] = {
+          id: stratId,
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic',
+          tier: stratId === 'manna_snd' ? 'pro' : 'basic',
+          totalSignals: 0,
+          activeSignals: 0,
+          resolvedSignals: 0,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+          totalRealizedR: 0
+        };
+      }
+
+      let tradeR = 0;
+      if (outcome.outcome_type === 'tp1_hit') {
+        tradeR = parentSetup?.r_multiple_1 || 2.0;
+        strategyStats[stratId].wins += 1;
+      } else if (outcome.outcome_type === 'tp2_hit') {
+        tradeR = parentSetup?.r_multiple_2 || 3.0;
+        strategyStats[stratId].wins += 1;
+      } else if (outcome.outcome_type === 'sl_hit') {
+        tradeR = -1.0;
+        strategyStats[stratId].losses += 1;
+      } else if (outcome.outcome_type === 'be_hit' || outcome.outcome_type === 'breakeven') {
+        tradeR = 0.0;
+      } else if (outcome.realized_pl) {
+        tradeR = outcome.realized_pl;
+        if (tradeR > 0) strategyStats[stratId].wins += 1;
+        else if (tradeR < 0) strategyStats[stratId].losses += 1;
+      }
+
+      strategyStats[stratId].totalRealizedR += tradeR;
     }
 
     for (const stratId of Object.keys(strategyStats)) {
       const s = strategyStats[stratId];
-      const totalResolved = s.wins + s.losses;
-      s.winRate = totalResolved > 0 ? Number(((s.wins / totalResolved) * 100).toFixed(1)) : 0;
+      const totalDecided = s.wins + s.losses;
+      s.winRate = totalDecided > 0 ? Number(((s.wins / totalDecided) * 100).toFixed(1)) : 0;
       s.totalRealizedR = Number(s.totalRealizedR.toFixed(2));
     }
 

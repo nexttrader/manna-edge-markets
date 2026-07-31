@@ -215,6 +215,12 @@ export async function initializeDatabase(): Promise<void> {
                     ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING;
+
+                    UPDATE outcomes SET strategy_id = 'manna_snd' WHERE setup_id IN (
+                        SELECT id FROM edge_setups WHERE strategy_id = 'manna_snd' 
+                        UNION 
+                        SELECT id FROM forex_edge_setups WHERE strategy_id = 'manna_snd'
+                    );
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
