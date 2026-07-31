@@ -284,15 +284,14 @@ export class MannaSndStrategy implements IStrategyEngine {
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
           const decimals = market === 'futures' ? 2 : 5;
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
-
-          // LONG zone layout:
-          // entry_zone_mid  = zone.proximal  (actual limit-buy price; TP1/TP2 anchor — must stay as proximal)
-          // entry_zone_high = zone.proximal + ATR buffer (top of fill zone; fill triggers when price is HERE)
-          // entry_zone_low  = zone.distal    (bottom of demand zone; SL sits below this)
           const ez_mid = Number(zone.proximal.toFixed(decimals));
           const ez_low = Number(zone.distal.toFixed(decimals));
-          const ez_high = Number((zone.proximal + atr14 * 0.25).toFixed(decimals));
+          const ez_high = Number(zone.proximal.toFixed(decimals));
+
+          // Discard setup if current market price has already reached TP1, breached Stop Loss, or is already at/below entry level
+          if (currentPrice >= tp1 || currentPrice <= stop || currentPrice <= ez_high) continue;
+
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,
@@ -356,9 +355,6 @@ export class MannaSndStrategy implements IStrategyEngine {
           const tp1 = entry_zone_mid - (risk * 2.0); // 2:1 Minimum RR
           const tp2 = entry_zone_mid - (risk * 3.0); // 3:1 RR
 
-          // Discard setup if current market price has already reached TP1 or breached Stop Loss
-          if (currentPrice <= tp1 || currentPrice >= stop) continue;
-
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
@@ -376,15 +372,14 @@ export class MannaSndStrategy implements IStrategyEngine {
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
           const decimals = market === 'futures' ? 2 : 5;
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
-
-          // SHORT zone layout:
-          // entry_zone_mid  = zone.proximal   (actual limit-sell price; TP1/TP2 anchor — must stay as proximal)
-          // entry_zone_low  = zone.proximal - ATR buffer (bottom of fill zone; fill triggers when price is HERE)
-          // entry_zone_high = zone.distal     (top of supply zone; SL sits above this)
           const ez_mid = Number(zone.proximal.toFixed(decimals));
           const ez_high = Number(zone.distal.toFixed(decimals));
-          const ez_low = Number((zone.proximal - atr14 * 0.25).toFixed(decimals));
+          const ez_low = Number(zone.proximal.toFixed(decimals));
+
+          // Discard setup if current market price has already reached TP1, breached Stop Loss, or is already at/above entry level
+          if (currentPrice <= tp1 || currentPrice >= stop || currentPrice >= ez_low) continue;
+
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,

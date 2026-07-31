@@ -708,6 +708,23 @@ router.get('/analytics/export-csv', async (_req: Request, res: Response) => {
   }
 });
 
+router.post('/signals/reset-stale', async (_req: Request, res: Response) => {
+  try {
+    // Wipe ALL awaiting_entry and active setups — these are the stale broken setups
+    // left behind by the instant-open/close bug. Active real trades should be manually
+    // invalidated via /signals/:id/invalidate before calling this.
+    const futures = await queryDb(`DELETE FROM edge_setups WHERE signal_state IN ('awaiting_entry', 'active')`);
+    const forex = await queryDb(`DELETE FROM forex_edge_setups WHERE signal_state IN ('awaiting_entry', 'active')`);
+    res.json({
+      success: true,
+      message: 'All stale awaiting_entry and active setups cleared. Run a manual scan to repopulate.',
+      cleared: { futures: (futures as any).changes ?? 'ok', forex: (forex as any).changes ?? 'ok' }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reset stale setups', details: String(error) });
+  }
+});
+
 router.post('/analytics/reset', async (req: Request, res: Response) => {
   try {
     const { archiveName = `Archive Epoch (${new Date().toLocaleDateString()})` } = req.body || {};

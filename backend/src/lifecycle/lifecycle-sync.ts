@@ -68,9 +68,9 @@ export class LifecycleSync {
         // SHORT (Limit Sell): Price must rally up to touch entry zone, AND current price must be at/near entry
         let isFilled = false;
         if (isLong) {
-          isFilled = minLow <= setup.entry_zone_high && currentPrice <= (setup.entry_zone_high * 1.002);
+          isFilled = minLow <= setup.entry_zone_high && currentPrice >= setup.stop;
         } else {
-          isFilled = maxHigh >= setup.entry_zone_low && currentPrice >= (setup.entry_zone_low * 0.998);
+          isFilled = maxHigh >= setup.entry_zone_low && currentPrice <= setup.stop;
         }
 
         if (isFilled) {
