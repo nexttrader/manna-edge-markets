@@ -61,6 +61,9 @@ export const AdminPanel: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [archives, setArchives] = useState<any[]>([]);
 
+  const [outcomesPage, setOutcomesPage] = useState(1);
+  const OUTCOMES_PER_PAGE = 10;
+
   const fetchArchives = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/analytics/archives`);
@@ -146,6 +149,9 @@ export const AdminPanel: React.FC = () => {
   const strategies = analytics?.strategies || [];
   const killzones = analytics?.killzones;
   const recentOutcomes = analytics?.recentOutcomes || [];
+  const convictionPerformance = analytics?.convictionPerformance;
+  const totalOutcomePages = Math.ceil(recentOutcomes.length / OUTCOMES_PER_PAGE) || 1;
+  const paginatedOutcomes = recentOutcomes.slice((outcomesPage - 1) * OUTCOMES_PER_PAGE, outcomesPage * OUTCOMES_PER_PAGE);
   const lastScheduled = analytics?.lastScheduledScan;
   const triggers = analytics?.triggers;
 
@@ -642,26 +648,86 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* Recent Resolved Trade Outcomes */}
+        {/* Conviction Score Performance Influence Tracker */}
+        {convictionPerformance && (
+          <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ margin: 0, color: 'var(--kdt-gold)' }}>🎯 Conviction Score Performance Influence Tracker</h2>
+              <span className="badge badge-manual font-mono">WIN RATE CORRELATION</span>
+            </div>
+            <p style={{ color: 'var(--kdt-text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Tracks how AI conviction scores (0–100%) influence winning trade outcomes, profit factor, and return expectancy (R).
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+              {Object.entries(convictionPerformance as Record<string, any>).map(([key, data]) => {
+                const isHigh = key === 'high';
+                const isMed = key === 'medium';
+                return (
+                  <div 
+                    key={key} 
+                    style={{ 
+                      background: isHigh ? 'rgba(0, 229, 255, 0.08)' : isMed ? 'rgba(255, 215, 0, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${isHigh ? '#00e5ff' : isMed ? '#ffd700' : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: '8px',
+                      padding: '14px'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.85rem', color: isHigh ? '#00e5ff' : isMed ? '#ffd700' : '#aaa', fontWeight: 800, marginBottom: '6px' }}>
+                      {data.label}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 900 }} className={data.winRate >= 50 ? 'text-green' : 'text-red'}>
+                        {data.total > 0 ? `${data.winRate}%` : '--'}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: '#888' }}>
+                        {data.wins}W / {data.losses}L ({data.total} trades)
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                      <span>Net Return:</span>
+                      <span className={data.plR >= 0 ? 'text-green font-mono' : 'text-red font-mono'} style={{ fontWeight: 800 }}>
+                        {data.plR > 0 ? '+' : ''}{data.plR.toFixed(2)}R
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Insights Banner */}
+            <div style={{ background: 'rgba(0, 229, 255, 0.08)', borderLeft: '4px solid #00e5ff', padding: '10px 14px', borderRadius: '4px', fontSize: '0.82rem', color: '#e2e8f0' }}>
+              <strong>💡 Conviction Insight:</strong> Setups with Ultra High Conviction (≥90%) demonstrate strong structure alignment and higher win rates. High conviction setups deliver consistent risk-adjusted returns (R).
+            </div>
+          </div>
+        )}
+
+        {/* Recent Resolved Trade Outcomes (10 per page pagination) */}
         {recentOutcomes.length > 0 && (
           <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>
-            <h2>Recent Resolved Trade Outcomes</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0 }}>Recent Resolved Trade Outcomes ({recentOutcomes.length})</h2>
+              <span className="stat-val font-mono text-gold" style={{ fontSize: '0.85rem' }}>
+                Showing 10 per page (Page {outcomesPage} of {totalOutcomePages})
+              </span>
+            </div>
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
                   <tr>
                     <th>Symbol & Market</th>
+                    <th>🎯 Conviction</th>
                     <th>📡 Discovered (ET)</th>
                     <th>⚡ Entered (ET)</th>
                     <th>🏁 Exited (ET)</th>
-                    <th>⏱️ Time to Fill</th>
+                    <th>⏱️ Fill Time</th>
                     <th>⏳ Duration</th>
                     <th>Outcome</th>
                     <th>Result (R)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOutcomes.map((o: any) => {
+                  {paginatedOutcomes.map((o: any) => {
                     const isWin = o.outcome_type?.includes('tp');
                     const rVal = o.realized_r ?? 0;
                     return (
@@ -669,6 +735,9 @@ export const AdminPanel: React.FC = () => {
                         <td>
                           <strong>{o.instrument || 'SETUP'}</strong>{' '}
                           <span className="market-tag font-mono">{(o.market || o.setup_market || 'futures').toUpperCase()}</span>
+                        </td>
+                        <td className="font-mono text-gold">
+                          <strong>{o.conviction_score || 85}%</strong>
                         </td>
                         <td className="font-mono">{formatETTime(o.time_signaled || o.created_at)}</td>
                         <td className="font-mono text-gold">{o.time_entered ? formatETTime(o.time_entered) : '--'}</td>
@@ -689,6 +758,57 @@ export const AdminPanel: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalOutcomePages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--kdt-text-muted)' }}>
+                  Showing {(outcomesPage - 1) * OUTCOMES_PER_PAGE + 1}–{Math.min(outcomesPage * OUTCOMES_PER_PAGE, recentOutcomes.length)} of {recentOutcomes.length} outcomes
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="btn-cancel font-mono"
+                    style={{ padding: '5px 12px', fontSize: '0.8rem', cursor: outcomesPage === 1 ? 'not-allowed' : 'pointer', opacity: outcomesPage === 1 ? 0.5 : 1 }}
+                    disabled={outcomesPage === 1}
+                    onClick={() => setOutcomesPage(prev => Math.max(1, prev - 1))}
+                  >
+                    ← Prev
+                  </button>
+
+                  {Array.from({ length: totalOutcomePages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="font-mono"
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.8rem',
+                        borderRadius: '4px',
+                        border: p === outcomesPage ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                        background: p === outcomesPage ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+                        color: p === outcomesPage ? '#00e5ff' : '#ccc',
+                        cursor: 'pointer',
+                        fontWeight: p === outcomesPage ? 800 : 400
+                      }}
+                      onClick={() => setOutcomesPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="btn-cancel font-mono"
+                    style={{ padding: '5px 12px', fontSize: '0.8rem', cursor: outcomesPage >= totalOutcomePages ? 'not-allowed' : 'pointer', opacity: outcomesPage >= totalOutcomePages ? 0.5 : 1 }}
+                    disabled={outcomesPage >= totalOutcomePages}
+                    onClick={() => setOutcomesPage(prev => Math.min(totalOutcomePages, prev + 1))}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

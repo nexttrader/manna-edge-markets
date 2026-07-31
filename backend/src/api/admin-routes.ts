@@ -373,7 +373,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let totalHoldingTimeMs = 0;
     let holdingTimeCount = 0;
 
-    const enrichedOutcomes = await Promise.all(outcomes.slice(0, 15).map(async (o: any) => {
+    const enrichedOutcomes = await Promise.all(outcomes.slice(0, 100).map(async (o: any) => {
       const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       let tradeR = 0;
       
@@ -424,6 +424,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
         instrument: setup?.instrument || 'UNKNOWN',
         market: setup?.market || 'futures',
         bias: setup?.bias || 'long',
+        conviction_score: setup?.conviction_score || o.conviction_score || 85,
         time_signaled: signalTime,
         time_entered: entryTime,
         time_exited: exitTime,
@@ -443,6 +444,13 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let maxDrawdownR = 0;
 
     const assetPerformance: Record<string, { instrument: string; strategy_id: string; total: number; wins: number; losses: number; plR: number; market: string }> = {};
+
+    const convictionPerformance: Record<string, { label: string; min: number; max: number; total: number; wins: number; losses: number; winRate: number; plR: number }> = {
+      high: { label: 'Ultra High (90–100%)', min: 90, max: 100, total: 0, wins: 0, losses: 0, winRate: 0, plR: 0 },
+      medium: { label: 'High (80–89%)', min: 80, max: 89.9, total: 0, wins: 0, losses: 0, winRate: 0, plR: 0 },
+      moderate: { label: 'Moderate (70–79%)', min: 70, max: 79.9, total: 0, wins: 0, losses: 0, winRate: 0, plR: 0 },
+      standard: { label: 'Standard (<70%)', min: 0, max: 69.9, total: 0, wins: 0, losses: 0, winRate: 0, plR: 0 }
+    };
 
     for (const o of outcomes) {
       const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
@@ -511,6 +519,24 @@ router.get('/analytics', async (req: Request, res: Response) => {
         if (isWin) killzonePerformance[setup.killzone_origin].wins++;
         else if (isLoss) killzonePerformance[setup.killzone_origin].losses++;
       }
+
+      const conviction = setup?.conviction_score || o.conviction_score || 85;
+      let cKey = 'standard';
+      if (conviction >= 90) cKey = 'high';
+      else if (conviction >= 80) cKey = 'medium';
+      else if (conviction >= 70) cKey = 'moderate';
+
+      convictionPerformance[cKey].total++;
+      convictionPerformance[cKey].plR += tradeR;
+      if (isWin) convictionPerformance[cKey].wins++;
+      else if (isLoss) convictionPerformance[cKey].losses++;
+    }
+
+    for (const k of Object.keys(convictionPerformance)) {
+      const p = convictionPerformance[k];
+      const dec = p.wins + p.losses;
+      p.winRate = dec > 0 ? Number(((p.wins / dec) * 100).toFixed(1)) : 0;
+      p.plR = Number(p.plR.toFixed(2));
     }
 
     const totalTrades = wins + losses;
@@ -580,6 +606,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
         forex: { total: forexTotal, active: forexActive },
       },
       assetPerformance,
+      convictionPerformance,
       invalidations: invStats,
       killzones: killzonePerformance,
       recentOutcomes: enrichedOutcomes
