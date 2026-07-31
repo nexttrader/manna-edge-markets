@@ -60,9 +60,17 @@ app.get('/api/health', async (_req: Request, res: Response) => {
     }
 });
 
-// Serve compiled frontend assets if present
-const frontendDistPath = path.resolve(__dirname, '../../../frontend/dist');
-if (fs.existsSync(frontendDistPath)) {
+// Serve compiled frontend assets if present across local or production deployment paths
+const possibleDistPaths = [
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, '../../../frontend/dist')
+];
+const frontendDistPath = possibleDistPaths.find(p => fs.existsSync(p));
+
+if (frontendDistPath) {
+    logger.info({ frontendDistPath }, '🟢 Serving static frontend dist assets & SPA fallback route.');
     app.use(express.static(frontendDistPath));
     app.get('*', (req: Request, res: Response, next: NextFunction) => {
         if (req.path.startsWith('/api')) return next();
