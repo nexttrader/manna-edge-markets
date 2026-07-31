@@ -185,15 +185,31 @@ export async function executePublishRun(
       }
     }
     
-    // CONSTRAINT CHECK: Ensure max 1 active/non-superseded per (instrument + strategy)
+    // CONSTRAINT RECONCILIATION: Ensure max 1 active setup per (instrument + strategy)
     for (const market of markets) {
       const checkActive = await queries.getActiveSetups(market.name);
-      const counts: Record<string, number> = {};
+      const groups: Record<string, typeof checkActive> = {};
       for (const s of checkActive) {
         const key = `${s.instrument}_${s.strategy_id || 'manna_basic'}`;
-        counts[key] = (counts[key] || 0) + 1;
-        if (counts[key] > 1) {
-          throw new Error(`Constraint violated: Multiple active setups for ${key} in ${market.name}`);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+      }
+
+      for (const [key, setupsList] of Object.entries(groups)) {
+        if (setupsList.length > 1) {
+          logger.warn({ key, count: setupsList.length }, 'Reconciling multiple active setups for key');
+          setupsList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          const toSupersede = setupsList.slice(1);
+          for (const dup of toSupersede) {
+            await queries.updateSetupState(dup.id, market.name, 'superseded', {
+              superseded: 1,
+              tradable: 0,
+              invalidation_reason: 'duplicate_reconciled',
+              invalidation_detail: 'Automatically superseded by PublishGate constraint reconciler',
+              resolved_at: new Date().toISOString()
+            });
+            stats.invalidated++;
+          }
         }
       }
     }

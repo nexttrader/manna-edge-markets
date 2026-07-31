@@ -674,6 +674,11 @@ export const AdminPanel: React.FC = () => {
                         </td>
                         <td>
                           <span className={`state-badge ${runState}`}>{runState}</span>
+                          {(run as any).error_detail && (
+                            <span style={{ fontSize: '0.7rem', display: 'block', color: '#ff1744', marginTop: '2px', maxWidth: '160px', wordBreak: 'break-word' }}>
+                              {(run as any).error_detail}
+                            </span>
+                          )}
                         </td>
                         <td>{run.created ?? (run as any).setups_created ?? 0}</td>
                         <td>{run.invalidated ?? (run as any).setups_invalidated ?? 0}</td>
