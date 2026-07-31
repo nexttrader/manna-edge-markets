@@ -23,7 +23,7 @@ export const FAQ_DATA: FaqItem[] = [
     id: 'strat-1',
     category: '⚡ Strategies Explained',
     question: 'What is the difference between Manna Basic and Manna SnD strategies?',
-    answer: '• Manna Basic (Cyan Card Border): Uses classic ICT/SMC concepts including Fair Value Gaps (FVG), Liquidity Sweeps, and Order Block displacement on the 15M timeframe.\n\n• Manna SnD (Gold Card Border): Institutional Supply & Demand strategy. Integrates 1H HTF Supply/Demand Curve analysis with 15M SnD entry zones, enforcing higher conviction thresholds and strict HTF alignment before publishing.',
+    answer: '• Manna Basic (Cyan Card Border): Uses classic KDT concepts including Fair Value Gaps (FVG), Liquidity Sweeps, and Order Block displacement on the 15M timeframe.\n\n• Manna SnD (Gold Card Border): Institutional Supply & Demand strategy. Integrates 1H HTF Supply/Demand Curve analysis with 15M SnD entry zones, enforcing higher conviction thresholds and strict HTF alignment before publishing.',
     roleRequired: 'all',
     tags: ['strategy', 'manna_basic', 'manna_snd'],
     updatedAt: '2026-07-31'

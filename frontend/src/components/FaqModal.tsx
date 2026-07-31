@@ -16,6 +16,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [openFaqId, setOpenFaqId] = useState<string | null>(FAQ_DATA[0]?.id || null);
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin'>('all');
+  const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
 
   // Filter categories based on available FAQ items for user role
   const availableFaqs = useMemo(() => {
@@ -48,33 +49,49 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
     setOpenFaqId(prev => (prev === id ? null : id));
   };
 
+  const handleFeedback = (id: string, type: 'up' | 'down') => {
+    setFeedbackState(prev => ({ ...prev, [id]: type }));
+  };
+
   return createPortal(
     <div className="faq-modal-backdrop font-sans">
       <div className="faq-modal-content glass-card animate-fade-in">
-        {/* Header */}
-        <div className="faq-modal-header">
-          <div className="faq-title-group">
-            <h2 className="faq-title">
-              ❓ Knowledge Base & FAQ{' '}
-              <span className={`role-badge ${isAdmin ? 'admin' : 'trader'}`}>
-                {isAdmin ? '🛡️ ADMIN ACCESS' : '👤 TRADER ACCESS'}
-              </span>
-            </h2>
-            <p className="faq-subtitle">
-              Comprehensive guide to Manna Edge Markets 2.0 discovery engine, strategies, execution rules, and admin tools.
-            </p>
+        {/* Premium Hero Banner Header */}
+        <div className="faq-hero-header">
+          <div className="faq-hero-left">
+            <div className="faq-kdt-emblem">⚡</div>
+            <div>
+              <h2 className="faq-hero-title">
+                KDT KNOWLEDGE HUB & FAQ
+                <span className={`role-pill ${isAdmin ? 'admin' : 'trader'}`}>
+                  {isAdmin ? '🛡️ ADMIN OPERATING MANUAL' : '👤 TRADER GUIDE'}
+                </span>
+              </h2>
+              <p className="faq-hero-sub">
+                Official documentation for Manna Edge Markets 2.0. Engine algorithms, KDT concepts, Killzones & Admin controls.
+              </p>
+            </div>
           </div>
-          <button className="faq-close-btn font-mono" onClick={onClose}>✕</button>
+          <button className="faq-close-btn font-mono" onClick={onClose} title="Close Knowledge Base">✕</button>
         </div>
 
-        {/* Search & Role Filter Bar */}
+        {/* Live Engine Sync Metrics Ribbon */}
+        <div className="faq-metrics-ribbon font-mono">
+          <span className="ribbon-item">📚 <strong>{filteredFaqs.length}</strong> {filteredFaqs.length === 1 ? 'Topic' : 'Topics'} Listed</span>
+          <span className="ribbon-divider">•</span>
+          <span className="ribbon-item text-cyan">⚡ Live Engine Auto-Sync</span>
+          <span className="ribbon-divider">•</span>
+          <span className="ribbon-item text-gold">{isAdmin ? '🛡️ Admin Privileges Active' : '🟢 Standard Trader Access'}</span>
+        </div>
+
+        {/* Search & Role Control Bar */}
         <div className="faq-controls font-mono">
           <div className="faq-search-wrapper">
             <span className="search-icon">🔍</span>
             <input 
               type="text"
               className="faq-search-input"
-              placeholder="Search features, strategies, orders, killzones..."
+              placeholder="Search KDT concepts, entry markers, Killzones, admin rescans..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -101,7 +118,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
           )}
         </div>
 
-        {/* Category Pills */}
+        {/* Category Pills Bar */}
         <div className="faq-categories-bar font-mono">
           {categories.map(cat => (
             <button
@@ -114,34 +131,54 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
           ))}
         </div>
 
-        {/* Accordion List */}
+        {/* Accordion Cards List */}
         <div className="faq-accordion-container">
           {filteredFaqs.length > 0 ? (
             filteredFaqs.map(item => {
               const isOpen = openFaqId === item.id;
               const isAdminOnly = item.roleRequired === 'admin';
+              const userFb = feedbackState[item.id];
 
               return (
-                <div key={item.id} className={`faq-card ${isOpen ? 'open' : ''} ${isAdminOnly ? 'admin-card' : ''}`}>
+                <div key={item.id} className={`faq-card ${isOpen ? 'open' : ''} ${isAdminOnly ? 'admin-card' : 'trader-card'}`}>
                   <button className="faq-question-btn" onClick={() => toggleAccordion(item.id)}>
                     <div className="question-left">
-                      <span className="category-tag font-mono">{item.category}</span>
-                      {isAdminOnly && <span className="admin-tag font-mono">🛡️ ADMIN</span>}
+                      <span className={`category-tag font-mono ${isAdminOnly ? 'admin-cat' : ''}`}>{item.category}</span>
+                      {isAdminOnly && <span className="admin-tag font-mono">🛡️ ADMIN ONLY</span>}
                       <span className="question-text">{item.question}</span>
                     </div>
-                    <span className="chevron-icon">{isOpen ? '▲' : '▼'}</span>
+                    <span className={`chevron-icon ${isOpen ? 'rotated' : ''}`}>▼</span>
                   </button>
 
                   {isOpen && (
                     <div className="faq-answer-body animate-fade-in">
-                      <p className="answer-text">{item.answer}</p>
+                      <div className="answer-text">{item.answer}</div>
+                      
                       <div className="faq-card-footer font-mono">
                         <div className="tags-group">
                           {item.tags.map(tag => (
                             <span key={tag} className="tag-chip">#{tag}</span>
                           ))}
                         </div>
-                        <span className="updated-at">Updated: {item.updatedAt}</span>
+
+                        <div className="faq-feedback-group">
+                          <span className="feedback-label">Helpful?</span>
+                          <button 
+                            className={`feedback-btn ${userFb === 'up' ? 'active-up' : ''}`}
+                            onClick={() => handleFeedback(item.id, 'up')}
+                            title="Yes, this answered my question"
+                          >
+                            👍 {userFb === 'up' ? 'Yes' : ''}
+                          </button>
+                          <button 
+                            className={`feedback-btn ${userFb === 'down' ? 'active-down' : ''}`}
+                            onClick={() => handleFeedback(item.id, 'down')}
+                            title="No, needs improvement"
+                          >
+                            👎
+                          </button>
+                          <span className="updated-at">Updated: {item.updatedAt}</span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -150,15 +187,21 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
             })
           ) : (
             <div className="faq-empty font-mono">
-              <span>🔍 No matching documentation found for "{searchQuery}". Try a different search term.</span>
+              <span className="empty-icon">🔍</span>
+              <p>No matching documentation found for "<strong>{searchQuery}</strong>".</p>
+              <button className="reset-search-btn" onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}>
+                ↺ Clear Search Filters
+              </button>
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="faq-modal-footer font-mono">
-          <span>📚 Manna Edge Markets 2.0 • Knowledge Base Engine (Auto-syncs on new releases)</span>
-          <button className="btn-close-bottom" onClick={onClose}>Close Guide</button>
+          <div className="footer-left">
+            <span>⚡ Manna Edge Markets 2.0 • KDT Architecture Framework</span>
+          </div>
+          <button className="btn-close-bottom" onClick={onClose}>Close Knowledge Hub</button>
         </div>
       </div>
     </div>,
