@@ -121,10 +121,12 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     const runId = `single_rescan_${Date.now()}`;
     const scope = (targetMarket.toLowerCase() as 'both' | 'futures' | 'forex');
 
-    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], undefined);
+    const targetStrategy = existingSetup.strategy_id || 'manna_basic';
+
+    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], targetStrategy);
 
     const candidates = targetMarket === 'futures' ? futures : forex;
-    const matchingCandidate = candidates.find(c => c.instrument === instrument);
+    const matchingCandidate = candidates.find(c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === targetStrategy);
 
     isSingleRescanActive = false;
 

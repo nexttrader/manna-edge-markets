@@ -15,7 +15,9 @@
 
 .replace-modal-content {
   width: 100%;
-  max-width: 820px;
+  max-width: 980px;
+  max-height: 90vh;
+  overflow-y: auto;
   background: #140926;
   border: 1px solid rgba(224, 86, 253, 0.3);
   border-radius: 14px;
@@ -62,37 +64,23 @@
 .comparison-grid {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 16px;
-  align-items: center;
+  gap: 20px;
+  align-items: flex-start;
   margin-bottom: 28px;
 }
 
-.compare-card {
+.compare-card-col {
   position: relative;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 20px;
-}
-
-.compare-card.current {
-  border-color: rgba(255, 171, 0, 0.4);
-}
-
-.compare-card.candidate {
-  border-color: rgba(0, 229, 255, 0.5);
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.12);
 }
 
 .card-badge {
-  position: absolute;
-  top: -11px;
-  left: 14px;
-  font-size: 0.68rem;
+  display: inline-block;
+  font-size: 0.72rem;
   font-weight: 900;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   letter-spacing: 0.05em;
+  margin-bottom: 12px;
 }
 
 .current-badge {
@@ -105,58 +93,12 @@
   color: #090314;
 }
 
-.inst-title {
-  font-size: 1.2rem;
-  font-weight: 900;
-  margin: 8px 0 6px 0;
-}
-
-.bias-pill {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 800;
-  padding: 3px 10px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-}
-
-.bias-pill.long {
-  background: rgba(0, 230, 118, 0.15);
-  color: #00e676;
-  border: 1px solid rgba(0, 230, 118, 0.3);
-}
-
-.bias-pill.short {
-  background: rgba(255, 23, 68, 0.15);
-  color: #ff1744;
-  border: 1px solid rgba(255, 23, 68, 0.3);
-}
-
-.metric-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  padding: 6px 0;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
-}
-
-.metric-row:last-child {
-  border-bottom: none;
-}
-
-.metric-label {
-  color: #8e80a9;
-}
-
-.metric-value {
-  font-weight: 700;
-}
-
 .vs-divider {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 900;
   color: #e056fd;
   text-align: center;
+  align-self: center;
 }
 
 .replace-actions {
@@ -165,6 +107,8 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 20px;
 }
 
 .right-actions {

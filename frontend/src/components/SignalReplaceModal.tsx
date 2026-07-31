@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { EdgeSetup } from '../types';
+import { SetupCard } from './SetupCard';
 import { SetupChartModal } from './SetupChartModal';
 import { API_BASE } from '../config';
 import './SignalReplaceModal.css';
@@ -22,39 +23,35 @@ export const SignalReplaceModal: React.FC<SignalReplaceModalProps> = ({
   const [replacing, setReplacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isCurrentLong = (currentSetup.bias || 'long').toLowerCase() === 'long';
-  const isCandidateLong = (candidate.bias || 'long').toLowerCase() === 'long';
-
-  const currentEntryLow = currentSetup.entry_zone_low ?? currentSetup.levels?.entryMin ?? 0;
-  const currentEntryHigh = currentSetup.entry_zone_high ?? currentSetup.levels?.entryMax ?? 0;
-  const currentStop = currentSetup.stop ?? currentSetup.levels?.stopLoss ?? 0;
-  const currentTp1 = currentSetup.tp1 ?? currentSetup.levels?.takeProfit1 ?? 0;
-  const currentConviction = Math.round(currentSetup.conviction_score ?? currentSetup.conviction ?? 75);
-
   const candidateEntryLow = candidate.entry_zone_low ?? candidate.levels?.entryMin ?? 0;
   const candidateEntryHigh = candidate.entry_zone_high ?? candidate.levels?.entryMax ?? 0;
   const candidateStop = candidate.stop ?? candidate.levels?.stopLoss ?? 0;
   const candidateTp1 = candidate.tp1 ?? candidate.levels?.takeProfit1 ?? 0;
   const candidateConviction = Math.round(candidate.conviction_score ?? candidate.conviction ?? 75);
 
-  // Construct a synthetic EdgeSetup object for chart preview of the candidate
-  const candidateAsSetup: EdgeSetup = {
-    id: 'candidate-preview',
+  // Construct a full EdgeSetup object so candidate displays identically to standard setup cards
+  const candidateSetup: EdgeSetup = {
+    id: candidate.id || `candidate_${Date.now()}`,
     instrument: candidate.instrument || currentSetup.instrument,
     market: currentSetup.market || 'futures',
     bias: candidate.bias || 'long',
     conviction_score: candidateConviction,
+    conviction: candidateConviction,
     entry_zone_low: candidateEntryLow,
     entry_zone_high: candidateEntryHigh,
-    entry_zone_mid: candidate.entry_zone_mid || (candidateEntryLow + candidateEntryHigh) / 2,
+    entry_zone_mid: candidate.entry_zone_mid || (candidateEntryLow && candidateEntryHigh ? (candidateEntryLow + candidateEntryHigh) / 2 : undefined),
     stop: candidateStop,
     tp1: candidateTp1,
     tp2: candidate.tp2,
     r_multiple_1: candidate.r_multiple_1 || 2.0,
     r_multiple_2: candidate.r_multiple_2 || 3.0,
     signal_state: 'awaiting_entry',
+    killzone_origin: currentSetup.killzone_origin || 'ny_am',
+    killzone_origin_at: currentSetup.killzone_origin_at,
     strategy_id: candidate.strategy_id || currentSetup.strategy_id || 'manna_basic',
-    created_at: new Date().toISOString()
+    strategy_tier: candidate.strategy_tier || currentSetup.strategy_tier || 'basic',
+    created_at: new Date().toISOString(),
+    metadata: typeof candidate.metadata === 'string' ? candidate.metadata : JSON.stringify(candidate.metadata || {})
   };
 
   const handleConfirmReplace = async () => {
@@ -80,85 +77,39 @@ export const SignalReplaceModal: React.FC<SignalReplaceModalProps> = ({
     }
   };
 
+  const stratName = (currentSetup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic').toUpperCase();
+
   return createPortal(
     <div className="replace-modal-backdrop font-sans">
       <div className="replace-modal-content glass-card animate-fade-in">
         {/* Header */}
         <div className="replace-modal-header">
-          <h2>🔍 Signal Replacement Discovered: <span className="font-mono text-cyan">{currentSetup.instrument}</span></h2>
+          <h2>🔍 Single-Asset Rescan ({stratName}): <span className="font-mono text-cyan">{currentSetup.instrument}</span></h2>
           <button className="close-btn font-mono" onClick={onClose}>✕</button>
         </div>
 
         <p className="replace-subtitle">
-          A new setup candidate was discovered for <strong>{currentSetup.instrument}</strong> during single-asset rescan.
-          Compare metrics below, preview on chart, or confirm replacement.
+          Discovered a new <strong>{stratName}</strong> setup proposal for <strong>{currentSetup.instrument}</strong>.
+          Compare the full signal cards below, preview on chart, or confirm replacement.
         </p>
 
         {error && <div className="replace-error font-mono">⚠️ {error}</div>}
 
-        {/* Side-by-Side Comparison */}
+        {/* Side-by-Side Comparison using identical SetupCard UI */}
         <div className="comparison-grid">
           {/* Current Signal Card */}
-          <div className="compare-card current font-mono">
-            <div className="card-badge current-badge">CURRENT PENDING SIGNAL</div>
-            <h3 className="inst-title">{currentSetup.instrument}</h3>
-            <div className={`bias-pill ${isCurrentLong ? 'long' : 'short'}`}>
-              {isCurrentLong ? '⬆ LONG' : '⬇ SHORT'}
-            </div>
-
-            <div className="metric-row">
-              <span className="metric-label">Conviction:</span>
-              <span className="metric-value text-gold">{currentConviction}%</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Entry Zone:</span>
-              <span className="metric-value">{currentEntryLow} – {currentEntryHigh}</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Stop Loss:</span>
-              <span className="metric-value text-red">{currentStop}</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Target 1 (R):</span>
-              <span className="metric-value text-green">{currentTp1} (+{currentSetup.r_multiple_1 || 2.0}R)</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Strategy:</span>
-              <span className="metric-value">{currentSetup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'}</span>
-            </div>
+          <div className="compare-card-col font-mono">
+            <div className="card-badge current-badge">📌 CURRENT PENDING SIGNAL</div>
+            <SetupCard setup={currentSetup} />
           </div>
 
           {/* VS Divider */}
           <div className="vs-divider font-mono">VS</div>
 
           {/* New Proposed Signal Card */}
-          <div className="compare-card candidate font-mono">
-            <div className="card-badge candidate-badge">⚡ PROPOSED REPLACEMENT</div>
-            <h3 className="inst-title">{candidate.instrument}</h3>
-            <div className={`bias-pill ${isCandidateLong ? 'long' : 'short'}`}>
-              {isCandidateLong ? '⬆ LONG' : '⬇ SHORT'}
-            </div>
-
-            <div className="metric-row">
-              <span className="metric-label">Conviction:</span>
-              <span className="metric-value text-cyan">{candidateConviction}%</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Entry Zone:</span>
-              <span className="metric-value text-cyan">{candidateEntryLow} – {candidateEntryHigh}</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Stop Loss:</span>
-              <span className="metric-value text-red">{candidateStop}</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Target 1 (R):</span>
-              <span className="metric-value text-green">{candidateTp1} (+{candidate.r_multiple_1 || 2.0}R)</span>
-            </div>
-            <div className="metric-row">
-              <span className="metric-label">Strategy:</span>
-              <span className="metric-value">{candidate.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'}</span>
-            </div>
+          <div className="compare-card-col font-mono">
+            <div className="card-badge candidate-badge">⚡ PROPOSED REPLACEMENT CANDIDATE</div>
+            <SetupCard setup={candidateSetup} />
           </div>
         </div>
 
@@ -181,7 +132,7 @@ export const SignalReplaceModal: React.FC<SignalReplaceModalProps> = ({
         {/* Interactive Chart Preview Modal */}
         {showChartPreview && (
           <SetupChartModal
-            setup={candidateAsSetup}
+            setup={candidateSetup}
             onClose={() => setShowChartPreview(false)}
           />
         )}
