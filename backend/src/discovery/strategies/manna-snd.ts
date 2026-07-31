@@ -267,16 +267,23 @@ export class MannaSndStrategy implements IStrategyEngine {
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
-          const conviction_score = computeConvictionScore({
-            supportResistanceStrength: 0.92,
-            volumeProfile: 0.88,
-            atrAlignment: 0.90,
-            structureAlignment: 0.94,
-            momentumConfluence: 0.89
-          });
-
+          const supportResistanceStrength = curveLocation === 'low' ? 0.96 : curveLocation === 'middle' ? 0.85 : 0.70;
+          const structureAlignment = trend15m === 'up' ? 0.95 : trend15m === 'sideways' ? 0.86 : 0.72;
           const lastVol = candles15m[candles15m.length - 1].volume;
           const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
+          const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
+          const zoneWidth = Math.abs(zone.proximal - zone.distal);
+          const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
+          const momentumConfluence = Math.min(0.98, Math.max(0.75, 0.78 + (r_multiple_1 - 2.0) * 0.08));
+
+          const conviction_score = computeConvictionScore({
+            supportResistanceStrength,
+            volumeProfile,
+            atrAlignment,
+            structureAlignment,
+            momentumConfluence
+          });
+
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
@@ -355,16 +362,23 @@ export class MannaSndStrategy implements IStrategyEngine {
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
 
-          const conviction_score = computeConvictionScore({
-            supportResistanceStrength: 0.92,
-            volumeProfile: 0.88,
-            atrAlignment: 0.90,
-            structureAlignment: 0.94,
-            momentumConfluence: 0.89
-          });
-
+          const supportResistanceStrength = curveLocation === 'high' ? 0.96 : curveLocation === 'middle' ? 0.85 : 0.70;
+          const structureAlignment = trend15m === 'down' ? 0.95 : trend15m === 'sideways' ? 0.86 : 0.72;
           const lastVol = candles15m[candles15m.length - 1].volume;
           const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
+          const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
+          const zoneWidth = Math.abs(zone.proximal - zone.distal);
+          const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
+          const momentumConfluence = Math.min(0.98, Math.max(0.75, 0.78 + (r_multiple_1 - 2.0) * 0.08));
+
+          const conviction_score = computeConvictionScore({
+            supportResistanceStrength,
+            volumeProfile,
+            atrAlignment,
+            structureAlignment,
+            momentumConfluence
+          });
+
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
