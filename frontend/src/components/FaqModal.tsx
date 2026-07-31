@@ -12,20 +12,39 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
+  // User profile active strategies & tier (defaults to all active for admin/pro, dynamic for profile)
+  const activeStrategies = useMemo(() => {
+    return (user as any)?.active_strategies || ['manna_basic', 'manna_snd'];
+  }, [user]);
+
+  const userTier: 'free' | 'pro' | 'institutional' = (user as any)?.tier || (isAdmin ? 'institutional' : 'pro');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [openFaqId, setOpenFaqId] = useState<string | null>(FAQ_DATA[0]?.id || null);
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin'>('all');
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
 
-  // Filter categories based on available FAQ items for user role
+  // Dynamic filtering based on user role, active strategies, and tier
   const availableFaqs = useMemo(() => {
     return FAQ_DATA.filter(item => {
+      // 1. Role check (Admin vs Trader)
       if (item.roleRequired === 'admin' && !isAdmin) return false;
       if (roleFilter === 'admin' && item.roleRequired !== 'admin') return false;
+
+      // 2. Dynamic Strategy Activation check (Hides strategy FAQs if not active on user profile)
+      if (item.strategyRequired && item.strategyRequired !== 'all') {
+        if (!activeStrategies.includes(item.strategyRequired)) return false;
+      }
+
+      // 3. Dynamic Tier check
+      if (item.tierRequired && item.tierRequired !== 'free') {
+        if ((userTier as string) === 'free') return false;
+      }
+
       return true;
     });
-  }, [isAdmin, roleFilter]);
+  }, [isAdmin, roleFilter, activeStrategies, userTier]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -56,32 +75,32 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
   return createPortal(
     <div className="faq-modal-backdrop font-sans">
       <div className="faq-modal-content glass-card animate-fade-in">
-        {/* Premium Hero Banner Header */}
-        <div className="faq-hero-header">
-          <div className="faq-hero-left">
-            <div className="faq-kdt-emblem">⚡</div>
+        {/* Header */}
+        <div className="faq-modal-header">
+          <div className="faq-header-left">
+            <div className="faq-logo-emblem">⚡</div>
             <div>
-              <h2 className="faq-hero-title">
-                KDT KNOWLEDGE HUB & FAQ
-                <span className={`role-pill ${isAdmin ? 'admin' : 'trader'}`}>
-                  {isAdmin ? '🛡️ ADMIN OPERATING MANUAL' : '👤 TRADER GUIDE'}
+              <h2 className="faq-header-title">
+                KDT KNOWLEDGE BASE & FAQ
+                <span className={`role-badge ${isAdmin ? 'admin' : 'trader'}`}>
+                  {isAdmin ? '🛡️ ADMIN MANUAL' : '👤 TRADER GUIDE'}
                 </span>
               </h2>
-              <p className="faq-hero-sub">
-                Official documentation for Manna Edge Markets 2.0. Engine algorithms, KDT concepts, Killzones & Admin controls.
+              <p className="faq-header-sub">
+                Interactive documentation for Manna Edge Markets 2.0. KDT concepts, Killzones & Admin tools.
               </p>
             </div>
           </div>
-          <button className="faq-close-btn font-mono" onClick={onClose} title="Close Knowledge Base">✕</button>
+          <button className="faq-close-btn font-mono" onClick={onClose} title="Close Guide">✕</button>
         </div>
 
         {/* Live Engine Sync Metrics Ribbon */}
         <div className="faq-metrics-ribbon font-mono">
-          <span className="ribbon-item">📚 <strong>{filteredFaqs.length}</strong> {filteredFaqs.length === 1 ? 'Topic' : 'Topics'} Listed</span>
+          <span className="ribbon-item">📚 <strong>{filteredFaqs.length}</strong> {filteredFaqs.length === 1 ? 'Topic' : 'Topics'} Available</span>
           <span className="ribbon-divider">•</span>
-          <span className="ribbon-item text-cyan">⚡ Live Engine Auto-Sync</span>
+          <span className="ribbon-item text-cyan">⚡ Dynamic Strategy Filter: Active</span>
           <span className="ribbon-divider">•</span>
-          <span className="ribbon-item text-gold">{isAdmin ? '🛡️ Admin Privileges Active' : '🟢 Standard Trader Access'}</span>
+          <span className="ribbon-item text-gold">{isAdmin ? '🛡️ Admin Privileges Active' : '🟢 Standard Trader Profile'}</span>
         </div>
 
         {/* Search & Role Control Bar */}
@@ -143,7 +162,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
                 <div key={item.id} className={`faq-card ${isOpen ? 'open' : ''} ${isAdminOnly ? 'admin-card' : 'trader-card'}`}>
                   <button className="faq-question-btn" onClick={() => toggleAccordion(item.id)}>
                     <div className="question-left">
-                      <span className={`category-tag font-mono ${isAdminOnly ? 'admin-cat' : ''}`}>{item.category}</span>
+                      <span className={`category-badge font-mono ${isAdminOnly ? 'admin-cat' : ''}`}>{item.category}</span>
                       {isAdminOnly && <span className="admin-tag font-mono">🛡️ ADMIN ONLY</span>}
                       <span className="question-text">{item.question}</span>
                     </div>
@@ -199,7 +218,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
         {/* Modal Footer */}
         <div className="faq-modal-footer font-mono">
           <div className="footer-left">
-            <span>⚡ Manna Edge Markets 2.0 • KDT Architecture Framework</span>
+            <span>⚡ Manna Edge Markets 2.0 • Dynamic KDT Architecture</span>
           </div>
           <button className="btn-close-bottom" onClick={onClose}>Close Knowledge Hub</button>
         </div>
