@@ -21,35 +21,36 @@ export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: n
   }
 
   if (setup.signal_state === 'awaiting_entry') {
-    const mid = setup.entry_zone_mid || (setup.entry_zone_low + setup.entry_zone_high) / 2;
-    
-    // Rule 2: price_displaced — price has moved too far PAST the zone entry edge to be viable.
-    // For LONG (Limit Buy): zone is below current price, we want price to come DOWN to the zone.
-    //   Invalidate only if price has moved UP (away from zone) by > 3x ATR above the zone high.
-    // For SHORT (Limit Sell): zone is above current price, we want price to go UP to the zone.
-    //   Invalidate only if price has moved DOWN (away from zone) by > 3x ATR below the zone low.
-    const zoneEdge = isLong ? setup.entry_zone_high : setup.entry_zone_low;
-    const displacement = isLong ? (currentPrice - zoneEdge) : (zoneEdge - currentPrice);
-    if (displacement > 3.0 * atr14) {
-      return { 
-        isValid: false, 
-        reason: InvalidationReason.price_displaced, 
-        detail: `Price ${currentPrice} displaced > 3x ATR (${(atr14 * 3.0).toFixed(2)}) from zone edge ${zoneEdge}` 
-      };
+    // Rule 2: zone_consumed — price has blown THROUGH the zone without triggering a fill.
+    // For LONG (limit buy waiting for price to DROP into zone):
+    //   The demand zone sits BELOW current price. Price being above is NORMAL — we're waiting.
+    //   Only invalidate if price crashes BELOW the zone bottom (entry_zone_low = zone.distal)
+    //   by more than 1.5x ATR — meaning the demand zone was consumed/destroyed.
+    // For SHORT (limit sell waiting for price to RALLY into zone):
+    //   The supply zone sits ABOVE current price. Price being below is NORMAL — we're waiting.
+    //   Only invalidate if price rallies ABOVE the zone top (entry_zone_high = zone.distal)
+    //   by more than 1.5x ATR — meaning the supply zone was consumed/destroyed.
+    if (isLong) {
+      const blowThrough = setup.entry_zone_low - currentPrice; // positive only if price < zone bottom
+      if (blowThrough > 1.5 * atr14) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${currentPrice} crashed ${blowThrough.toFixed(2)} below zone bottom ${setup.entry_zone_low} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — demand zone consumed`
+        };
+      }
+    } else {
+      const blowThrough = currentPrice - setup.entry_zone_high; // positive only if price > zone top
+      if (blowThrough > 1.5 * atr14) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${currentPrice} rallied ${blowThrough.toFixed(2)} above zone top ${setup.entry_zone_high} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — supply zone consumed`
+        };
+      }
     }
 
-    // Rule 3: structure_displaced — price has blown THROUGH the zone in the entry direction
-    // without triggering a fill, meaning the zone has been consumed and is no longer fresh.
-    const zonePenetrated = isLong ? currentPrice < setup.entry_zone_low : currentPrice > setup.entry_zone_high;
-    if (zonePenetrated && Math.abs(currentPrice - mid) > 1.5 * atr14) {
-      return { 
-        isValid: false, 
-        reason: InvalidationReason.structure_displaced, 
-        detail: `Price ${currentPrice} blew through zone (low=${setup.entry_zone_low}, high=${setup.entry_zone_high}) by > 1.5x ATR` 
-      };
-    }
-
-    // Rule 4: entry_expired (> 12 hours = ~2 killzone cycles)
+    // Rule 3: entry_expired (> 12 hours = ~2 killzone cycles)
     const now = new Date();
     const createdTime = new Date(setup.created_at);
     const diffHours = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
