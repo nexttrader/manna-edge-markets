@@ -48,6 +48,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const isActive = setup.signal_state === 'active';
   const isResolved = setup.signal_state === 'resolved' || setup.signal_state === 'invalidated';
 
+  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (isActive || isResolved ? setup.validatedAt || setup.created_at : undefined);
+  const resolvedTimestamp = setup.resolved_at;
+  const execPrice = parseNum(setup.entry_price_recorded ?? setup.entry_price_executed ?? entryMid);
+
   const isMannaSnd = setup.strategy_id === 'manna_snd';
 
   let metadata: any = {};
@@ -279,6 +283,73 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         priceLinesRef.current = lines;
 
+        // Superimpose Candlestick Markers for Entry and Exit
+        const markers: any[] = [];
+        if (entryTimestamp) {
+          try {
+            const entryTimeMs = new Date(entryTimestamp).getTime();
+            const entryUnix = Math.floor(entryTimeMs / 1000);
+            let closestCandle = formattedCandles[0];
+            let minDiff = Infinity;
+            for (const c of formattedCandles) {
+              const diff = Math.abs((c.time as number) - entryUnix);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closestCandle = c;
+              }
+            }
+            if (closestCandle) {
+              const entryTimeStr = new Date(entryTimeMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+              markers.push({
+                time: closestCandle.time,
+                position: isLong ? 'belowBar' : 'aboveBar',
+                color: '#00e5ff',
+                shape: isLong ? 'arrowUp' : 'arrowDown',
+                text: `⚡ ENTRY @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`,
+                size: 2,
+              });
+            }
+          } catch {}
+        }
+
+        if (resolvedTimestamp) {
+          try {
+            const resTimeMs = new Date(resolvedTimestamp).getTime();
+            const resUnix = Math.floor(resTimeMs / 1000);
+            let closestRes = formattedCandles[0];
+            let minDiff = Infinity;
+            for (const c of formattedCandles) {
+              const diff = Math.abs((c.time as number) - resUnix);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closestRes = c;
+              }
+            }
+            if (closestRes) {
+              const resTimeStr = new Date(resTimeMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+              const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
+              const isWin = reason.includes('TP');
+              markers.push({
+                time: closestRes.time,
+                position: isWin ? 'aboveBar' : 'belowBar',
+                color: isWin ? '#00e676' : '#ff1744',
+                shape: 'circle',
+                text: `🏁 ${reason} @ ${resTimeStr}`,
+                size: 2,
+              });
+            }
+          } catch {}
+        }
+
+        if (markers.length > 0) {
+          markers.sort((a, b) => (a.time as number) - (b.time as number));
+          try {
+            candleSeries.setMarkers(markers);
+          } catch (mErr) {
+            console.warn('Unable to set candle markers:', mErr);
+          }
+        }
+
         // Auto Scale to fit candles and price lines
         chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
         chartRef.current?.timeScale().fitContent();
@@ -422,7 +493,91 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         ctx.restore();
       }
     }
-  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata]);
+
+    // 3. Draw Vertical Entry Timestamp Marker Line & Floating Banner Flag
+    if (entryTimestamp) {
+      try {
+        const entryUnix = Math.floor(new Date(entryTimestamp).getTime() / 1000);
+        const entryX = timeScale.timeToCoordinate(entryUnix as any);
+
+        if (entryX !== null && entryX > 0 && entryX < width) {
+          ctx.save();
+          ctx.strokeStyle = '#00e5ff';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+
+          ctx.beginPath();
+          ctx.moveTo(entryX, 0);
+          ctx.lineTo(entryX, height);
+          ctx.stroke();
+
+          const entryTimeStr = new Date(entryTimestamp).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ET';
+          const labelText = `⚡ EXACT ENTRY FILL @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`;
+          ctx.font = 'bold 11px monospace';
+          const textWidth = ctx.measureText(labelText).width;
+
+          const badgeX = Math.max(10, Math.min(width - textWidth - 20, entryX - textWidth / 2));
+          const badgeY = 28;
+
+          ctx.fillStyle = 'rgba(9, 3, 20, 0.9)';
+          ctx.strokeStyle = '#00e5ff';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+
+          ctx.fillRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
+          ctx.strokeRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
+
+          ctx.fillStyle = '#00e5ff';
+          ctx.fillText(labelText, badgeX, badgeY);
+          ctx.restore();
+        }
+      } catch {}
+    }
+
+    // 4. Draw Vertical Resolved Timestamp Marker Line & Exit Banner Flag
+    if (resolvedTimestamp) {
+      try {
+        const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+        const resX = timeScale.timeToCoordinate(resUnix as any);
+
+        if (resX !== null && resX > 0 && resX < width) {
+          const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
+          const isWin = reason.includes('TP');
+          const flagColor = isWin ? '#00e676' : '#ff1744';
+
+          ctx.save();
+          ctx.strokeStyle = flagColor;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+
+          ctx.beginPath();
+          ctx.moveTo(resX, 0);
+          ctx.lineTo(resX, height);
+          ctx.stroke();
+
+          const resTimeStr = new Date(resolvedTimestamp).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }) + ' ET';
+          const labelText = `🏁 TRADE EXIT (${reason}) @ ${resTimeStr}`;
+          ctx.font = 'bold 11px monospace';
+          const textWidth = ctx.measureText(labelText).width;
+
+          const badgeX = Math.max(10, Math.min(width - textWidth - 20, resX - textWidth / 2));
+          const badgeY = 54;
+
+          ctx.fillStyle = 'rgba(9, 3, 20, 0.9)';
+          ctx.strokeStyle = flagColor;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+
+          ctx.fillRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
+          ctx.strokeRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
+
+          ctx.fillStyle = flagColor;
+          ctx.fillText(labelText, badgeX, badgeY);
+          ctx.restore();
+        }
+      } catch {}
+    }
+  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
