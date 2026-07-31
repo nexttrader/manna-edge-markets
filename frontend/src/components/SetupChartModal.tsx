@@ -387,8 +387,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     canvas.height = height;
     ctx.clearRect(0, 0, width, height);
 
-    if (!isMannaSnd) return;
-
     const series = candleSeriesRef.current;
     const timeScale = chartRef.current.timeScale();
 
@@ -408,65 +406,66 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     };
 
-    // 1. Draw 1H HTF Demand Curve Zone (Emerald Green, Below Price)
-    if (activeDemandProx > 0 && activeDemandDist > 0) {
-      const y1 = getY(activeDemandProx);
-      const y2 = getY(activeDemandDist);
+    // 1. Draw 1H HTF Demand & Supply Curve Zones for Manna SnD
+    if (isMannaSnd) {
+      if (activeDemandProx > 0 && activeDemandDist > 0) {
+        const y1 = getY(activeDemandProx);
+        const y2 = getY(activeDemandDist);
 
-      if (y1 !== null && y2 !== null) {
-        const topY = Math.min(y1, y2);
-        const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(activeDemandTime);
-        const boxWidth = width - startX;
+        if (y1 !== null && y2 !== null) {
+          const topY = Math.min(y1, y2);
+          const boxHeight = Math.max(3, Math.abs(y2 - y1));
+          const startX = getX(activeDemandTime);
+          const boxWidth = width - startX;
 
-        ctx.save();
-        ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
-        ctx.strokeStyle = '#00e676';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
+          ctx.strokeStyle = '#00e676';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
 
-        ctx.fillRect(startX, topY, boxWidth, boxHeight);
-        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+          ctx.fillRect(startX, topY, boxWidth, boxHeight);
+          ctx.strokeRect(startX, topY, boxWidth, boxHeight);
 
-        ctx.fillStyle = '#00e676';
-        ctx.font = 'bold 11px monospace';
-        const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
-        const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
-        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
-        ctx.restore();
+          ctx.fillStyle = '#00e676';
+          ctx.font = 'bold 11px monospace';
+          const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
+          const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
+          ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
+          ctx.restore();
+        }
+      }
+
+      if (activeSupplyProx > 0 && activeSupplyDist > 0) {
+        const y1 = getY(activeSupplyProx);
+        const y2 = getY(activeSupplyDist);
+
+        if (y1 !== null && y2 !== null) {
+          const topY = Math.min(y1, y2);
+          const boxHeight = Math.max(3, Math.abs(y2 - y1));
+          const startX = getX(activeSupplyTime);
+          const boxWidth = width - startX;
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
+          ctx.strokeStyle = '#ff1744';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+
+          ctx.fillRect(startX, topY, boxWidth, boxHeight);
+          ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+          ctx.fillStyle = '#ff1744';
+          ctx.font = 'bold 11px monospace';
+          const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
+          const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
+          ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
+          ctx.restore();
+        }
       }
     }
 
-    // 2. Draw 1H HTF Supply Curve Zone (Rose Red, Above Price)
-    if (activeSupplyProx > 0 && activeSupplyDist > 0) {
-      const y1 = getY(activeSupplyProx);
-      const y2 = getY(activeSupplyDist);
-
-      if (y1 !== null && y2 !== null) {
-        const topY = Math.min(y1, y2);
-        const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(activeSupplyTime);
-        const boxWidth = width - startX;
-
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
-        ctx.strokeStyle = '#ff1744';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-
-        ctx.fillRect(startX, topY, boxWidth, boxHeight);
-        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
-
-        ctx.fillStyle = '#ff1744';
-        ctx.font = 'bold 11px monospace';
-        const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
-        const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
-        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
-        ctx.restore();
-      }
-    }
-
-    // 2. Draw 15M Entry Zone Shaded Box
+    // 2. Draw 15M Entry Zone Shaded Box (Starts on Zone Base Candle Timestamp)
     if (entryLow > 0 && entryHigh > 0) {
       const y1 = getY(entryHigh);
       const y2 = getY(entryLow);
@@ -474,7 +473,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       if (y1 !== null && y2 !== null) {
         const topY = Math.min(y1, y2);
         const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const startX = getX(metadata.entry_zone_base_time);
+        const zoneBaseTime = metadata.entry_zone_base_time || setup.created_at || (setup as any).createdAt;
+        const startX = getX(zoneBaseTime);
         const boxWidth = width - startX;
 
         ctx.save();
