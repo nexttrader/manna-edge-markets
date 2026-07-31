@@ -21,7 +21,7 @@ export async function discoverUnifiedSetups(
   const futuresCandidates: CandidateSetup[] = [];
   const forexCandidates: CandidateSetup[] = [];
 
-  let activeStrategies = strategyRegistry.getActiveStrategies();
+  let activeStrategies = await strategyRegistry.getActiveStrategiesAsync();
 
   if (targetStrategyId && targetStrategyId !== 'all') {
     activeStrategies = activeStrategies.filter(s => s.meta.id === targetStrategyId);

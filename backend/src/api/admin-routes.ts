@@ -5,9 +5,77 @@ import { metrics } from '../telemetry/metrics';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun } from '../publish-gate/publish-gate';
-import { getDb } from '../db/database';
+import { queryDb } from '../db/database';
+
+import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
 const router = express.Router();
+
+router.get('/strategies/status', async (_req: Request, res: Response) => {
+  try {
+    const strategies = await queries.getStrategySettings();
+    res.json({ strategies });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch strategy status', details: String(error) });
+  }
+});
+
+router.post('/strategies/toggle', async (req: Request, res: Response) => {
+  try {
+    const { strategyId, enabled } = req.body || {};
+    if (!strategyId || typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Missing strategyId or enabled boolean' });
+    }
+    await queries.updateStrategyEnabled(strategyId, enabled);
+    const updated = await queries.getStrategySettings();
+    res.json({ success: true, message: `Strategy ${strategyId} ${enabled ? 'enabled' : 'disabled'}`, strategies: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to toggle strategy', details: String(error) });
+  }
+});
+
+router.post('/signals/:id/invalidate', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { market = 'futures', reason = 'admin_manually_disabled', detail = 'Manually disabled by admin from panel' } = req.body || {};
+    
+    let setup = await queries.getSetupById(id, market);
+    let targetMarket = market;
+    if (!setup) {
+      const altMarket = market === 'futures' ? 'forex' : 'futures';
+      setup = await queries.getSetupById(id, altMarket);
+      if (setup) targetMarket = altMarket;
+    }
+
+    if (!setup) {
+      return res.status(404).json({ error: 'Signal not found' });
+    }
+    
+    await queries.updateSetupState(id, targetMarket, 'invalidated', {
+      invalidation_reason: reason,
+      invalidation_detail: detail,
+      tradable: 0,
+      resolved_at: new Date().toISOString()
+    });
+
+    await hawkeyeService.logInvalidation({
+      setupId: id,
+      instrument: setup.instrument,
+      setupMarket: targetMarket,
+      runId: `manual_disable_${Date.now()}`,
+      reasonCode: reason,
+      detail: detail,
+      previousState: setup.signal_state,
+      newState: 'invalidated',
+      createdBy: 'admin_panel'
+    });
+
+    res.json({ success: true, message: `Signal ${id} disabled and invalidated successfully.` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to disable signal', details: String(error) });
+  }
+});
 
 router.post('/scheduled/session-boundary-revalidation', async (req: Request, res: Response) => {
   try {
@@ -50,12 +118,12 @@ router.post('/force-dedupe/:instrument', (req: Request, res: Response) => {
   }
 });
 
-router.get('/system-status', (_req: Request, res: Response) => {
+router.get('/system-status', async (_req: Request, res: Response) => {
   try {
     const now = new Date();
-    const futuresActive = queries.getActiveSetups('futures');
-    const forexActive = queries.getActiveSetups('forex');
-    const recentRuns = queries.getRecentPublishRuns(1);
+    const futuresActive = await queries.getActiveSetups('futures');
+    const forexActive = await queries.getActiveSetups('forex');
+    const recentRuns = await queries.getRecentPublishRuns(1);
     const cbStatus = circuitBreaker.getStatus();
     
     res.json({
@@ -72,51 +140,56 @@ router.get('/system-status', (_req: Request, res: Response) => {
   }
 });
 
-router.get('/publish-runs', (req: Request, res: Response) => {
+router.get('/publish-runs', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 20;
-    const runs = queries.getRecentPublishRuns(limit);
+    const runs = await queries.getRecentPublishRuns(limit);
     res.json({ runs, count: runs.length });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/analytics', (req: Request, res: Response) => {
+router.get('/analytics', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
     const now = new Date();
-
     const selectedStrategy = req.query.strategy_id as string | undefined;
 
     let futuresQuery = `SELECT COUNT(*) as c FROM edge_setups`;
     let forexQuery = `SELECT COUNT(*) as c FROM forex_edge_setups`;
     let outcomesQuery = `SELECT * FROM outcomes ORDER BY created_at DESC`;
+    const params: any[] = [];
 
     if (selectedStrategy && selectedStrategy !== 'all') {
-      futuresQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
-      forexQuery += ` WHERE strategy_id = '${selectedStrategy}'`;
+      futuresQuery += ` WHERE strategy_id = ?`;
+      forexQuery += ` WHERE strategy_id = ?`;
       outcomesQuery = `
         SELECT o.* FROM outcomes o
         LEFT JOIN edge_setups e ON o.setup_id = e.id
         LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
-        WHERE COALESCE(o.strategy_id, e.strategy_id, f.strategy_id, 'manna_basic') = '${selectedStrategy}'
+        WHERE COALESCE(o.strategy_id, e.strategy_id, f.strategy_id, 'manna_basic') = ?
         ORDER BY o.created_at DESC
       `;
+      params.push(selectedStrategy);
     }
 
-    const futuresTotal = (db.prepare(futuresQuery).get() as any).c;
-    const forexTotal = (db.prepare(forexQuery).get() as any).c;
+    const futuresCountRow = await queryDb<{ c: string | number }>(futuresQuery, params);
+    const forexCountRow = await queryDb<{ c: string | number }>(forexQuery, params);
+    const futuresTotal = futuresCountRow.length > 0 ? Number(futuresCountRow[0].c) : 0;
+    const forexTotal = forexCountRow.length > 0 ? Number(forexCountRow[0].c) : 0;
     
-    let futuresActive = queries.getActiveSetups('futures').length;
-    let forexActive = queries.getActiveSetups('forex').length;
+    let futuresActiveSetups = await queries.getActiveSetups('futures');
+    let forexActiveSetups = await queries.getActiveSetups('forex');
+
+    let futuresActive = futuresActiveSetups.length;
+    let forexActive = forexActiveSetups.length;
 
     if (selectedStrategy && selectedStrategy !== 'all') {
-      futuresActive = queries.getActiveSetups('futures').filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
-      forexActive = queries.getActiveSetups('forex').filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
+      futuresActive = futuresActiveSetups.filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
+      forexActive = forexActiveSetups.filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
     }
     
-    let outcomes = db.prepare(outcomesQuery).all() as any[];
+    let outcomes = await queryDb(outcomesQuery, params);
     let wins = 0;
     let losses = 0;
     let totalRealizedR = 0;
@@ -135,8 +208,8 @@ router.get('/analytics', (req: Request, res: Response) => {
     let totalHoldingTimeMs = 0;
     let holdingTimeCount = 0;
 
-    const enrichedOutcomes = outcomes.slice(0, 15).map((o: any) => {
-      const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+    const enrichedOutcomes = await Promise.all(outcomes.slice(0, 15).map(async (o: any) => {
+      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       let tradeR = 0;
       
       if (o.outcome_type === 'tp1_hit') {
@@ -193,7 +266,7 @@ router.get('/analytics', (req: Request, res: Response) => {
         holding_duration_min: holdingDurationMin,
         realized_r: tradeR
       };
-    });
+    }));
 
     let grossWinR = 0;
     let grossLossR = 0;
@@ -207,7 +280,7 @@ router.get('/analytics', (req: Request, res: Response) => {
     const assetPerformance: Record<string, { instrument: string; strategy_id: string; total: number; wins: number; losses: number; plR: number; market: string }> = {};
 
     for (const o of outcomes) {
-      const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       let tradeR = 0;
       const isWin = o.outcome_type.includes('tp');
       const isLoss = o.outcome_type.includes('sl');
@@ -282,27 +355,27 @@ router.get('/analytics', (req: Request, res: Response) => {
     const profitFactor = grossLossR > 0 ? Number((grossWinR / grossLossR).toFixed(2)) : Number(grossWinR.toFixed(2));
     const expectancyR = Number(((winRate * avgWinR) - ((1 - winRate) * avgLossR)).toFixed(2));
 
-    const invStats = queries.getInvalidationStats();
+    const invStats = await queries.getInvalidationStats();
 
     // ── Separate Scheduled Runs vs Manual Triggers ──
-    const scheduledRuns = db.prepare(`SELECT * FROM publish_runs WHERE trigger_type = 'scheduled' OR trigger_type IS NULL ORDER BY created_at DESC`).all() as any[];
-    const manualRuns = db.prepare(`SELECT * FROM publish_runs WHERE trigger_type = 'manual' ORDER BY created_at DESC`).all() as any[];
+    const scheduledRuns = await queryDb(`SELECT * FROM publish_runs WHERE trigger_type = 'scheduled' OR trigger_type IS NULL ORDER BY created_at DESC`);
+    const manualRuns = await queryDb(`SELECT * FROM publish_runs WHERE trigger_type = 'manual' ORDER BY created_at DESC`);
 
     const lastScheduledScan = scheduledRuns.length > 0 ? scheduledRuns[0] : null;
     const lastManualTrigger = manualRuns.length > 0 ? manualRuns[0] : null;
 
     const scheduledStats = {
       totalRuns: scheduledRuns.length,
-      created: scheduledRuns.reduce((acc, r) => acc + (r.setups_created || 0), 0),
-      invalidated: scheduledRuns.reduce((acc, r) => acc + (r.setups_invalidated || 0), 0),
-      preserved: scheduledRuns.reduce((acc, r) => acc + (r.setups_preserved || 0), 0)
+      created: scheduledRuns.reduce((acc: number, r: any) => acc + (r.setups_created || 0), 0),
+      invalidated: scheduledRuns.reduce((acc: number, r: any) => acc + (r.setups_invalidated || 0), 0),
+      preserved: scheduledRuns.reduce((acc: number, r: any) => acc + (r.setups_preserved || 0), 0)
     };
 
     const manualStats = {
       totalRuns: manualRuns.length,
-      created: manualRuns.reduce((acc, r) => acc + (r.setups_created || 0), 0),
-      invalidated: manualRuns.reduce((acc, r) => acc + (r.setups_invalidated || 0), 0),
-      preserved: manualRuns.reduce((acc, r) => acc + (r.setups_preserved || 0), 0)
+      created: manualRuns.reduce((acc: number, r: any) => acc + (r.setups_created || 0), 0),
+      invalidated: manualRuns.reduce((acc: number, r: any) => acc + (r.setups_invalidated || 0), 0),
+      preserved: manualRuns.reduce((acc: number, r: any) => acc + (r.setups_preserved || 0), 0)
     };
 
     const avgTimeToFill = fillTimeCount > 0 ? Number((totalFillTimeMs / (fillTimeCount * 60000)).toFixed(1)) : 0;
@@ -351,7 +424,6 @@ router.get('/analytics', (req: Request, res: Response) => {
   }
 });
 
-// Helper to generate full CSV string with metadata headers
 function buildAnalyticsCSV(
   archiveName: string,
   capturedFrom: string,
@@ -401,17 +473,15 @@ function buildAnalyticsCSV(
   return lines.join('\n');
 }
 
-// ── GET /api/admin/analytics/export-csv — Live CSV Export ──
-router.get('/analytics/export-csv', (req: Request, res: Response) => {
+router.get('/analytics/export-csv', async (_req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const outcomesRaw = db.prepare(`SELECT * FROM outcomes ORDER BY created_at DESC`).all() as any[];
+    const outcomesRaw = await queryDb(`SELECT * FROM outcomes ORDER BY created_at DESC`);
     
     let earliestTime = new Date().toISOString();
     let latestTime = new Date().toISOString();
 
-    const outcomes = outcomesRaw.map(o => {
-      const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+    const outcomes = await Promise.all(outcomesRaw.map(async o => {
+      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       const sigTime = setup?.created_at || o.created_at;
       if (sigTime < earliestTime) earliestTime = sigTime;
 
@@ -443,7 +513,7 @@ router.get('/analytics/export-csv', (req: Request, res: Response) => {
         holding_duration_min: holdMin,
         realized_r: tradeR
       };
-    });
+    }));
 
     const wins = outcomes.filter(o => o.outcome_type.includes('tp')).length;
     const losses = outcomes.filter(o => o.outcome_type === 'sl_hit').length;
@@ -474,13 +544,10 @@ router.get('/analytics/export-csv', (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/admin/analytics/reset — Archive Current Analytics & Reset Tracking ──
-router.post('/analytics/reset', (req: Request, res: Response) => {
+router.post('/analytics/reset', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
     const { archiveName = `Archive Epoch (${new Date().toLocaleDateString()})` } = req.body || {};
-
-    const outcomesRaw = db.prepare(`SELECT * FROM outcomes ORDER BY created_at DESC`).all() as any[];
+    const outcomesRaw = await queryDb(`SELECT * FROM outcomes ORDER BY created_at DESC`);
     
     let earliestTime = new Date().toISOString();
     let latestTime = new Date().toISOString();
@@ -490,8 +557,8 @@ router.post('/analytics/reset', (req: Request, res: Response) => {
     let totalHoldTimeMs = 0;
     let holdCount = 0;
 
-    const outcomes = outcomesRaw.map(o => {
-      const setup = queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+    const outcomes = await Promise.all(outcomesRaw.map(async o => {
+      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       const sigTime = setup?.created_at || o.created_at;
       if (sigTime < earliestTime) earliestTime = sigTime;
 
@@ -536,7 +603,7 @@ router.post('/analytics/reset', (req: Request, res: Response) => {
         holding_duration_min: holdMin,
         realized_r: tradeR
       };
-    });
+    }));
 
     const wins = outcomes.filter(o => o.outcome_type.includes('tp')).length;
     const losses = outcomes.filter(o => o.outcome_type === 'sl_hit').length;
@@ -562,15 +629,14 @@ router.post('/analytics/reset', (req: Request, res: Response) => {
 
     const csvContent = buildAnalyticsCSV(archiveName, earliestTime, latestTime, summary, outcomes);
 
-    // Save archive to database
     const archiveId = `arch_${Date.now()}`;
-    db.prepare(`
+    await queryDb(`
       INSERT INTO analytics_archives (
         id, archive_name, captured_from, captured_until, total_setups, total_resolved,
         win_rate, total_realized_r, avg_fill_time_min, avg_hold_duration_min,
         csv_content, summary_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       archiveId,
       archiveName,
       earliestTime,
@@ -584,12 +650,11 @@ router.post('/analytics/reset', (req: Request, res: Response) => {
       csvContent,
       JSON.stringify(summary),
       new Date().toISOString()
-    );
+    ]);
 
-    // RESET: Delete resolved outcomes & resolved setups to start tracking anew!
-    db.prepare(`DELETE FROM outcomes`).run();
-    db.prepare(`DELETE FROM edge_setups WHERE signal_state IN ('resolved', 'invalidated')`).run();
-    db.prepare(`DELETE FROM forex_edge_setups WHERE signal_state IN ('resolved', 'invalidated')`).run();
+    await queryDb(`DELETE FROM outcomes`);
+    await queryDb(`DELETE FROM edge_setups WHERE signal_state IN ('resolved', 'invalidated')`);
+    await queryDb(`DELETE FROM forex_edge_setups WHERE signal_state IN ('resolved', 'invalidated')`);
 
     res.json({
       success: true,
@@ -606,26 +671,23 @@ router.post('/analytics/reset', (req: Request, res: Response) => {
   }
 });
 
-// ── GET /api/admin/analytics/archives — List Historical Archived Epochs ──
-router.get('/analytics/archives', (_req: Request, res: Response) => {
+router.get('/analytics/archives', async (_req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const archives = db.prepare(`
+    const archives = await queryDb(`
       SELECT id, archive_name, captured_from, captured_until, total_setups, total_resolved,
              win_rate, total_realized_r, avg_fill_time_min, avg_hold_duration_min, created_at
       FROM analytics_archives ORDER BY created_at DESC
-    `).all();
+    `);
     res.json({ archives });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch archives', details: String(error) });
   }
 });
 
-// ── GET /api/admin/analytics/archives/:id/download — Download CSV for Specific Archive ──
-router.get('/analytics/archives/:id/download', (req: Request, res: Response) => {
+router.get('/analytics/archives/:id/download', async (req: Request, res: Response) => {
   try {
-    const db = getDb();
-    const archive = db.prepare(`SELECT * FROM analytics_archives WHERE id = ?`).get(req.params.id) as any;
+    const rows = await queryDb(`SELECT * FROM analytics_archives WHERE id = ?`, [req.params.id]);
+    const archive = rows.length > 0 ? rows[0] : null;
     if (!archive) {
       return res.status(404).json({ error: 'Archive not found' });
     }
@@ -638,16 +700,12 @@ router.get('/analytics/archives/:id/download', (req: Request, res: Response) => 
   }
 });
 
-// ── GET /api/admin/analytics/strategies — Strategy Performance Matrix ──
-router.get('/analytics/strategies', (_req: Request, res: Response) => {
+router.get('/analytics/strategies', async (_req: Request, res: Response) => {
   try {
-    const db = getDb();
-
-    // Fetch all active strategy setups & outcomes
-    const futuresSetups = db.prepare(`SELECT * FROM edge_setups`).all() as any[];
-    const forexSetups = db.prepare(`SELECT * FROM forex_edge_setups`).all() as any[];
+    const futuresSetups = await queryDb(`SELECT * FROM edge_setups`);
+    const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups`);
     const allSetups = [...futuresSetups, ...forexSetups];
-    const allOutcomes = db.prepare(`SELECT * FROM outcomes`).all() as any[];
+    const allOutcomes = await queryDb(`SELECT * FROM outcomes`);
 
     const strategyStats: Record<string, {
       id: string;
@@ -687,7 +745,6 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
       }
     };
 
-    // Aggregate setups by strategy
     for (const setup of allSetups) {
       const stratId = setup.strategy_id || 'manna_basic';
       if (!strategyStats[stratId]) {
@@ -712,7 +769,6 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
       }
     }
 
-    // Aggregate outcomes by strategy
     for (const outcome of allOutcomes) {
       const parentSetup = allSetups.find(s => String(s.id) === String(outcome.setup_id));
       const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
@@ -727,7 +783,6 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
       }
     }
 
-    // Calculate win rates
     for (const stratId of Object.keys(strategyStats)) {
       const s = strategyStats[stratId];
       const totalResolved = s.wins + s.losses;
@@ -737,7 +792,6 @@ router.get('/analytics/strategies', (_req: Request, res: Response) => {
 
     const stratsArray = Object.values(strategyStats);
 
-    // Collective Portfolio-Wide Aggregate Metrics
     const collectiveWins = stratsArray.reduce((acc, s) => acc + s.wins, 0);
     const collectiveLosses = stratsArray.reduce((acc, s) => acc + s.losses, 0);
     const collectiveResolvedCount = collectiveWins + collectiveLosses;

@@ -10,9 +10,9 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
     const market = (req.query.market as string) || 'all';
     let rawSetups;
     if (market === 'all') {
-      rawSetups = queries.getAllActiveSetups();
+      rawSetups = await queries.getAllActiveSetups();
     } else {
-      rawSetups = queries.getActiveSetups(market);
+      rawSetups = await queries.getActiveSetups(market);
     }
 
     // Auto-replenish if active setups in DB drop below 3
@@ -84,15 +84,15 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/accelerate/past-setups', (req: Request, res: Response) => {
+router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
   try {
     const market = (req.query.market as string) || 'all';
     const limit = parseInt(req.query.limit as string) || 50;
     let setups;
     if (market === 'all') {
-      setups = queries.getAllPastSetups(limit);
+      setups = await queries.getAllPastSetups(limit);
     } else {
-      setups = queries.getPastSetups(market, limit);
+      setups = await queries.getPastSetups(market, limit);
     }
     
     res.json({ setups, count: setups.length });
@@ -101,18 +101,18 @@ router.get('/accelerate/past-setups', (req: Request, res: Response) => {
   }
 });
 
-router.get('/setups/:id', (req: Request, res: Response) => {
+router.get('/setups/:id', async (req: Request, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const market = (req.query.market as string) || 'futures';
     
-    const setup = queries.getSetupById(id, market);
+    const setup = await queries.getSetupById(id, market);
     if (!setup) {
       return res.status(404).json({ error: 'Setup not found' });
     }
     
-    const history = queries.getSetupHistory(id, market);
-    const outcomes = queries.getOutcomesBySetup(id);
+    const history = await queries.getSetupHistory(id, market);
+    const outcomes = await queries.getOutcomesBySetup(id);
     
     res.json({ setup, history, outcomes });
   } catch (error) {

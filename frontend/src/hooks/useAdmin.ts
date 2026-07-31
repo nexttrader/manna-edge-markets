@@ -17,7 +17,60 @@ export function useAdmin() {
     }
   };
 
-  return { triggerRun };
+  const disableSignal = async (signalId: string, market: string = 'futures', reason?: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/signals/${signalId}/invalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ market, reason })
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  return { triggerRun, disableSignal };
+}
+
+export function useStrategies() {
+  const [strategies, setStrategies] = useState<{ id: string; name: string; enabled: boolean }[]>([]);
+
+  const fetchStrategies = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/strategies/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setStrategies(data.strategies || []);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  const toggleStrategy = async (strategyId: string, enabled: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/strategies/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ strategyId, enabled })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStrategies(data.strategies || []);
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    fetchStrategies();
+  }, [fetchStrategies]);
+
+  return { strategies, toggleStrategy, refetch: fetchStrategies };
 }
 
 export function useSystemStatus() {

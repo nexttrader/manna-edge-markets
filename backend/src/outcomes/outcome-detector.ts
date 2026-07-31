@@ -24,10 +24,8 @@ export class OutcomeDetector {
   }
   
   private async tick(): Promise<void> {
-    const db = getDb();
-    
     try {
-      const setups = queries.getSetupsByState('active');
+      const setups = await queries.getSetupsByState('active');
       
       for (const setup of setups) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
@@ -61,7 +59,7 @@ export class OutcomeDetector {
           setup.initial_stop = origStop;
           setup.stop = entryPrice; // Shift SL line to BE!
           
-          queries.updateSetupState(setup.id, setup.market || 'futures', 'active', {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'active', {
             stop: entryPrice,
             initial_stop: origStop,
             is_breakeven: 1
@@ -131,9 +129,9 @@ export class OutcomeDetector {
             created_at: new Date().toISOString()
           };
           
-          queries.createOutcome(outcome);
+          await queries.createOutcome(outcome);
           
-          queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
             tradable: 0,
             resolved_at: outcome.execution_time
           });

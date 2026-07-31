@@ -38,9 +38,24 @@ app.use('/api/hawkeye', hawkeyeRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api', eventsRouter);
 
-// Health check
-app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check with DB status check for UptimeRobot keep-alive
+app.get('/api/health', async (_req: Request, res: Response) => {
+    try {
+        const activeSetups = await queries.getAllActiveSetups();
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            activeSetupsCount: activeSetups.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err: any) {
+        res.json({
+            status: 'ok',
+            database: 'degraded',
+            error: err.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Error handling
@@ -51,7 +66,7 @@ app.use((err: any, req: any, res: Response, _next: NextFunction) => {
 
 async function runStartupDiscoveryIfEmpty() {
     try {
-        const activeSetups = queries.getAllActiveSetups();
+        const activeSetups = await queries.getAllActiveSetups();
         const activeCount = activeSetups.length;
         const sndCount = activeSetups.filter(s => s.strategy_id === 'manna_snd').length;
 
@@ -74,7 +89,7 @@ async function runStartupDiscoveryIfEmpty() {
 async function startServer() {
     try {
         logger.info('Initializing database...');
-        initializeDatabase();
+        await initializeDatabase();
 
         logger.info('Starting lifecycle sync...');
         lifecycleSync.start(15000);
@@ -100,7 +115,7 @@ async function startServer() {
             async (kzInfo) => {
                 logger.info({ killzone: kzInfo.killzone }, 'Killzone midpoint boundary triggered');
                 try {
-                    const activeSetups = queries.getAllActiveSetups();
+                    const activeSetups = await queries.getAllActiveSetups();
                     if (activeSetups.length < 5) {
                         const activeInstruments = activeSetups.map((s: any) => s.instrument).filter(Boolean);
                         logger.info({
@@ -122,7 +137,7 @@ async function startServer() {
         );
 
         // Run automatic initial discovery scan on boot if DB is empty
-        runStartupDiscoveryIfEmpty();
+        await runStartupDiscoveryIfEmpty();
 
         app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();

@@ -23,7 +23,7 @@ async function runAllTests() {
     }
 
     // Initialize DB
-    initializeDatabase();
+    await initializeDatabase();
     console.log('✅ TEST 1: Database Initialization & DDL Schema');
 
     // 1. Killzone Mapper Test
@@ -145,12 +145,12 @@ async function runAllTests() {
     assert.strictEqual(pubResult.stats.created, 1, 'Should create exactly 1 setup for ES');
 
     // Verify constraint: check DB active count for ES
-    const activeCount = queries.countActiveSetupsForInstrument('ES', 'futures');
+    const activeCount = await queries.countActiveSetupsForInstrument('ES', 'futures');
     assert.strictEqual(activeCount, 1, 'MUST have max 1 active setup per instrument in DB');
     console.log('✅ TEST 7: PublishGate Transactional Execution (Max 1 Active Setup Enforced)');
 
     // 7. Hawkeye Audit Log Test
-    const invs = queries.getRecentInvalidations(10);
+    const invs = await queries.getRecentInvalidations(10);
     console.log(`✅ TEST 8: Hawkeye Audit Trail (Log Entries: ${invs.length})`);
 
     // 8. Circuit Breaker Test

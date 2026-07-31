@@ -4,6 +4,15 @@ import { Dashboard } from './pages/Dashboard';
 import { LoginPage } from './pages/LoginPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
+import { useAuth } from './context/AuthContext';
+
+function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   return (
@@ -12,7 +21,14 @@ function App() {
       <Route path="/client" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/admin" element={<AdminPanel />} />
+      <Route 
+        path="/admin" 
+        element={
+          <ProtectedAdminRoute>
+            <AdminPanel />
+          </ProtectedAdminRoute>
+        } 
+      />
       <Route path="/setup/:id" element={<SetupDetail />} />
     </Routes>
   );

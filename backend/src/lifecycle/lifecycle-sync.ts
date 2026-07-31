@@ -25,7 +25,7 @@ export class LifecycleSync {
   
   private async tick(): Promise<void> {
     try {
-      const setups = queries.getSetupsByState('awaiting_entry');
+      const setups = await queries.getSetupsByState('awaiting_entry');
       
       for (const setup of setups) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
@@ -73,7 +73,7 @@ export class LifecycleSync {
           const entryTriggeredAt = nowTime;
 
           const market = setup.market || 'futures';
-          queries.updateSetupState(setup.id, market, 'active', {
+          await queries.updateSetupState(setup.id, market, 'active', {
             entry_triggered_at: entryTriggeredAt.toISOString(),
             entry_price_recorded: executionPrice
           });

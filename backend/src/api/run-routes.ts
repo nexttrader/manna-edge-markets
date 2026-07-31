@@ -3,20 +3,20 @@ import * as queries from '../db/queries';
 
 const router = express.Router();
 
-router.get('/publish-runs', (req: Request, res: Response) => {
+router.get('/publish-runs', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 20;
-    const runs = queries.getRecentPublishRuns(limit);
+    const runs = await queries.getRecentPublishRuns(limit);
     res.json({ runs });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/publish-runs/:runId', (req: Request, res: Response) => {
+router.get('/publish-runs/:runId', async (req: Request, res: Response) => {
   try {
     const runId = Array.isArray(req.params.runId) ? req.params.runId[0] : req.params.runId;
-    const run = queries.getPublishRun(runId);
+    const run = await queries.getPublishRun(runId);
     
     if (!run) {
       return res.status(404).json({ error: 'Run not found' });
@@ -31,7 +31,7 @@ router.get('/publish-runs/:runId', (req: Request, res: Response) => {
       }
     }
     
-    const setups = queries.getSetupsByRun(runId);
+    const setups = await queries.getSetupsByRun(runId);
     
     res.json({ run: { ...run, summary_json: parsedSummary }, setups });
   } catch (error) {
