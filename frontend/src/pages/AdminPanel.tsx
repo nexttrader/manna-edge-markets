@@ -8,6 +8,7 @@ import { useSetups } from '../hooks/useSetups';
 import { useAuth } from '../context/AuthContext';
 import { formatETTime } from '../utils/time';
 import { API_BASE } from '../config';
+import { SignalReplaceModal } from '../components/SignalReplaceModal';
 
 export const AdminPanel: React.FC = () => {
   const { user, logout } = useAuth();
@@ -17,6 +18,34 @@ export const AdminPanel: React.FC = () => {
   const { resetCircuitBreaker, status } = useSystemStatus();
   const { strategies: dbStrategies, toggleStrategy } = useStrategies();
   const { setups: activeSetupsList, refetch: refetchActiveSetups } = useSetups();
+
+  const [rescanCandidate, setRescanCandidate] = useState<any | null>(null);
+  const [rescanCurrentSetup, setRescanCurrentSetup] = useState<any | null>(null);
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
+
+  const handleAdminSingleRescan = async (setup: any) => {
+    try {
+      setRescanningId(setup.id);
+      const res = await fetch(`${API_BASE}/api/admin/single-asset-rescan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupId: setup.id, instrument: setup.instrument, market: setup.market })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Rescan failed');
+
+      if (data.found && data.candidate) {
+        setRescanCurrentSetup(setup);
+        setRescanCandidate(data.candidate);
+      } else {
+        alert(data.message || `No new candidate setup discovered for ${setup.instrument}.`);
+      }
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Rescan failed'}`);
+    } finally {
+      setRescanningId(null);
+    }
+  };
 
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
@@ -259,23 +288,50 @@ export const AdminPanel: React.FC = () => {
                           </span>
                         </td>
                         <td>
-                          <button
-                            className="btn-disable-signal font-mono"
-                            style={{
-                              background: 'rgba(255, 23, 68, 0.2)',
-                              border: '1px solid #ff1744',
-                              color: '#ff1744',
-                              padding: '4px 10px',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontWeight: 800,
-                              fontSize: '0.75rem'
-                            }}
-                            onClick={() => handleDisableSignal(setup.id, setup.market)}
-                            disabled={isDisabling}
-                          >
-                            {isDisabling ? 'Disabling...' : '⛔ DISABLE SIGNAL'}
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {(setup.signal_state || setup.state || '').toLowerCase() === 'awaiting_entry' && (
+                              <button
+                                className="font-mono"
+                                style={{
+                                  background: 'rgba(0, 229, 255, 0.15)',
+                                  border: '1px solid #00e5ff',
+                                  color: '#00e5ff',
+                                  padding: '4px 10px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: 800,
+                                  fontSize: '0.75rem'
+                                }}
+                                onClick={() => handleAdminSingleRescan(setup)}
+                                disabled={rescanningId === setup.id}
+                                title="Run single-asset rescan for this pending signal"
+                              >
+                                {rescanningId === setup.id ? '⏳ Scanning...' : '🔍 Rescan & Replace'}
+                              </button>
+                            )}
+                            <button
+                              className="btn-disable-signal font-mono"
+                              style={{
+                                background: 'rgba(255, 23, 68, 0.2)',
+                                border: '1px solid #ff1744',
+                                color: '#ff1744',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 800,
+                                fontSize: '0.75rem'
+                              }}
+                              onClick={() => {
+                                const confirmed = window.confirm(`⚠️ CONFIRMATION REQUIRED:\n\nAre you sure you want to disable and invalidate the signal for ${setup.instrument}? This will mark it as non-tradable.`);
+                                if (confirmed) {
+                                  handleDisableSignal(setup.id, setup.market);
+                                }
+                              }}
+                              disabled={isDisabling}
+                            >
+                              {isDisabling ? 'Disabling...' : '⛔ DISABLE SIGNAL'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -754,6 +810,23 @@ export const AdminPanel: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {rescanCandidate && rescanCurrentSetup && (
+          <SignalReplaceModal
+            currentSetup={rescanCurrentSetup}
+            candidate={rescanCandidate}
+            onClose={() => {
+              setRescanCandidate(null);
+              setRescanCurrentSetup(null);
+            }}
+            onSuccess={() => {
+              setRescanCandidate(null);
+              setRescanCurrentSetup(null);
+              refetchActiveSetups();
+              refetchAnalytics();
+            }}
+          />
+        )}
       </main>
     </div>
   );
