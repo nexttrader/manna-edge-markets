@@ -5,9 +5,10 @@ import { Pool } from 'pg';
 
 let sqliteDb: Database.Database | null = null;
 let pgPool: Pool | null = null;
+let isPgAvailable = false;
 
 export function isPg(): boolean {
-    return !!process.env.DATABASE_URL;
+    return !!process.env.DATABASE_URL && isPgAvailable;
 }
 
 export function getSqliteDb(): Database.Database {
@@ -22,10 +23,10 @@ export function getSqliteDb(): Database.Database {
 
 export function getPgPool(): Pool {
     if (!pgPool) {
-        const connectionString = process.env.DATABASE_URL;
+        let connectionString = process.env.DATABASE_URL || '';
         pgPool = new Pool({
             connectionString,
-            ssl: connectionString?.includes('localhost') ? false : { rejectUnauthorized: false }
+            ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false }
         });
     }
     return pgPool;
@@ -57,225 +58,233 @@ export function getDb(): Database.Database {
 }
 
 export async function initializeDatabase(): Promise<void> {
-    if (isPg()) {
+    if (process.env.DATABASE_URL) {
         console.log('Initializing PostgreSQL (Supabase) database...');
-        const pool = getPgPool();
-        const client = await pool.connect();
         try {
-            await client.query(`
-                CREATE TABLE IF NOT EXISTS edge_setups (
-                    id TEXT PRIMARY KEY,
-                    instrument TEXT NOT NULL,
-                    market TEXT DEFAULT 'futures',
-                    created_at TEXT NOT NULL,
-                    created_by_run TEXT,
-                    killzone_origin TEXT NOT NULL,
-                    killzone_origin_at TEXT,
-                    bias TEXT NOT NULL,
-                    entry_zone_low DOUBLE PRECISION NOT NULL,
-                    entry_zone_high DOUBLE PRECISION NOT NULL,
-                    entry_zone_mid DOUBLE PRECISION NOT NULL,
-                    entry_price_recorded DOUBLE PRECISION,
-                    entry_price_executed DOUBLE PRECISION,
-                    stop DOUBLE PRECISION NOT NULL,
-                    tp1 DOUBLE PRECISION NOT NULL,
-                    tp2 DOUBLE PRECISION,
-                    r_multiple_1 DOUBLE PRECISION,
-                    r_multiple_2 DOUBLE PRECISION,
-                    signal_state TEXT NOT NULL DEFAULT 'awaiting_entry',
-                    superseded INTEGER DEFAULT 0,
-                    superseded_by TEXT,
-                    invalidation_reason TEXT,
-                    invalidation_detail TEXT,
-                    entry_triggered_at TEXT,
-                    tradable INTEGER DEFAULT 1,
-                    conviction_score DOUBLE PRECISION,
-                    liquidity_score DOUBLE PRECISION,
-                    strategy_id TEXT DEFAULT 'manna_basic',
-                    strategy_tier TEXT DEFAULT 'basic',
-                    metadata TEXT,
-                    resolved_at TEXT,
-                    is_breakeven INTEGER DEFAULT 0,
-                    initial_stop DOUBLE PRECISION
-                );
-                CREATE INDEX IF NOT EXISTS idx_edge_setups_instrument_state ON edge_setups(instrument, signal_state, superseded);
-                CREATE INDEX IF NOT EXISTS idx_edge_setups_killzone_origin ON edge_setups(killzone_origin);
-                CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id);
+            const pool = getPgPool();
+            const client = await pool.connect();
+            try {
+                await client.query(`
+                    CREATE TABLE IF NOT EXISTS edge_setups (
+                        id TEXT PRIMARY KEY,
+                        instrument TEXT NOT NULL,
+                        market TEXT DEFAULT 'futures',
+                        created_at TEXT NOT NULL,
+                        created_by_run TEXT,
+                        killzone_origin TEXT NOT NULL,
+                        killzone_origin_at TEXT,
+                        bias TEXT NOT NULL,
+                        entry_zone_low DOUBLE PRECISION NOT NULL,
+                        entry_zone_high DOUBLE PRECISION NOT NULL,
+                        entry_zone_mid DOUBLE PRECISION NOT NULL,
+                        entry_price_recorded DOUBLE PRECISION,
+                        entry_price_executed DOUBLE PRECISION,
+                        stop DOUBLE PRECISION NOT NULL,
+                        tp1 DOUBLE PRECISION NOT NULL,
+                        tp2 DOUBLE PRECISION,
+                        r_multiple_1 DOUBLE PRECISION,
+                        r_multiple_2 DOUBLE PRECISION,
+                        signal_state TEXT NOT NULL DEFAULT 'awaiting_entry',
+                        superseded INTEGER DEFAULT 0,
+                        superseded_by TEXT,
+                        invalidation_reason TEXT,
+                        invalidation_detail TEXT,
+                        entry_triggered_at TEXT,
+                        tradable INTEGER DEFAULT 1,
+                        conviction_score DOUBLE PRECISION,
+                        liquidity_score DOUBLE PRECISION,
+                        strategy_id TEXT DEFAULT 'manna_basic',
+                        strategy_tier TEXT DEFAULT 'basic',
+                        metadata TEXT,
+                        resolved_at TEXT,
+                        is_breakeven INTEGER DEFAULT 0,
+                        initial_stop DOUBLE PRECISION
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_edge_setups_instrument_state ON edge_setups(instrument, signal_state, superseded);
+                    CREATE INDEX IF NOT EXISTS idx_edge_setups_killzone_origin ON edge_setups(killzone_origin);
+                    CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id);
 
-                CREATE TABLE IF NOT EXISTS forex_edge_setups (
-                    id TEXT PRIMARY KEY,
-                    instrument TEXT NOT NULL,
-                    market TEXT DEFAULT 'forex',
-                    created_at TEXT NOT NULL,
-                    created_by_run TEXT,
-                    killzone_origin TEXT NOT NULL,
-                    killzone_origin_at TEXT,
-                    bias TEXT NOT NULL,
-                    entry_zone_low DOUBLE PRECISION NOT NULL,
-                    entry_zone_high DOUBLE PRECISION NOT NULL,
-                    entry_zone_mid DOUBLE PRECISION NOT NULL,
-                    entry_price_recorded DOUBLE PRECISION,
-                    entry_price_executed DOUBLE PRECISION,
-                    stop DOUBLE PRECISION NOT NULL,
-                    tp1 DOUBLE PRECISION NOT NULL,
-                    tp2 DOUBLE PRECISION,
-                    r_multiple_1 DOUBLE PRECISION,
-                    r_multiple_2 DOUBLE PRECISION,
-                    signal_state TEXT NOT NULL DEFAULT 'awaiting_entry',
-                    superseded INTEGER DEFAULT 0,
-                    superseded_by TEXT,
-                    invalidation_reason TEXT,
-                    invalidation_detail TEXT,
-                    entry_triggered_at TEXT,
-                    tradable INTEGER DEFAULT 1,
-                    conviction_score DOUBLE PRECISION,
-                    liquidity_score DOUBLE PRECISION,
-                    strategy_id TEXT DEFAULT 'manna_basic',
-                    strategy_tier TEXT DEFAULT 'basic',
-                    metadata TEXT,
-                    resolved_at TEXT,
-                    is_breakeven INTEGER DEFAULT 0,
-                    initial_stop DOUBLE PRECISION
-                );
-                CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_instrument_state ON forex_edge_setups(instrument, signal_state, superseded);
-                CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_killzone_origin ON forex_edge_setups(killzone_origin);
-                CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id);
+                    CREATE TABLE IF NOT EXISTS forex_edge_setups (
+                        id TEXT PRIMARY KEY,
+                        instrument TEXT NOT NULL,
+                        market TEXT DEFAULT 'forex',
+                        created_at TEXT NOT NULL,
+                        created_by_run TEXT,
+                        killzone_origin TEXT NOT NULL,
+                        killzone_origin_at TEXT,
+                        bias TEXT NOT NULL,
+                        entry_zone_low DOUBLE PRECISION NOT NULL,
+                        entry_zone_high DOUBLE PRECISION NOT NULL,
+                        entry_zone_mid DOUBLE PRECISION NOT NULL,
+                        entry_price_recorded DOUBLE PRECISION,
+                        entry_price_executed DOUBLE PRECISION,
+                        stop DOUBLE PRECISION NOT NULL,
+                        tp1 DOUBLE PRECISION NOT NULL,
+                        tp2 DOUBLE PRECISION,
+                        r_multiple_1 DOUBLE PRECISION,
+                        r_multiple_2 DOUBLE PRECISION,
+                        signal_state TEXT NOT NULL DEFAULT 'awaiting_entry',
+                        superseded INTEGER DEFAULT 0,
+                        superseded_by TEXT,
+                        invalidation_reason TEXT,
+                        invalidation_detail TEXT,
+                        entry_triggered_at TEXT,
+                        tradable INTEGER DEFAULT 1,
+                        conviction_score DOUBLE PRECISION,
+                        liquidity_score DOUBLE PRECISION,
+                        strategy_id TEXT DEFAULT 'manna_basic',
+                        strategy_tier TEXT DEFAULT 'basic',
+                        metadata TEXT,
+                        resolved_at TEXT,
+                        is_breakeven INTEGER DEFAULT 0,
+                        initial_stop DOUBLE PRECISION
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_instrument_state ON forex_edge_setups(instrument, signal_state, superseded);
+                    CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_killzone_origin ON forex_edge_setups(killzone_origin);
+                    CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id);
 
-                CREATE TABLE IF NOT EXISTS invalidation_audit (
-                    id TEXT PRIMARY KEY,
-                    setup_id TEXT NOT NULL,
-                    instrument TEXT,
-                    setup_market TEXT NOT NULL,
-                    run_id TEXT,
-                    timestamp TEXT NOT NULL,
-                    reason_code TEXT NOT NULL,
-                    detail TEXT,
-                    previous_state TEXT,
-                    new_state TEXT,
-                    created_by TEXT
-                );
+                    CREATE TABLE IF NOT EXISTS invalidation_audit (
+                        id TEXT PRIMARY KEY,
+                        setup_id TEXT NOT NULL,
+                        instrument TEXT,
+                        setup_market TEXT NOT NULL,
+                        run_id TEXT,
+                        timestamp TEXT NOT NULL,
+                        reason_code TEXT NOT NULL,
+                        detail TEXT,
+                        previous_state TEXT,
+                        new_state TEXT,
+                        created_by TEXT
+                    );
 
-                CREATE TABLE IF NOT EXISTS publish_runs (
-                    id TEXT PRIMARY KEY,
-                    run_timestamp TEXT NOT NULL,
-                    killzone TEXT NOT NULL,
-                    market TEXT,
-                    run_mode TEXT NOT NULL,
-                    run_state TEXT NOT NULL,
-                    setups_created INTEGER DEFAULT 0,
-                    setups_invalidated INTEGER DEFAULT 0,
-                    setups_preserved INTEGER DEFAULT 0,
-                    summary_json TEXT,
-                    error_detail TEXT,
-                    trigger_type TEXT DEFAULT 'scheduled',
-                    created_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS publish_runs (
+                        id TEXT PRIMARY KEY,
+                        run_timestamp TEXT NOT NULL,
+                        killzone TEXT NOT NULL,
+                        market TEXT,
+                        run_mode TEXT NOT NULL,
+                        run_state TEXT NOT NULL,
+                        setups_created INTEGER DEFAULT 0,
+                        setups_invalidated INTEGER DEFAULT 0,
+                        setups_preserved INTEGER DEFAULT 0,
+                        summary_json TEXT,
+                        error_detail TEXT,
+                        trigger_type TEXT DEFAULT 'scheduled',
+                        created_at TEXT NOT NULL
+                    );
 
-                CREATE TABLE IF NOT EXISTS outcomes (
-                    id TEXT PRIMARY KEY,
-                    setup_id TEXT NOT NULL,
-                    setup_market TEXT NOT NULL,
-                    run_id TEXT,
-                    outcome_type TEXT NOT NULL,
-                    execution_price DOUBLE PRECISION,
-                    execution_time TEXT,
-                    realized_pl DOUBLE PRECISION,
-                    mae DOUBLE PRECISION,
-                    strategy_id TEXT DEFAULT 'manna_basic',
-                    notes TEXT,
-                    created_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS outcomes (
+                        id TEXT PRIMARY KEY,
+                        setup_id TEXT NOT NULL,
+                        setup_market TEXT NOT NULL,
+                        run_id TEXT,
+                        outcome_type TEXT NOT NULL,
+                        execution_price DOUBLE PRECISION,
+                        execution_time TEXT,
+                        realized_pl DOUBLE PRECISION,
+                        mae DOUBLE PRECISION,
+                        strategy_id TEXT DEFAULT 'manna_basic',
+                        notes TEXT,
+                        created_at TEXT NOT NULL
+                    );
 
-                CREATE TABLE IF NOT EXISTS analytics_archives (
-                    id TEXT PRIMARY KEY,
-                    archive_name TEXT NOT NULL,
-                    captured_from TEXT NOT NULL,
-                    captured_until TEXT NOT NULL,
-                    total_setups INTEGER NOT NULL,
-                    total_resolved INTEGER NOT NULL,
-                    win_rate DOUBLE PRECISION NOT NULL,
-                    total_realized_r DOUBLE PRECISION NOT NULL,
-                    avg_fill_time_min DOUBLE PRECISION NOT NULL,
-                    avg_hold_duration_min DOUBLE PRECISION NOT NULL,
-                    csv_content TEXT NOT NULL,
-                    summary_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS analytics_archives (
+                        id TEXT PRIMARY KEY,
+                        archive_name TEXT NOT NULL,
+                        captured_from TEXT NOT NULL,
+                        captured_until TEXT NOT NULL,
+                        total_setups INTEGER NOT NULL,
+                        total_resolved INTEGER NOT NULL,
+                        win_rate DOUBLE PRECISION NOT NULL,
+                        total_realized_r DOUBLE PRECISION NOT NULL,
+                        avg_fill_time_min DOUBLE PRECISION NOT NULL,
+                        avg_hold_duration_min DOUBLE PRECISION NOT NULL,
+                        csv_content TEXT NOT NULL,
+                        summary_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
 
-                CREATE TABLE IF NOT EXISTS strategy_settings (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    enabled INTEGER DEFAULT 1,
-                    updated_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS strategy_settings (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        enabled INTEGER DEFAULT 1,
+                        updated_at TEXT NOT NULL
+                    );
 
-                INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-                ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
-                ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
-                ON CONFLICT (id) DO NOTHING;
-            `);
-            console.log('PostgreSQL (Supabase) tables initialized successfully.');
-        } finally {
-            client.release();
+                    INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
+                    ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
+                    ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO NOTHING;
+                `);
+                isPgAvailable = true;
+                console.log('PostgreSQL (Supabase) tables initialized successfully.');
+                return;
+            } finally {
+                client.release();
+            }
+        } catch (pgError: any) {
+            console.error('⚠️ PostgreSQL connection failed:', pgError.message);
+            console.error('💡 Tip: On Render, use Supabase Pooler URI on port 6543 (IPv4) instead of direct connection on port 5432 (IPv6). Falling back to local SQLite...');
+            isPgAvailable = false;
         }
-    } else {
-        const db = getSqliteDb();
-        let schemaPath = path.join(__dirname, 'schema.sql');
-        if (!fs.existsSync(schemaPath)) {
-            schemaPath = path.join(__dirname, '../../src/db/schema.sql');
-        }
-        const schema = fs.readFileSync(schemaPath, 'utf8');
-        const statements = schema.split(';').map(s => s.trim()).filter(Boolean);
-
-        for (const stmt of statements) {
-            try { db.exec(stmt + ';'); } catch (e) {}
-        }
-
-        try { db.exec(`ALTER TABLE publish_runs ADD COLUMN trigger_type TEXT DEFAULT 'scheduled'`); } catch {}
-        try { db.exec(`ALTER TABLE edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
-        try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
-        try { db.exec(`ALTER TABLE edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
-        try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
-        try { db.exec(`ALTER TABLE edge_setups ADD COLUMN initial_stop REAL`); } catch {}
-        try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN initial_stop REAL`); } catch {}
-        try { db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`); } catch {}
-        try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
-        try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
-        try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
-        try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
-        try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
-
-        db.exec(`
-            CREATE TABLE IF NOT EXISTS analytics_archives (
-                id TEXT PRIMARY KEY,
-                archive_name TEXT NOT NULL,
-                captured_from TEXT NOT NULL,
-                captured_until TEXT NOT NULL,
-                total_setups INTEGER NOT NULL,
-                total_resolved INTEGER NOT NULL,
-                win_rate REAL NOT NULL,
-                total_realized_r REAL NOT NULL,
-                avg_fill_time_min REAL NOT NULL,
-                avg_hold_duration_min REAL NOT NULL,
-                csv_content TEXT NOT NULL,
-                summary_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS strategy_settings (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                enabled INTEGER DEFAULT 1,
-                updated_at TEXT NOT NULL
-            );
-
-            INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-            ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
-            ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
-            ON CONFLICT (id) DO NOTHING;
-        `);
-
-        console.log('Database initialized successfully.');
     }
-}
 
+    // SQLite setup (Fallback)
+    const db = getSqliteDb();
+    let schemaPath = path.join(__dirname, 'schema.sql');
+    if (!fs.existsSync(schemaPath)) {
+        schemaPath = path.join(__dirname, '../../src/db/schema.sql');
+    }
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+    const statements = schema.split(';').map(s => s.trim()).filter(Boolean);
+
+    for (const stmt of statements) {
+        try { db.exec(stmt + ';'); } catch (e) {}
+    }
+
+    try { db.exec(`ALTER TABLE publish_runs ADD COLUMN trigger_type TEXT DEFAULT 'scheduled'`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN resolved_at TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+    try { db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS analytics_archives (
+            id TEXT PRIMARY KEY,
+            archive_name TEXT NOT NULL,
+            captured_from TEXT NOT NULL,
+            captured_until TEXT NOT NULL,
+            total_setups INTEGER NOT NULL,
+            total_resolved INTEGER NOT NULL,
+            win_rate REAL NOT NULL,
+            total_realized_r REAL NOT NULL,
+            avg_fill_time_min REAL NOT NULL,
+            avg_hold_duration_min REAL NOT NULL,
+            csv_content TEXT NOT NULL,
+            summary_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS strategy_settings (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
+        ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
+        ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (id) DO NOTHING;
+    `);
+
+    console.log('Database initialized successfully.');
+}
