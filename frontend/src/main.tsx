@@ -6,19 +6,22 @@ import { AuthProvider } from './context/AuthContext';
 import { VoiceProvider } from './context/VoiceContext';
 import { SignalNotificationProvider } from './context/SignalNotificationContext';
 import { SignalNotificationToastContainer } from './components/SignalNotificationToast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <VoiceProvider>
-          <SignalNotificationProvider>
-            <App />
-            <SignalNotificationToastContainer />
-          </SignalNotificationProvider>
-        </VoiceProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <VoiceProvider>
+            <SignalNotificationProvider>
+              <App />
+              <SignalNotificationToastContainer />
+            </SignalNotificationProvider>
+          </VoiceProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

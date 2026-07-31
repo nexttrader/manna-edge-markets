@@ -36,6 +36,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
 
+  if (!setup) return null;
+
   const biasRaw = (setup.bias || 'long').toLowerCase();
   const isLong = biasRaw === 'long';
 
