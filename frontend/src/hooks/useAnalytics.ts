@@ -50,6 +50,7 @@ export interface AnalyticsData {
     forex: { total: number; active: number };
   };
   assetPerformance?: Record<string, { instrument: string; strategy_id?: string; total: number; wins: number; losses: number; plR: number; market: string }>;
+  convictionPerformance?: Record<string, { label: string; min: number; max: number; total: number; wins: number; losses: number; winRate: number; plR: number }>;
   invalidations: {
     total: number;
     byReason: Record<string, number>;
@@ -64,6 +65,7 @@ export interface AnalyticsData {
     bias?: string;
     setup_market?: string;
     strategy_id?: string;
+    conviction_score?: number;
     outcome_type: string;
     realized_r?: number;
     realized_pl?: number;
