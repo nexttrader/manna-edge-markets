@@ -18,10 +18,10 @@ export const MasterPasscodeModal: React.FC<MasterPasscodeModalProps> = ({ onSucc
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Master Key Passcode check
-    if (passcode === '7729' || passcode === 'manna-master-key' || passcode === 'master') {
+    if (passcode === '5287' || passcode === 'manna-master-key' || passcode === 'master') {
       login('superadmin@mannaedge.com', 'super_admin', 'Master Telemetry Admin', 'futures_forex');
       onSuccess();
-      navigate('/vault-7729');
+      navigate('/vault-5287');
     } else {
       setError('Invalid Access Key');
       setPasscode('');

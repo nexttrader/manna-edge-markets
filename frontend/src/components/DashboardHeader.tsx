@@ -71,7 +71,7 @@ export const DashboardHeader: React.FC = () => {
                 </Link>
               )}
               {isSuperAdmin && (
-                <Link to="/vault-7729" className={`nav-link ${location.pathname === '/vault-7729' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
+                <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
                   👁️ Master Desk
                 </Link>
               )}

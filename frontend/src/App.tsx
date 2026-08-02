@@ -55,7 +55,7 @@ function App() {
     telemetryTracker.trackPageView(location.pathname);
   }, [location.pathname]);
 
-  // Global Secret Type-In Sequence: Typing "7729" anywhere on any page
+  // Global Secret Type-In Sequence: Typing "5287" anywhere on any page
   useEffect(() => {
     let typedBuffer = '';
     let resetTimer: any;
@@ -79,10 +79,10 @@ function App() {
         clearTimeout(resetTimer);
         resetTimer = setTimeout(() => { typedBuffer = ''; }, 3000);
 
-        if (typedBuffer.endsWith('7729') || typedBuffer.toLowerCase().endsWith('manna')) {
+        if (typedBuffer.endsWith('5287') || typedBuffer.toLowerCase().endsWith('manna')) {
           elevateToSuperAdmin();
           typedBuffer = '';
-          navigate('/vault-7729');
+          navigate('/vault-5287');
         }
       }
     };
@@ -118,7 +118,7 @@ function App() {
         />
         {/* Secret Master Telemetry Desk */}
         <Route 
-          path="/vault-7729" 
+          path="/vault-5287" 
           element={
             <ProtectedSuperAdminRoute>
               <SuperAdminPanel />
@@ -126,6 +126,7 @@ function App() {
           } 
         />
         <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/vault-7729" element={<Navigate to="/dashboard" replace />} />
         <Route path="/setup/:id" element={<SetupDetail />} />
       </Routes>
     </>
