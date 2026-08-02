@@ -15,6 +15,7 @@ interface AuthContextType {
   isImpersonating: boolean;
   login: (email: string, role?: 'trader' | 'admin' | 'super_admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex') => void;
   logout: () => void;
+  elevateToSuperAdmin: () => void;
   impersonateUser: (targetUser: User) => void;
   stopImpersonating: () => void;
   isAuthenticated: boolean;
@@ -93,6 +94,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const elevateToSuperAdmin = () => {
+    if (user) {
+      const superUser: User = {
+        ...user,
+        role: 'super_admin',
+        tier: 'futures_forex'
+      };
+      setUser(superUser);
+      localStorage.setItem('manna_user', JSON.stringify(superUser));
+    } else {
+      login('superadmin@mannaedge.com', 'super_admin', 'Master Telemetry Admin', 'futures_forex');
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setOriginalAdmin(null);
@@ -106,6 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isImpersonating, 
         login, 
         logout, 
+        elevateToSuperAdmin,
         impersonateUser, 
         stopImpersonating, 
         isAuthenticated: !!user 

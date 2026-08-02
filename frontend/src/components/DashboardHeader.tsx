@@ -9,12 +9,30 @@ import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
 
 export const DashboardHeader: React.FC = () => {
-  const { user, logout, originalAdmin } = useAuth();
-  const isAdmin = user?.role === 'admin' || originalAdmin?.role === 'admin';
+  const { user, logout, originalAdmin, elevateToSuperAdmin } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
+  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
   const location = useLocation();
   const [showCalendar, setShowCalendar] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
+  const [clickCount, setClickCount] = useState(0);
+  const [lastClickTime, setLastClickTime] = useState(0);
+
+  const handleAdminNameClick = () => {
+    const now = Date.now();
+    if (now - lastClickTime > 3000) {
+      setClickCount(1);
+    } else {
+      const newCount = clickCount + 1;
+      setClickCount(newCount);
+      if (newCount >= 7) {
+        elevateToSuperAdmin();
+        setClickCount(0);
+      }
+    }
+    setLastClickTime(now);
+  };
 
   return (
     <>
@@ -52,6 +70,11 @@ export const DashboardHeader: React.FC = () => {
                   ⚙️ Admin
                 </Link>
               )}
+              {isSuperAdmin && (
+                <Link to="/vault-7729" className={`nav-link ${location.pathname === '/vault-7729' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
+                  👁️ Master Desk
+                </Link>
+              )}
             </nav>
           </div>
           
@@ -84,7 +107,14 @@ export const DashboardHeader: React.FC = () => {
 
             {user ? (
               <div className="header-user-menu font-mono">
-                <span className="user-email-chip">{user.email.split('@')[0]}</span>
+                <span 
+                  className="user-email-chip"
+                  onClick={handleAdminNameClick}
+                  style={{ cursor: 'pointer', userSelect: 'none', border: isSuperAdmin ? '1px solid #b388ff' : undefined }}
+                  title="Trader Profile"
+                >
+                  {user.email.split('@')[0]} {isSuperAdmin ? '👁️' : ''}
+                </span>
                 <button onClick={logout} className="logout-btn" title="Sign Out">
                   🚪
                 </button>

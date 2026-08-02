@@ -47,23 +47,52 @@ function ProtectedSuperAdminRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { elevateToSuperAdmin } = useAuth();
   const [showSecretModal, setShowSecretModal] = useState(false);
 
   useEffect(() => {
     telemetryTracker.trackPageView(location.pathname);
   }, [location.pathname]);
 
-  // Global Secret Shortcut: Ctrl + Shift + K (or Cmd + Shift + K)
+  // Global Secret Type-In Sequence: Typing "7729" anywhere on any page
   useEffect(() => {
+    let typedBuffer = '';
+    let resetTimer: any;
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore typing inside input/textarea fields
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      // Check Ctrl+Shift+K hotkey
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setShowSecretModal(true);
+        return;
+      }
+
+      // Buffer typed digits/letters
+      if (/^[0-9a-zA-Z]$/.test(e.key)) {
+        typedBuffer += e.key;
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => { typedBuffer = ''; }, 3000);
+
+        if (typedBuffer.endsWith('7729') || typedBuffer.toLowerCase().endsWith('manna')) {
+          elevateToSuperAdmin();
+          typedBuffer = '';
+          navigate('/vault-7729');
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(resetTimer);
+    };
+  }, [elevateToSuperAdmin, navigate]);
 
   return (
     <>
