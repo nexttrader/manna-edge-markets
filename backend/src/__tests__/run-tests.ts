@@ -92,9 +92,9 @@ async function runAllTests() {
     const valResult1 = revalidateSetup(mockSetup, 1.0910, 0.0020);
     assert.strictEqual(valResult1.isValid, true, 'Setup within entry zone should be valid');
 
-    // Displaced price check (>1.5x ATR away from mid)
-    const valResult2 = revalidateSetup(mockSetup, 1.0960, 0.0020); // 0.050 diff > 1.5 * 0.0020 (0.0030)
-    assert.strictEqual(valResult2.isValid, false, 'Price displaced > 1.5x ATR should invalidate');
+    // Displaced price check (>1.5x ATR below zone bottom for long)
+    const valResult2 = revalidateSetup(mockSetup, 1.0850, 0.0020); // 1.0850 is 0.0050 below 1.0900 zone bottom (> 1.5 * 0.0020)
+    assert.strictEqual(valResult2.isValid, false, 'Price displaced > 1.5x ATR below zone bottom should invalidate');
     assert.strictEqual(valResult2.reason, 'price_displaced');
     console.log('✅ TEST 5: Revalidation Rules (Displacement & Boundaries)');
 

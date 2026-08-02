@@ -259,7 +259,7 @@ export const AdminPanel: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
   
-  const [mode, setMode] = useState<'live' | 'dry_run'>('dry_run');
+  const [mode, setMode] = useState<'live' | 'dry_run'>('live');
   const [market, setMarket] = useState<'FUTURES' | 'FOREX' | 'ALL'>('ALL');
   const [isTriggering, setIsTriggering] = useState(false);
   const [disablingId, setDisablingId] = useState<string | null>(null);

@@ -12,6 +12,8 @@ const MOCK_SETUPS: EdgeSetup[] = [
     conviction: 82,
     state: SignalState.ACTIVE,
     killzone: Killzone.NY_AM,
+    strategy_id: 'manna_basic',
+    strategy_tier: 'basic',
     createdAt: new Date(Date.now() - 3600000).toISOString(),
     validatedAt: new Date(Date.now() - 3000000).toISOString(),
     entryAt: new Date(Date.now() - 2800000).toISOString(),
@@ -33,6 +35,8 @@ const MOCK_SETUPS: EdgeSetup[] = [
     conviction: 95,
     state: SignalState.AWAITING_ENTRY,
     killzone: Killzone.LONDON,
+    strategy_id: 'manna_snd',
+    strategy_tier: 'pro',
     createdAt: new Date(Date.now() - 7200000).toISOString(),
     validatedAt: new Date(Date.now() - 7000000).toISOString(),
     unrealizedR: 0,
@@ -44,6 +48,28 @@ const MOCK_SETUPS: EdgeSetup[] = [
       takeProfit2: 17800
     },
     pips: { stopLoss: -70, takeProfit1: 100, takeProfit2: 250 }
+  },
+  {
+    id: 'setup-3',
+    instrument: 'ES',
+    market: Market.FUTURES,
+    bias: Bias.SHORT,
+    conviction: 88,
+    state: SignalState.AWAITING_ENTRY,
+    killzone: Killzone.NY_AM,
+    strategy_id: 'manna_snd',
+    strategy_tier: 'pro',
+    createdAt: new Date(Date.now() - 1800000).toISOString(),
+    validatedAt: new Date(Date.now() - 1500000).toISOString(),
+    unrealizedR: 0,
+    levels: {
+      entryMin: 5520,
+      entryMax: 5525,
+      stopLoss: 5535,
+      takeProfit1: 5490,
+      takeProfit2: 5470
+    },
+    pips: { stopLoss: -15, takeProfit1: 30, takeProfit2: 50 }
   }
 ];
 
@@ -61,7 +87,7 @@ export function useSetups() {
       const res = await fetch(`${API_BASE}/api/accelerate/active-setups`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      const currentList: EdgeSetup[] = (Array.isArray(data.setups) && data.setups.length > 0) ? data.setups : MOCK_SETUPS;
+      const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : MOCK_SETUPS;
 
       // Check for newly discovered signals
       if (!isInitialFetchRef.current && currentList.length > 0) {

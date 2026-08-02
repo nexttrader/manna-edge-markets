@@ -275,8 +275,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
           const tp2 = entry_zone_mid + (risk * 3.0); // 3:1 RR
 
-          // Discard setup if current market price has already reached TP1 or breached Stop Loss
-          if (currentPrice >= tp1 || currentPrice <= stop) continue;
+          // Discard setup if current market price has breached Stop Loss or is excessively displaced (> 6x ATR)
+          if (currentPrice <= stop || (currentPrice - entry_zone_mid) > (atr14 * 6)) continue;
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
@@ -320,8 +320,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           const ez_low = Number(zone.distal.toFixed(decimals));
           const ez_high = Number(zone.proximal.toFixed(decimals));
 
-          // Discard setup if current market price has already reached TP1, breached Stop Loss, or is already at/below entry level
-          if (currentPrice >= tp1 || currentPrice <= stop || currentPrice <= ez_high) continue;
+          // Discard setup if current market price has breached Stop Loss, is inside/below entry zone, or is excessively displaced
+          if (currentPrice <= stop || currentPrice <= ez_high || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
@@ -428,11 +428,12 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const decimals = market === 'futures' ? 2 : 5;
           const ez_mid = Number(zone.proximal.toFixed(decimals));
-          const ez_high = Number(zone.distal.toFixed(decimals));
-          const ez_low = Number(zone.proximal.toFixed(decimals));
+          // For a SUPPLY zone: proximal = bottom of the zone (limit sell entry), distal = top (above proximal, zone ceiling/stop boundary)
+          const ez_low = Number(zone.proximal.toFixed(decimals));  // proximal = entry lower boundary
+          const ez_high = Number(zone.distal.toFixed(decimals));   // distal = zone top (above entry, near stop)
 
-          // Discard setup if current market price has already reached TP1, breached Stop Loss, or is already at/above entry level
-          if (currentPrice <= tp1 || currentPrice >= stop || currentPrice >= ez_low) continue;
+          // Discard setup if current market price has breached Stop Loss, is inside/above supply zone, or is excessively displaced
+          if (currentPrice >= stop || currentPrice >= ez_low || (ez_low - currentPrice) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
@@ -443,8 +444,8 @@ export class MannaSndStrategy implements IStrategyEngine {
             killzone_origin: killzone.killzone,
             killzone_origin_at: killzone.boundaryUTC,
             bias,
-            entry_zone_low: ez_low,
-            entry_zone_high: ez_high,
+            entry_zone_low: ez_low,   // proximal: limit sell boundary (lower edge of supply zone)
+            entry_zone_high: ez_high, // distal: upper edge of supply zone (stop reference)
             entry_zone_mid: ez_mid,
             stop: Number(stop.toFixed(decimals)),
             tp1: Number(tp1.toFixed(decimals)),

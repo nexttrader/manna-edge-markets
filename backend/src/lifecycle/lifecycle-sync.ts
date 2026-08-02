@@ -70,13 +70,15 @@ export class LifecycleSync {
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
 
         // Entry fill check:
-        // LONG (Limit Buy): Price must drop down to touch entry zone, AND current price must be at/near entry
-        // SHORT (Limit Sell): Price must rally up to touch entry zone, AND current price must be at/near entry
+        // LONG (Limit Buy):  Price must DROP DOWN to touch demand zone top (entry_zone_high = proximal),
+        //                    AND current price must still be ABOVE stop (not stopped out)
+        // SHORT (Limit Sell): Price must RALLY UP to touch supply zone bottom (entry_zone_low = proximal),
+        //                     AND current price must still be BELOW stop (not stopped out)
         let isFilled = false;
         if (isLong) {
-          isFilled = minLow <= setup.entry_zone_high && currentPrice >= setup.stop;
+          isFilled = minLow <= setup.entry_zone_high && currentPrice > setup.stop;
         } else {
-          isFilled = maxHigh >= setup.entry_zone_low && currentPrice <= setup.stop;
+          isFilled = maxHigh >= setup.entry_zone_low && currentPrice < setup.stop;
         }
 
         if (isFilled) {

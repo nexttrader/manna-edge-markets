@@ -38,7 +38,7 @@ export function mapTimestampToKillzone(timestamp: Date): KillzoneInfo | null {
     };
 }
 
-export function getCurrentKillzone(now: Date): KillzoneInfo {
+export function getCurrentKillzone(now: Date = new Date()): KillzoneInfo {
     const kz = mapTimestampToKillzone(now);
     if (!kz) {
         // Fallback safety

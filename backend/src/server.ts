@@ -93,11 +93,10 @@ async function runStartupDiscoveryIfEmpty() {
         const activeSetups = await queries.getAllActiveSetups();
         const activeCount = activeSetups.length;
 
-        // Only auto-scan on startup if the database has NO active or awaiting_entry setups at all.
-        // Do NOT scan just because the count is "low" (e.g. < 5) — active trades ARE expected
-        // during normal operation and a restart must not re-trigger a full discovery scan.
-        if (activeCount === 0) {
-            logger.info({ activeCount }, '⚡ No active setups found on startup. Running initial discovery scan...');
+        const hasSnd = activeSetups.some((s: any) => s.strategy_id === 'manna_snd');
+
+        if (activeCount === 0 || !hasSnd) {
+            logger.info({ activeCount, hasSnd }, '⚡ Running startup discovery scan to ensure all active strategies (including Manna SnD) are populated...');
             const now = new Date();
             const kzInfo = getCurrentKillzone(now);
             const runId = `startup_run_${Date.now()}`;
