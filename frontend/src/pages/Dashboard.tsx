@@ -6,6 +6,7 @@ import { HawkeyePanel } from '../components/HawkeyePanel';
 import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
+import { MarketClosedBanner } from '../components/MarketClosedBanner';
 import { FaqModal } from '../components/FaqModal';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
@@ -116,6 +117,8 @@ export const Dashboard: React.FC = () => {
       <DashboardHeader />
       
       <main className="container dashboard-main">
+        <MarketClosedBanner />
+
         {/* Main Filter & Control Panel */}
         <div className="filter-bar glass-card font-mono">
           <div className="filter-top-row">

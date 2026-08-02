@@ -1,0 +1,186 @@
+.market-closed-banner {
+  background: linear-gradient(135deg, rgba(30, 8, 20, 0.95) 0%, rgba(15, 4, 12, 0.98) 100%);
+  border: 1px solid rgba(255, 23, 68, 0.45);
+  box-shadow: 0 8px 32px rgba(255, 23, 68, 0.2), inset 0 0 20px rgba(255, 23, 68, 0.08);
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+  animation: bannerFadeIn 0.4s ease-out;
+}
+
+@keyframes bannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.market-closed-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.market-closed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 23, 68, 0.2);
+  padding-bottom: 10px;
+}
+
+.market-closed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 23, 68, 0.15);
+  border: 1px solid #ff1744;
+  color: #ff1744;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.market-closed-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ff1744;
+  box-shadow: 0 0 8px #ff1744;
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(255, 23, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 23, 68, 0);
+  }
+}
+
+.market-closed-close-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #aaa;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.market-closed-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.market-closed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.market-closed-title {
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+}
+
+.market-closed-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.market-closed-timer-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(10, 3, 8, 0.8);
+  border: 1px solid rgba(255, 171, 0, 0.35);
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.timer-label {
+  color: #ffab00;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.timer-value {
+  color: #00e676;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  font-family: monospace;
+  background: rgba(0, 230, 118, 0.1);
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.timer-subtext {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+/* Collapsed Mini Banner Bar */
+.market-closed-bar-collapsed {
+  background: rgba(30, 8, 20, 0.95);
+  border: 1px solid #ff1744;
+  color: #ff1744;
+  padding: 8px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 16px rgba(255, 23, 68, 0.15);
+  transition: all 0.2s ease;
+}
+
+.market-closed-bar-collapsed:hover {
+  background: rgba(45, 12, 30, 0.98);
+  border-color: #ff5252;
+}
+
+.market-closed-timer-mini {
+  color: #00e676;
+  font-weight: 800;
+  background: rgba(0, 230, 118, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.market-closed-expand-btn {
+  background: rgba(255, 23, 68, 0.2);
+  border: 1px solid #ff1744;
+  color: #ff1744;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
