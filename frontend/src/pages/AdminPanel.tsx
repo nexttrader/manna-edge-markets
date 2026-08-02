@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatETTime } from '../utils/time';
 import { API_BASE } from '../config';
 import { SignalReplaceModal } from '../components/SignalReplaceModal';
+import { AdminSupportInbox } from '../components/AdminSupportInbox';
 
 export const AdminPanel: React.FC = () => {
   const { user, logout, impersonateUser, isImpersonating, stopImpersonating } = useAuth();
@@ -253,7 +254,8 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history' | 'support'>('users');
+  const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
   
@@ -458,6 +460,35 @@ export const AdminPanel: React.FC = () => {
             onClick={() => setAdminTab('history')}
           >
             📜 Run History &amp; Audits ({runs.length})
+          </button>
+
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'support' ? 'active' : ''}`}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '6px',
+              border: adminTab === 'support' ? '1px solid #ffd700' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: adminTab === 'support' ? 'rgba(255,215,0,0.18)' : 'transparent',
+              color: adminTab === 'support' ? '#ffd700' : '#ccc',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.88rem',
+              position: 'relative'
+            }}
+            onClick={() => setAdminTab('support')}
+          >
+            🎫 Support Centre
+            {supportUnreadCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -6, right: -6,
+                background: '#ff3b3b', color: '#fff',
+                fontSize: '0.6rem', fontWeight: 900,
+                minWidth: 16, height: 16, borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '0 3px'
+              }}>{supportUnreadCount}</span>
+            )}
           </button>
         </div>
 
@@ -1719,6 +1750,21 @@ export const AdminPanel: React.FC = () => {
           </div>
         </div>
         </>
+        )}
+
+        {/* TAB 5: Support Command Centre */}
+        {adminTab === 'support' && (
+          <div className="glass-card font-mono" style={{ padding: '20px', borderRadius: '10px', background: 'rgba(255,215,0,0.03)', border: '1px solid rgba(255,215,0,0.2)', minHeight: '600px', display: 'flex', flexDirection: 'column' }}>
+            <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffd700', margin: '0 0 16px 0' }}>
+              🎫 ADMIN SUPPORT COMMAND CENTRE
+            </h2>
+            <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+              Manage upgrade requests, reply to users, send invoices, and transfer tickets to other admins. Users are notified in real-time when you respond.
+            </p>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <AdminSupportInbox />
+            </div>
+          </div>
         )}
 
         {rescanCandidate && rescanCurrentSetup && (

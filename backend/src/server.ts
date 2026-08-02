@@ -20,6 +20,7 @@ import hawkeyeRoutes from './api/hawkeye-routes';
 import runRoutes from './api/run-routes';
 import eventsRouter from './api/events';
 import newsRoutes from './api/news-routes';
+import supportRoutes from './api/support-routes';
 
 const logger = createLogger('server');
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/admin', runRoutes);
 app.use('/api/hawkeye', hawkeyeRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api', eventsRouter);
+app.use('/api/support', supportRoutes);
 
 // Health check with DB status check for UptimeRobot keep-alive
 app.get('/api/health', async (_req: Request, res: Response) => {
