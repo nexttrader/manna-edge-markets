@@ -14,6 +14,8 @@ import {
   computeNewsProximityModifier
 } from '../scoring';
 
+import { getLogicalStopDistance } from '../stop-loss-rules';
+
 export class MannaBasicStrategy implements IStrategyEngine {
   public meta: StrategyMeta = {
     id: 'manna_basic',
@@ -44,12 +46,14 @@ export class MannaBasicStrategy implements IStrategyEngine {
         let entry_zone_mid: number;
         let stop: number;
 
+        const stopDistance = getLogicalStopDistance(instrument, atr14, atr14 * 1.25, market);
+
         if (bias === 'long') {
-          entry_zone_mid = currentPrice - (atr14 * 0.4);
-          stop = entry_zone_mid - (atr14 * 0.3);
+          entry_zone_mid = currentPrice - (atr14 * 0.3);
+          stop = entry_zone_mid - stopDistance;
         } else {
-          entry_zone_mid = currentPrice + (atr14 * 0.4);
-          stop = entry_zone_mid + (atr14 * 0.3);
+          entry_zone_mid = currentPrice + (atr14 * 0.3);
+          stop = entry_zone_mid + stopDistance;
         }
 
         const zoneWidth = market === 'futures' ? atr14 * 0.15 : atr14 * 0.1;
@@ -57,8 +61,8 @@ export class MannaBasicStrategy implements IStrategyEngine {
         const entry_zone_high = entry_zone_mid + zoneWidth;
 
         const risk = Math.abs(entry_zone_mid - stop);
-        const tp1 = bias === 'long' ? entry_zone_mid + (risk * 2) : entry_zone_mid - (risk * 2);
-        const tp2 = bias === 'long' ? entry_zone_mid + (risk * 3) : entry_zone_mid - (risk * 3);
+        const tp1 = bias === 'long' ? entry_zone_mid + (risk * 2.0) : entry_zone_mid - (risk * 2.0);
+        const tp2 = bias === 'long' ? entry_zone_mid + (risk * 3.0) : entry_zone_mid - (risk * 3.0);
 
         // Discard setup if current market price has already reached TP1, breached Stop Loss, or already passed/inside entry zone
         if (bias === 'long' && (currentPrice >= tp1 || currentPrice <= stop || currentPrice <= entry_zone_high)) continue;

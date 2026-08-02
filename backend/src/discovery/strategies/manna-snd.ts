@@ -14,6 +14,8 @@ import {
   computeNewsProximityModifier
 } from '../scoring';
 
+import { getLogicalStopDistance } from '../stop-loss-rules';
+
 type CandleType = 'base' | 'leg_up' | 'leg_down';
 
 interface Zone {
@@ -264,8 +266,10 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const bias: Bias = 'long';
           const entry_zone_mid = zone.proximal;
-          const stop = zone.distal - (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15);
-          const risk = Math.abs(entry_zone_mid - stop);
+          const rawStop = zone.distal - (market === 'futures' ? atr14 * 0.4 : atr14 * 0.25);
+          const rawRisk = Math.abs(entry_zone_mid - rawStop);
+          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
+          const stop = entry_zone_mid - risk;
           if (risk <= 0) continue;
 
           const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
@@ -376,8 +380,10 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const bias: Bias = 'short';
           const entry_zone_mid = zone.proximal;
-          const stop = zone.distal + (market === 'futures' ? atr14 * 0.2 : atr14 * 0.15);
-          const risk = Math.abs(stop - entry_zone_mid);
+          const rawStop = zone.distal + (market === 'futures' ? atr14 * 0.4 : atr14 * 0.25);
+          const rawRisk = Math.abs(rawStop - entry_zone_mid);
+          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
+          const stop = entry_zone_mid + risk;
           if (risk <= 0) continue;
 
           const tp1 = entry_zone_mid - (risk * 2.0); // 2:1 Minimum RR
