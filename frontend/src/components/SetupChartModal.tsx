@@ -147,6 +147,34 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       borderDownColor: '#ff1744',
       wickUpColor: '#00e676',
       wickDownColor: '#ff1744',
+      autoscaleInfoProvider: (original: any) => {
+        const res = original();
+        let min = res?.priceRange?.minValue;
+        let max = res?.priceRange?.maxValue;
+
+        const levelsToInclude = [
+          entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+          activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist
+        ].filter(p => p > 0);
+
+        for (const p of levelsToInclude) {
+          if (min === undefined || p < min) min = p;
+          if (max === undefined || p > max) max = p;
+        }
+
+        if (min !== undefined && max !== undefined) {
+          const margin = (max - min) * 0.05;
+          min -= margin;
+          max += margin;
+        }
+
+        return {
+          priceRange: {
+            minValue: min,
+            maxValue: max,
+          },
+        };
+      },
     });
 
     chartRef.current = chart;

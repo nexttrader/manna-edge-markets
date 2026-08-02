@@ -298,9 +298,9 @@ export class MannaSndStrategy implements IStrategyEngine {
         const m15Zones = this.findZones(candles15m);
 
         if (allowedAction === 'BUY') {
-          const demandZones = m15Zones.filter(z => z.type === 'demand' && z.proximal < currentPrice);
+          const demandZones = m15Zones.filter(z => z.type === 'demand' && z.proximal < currentPrice && (currentPrice - z.proximal) <= atr14 * 5);
           const zone = demandZones.length > 0
-            ? demandZones[demandZones.length - 1]
+            ? demandZones.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandZones[0])
             : this.findFallbackZone(candles15m, 'demand', atr14);
 
           const bias: Bias = 'long';
@@ -412,9 +412,9 @@ export class MannaSndStrategy implements IStrategyEngine {
             })
           });
         } else if (allowedAction === 'SELL') {
-          const supplyZones = m15Zones.filter(z => z.type === 'supply' && z.proximal > currentPrice);
+          const supplyZones = m15Zones.filter(z => z.type === 'supply' && z.proximal > currentPrice && (z.proximal - currentPrice) <= atr14 * 5);
           const zone = supplyZones.length > 0
-            ? supplyZones[supplyZones.length - 1]
+            ? supplyZones.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyZones[0])
             : this.findFallbackZone(candles15m, 'supply', atr14);
 
           const bias: Bias = 'short';
