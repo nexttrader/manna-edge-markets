@@ -4,7 +4,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'trader' | 'admin';
+  role: 'trader' | 'admin' | 'super_admin';
   tier?: 'free' | 'forex_only' | 'futures_forex';
   marketAccess?: 'all' | 'futures' | 'forex';
 }
@@ -13,7 +13,7 @@ interface AuthContextType {
   user: User | null;
   originalAdmin: User | null;
   isImpersonating: boolean;
-  login: (email: string, role?: 'trader' | 'admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex') => void;
+  login: (email: string, role?: 'trader' | 'admin' | 'super_admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex') => void;
   logout: () => void;
   impersonateUser: (targetUser: User) => void;
   stopImpersonating: () => void;
@@ -59,14 +59,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [originalAdmin]);
 
-  const login = (email: string, role: 'trader' | 'admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex') => {
-    const defaultName = role === 'admin' ? 'System Administrator' : 'Institutional Trader';
+  const login = (email: string, role: 'trader' | 'admin' | 'super_admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex') => {
+    const defaultName = role === 'super_admin' ? 'Super Administrator (Master)' : role === 'admin' ? 'System Administrator' : 'Institutional Trader';
     const newUser: User = {
       id: `usr_${Date.now()}`,
       name: name || defaultName,
       email,
       role,
-      tier: role === 'admin' ? 'futures_forex' : tier,
+      tier: (role === 'admin' || role === 'super_admin') ? 'futures_forex' : tier,
       marketAccess: tier === 'forex_only' ? 'forex' : 'all'
     };
     setOriginalAdmin(null);
@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const impersonateUser = (targetUser: User) => {
-    if (user?.role === 'admin' || originalAdmin?.role === 'admin') {
+    if (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin') {
       const adminToBackup = originalAdmin || user;
       setOriginalAdmin(adminToBackup);
       setUser({
@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tier: targetUser.tier || 'futures_forex'
       });
     } else {
-      console.warn('Impersonation denied: Only Admins can impersonate user accounts.');
+      console.warn('Impersonation denied: Only Admins and Super Admins can impersonate user accounts.');
     }
   };
 

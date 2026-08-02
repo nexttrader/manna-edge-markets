@@ -1,27 +1,47 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HomePage } from './pages/HomePage';
 import { Dashboard } from './pages/Dashboard';
 import { LoginPage } from './pages/LoginPage';
 import { AdminPanel } from './pages/AdminPanel';
+import { SuperAdminPanel } from './pages/SuperAdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
 import { useAuth } from './context/AuthContext';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
+import { telemetryTracker } from './services/telemetryTracker';
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isImpersonating, originalAdmin } = useAuth();
-  if (isImpersonating && originalAdmin?.role === 'admin') {
+  if (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin')) {
     return <>{children}</>;
   }
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  if (user.role !== 'admin') {
+  if (user.role !== 'admin' && user.role !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+function ProtectedSuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, isImpersonating, originalAdmin } = useAuth();
+  if (isImpersonating && originalAdmin?.role === 'super_admin') {
+    return <>{children}</>;
+  }
+  if (!user || user.role !== 'super_admin') {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }
 
 function App() {
+  const location = useLocation();
+
+  useEffect(() => {
+    telemetryTracker.trackPageView(location.pathname);
+  }, [location.pathname]);
+
   return (
     <>
       <ImpersonationBanner />
@@ -36,6 +56,14 @@ function App() {
             <ProtectedAdminRoute>
               <AdminPanel />
             </ProtectedAdminRoute>
+          } 
+        />
+        <Route 
+          path="/super-admin" 
+          element={
+            <ProtectedSuperAdminRoute>
+              <SuperAdminPanel />
+            </ProtectedSuperAdminRoute>
           } 
         />
         <Route path="/setup/:id" element={<SetupDetail />} />

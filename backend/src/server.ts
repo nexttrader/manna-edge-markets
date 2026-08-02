@@ -15,6 +15,7 @@ import { createLogger } from './telemetry/logger';
 
 import setupRoutes from './api/setup-routes';
 import adminRoutes from './api/admin-routes';
+import superAdminRoutes from './api/super-admin-routes';
 import hawkeyeRoutes from './api/hawkeye-routes';
 import runRoutes from './api/run-routes';
 import eventsRouter from './api/events';
@@ -35,6 +36,7 @@ app.use((req: any, _res: Response, next: NextFunction) => {
 // Routes
 app.use('/api', setupRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/admin', runRoutes);
 app.use('/api/hawkeye', hawkeyeRoutes);
 app.use('/api/news', newsRoutes);

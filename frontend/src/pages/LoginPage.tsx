@@ -26,11 +26,11 @@ export const LoginPage: React.FC = () => {
     navigate(role === 'admin' ? '/admin' : '/dashboard');
   };
 
-  const handleDemoLogin = (demoRole: 'trader' | 'admin') => {
-    const demoEmail = demoRole === 'admin' ? 'admin@mannaedge.com' : 'trader@mannaedge.com';
-    const demoName = demoRole === 'admin' ? 'System Administrator' : 'Institutional Trader';
+  const handleDemoLogin = (demoRole: 'trader' | 'admin' | 'super_admin') => {
+    const demoEmail = demoRole === 'super_admin' ? 'superadmin@mannaedge.com' : demoRole === 'admin' ? 'admin@mannaedge.com' : 'trader@mannaedge.com';
+    const demoName = demoRole === 'super_admin' ? 'Super Administrator (Master)' : demoRole === 'admin' ? 'System Administrator' : 'Institutional Trader';
     login(demoEmail, demoRole, demoName, 'futures_forex');
-    navigate(demoRole === 'admin' ? '/admin' : '/dashboard');
+    navigate(demoRole === 'super_admin' ? '/super-admin' : demoRole === 'admin' ? '/admin' : '/dashboard');
   };
 
   return (
@@ -72,6 +72,9 @@ export const LoginPage: React.FC = () => {
             </button>
             <button className="btn-demo admin font-mono" onClick={() => handleDemoLogin('admin')}>
               ⚙️ Admin Demo
+            </button>
+            <button className="btn-demo admin font-mono" style={{ borderColor: '#b388ff', color: '#b388ff' }} onClick={() => handleDemoLogin('super_admin')}>
+              👁️ Super Admin
             </button>
           </div>
         </div>
