@@ -27,7 +27,9 @@ interface CacheEntry<T> {
     timestamp: number;
 }
 
-const CACHE_TTL_MS = 15 * 1000; // 15s cache for fast live price updates
+const CANDLE_CACHE_TTL_MS = 120 * 1000; // 2 minutes global cache for historical candles
+const PRICE_CACHE_TTL_MS = 10 * 1000;  // 10s cache for fast live price updates
+
 const candleCache = new Map<string, CacheEntry<Candle[]>>();
 const priceCache = new Map<string, CacheEntry<number>>();
 
@@ -42,16 +44,18 @@ export async function getLiveCandles(
         return [];
     }
 
-    const cacheKey = `${instrument}_${timeframe}_${count}`;
+    // Shared global cache key across ALL users and request counts
+    const cacheKey = `${instrument}_${timeframe}`;
     const cached = candleCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        return cached.data;
+    if (cached && Date.now() - cached.timestamp < CANDLE_CACHE_TTL_MS && cached.data.length > 0) {
+        // Return slice matching requested count directly from memory (0ms latency, 0 Yahoo calls)
+        return cached.data.slice(-count);
     }
 
     try {
         const now = new Date();
-        // Use sufficient lookback days to span weekend & holiday market gaps
-        const lookbackDays = timeframe === '1m' ? 5 : (timeframe === '5m' || timeframe === '15m') ? 7 : 30;
+        // Maximum safe historical lookback per timeframe without exceeding Yahoo limits or rate limits
+        const lookbackDays = timeframe === '1m' ? 6 : (timeframe === '5m' || timeframe === '15m') ? 45 : timeframe === '1h' ? 120 : timeframe === '4h' ? 365 : 1825;
         const period1 = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
         const interval = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe) as any;
 
@@ -63,7 +67,6 @@ export async function getLiveCandles(
         if (chartResult && chartResult.quotes && chartResult.quotes.length > 0) {
             const candles: Candle[] = chartResult.quotes
                 .filter((q: any) => q.open !== null && q.close !== null && q.high !== null && q.low !== null)
-                .slice(-count)
                 .map((q: any) => ({
                     open: Number(q.open.toFixed(5)),
                     high: Number(q.high.toFixed(5)),
@@ -74,15 +77,16 @@ export async function getLiveCandles(
                 }));
 
             if (candles.length > 0) {
+                // Store full historical array in global memory cache
                 candleCache.set(cacheKey, { data: candles, timestamp: Date.now() });
                 
-                // Also update price cache with latest close
+                // Update price cache with latest close
                 const lastCandle = candles[candles.length - 1];
                 if (lastCandle && lastCandle.close > 0) {
                     priceCache.set(instrument, { data: lastCandle.close, timestamp: Date.now() });
                 }
 
-                return candles;
+                return candles.slice(-count);
             }
         }
 
@@ -90,6 +94,10 @@ export async function getLiveCandles(
         return [];
     } catch (err: any) {
         logger.error({ instrument, yahooSymbol, message: err.message }, 'Failed to fetch live candles from Yahoo');
+        // Return stale cached data if available to prevent user disruption on transient network glitches
+        if (cached && cached.data.length > 0) {
+            return cached.data.slice(-count);
+        }
         return [];
     }
 }
@@ -99,7 +107,7 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     if (!yahooSymbol) return 0;
 
     const cached = priceCache.get(instrument);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
         return cached.data;
     }
 
