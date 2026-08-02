@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { createChart, ColorType, LineStyle, CandlestickSeries, type IChartApi } from 'lightweight-charts';
+import { createChart, ColorType, LineStyle, CrosshairMode, CandlestickSeries, type IChartApi } from 'lightweight-charts';
 import type { EdgeSetup } from '../types';
 import { API_BASE } from '../config';
 import './SetupChartModal.css';
@@ -103,6 +103,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const levelsRef = useRef<number[]>([]);
+  levelsRef.current = [
+    entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+    activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist
+  ].filter((p): p is number => typeof p === 'number' && p > 0);
+
   // 1. Initialize Chart Canvas ONCE on mount
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -114,19 +120,31 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#140926' },
-        textColor: '#e0d6f5',
-        fontFamily: 'JetBrains Mono, monospace',
+        background: { type: ColorType.Solid, color: '#090314' },
+        textColor: '#e056fd',
+        fontSize: 12,
+        fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: 'rgba(224, 86, 253, 0.05)' },
-        horzLines: { color: 'rgba(224, 86, 253, 0.05)' },
+        vertLines: { color: 'rgba(224, 86, 253, 0.06)' },
+        horzLines: { color: 'rgba(224, 86, 253, 0.06)' },
       },
       width: container.clientWidth,
       height: containerHeight,
       crosshair: {
-        vertLine: { color: '#e056fd', width: 1, style: LineStyle.Dashed },
-        horzLine: { color: '#e056fd', width: 1, style: LineStyle.Dashed },
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          color: '#e056fd',
+          width: 1,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: '#e056fd',
+        },
+        horzLine: {
+          color: '#e056fd',
+          width: 1,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: '#e056fd',
+        },
       },
       rightPriceScale: {
         borderColor: 'rgba(224, 86, 253, 0.2)',
@@ -152,18 +170,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         let min = res?.priceRange?.minValue;
         let max = res?.priceRange?.maxValue;
 
-        const levelsToInclude: number[] = [
-          entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
-          activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist
-        ].filter((p): p is number => typeof p === 'number' && p > 0);
-
-        for (const p of levelsToInclude) {
+        for (const p of levelsRef.current) {
           if (min === undefined || p < min) min = p;
           if (max === undefined || p > max) max = p;
         }
 
         if (min !== undefined && max !== undefined) {
-          const margin = (max - min) * 0.05;
+          const margin = (max - min) * 0.08;
           min -= margin;
           max += margin;
         }
@@ -438,59 +451,63 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     // 1. Draw 1H HTF Demand & Supply Curve Zones for Manna SnD
     if (isMannaSnd) {
       if (activeDemandProx > 0 && activeDemandDist > 0) {
-        const y1 = getY(activeDemandProx);
-        const y2 = getY(activeDemandDist);
+        const rawY1 = series.priceToCoordinate(activeDemandProx);
+        const rawY2 = series.priceToCoordinate(activeDemandDist);
 
-        if (y1 !== null && y2 !== null) {
-          const topY = Math.min(y1, y2);
-          const boxHeight = Math.max(3, Math.abs(y2 - y1));
-          const startX = getX(activeDemandTime);
-          const boxWidth = width - startX;
+        const y1 = rawY1 !== null ? rawY1 : height - 20;
+        const y2 = rawY2 !== null ? rawY2 : height - 5;
 
-          ctx.save();
-          ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
-          ctx.strokeStyle = '#00e676';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([4, 4]);
+        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
+        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
+        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
+        const startX = getX(activeDemandTime);
+        const boxWidth = width - startX;
 
-          ctx.fillRect(startX, topY, boxWidth, boxHeight);
-          ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
+        ctx.strokeStyle = '#00e676';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
 
-          ctx.fillStyle = '#00e676';
-          ctx.font = 'bold 11px monospace';
-          const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
-          const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
-          ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
-          ctx.restore();
-        }
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+        ctx.fillStyle = '#00e676';
+        ctx.font = 'bold 11px monospace';
+        const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
+        const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
+        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(14, boxHeight / 2 + 4));
+        ctx.restore();
       }
 
       if (activeSupplyProx > 0 && activeSupplyDist > 0) {
-        const y1 = getY(activeSupplyProx);
-        const y2 = getY(activeSupplyDist);
+        const rawY1 = series.priceToCoordinate(activeSupplyProx);
+        const rawY2 = series.priceToCoordinate(activeSupplyDist);
 
-        if (y1 !== null && y2 !== null) {
-          const topY = Math.min(y1, y2);
-          const boxHeight = Math.max(3, Math.abs(y2 - y1));
-          const startX = getX(activeSupplyTime);
-          const boxWidth = width - startX;
+        const y1 = rawY1 !== null ? rawY1 : 5;
+        const y2 = rawY2 !== null ? rawY2 : 20;
 
-          ctx.save();
-          ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
-          ctx.strokeStyle = '#ff1744';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([4, 4]);
+        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
+        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
+        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
+        const startX = getX(activeSupplyTime);
+        const boxWidth = width - startX;
 
-          ctx.fillRect(startX, topY, boxWidth, boxHeight);
-          ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
+        ctx.strokeStyle = '#ff1744';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
 
-          ctx.fillStyle = '#ff1744';
-          ctx.font = 'bold 11px monospace';
-          const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
-          const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
-          ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
-          ctx.restore();
-        }
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+
+        ctx.fillStyle = '#ff1744';
+        ctx.font = 'bold 11px monospace';
+        const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
+        const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
+        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(14, boxHeight / 2 + 4));
+        ctx.restore();
       }
     }
 
