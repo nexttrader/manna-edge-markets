@@ -27,64 +27,63 @@ function generateRandomWalk(startPrice: number, count: number, volatility: numbe
     return prices;
 }
 
-export function generateCandles(instrument: string, count: number, timeframeMinutes: number): Candle[] {
-    const base = basePrices[instrument] || 100;
+export function generateCandles(instrument: string, count: number, timeframeMinutes: number, anchorPrice?: number): Candle[] {
+    const base = anchorPrice && anchorPrice > 0 ? anchorPrice : (basePrices[instrument] || 100);
     const isForex = FOREX_INSTRUMENTS.includes(instrument);
     
     // Set appropriate volatility based on instrument type and price magnitude
-    const volatility = isForex ? (base * 0.001) : (base * 0.002);
+    const volatility = isForex ? (base * 0.0008) : (base * 0.0015);
     
     const now = new Date();
-    const candles: Candle[] = [];
+    const tempCandles: Candle[] = [];
     
+    // Generate backwards from anchorPrice so the newest candle lands EXACTLY on anchorPrice
     let currentPrice = base;
     
-    for (let i = count - 1; i >= 0; i--) {
+    for (let i = 0; i < count; i++) {
         const time = new Date(now.getTime() - (i * timeframeMinutes * 60 * 1000));
         
-        let open = currentPrice;
-        let close: number;
+        let close = currentPrice;
+        let open: number;
         let high: number;
         let low: number;
 
-        // Periodically insert clean consolidation base candles & leg departures (every ~12-16 candles)
         const cycle = i % 15;
         if (cycle === 5 || cycle === 6) {
           // Base candle (tight body <= 40% of range)
-          const range = volatility * (0.6 + Math.random() * 0.4);
+          const range = volatility * (0.5 + Math.random() * 0.4);
           const body = range * (0.1 + Math.random() * 0.25);
           const isUp = Math.random() > 0.5;
-          close = isUp ? open + body : open - body;
+          open = isUp ? close - body : close + body;
           const wickUpper = (range - body) * (0.3 + Math.random() * 0.4);
           high = Math.max(open, close) + wickUpper;
           low = Math.min(open, close) - (range - body - wickUpper);
         } else if (cycle === 4) {
           // Strong leg candle preceding base
           const isLegUp = (i % 30) < 15;
-          const range = volatility * (1.2 + Math.random() * 0.6);
+          const range = volatility * (1.2 + Math.random() * 0.5);
           const body = range * (0.7 + Math.random() * 0.2);
-          close = isLegUp ? open + body : open - body;
+          open = isLegUp ? close - body : close + body;
           high = Math.max(open, close) + (range - body) * 0.5;
           low = Math.min(open, close) - (range - body) * 0.5;
         } else if (cycle === 7) {
           // Strong leg departure candle following base
           const isLegUp = (i % 30) < 15;
-          const range = volatility * (1.3 + Math.random() * 0.7);
+          const range = volatility * (1.3 + Math.random() * 0.6);
           const body = range * (0.75 + Math.random() * 0.2);
-          close = isLegUp ? open + body : open - body;
+          open = isLegUp ? close - body : close + body;
           high = Math.max(open, close) + (range - body) * 0.5;
           low = Math.min(open, close) - (range - body) * 0.5;
         } else {
           // Normal random walk candle
-          const closeChange = (Math.random() - 0.5) * volatility;
-          close = open + closeChange;
+          const openChange = (Math.random() - 0.5) * volatility;
+          open = close + openChange;
           const highMargin = Math.random() * (volatility / 2);
           const lowMargin = Math.random() * (volatility / 2);
           high = Math.max(open, close) + highMargin;
           low = Math.min(open, close) - lowMargin;
         }
-        
-        // Volume varies by time of day roughly (higher in NY/London)
+
         const hour = time.getUTCHours();
         let volumeMultiplier = 1;
         if (hour >= 13 && hour <= 20) volumeMultiplier = 2.5; // NY
@@ -92,20 +91,20 @@ export function generateCandles(instrument: string, count: number, timeframeMinu
         
         const baseVol = isForex ? 10000 : 50000;
         const volume = Math.floor(baseVol * volumeMultiplier * (0.8 + Math.random() * 0.4));
-        
-        candles.push({
-            open: Number(open.toFixed(5)),
-            high: Number(high.toFixed(5)),
-            low: Number(low.toFixed(5)),
-            close: Number(close.toFixed(5)),
-            volume,
-            timestamp: time.toISOString()
+
+        tempCandles.push({
+          open: Number(open.toFixed(5)),
+          high: Number(high.toFixed(5)),
+          low: Number(low.toFixed(5)),
+          close: Number(close.toFixed(5)),
+          volume,
+          timestamp: time.toISOString()
         });
-        
-        currentPrice = close;
+
+        currentPrice = open;
     }
-    
-    return candles;
+
+    return tempCandles.reverse();
 }
 
 export function getCurrentPrice(instrument: string): number {

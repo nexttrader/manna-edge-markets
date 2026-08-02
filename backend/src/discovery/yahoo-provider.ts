@@ -126,5 +126,6 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
 
 function getFallbackCandles(instrument: string, timeframe: '1m' | '5m' | '15m' | '1h' | '4h' | '1d', count: number): Candle[] {
     const tfMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : timeframe === '15m' ? 15 : timeframe === '1h' ? 60 : timeframe === '4h' ? 240 : 1440;
-    return generateCandles(instrument, count, tfMinutes);
+    const currentPrice = priceCache.get(instrument)?.data || getMockCurrentPrice(instrument);
+    return generateCandles(instrument, count, tfMinutes, currentPrice);
 }
