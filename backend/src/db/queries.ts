@@ -243,13 +243,41 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 // ── Strategy Settings ──
 
-export async function getStrategySettings(): Promise<{ id: string, name: string, enabled: boolean }[]> {
-    const rows = await queryDb<{ id: string, name: string, enabled: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
-    return rows.map(r => ({ id: r.id, name: r.name, enabled: Boolean(r.enabled) }));
+export async function getStrategySettings(role?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean }[]> {
+    try {
+        const rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+        const mapped = rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            enabled: Boolean(r.enabled),
+            visibleToAdmins: r.visible_to_admins !== undefined ? Boolean(r.visible_to_admins) : true
+        }));
+
+        if (role !== 'super_admin') {
+            return mapped.filter(s => s.visibleToAdmins);
+        }
+        return mapped;
+    } catch {
+        return [
+            { id: 'manna_basic', name: 'Manna Basic', enabled: true, visibleToAdmins: true },
+            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true }
+        ];
+    }
 }
 
 export async function updateStrategyEnabled(id: string, enabled: boolean): Promise<void> {
     const val = enabled ? 1 : 0;
     await queryDb(`UPDATE strategy_settings SET enabled = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
+}
+
+export async function updateStrategyVisibility(id: string, visibleToAdmins: boolean): Promise<void> {
+    const val = visibleToAdmins ? 1 : 0;
+    try {
+        await queryDb(`UPDATE strategy_settings SET visible_to_admins = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
+    } catch {}
+}
+
+export async function deleteStrategy(id: string): Promise<void> {
+    await queryDb(`DELETE FROM strategy_settings WHERE id = ?`, [id]);
 }
 

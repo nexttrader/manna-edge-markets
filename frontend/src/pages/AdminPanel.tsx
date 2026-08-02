@@ -20,6 +20,9 @@ export const AdminPanel: React.FC = () => {
   const { setups: activeSetupsList, refetch: refetchActiveSetups } = useSetups();
 
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [holdingList, setHoldingList] = useState<any[]>([]);
+  const [userSubTab, setUserSubTab] = useState<'active' | 'holding'>('active');
+  const [selectedUserProfile, setSelectedUserProfile] = useState<any | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -29,14 +32,25 @@ export const AdminPanel: React.FC = () => {
     } catch {}
   };
 
+  const fetchHoldingUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/holding`);
+      const data = await res.json();
+      if (data.holding) setHoldingList(data.holding);
+    } catch {}
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchHoldingUsers();
   }, []);
 
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserTier, setNewUserTier] = useState<'free' | 'forex_only' | 'futures_forex'>('free');
+  const [newPrefMarket, setNewPrefMarket] = useState<'Futures' | 'Forex' | 'Both'>('Both');
+  const [newRiskLimit, setNewRiskLimit] = useState<'1%' | '2%' | '5%'>('1%');
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +62,7 @@ export const AdminPanel: React.FC = () => {
       const res = await fetch(`${API_BASE}/api/admin/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newUserName, email: newUserEmail, tier: newUserTier })
+        body: JSON.stringify({ name: newUserName, email: newUserEmail, tier: newUserTier, preferredMarket: newPrefMarket, riskLimit: newRiskLimit })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
@@ -59,6 +73,34 @@ export const AdminPanel: React.FC = () => {
       setNewUserEmail('');
       setNewUserTier('free');
       alert(`✅ Account for "${newUserName}" created successfully!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
+  const handleSoftDeleteUser = async (userId: string, userName: string) => {
+    const confirmed = window.confirm(`⚠️ SOFT-DELETE USER CONFIRMATION:\n\nAre you sure you want to delete ${userName}?\n\nThe user will be moved to the 30-Day Holding Zone / Recycle Bin before permanent deletion.\n\nNote: A new user with the SAME details can be created immediately in the meantime!`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+      if (data.users) setUsersList(data.users);
+      if (data.holding) setHoldingList(data.holding);
+      alert(`🗑️ Account for "${userName}" moved to 30-Day Holding Zone.`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
+  const handleRestoreUser = async (userId: string, userName: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/restore`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to restore user');
+      if (data.users) setUsersList(data.users);
+      if (data.holding) setHoldingList(data.holding);
+      alert(`♻️ Account for "${userName}" restored to Active Users!`);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     }
@@ -399,6 +441,32 @@ export const AdminPanel: React.FC = () => {
                     <option value="futures_forex">🟡 Futures &amp; Forex Tier (All Futures + Forex)</option>
                   </select>
                 </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Preferred Market Focus</label>
+                  <select
+                    value={newPrefMarket}
+                    onChange={e => setNewPrefMarket(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  >
+                    <option value="Both">Both (Futures &amp; Forex)</option>
+                    <option value="Futures">Futures Only</option>
+                    <option value="Forex">Forex Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Risk Preference</label>
+                  <select
+                    value={newRiskLimit}
+                    onChange={e => setNewRiskLimit(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  >
+                    <option value="1%">1% Max Risk per Trade</option>
+                    <option value="2%">2% Max Risk per Trade</option>
+                    <option value="5%">5% Max Risk per Trade</option>
+                  </select>
+                </div>
               </div>
 
               <button
@@ -426,75 +494,290 @@ export const AdminPanel: React.FC = () => {
             </div>
           )}
 
-          <div className="table-responsive">
-            <table className="runs-table">
-              <thead>
-                <tr>
-                  <th>User Display Name</th>
-                  <th>Institutional Email</th>
-                  <th>Account Role</th>
-                  <th>Subscription Tier</th>
-                  <th>Market Access</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usersList.map((u: any) => (
-                  <tr key={u.id || u.email}>
-                    <td>
-                      <strong>{u.name}</strong>
-                    </td>
-                    <td className="font-mono">{u.email}</td>
-                    <td>
-                      <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255,171,0,0.2)' : 'rgba(0,229,255,0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
-                        {(u.role || 'trader').toUpperCase()}
-                      </span>
-                    </td>
-                    <td>
-                      <select
-                        value={u.tier || 'free'}
-                        onChange={e => handleUpdateTier(u.id || u.email, e.target.value as any)}
-                        style={{
-                          background: 'rgba(9, 3, 20, 0.8)',
-                          border: `1px solid ${u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#888'}`,
-                          color: u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#ccc',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontWeight: 700,
-                          fontSize: '0.8rem'
-                        }}
-                      >
-                        <option value="free">Free Tier</option>
-                        <option value="forex_only">Forex Only</option>
-                        <option value="futures_forex">Futures &amp; Forex</option>
-                      </select>
-                    </td>
-                    <td className="font-mono text-gold">{(u.marketAccess || 'all').toUpperCase()}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="font-mono"
-                        style={{
-                          background: 'rgba(255, 171, 0, 0.2)',
-                          border: '1px solid #ffab00',
-                          color: '#ffab00',
-                          padding: '5px 12px',
-                          borderRadius: '4px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          fontSize: '0.8rem'
-                        }}
-                        onClick={() => handleImpersonateUser(u)}
-                      >
-                        🥸 Impersonate Account
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Sub-tab navigation for Active Users vs 30-Day Holding Zone */}
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              className="font-mono"
+              style={{
+                padding: '6px 14px',
+                borderRadius: '4px',
+                border: userSubTab === 'active' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
+                background: userSubTab === 'active' ? 'rgba(255, 171, 0, 0.2)' : 'transparent',
+                color: userSubTab === 'active' ? '#ffab00' : '#888',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '0.82rem'
+              }}
+              onClick={() => setUserSubTab('active')}
+            >
+              👥 Active Accounts ({usersList.length})
+            </button>
+
+            <button
+              type="button"
+              className="font-mono"
+              style={{
+                padding: '6px 14px',
+                borderRadius: '4px',
+                border: userSubTab === 'holding' ? '1px solid #ff1744' : '1px solid rgba(255,255,255,0.1)',
+                background: userSubTab === 'holding' ? 'rgba(255, 23, 68, 0.2)' : 'transparent',
+                color: userSubTab === 'holding' ? '#ff1744' : '#888',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '0.82rem'
+              }}
+              onClick={() => setUserSubTab('holding')}
+            >
+              🗑️ 30-Day Holding Zone / Recycle Bin ({holdingList.length})
+            </button>
           </div>
+
+          {userSubTab === 'active' ? (
+            <div className="table-responsive">
+              <table className="runs-table">
+                <thead>
+                  <tr>
+                    <th>User Display Name</th>
+                    <th>Institutional Email</th>
+                    <th>Account Role</th>
+                    <th>Subscription Tier</th>
+                    <th>Market Focus</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersList.map((u: any) => (
+                    <tr key={u.id || u.email}>
+                      <td>
+                        <button
+                          type="button"
+                          style={{ background: 'none', border: 'none', color: '#ffab00', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline' }}
+                          onClick={() => setSelectedUserProfile(u)}
+                        >
+                          {u.name}
+                        </button>
+                      </td>
+                      <td className="font-mono">{u.email}</td>
+                      <td>
+                        <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255,171,0,0.2)' : 'rgba(0,229,255,0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
+                          {(u.role || 'trader').toUpperCase()}
+                        </span>
+                      </td>
+                      <td>
+                        <select
+                          value={u.tier || 'free'}
+                          onChange={e => handleUpdateTier(u.id || u.email, e.target.value as any)}
+                          style={{
+                            background: 'rgba(9, 3, 20, 0.8)',
+                            border: `1px solid ${u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#888'}`,
+                            color: u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#ccc',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            fontSize: '0.8rem'
+                          }}
+                        >
+                          <option value="free">Free Tier</option>
+                          <option value="forex_only">Forex Only</option>
+                          <option value="futures_forex">Futures &amp; Forex</option>
+                        </select>
+                      </td>
+                      <td className="font-mono text-gold">{u.preferredMarket || 'Both'}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(255, 171, 0, 0.2)',
+                              border: '1px solid #ffab00',
+                              color: '#ffab00',
+                              padding: '5px 10px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.78rem'
+                            }}
+                            onClick={() => handleImpersonateUser(u)}
+                          >
+                            🥸 Impersonate
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(255, 23, 68, 0.15)',
+                              border: '1px solid #ff1744',
+                              color: '#ff1744',
+                              padding: '5px 10px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.78rem'
+                            }}
+                            onClick={() => handleSoftDeleteUser(u.id || u.email, u.name)}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="runs-table">
+                <thead>
+                  <tr>
+                    <th>Display Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Date Deleted</th>
+                    <th>Days Remaining until Purge</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdingList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', color: '#888', padding: '24px' }}>
+                        No soft-deleted users in the holding zone.
+                      </td>
+                    </tr>
+                  ) : (
+                    holdingList.map((u: any) => (
+                      <tr key={u.id || u.email}>
+                        <td><strong>{u.name}</strong></td>
+                        <td className="font-mono">{u.email}</td>
+                        <td>
+                          <span className="market-tag font-mono" style={{ background: 'rgba(255,23,68,0.2)', color: '#ff1744' }}>
+                            PENDING DELETION
+                          </span>
+                        </td>
+                        <td className="font-mono">{formatETTime(u.deletedAt)}</td>
+                        <td className="font-mono" style={{ color: '#ff1744', fontWeight: 900 }}>
+                          {u.daysRemaining ?? 30} days remaining
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(0, 230, 118, 0.2)',
+                              border: '1px solid #00e676',
+                              color: '#00e676',
+                              padding: '5px 12px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => handleRestoreUser(u.id || u.email, u.name)}
+                          >
+                            ♻️ Restore Account
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+        )}
+
+        {/* Rich User Profile Modal */}
+        {selectedUserProfile && (
+          <div className="modal-overlay font-mono" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(6,2,12,0.9)', backdropFilter: 'blur(10px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div className="glass-card" style={{ background: '#0f0620', border: '1px solid #ffab00', borderRadius: '12px', padding: '24px', maxWidth: '520px', width: '100%', color: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, color: '#ffab00', fontSize: '1.2rem' }}>👤 Full User Profile — {selectedUserProfile.name}</h3>
+                <button type="button" style={{ background: 'none', border: 'none', color: '#aaa', fontSize: '1.2rem', cursor: 'pointer' }} onClick={() => setSelectedUserProfile(null)}>✖</button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px', fontSize: '0.85rem' }}>
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Display Name:</span>
+                  <strong style={{ fontSize: '1rem', color: '#fff' }}>{selectedUserProfile.name}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Institutional Email:</span>
+                  <strong style={{ color: '#00e5ff' }}>{selectedUserProfile.email}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Account Privilege / Role:</span>
+                  <span className="market-tag font-mono" style={{ background: selectedUserProfile.role === 'admin' ? 'rgba(255,171,0,0.2)' : 'rgba(0,229,255,0.2)', color: selectedUserProfile.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
+                    {(selectedUserProfile.role || 'trader').toUpperCase()}
+                  </span>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Subscription Access Tier:</span>
+                  <strong style={{ color: '#ffd700' }}>{(selectedUserProfile.tier || 'free').toUpperCase()}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Preferred Market Focus:</span>
+                  <strong>{selectedUserProfile.preferredMarket || 'Both'}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Risk Limit Preference:</span>
+                  <strong>{selectedUserProfile.riskLimit || '1%'}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Signals Viewed:</span>
+                  <strong>{selectedUserProfile.signalsViewed || 0} setups</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Watchlist Size:</span>
+                  <strong>{selectedUserProfile.watchlistCount || 0} setups</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Date Joined / Created:</span>
+                  <strong>{formatETTime(selectedUserProfile.createdAt)}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: '#aaa', display: 'block' }}>Account Status:</span>
+                  <strong style={{ color: selectedUserProfile.status === 'active' ? '#00e676' : '#ff1744' }}>
+                    {(selectedUserProfile.status || 'active').toUpperCase()}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '8px 16px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer' }}
+                  onClick={() => {
+                    const u = selectedUserProfile;
+                    setSelectedUserProfile(null);
+                    handleImpersonateUser(u);
+                  }}
+                >
+                  🥸 Impersonate Account
+                </button>
+                <button
+                  type="button"
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#ccc', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={() => setSelectedUserProfile(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* TAB 2: Strategy Engine & Manual Scans */}

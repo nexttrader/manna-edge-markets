@@ -168,4 +168,41 @@ router.post('/users', (req: Request, res: Response) => {
   }
 });
 
+// 4. SUPER ADMIN STRATEGY VISIBILITY & DELETION ENDPOINTS
+router.get('/strategies/status', async (_req: Request, res: Response) => {
+  try {
+    const strategies = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch strategies', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/visibility', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { visibleToAdmins } = req.body || {};
+
+    await queries.updateStrategyVisibility(strategyId, Boolean(visibleToAdmins));
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update strategy visibility', details: err.message });
+  }
+});
+
+router.delete('/strategies/:id', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+
+    await queries.deleteStrategy(strategyId);
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, message: `Strategy ${strategyId} deleted permanently`, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to delete strategy', details: err.message });
+  }
+});
+
 export default router;

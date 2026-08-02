@@ -14,14 +14,14 @@ const router = express.Router();
 
 router.get('/strategies/status', async (_req: Request, res: Response) => {
   try {
-    const strategies = await queries.getStrategySettings();
+    const strategies = await queries.getStrategySettings('admin');
     res.json({ strategies });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch strategy status', details: String(error) });
   }
 });
 
-import { getAllUsers, addUser, updateUserTier } from '../db/user-store';
+import { getAllUsers, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers } from '../db/user-store';
 
 // User Accounts Management Endpoints
 router.get('/users', (_req: Request, res: Response) => {
@@ -29,9 +29,14 @@ router.get('/users', (_req: Request, res: Response) => {
   res.json({ success: true, users });
 });
 
+router.get('/users/holding', (_req: Request, res: Response) => {
+  const holding = getHoldingZoneUsers();
+  res.json({ success: true, holding });
+});
+
 router.post('/users', (req: Request, res: Response) => {
   try {
-    const { name, email, tier = 'free' } = req.body || {};
+    const { name, email, tier = 'free', preferredMarket, riskLimit } = req.body || {};
     if (!name || !email) {
       return res.status(400).json({ error: 'Name and email are required' });
     }
@@ -41,7 +46,9 @@ router.post('/users', (req: Request, res: Response) => {
       name,
       email,
       role: 'trader',
-      tier
+      tier,
+      preferredMarket,
+      riskLimit
     });
 
     res.json({ success: true, user: newUser, users: getAllUsers() });
@@ -68,6 +75,38 @@ router.put('/users/:id/tier', (req: Request, res: Response) => {
     res.json({ success: true, user: updated, users: getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user tier', details: err.message });
+  }
+});
+
+router.delete('/users/:id', (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const userId = Array.isArray(rawId) ? rawId[0] : rawId;
+
+    const result = softDeleteUser(userId);
+    if (!result.success) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'User moved to 30-day holding zone', users: getAllUsers(), holding: getHoldingZoneUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to delete user', details: err.message });
+  }
+});
+
+router.post('/users/:id/restore', (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const userId = Array.isArray(rawId) ? rawId[0] : rawId;
+
+    const result = restoreUser(userId);
+    if (!result.success) {
+      return res.status(404).json({ error: 'User not found in holding zone' });
+    }
+
+    res.json({ success: true, message: 'User restored from holding zone', users: getAllUsers(), holding: getHoldingZoneUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to restore user', details: err.message });
   }
 });
 

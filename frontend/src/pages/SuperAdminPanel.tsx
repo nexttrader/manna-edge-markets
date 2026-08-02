@@ -14,8 +14,49 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'admin_audit' | 'metrics' | 'health'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'strategies' | 'admin_audit' | 'metrics' | 'health'>('roster');
   const [data, setData] = useState<any>(null);
+  const [strategiesList, setStrategiesList] = useState<any[]>([]);
+
+  const fetchSuperStrategies = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/status`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.strategies) setStrategiesList(json.strategies);
+      }
+    } catch {}
+  };
+
+  const handleToggleStrategyVisibility = async (strategyId: string, currentVisible: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/visibility`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibleToAdmins: !currentVisible })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to update visibility');
+      if (resData.strategies) setStrategiesList(resData.strategies);
+      alert(`👁️ Strategy "${strategyId}" visibility updated!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
+  const handleDeleteStrategy = async (strategyId: string, name: string) => {
+    const confirmed = window.confirm(`⚠️ SUPER ADMIN PERMANENT DELETION:\n\nAre you sure you want to PERMANENTLY DELETE strategy "${name}" (${strategyId})?\n\nRegular admins will lose all access to this strategy.`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}`, { method: 'DELETE' });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to delete strategy');
+      if (resData.strategies) setStrategiesList(resData.strategies);
+      alert(`🗑️ Strategy "${name}" deleted permanently.`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
@@ -69,6 +110,7 @@ export const SuperAdminPanel: React.FC = () => {
 
   useEffect(() => {
     fetchSuperAdminData();
+    fetchSuperStrategies();
     const interval = setInterval(fetchSuperAdminData, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -169,6 +211,19 @@ export const SuperAdminPanel: React.FC = () => {
             onClick={() => setActiveTab('roster')}
           >
             👥 User &amp; Admin Live Roster ({roster.length})
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'strategies' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'strategies' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+              color: activeTab === 'strategies' ? '#00e5ff' : '#ccc'
+            }}
+            onClick={() => setActiveTab('strategies')}
+          >
+            ⚙️ Strategy Governance ({strategiesList.length})
           </button>
 
           <button
@@ -345,6 +400,91 @@ export const SuperAdminPanel: React.FC = () => {
                         >
                           🥸 Super-Impersonate
                         </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Strategy Governance & Visibility (Super Admin Only) */}
+        {activeTab === 'strategies' && (
+          <div className="super-card font-mono">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#00e5ff' }}>⚙️ Strategy Access, Visibility &amp; Deletion Governance</h2>
+                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
+                  Super Admin Exclusive: Controls which strategies regular Admins can see/toggle, and permanently delete strategies.
+                </span>
+              </div>
+            </div>
+
+            <div className="table-responsive">
+              <table className="runs-table">
+                <thead>
+                  <tr>
+                    <th>Strategy ID &amp; Name</th>
+                    <th>Execution Status</th>
+                    <th>Admin Visibility Status</th>
+                    <th>Governance Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {strategiesList.map((strat: any) => (
+                    <tr key={strat.id}>
+                      <td>
+                        <strong>{strat.name}</strong> <span style={{ color: '#aaa', fontSize: '0.8rem' }}>({strat.id})</span>
+                      </td>
+                      <td>
+                        <span className="market-tag font-mono" style={{ background: strat.enabled ? 'rgba(0, 230, 118, 0.2)' : 'rgba(255, 23, 68, 0.2)', color: strat.enabled ? '#00e676' : '#ff1744' }}>
+                          {strat.enabled ? '🟢 ENABLED' : '🔴 DISABLED'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="market-tag font-mono" style={{ background: strat.visibleToAdmins ? 'rgba(0, 229, 255, 0.2)' : 'rgba(255, 171, 0, 0.2)', color: strat.visibleToAdmins ? '#00e5ff' : '#ffab00' }}>
+                          {strat.visibleToAdmins ? '👁️ VISIBLE TO ADMINS' : '🙈 HIDDEN FROM ADMINS'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: strat.visibleToAdmins ? 'rgba(255, 171, 0, 0.15)' : 'rgba(0, 229, 255, 0.15)',
+                              border: `1px solid ${strat.visibleToAdmins ? '#ffab00' : '#00e5ff'}`,
+                              color: strat.visibleToAdmins ? '#ffab00' : '#00e5ff',
+                              padding: '5px 12px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => handleToggleStrategyVisibility(strat.id, strat.visibleToAdmins)}
+                          >
+                            {strat.visibleToAdmins ? '🙈 Hide from Admins' : '👁️ Make Visible to Admins'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(255, 23, 68, 0.2)',
+                              border: '1px solid #ff1744',
+                              color: '#ff1744',
+                              padding: '5px 12px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => handleDeleteStrategy(strat.id, strat.name)}
+                          >
+                            🗑️ Delete Strategy Permanently
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
