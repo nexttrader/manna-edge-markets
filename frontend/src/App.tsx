@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { HomePage } from './pages/HomePage';
 import { Dashboard } from './pages/Dashboard';
 import { LoginPage } from './pages/LoginPage';
@@ -8,6 +8,7 @@ import { SuperAdminPanel } from './pages/SuperAdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
 import { useAuth } from './context/AuthContext';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
+import { MasterPasscodeModal } from './components/MasterPasscodeModal';
 import { telemetryTracker } from './services/telemetryTracker';
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
@@ -26,25 +27,53 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
 
 function ProtectedSuperAdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isImpersonating, originalAdmin } = useAuth();
+  const navigate = useNavigate();
+
   if (isImpersonating && originalAdmin?.role === 'super_admin') {
     return <>{children}</>;
   }
-  if (!user || user.role !== 'super_admin') {
-    return <Navigate to="/dashboard" replace />;
+
+  if (user && user.role === 'super_admin') {
+    return <>{children}</>;
   }
-  return <>{children}</>;
+
+  return (
+    <MasterPasscodeModal
+      onSuccess={() => {}}
+      onCancel={() => navigate('/dashboard')}
+    />
+  );
 }
 
 function App() {
   const location = useLocation();
+  const [showSecretModal, setShowSecretModal] = useState(false);
 
   useEffect(() => {
     telemetryTracker.trackPageView(location.pathname);
   }, [location.pathname]);
 
+  // Global Secret Shortcut: Ctrl + Shift + K (or Cmd + Shift + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSecretModal(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <>
       <ImpersonationBanner />
+      {showSecretModal && (
+        <MasterPasscodeModal
+          onSuccess={() => setShowSecretModal(false)}
+          onCancel={() => setShowSecretModal(false)}
+        />
+      )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/client" element={<Navigate to="/dashboard" replace />} />
@@ -58,14 +87,16 @@ function App() {
             </ProtectedAdminRoute>
           } 
         />
+        {/* Secret Master Telemetry Desk */}
         <Route 
-          path="/super-admin" 
+          path="/vault-7729" 
           element={
             <ProtectedSuperAdminRoute>
               <SuperAdminPanel />
             </ProtectedSuperAdminRoute>
           } 
         />
+        <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="/setup/:id" element={<SetupDetail />} />
       </Routes>
     </>

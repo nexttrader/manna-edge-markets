@@ -73,9 +73,6 @@ export const LoginPage: React.FC = () => {
             <button className="btn-demo admin font-mono" onClick={() => handleDemoLogin('admin')}>
               ⚙️ Admin Demo
             </button>
-            <button className="btn-demo admin font-mono" style={{ borderColor: '#b388ff', color: '#b388ff' }} onClick={() => handleDemoLogin('super_admin')}>
-              👁️ Super Admin
-            </button>
           </div>
         </div>
 
