@@ -21,7 +21,7 @@ router.get('/strategies/status', async (_req: Request, res: Response) => {
   }
 });
 
-import { getAllUsers, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers, updateUserPassword } from '../db/user-store';
+import { getAllUsers, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers, updateUserPassword, bulkPreloadUsers, completeFirstLoginPasswordSetup } from '../db/user-store';
 
 // User Accounts Management Endpoints
 router.get('/users', (_req: Request, res: Response) => {
@@ -32,6 +32,41 @@ router.get('/users', (_req: Request, res: Response) => {
 router.get('/users/holding', (_req: Request, res: Response) => {
   const holding = getHoldingZoneUsers();
   res.json({ success: true, holding });
+});
+
+router.post('/users/bulk-import', (req: Request, res: Response) => {
+  try {
+    const { rawUsers } = req.body || {};
+    if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
+      return res.status(400).json({ error: 'Please provide an array of users to import' });
+    }
+
+    const result = bulkPreloadUsers(rawUsers);
+    res.json({ success: true, message: `Successfully preloaded ${result.importedCount} user accounts`, importedCount: result.importedCount, users: result.users });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk import users', details: err.message });
+  }
+});
+
+router.post('/first-login-password', (req: Request, res: Response) => {
+  try {
+    const { email, newPassword } = req.body || {};
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: 'Email and new password are required' });
+    }
+    if (newPassword.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+    }
+
+    const result = completeFirstLoginPasswordSetup(email, newPassword);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Failed to complete password setup' });
+    }
+
+    res.json({ success: true, message: 'Password setup completed! Account fully activated.', user: result.user });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to complete password setup', details: err.message });
+  }
 });
 
 router.post('/users', (req: Request, res: Response) => {

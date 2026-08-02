@@ -52,6 +52,68 @@ export const AdminPanel: React.FC = () => {
   const [newPrefMarket, setNewPrefMarket] = useState<'Futures' | 'Forex' | 'Both'>('Both');
   const [newRiskLimit, setNewRiskLimit] = useState<'1%' | '2%' | '5%'>('1%');
 
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [bulkCsvText, setBulkCsvText] = useState('');
+
+  const handleBulkImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkCsvText.trim()) {
+      alert('Please paste CSV or lines of users to import.');
+      return;
+    }
+
+    const lines = bulkCsvText.split('\n').map(l => l.trim()).filter(Boolean);
+    const rawUsers: Array<{ name: string; email: string; tier?: 'free' | 'forex_only' | 'futures_forex' }> = [];
+
+    for (const line of lines) {
+      if (line.toLowerCase().startsWith('name,') || line.toLowerCase().startsWith('email,')) continue;
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length >= 2) {
+        let name = parts[0];
+        let email = parts[1];
+        let tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex';
+
+        if (!name.includes('@') && email.includes('@')) {
+          // Name, Email, Tier
+        } else if (name.includes('@')) {
+          const temp = name;
+          name = email || temp.split('@')[0];
+          email = temp;
+        }
+
+        if (parts[2]) {
+          const t = parts[2].toLowerCase();
+          if (t.includes('free')) tier = 'free';
+          else if (t.includes('forex')) tier = 'forex_only';
+        }
+
+        rawUsers.push({ name, email, tier });
+      }
+    }
+
+    if (rawUsers.length === 0) {
+      alert('Could not parse any valid users. Format: Name, Email, Tier');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/bulk-import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawUsers })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to bulk import users');
+
+      if (data.users) setUsersList(data.users);
+      setShowBulkImportModal(false);
+      setBulkCsvText('');
+      alert(`✅ Preloaded ${data.importedCount} user accounts! All preloaded users will be forced to set their account password on first sign-in.`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName || !newUserEmail) {
@@ -428,7 +490,48 @@ export const AdminPanel: React.FC = () => {
               >
                 {showAddUserModal ? '✖️ Close Form' : '➕ Add Trader Account'}
               </button>
+
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: 'rgba(224, 86, 253, 0.15)',
+                  border: '1px solid #e056fd',
+                  color: '#e056fd',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setShowBulkImportModal(!showBulkImportModal)}
+              >
+                {showBulkImportModal ? '✖️ Close Import' : '📥 Bulk Preload Users (CSV)'}
+              </button>
             </div>
+
+          {showBulkImportModal && (
+            <form onSubmit={handleBulkImport} style={{ background: 'rgba(224, 86, 253, 0.05)', border: '1px solid rgba(224, 86, 253, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: '#e056fd' }}>📥 Bulk Preload User Accounts (From Other Site)</h3>
+              <p style={{ fontSize: '0.8rem', color: '#ccc', margin: '0 0 12px 0' }}>
+                Paste CSV or line-separated user records. Preloaded users can log in using their email and set up their personal password on first sign-in.
+              </p>
+              <textarea
+                rows={5}
+                placeholder={`Name, Email, Access Tier\nJohn Doe, john@example.com, futures_forex\nSarah Jenkins, sarah@example.com, forex_only\nAlex Smith, alex@example.com, free`}
+                value={bulkCsvText}
+                onChange={e => setBulkCsvText(e.target.value)}
+                style={{ width: '100%', padding: '10px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', fontSize: '0.82rem', fontFamily: 'monospace', marginBottom: '12px' }}
+              />
+              <button
+                type="submit"
+                className="font-mono"
+                style={{ background: '#e056fd', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
+              >
+                🚀 Import &amp; Preload Accounts
+              </button>
+            </form>
+          )}
 
           {showAddUserModal && (
             <form onSubmit={handleCreateUser} style={{ background: 'rgba(0, 229, 255, 0.05)', border: '1px solid rgba(0, 229, 255, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>

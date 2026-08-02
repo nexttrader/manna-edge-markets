@@ -7,17 +7,19 @@ export interface User {
   role: 'trader' | 'admin' | 'super_admin';
   tier?: 'free' | 'forex_only' | 'futures_forex';
   marketAccess?: 'all' | 'futures' | 'forex';
+  mustChangePassword?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   originalAdmin: User | null;
   isImpersonating: boolean;
-  login: (email: string, role?: 'trader' | 'admin' | 'super_admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex') => void;
+  login: (email: string, role?: 'trader' | 'admin' | 'super_admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex', mustChangePassword?: boolean) => void;
   logout: () => void;
   elevateToSuperAdmin: () => void;
   impersonateUser: (targetUser: User) => void;
   stopImpersonating: () => void;
+  updateMustChangePassword: (val: boolean) => void;
   isAuthenticated: boolean;
 }
 
@@ -60,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [originalAdmin]);
 
-  const login = (email: string, role: 'trader' | 'admin' | 'super_admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex') => {
+  const login = (email: string, role: 'trader' | 'admin' | 'super_admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex', mustChangePassword: boolean = false) => {
     const defaultName = role === 'super_admin' ? 'Super Administrator (Master)' : role === 'admin' ? 'System Administrator' : 'Institutional Trader';
     const newUser: User = {
       id: `usr_${Date.now()}`,
@@ -68,10 +70,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email,
       role,
       tier: (role === 'admin' || role === 'super_admin') ? 'futures_forex' : tier,
-      marketAccess: tier === 'forex_only' ? 'forex' : 'all'
+      marketAccess: tier === 'forex_only' ? 'forex' : 'all',
+      mustChangePassword
     };
     setOriginalAdmin(null);
     setUser(newUser);
+  };
+
+  const updateMustChangePassword = (val: boolean) => {
+    if (user) {
+      const updated = { ...user, mustChangePassword: val };
+      setUser(updated);
+      localStorage.setItem('manna_user', JSON.stringify(updated));
+    }
   };
 
   const impersonateUser = (targetUser: User) => {
@@ -123,7 +134,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout, 
         elevateToSuperAdmin,
         impersonateUser, 
-        stopImpersonating, 
+        stopImpersonating,
+        updateMustChangePassword,
         isAuthenticated: !!user 
       }}
     >

@@ -9,6 +9,7 @@ import { SetupDetail } from './pages/SetupDetail';
 import { useAuth } from './context/AuthContext';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { MasterPasscodeModal } from './components/MasterPasscodeModal';
+import { FirstLoginPasswordModal } from './components/FirstLoginPasswordModal';
 import { telemetryTracker } from './services/telemetryTracker';
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
@@ -97,6 +98,7 @@ function App() {
   return (
     <>
       <ImpersonationBanner />
+      <FirstLoginPasswordModal />
       {showSecretModal && (
         <MasterPasscodeModal
           onSuccess={() => setShowSecretModal(false)}
