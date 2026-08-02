@@ -21,6 +21,19 @@ router.get('/strategies/status', async (_req: Request, res: Response) => {
   }
 });
 
+// User Accounts & Impersonation Management Endpoint
+router.get('/users', (_req: Request, res: Response) => {
+  const users = [
+    { id: 'usr_alex', name: 'Alex Thompson', email: 'alex.t@propfirm.com', role: 'trader', tier: 'pro', marketAccess: 'all', status: 'active', lastActive: '10 mins ago' },
+    { id: 'usr_sarah', name: 'Sarah Jenkins', email: 's.jenkins@hedgefund.io', role: 'trader', tier: 'institutional', marketAccess: 'futures', status: 'active', lastActive: '2 hours ago' },
+    { id: 'usr_david', name: 'David Chen', email: 'dchen@retailtrader.com', role: 'trader', tier: 'free', marketAccess: 'forex', status: 'active', lastActive: 'Yesterday' },
+    { id: 'usr_marcus', name: 'Marcus Vance', email: 'vance.m@alphaquant.co', role: 'trader', tier: 'pro', marketAccess: 'all', status: 'active', lastActive: '5 mins ago' },
+    { id: 'usr_elena', name: 'Elena Rostova', email: 'elena.r@fintechtraders.eu', role: 'trader', tier: 'institutional', marketAccess: 'all', status: 'active', lastActive: '1 hour ago' },
+    { id: 'usr_demo', name: 'Institutional Trader (Default)', email: 'trader@mannaedge.com', role: 'trader', tier: 'pro', marketAccess: 'all', status: 'active', lastActive: 'Just now' }
+  ];
+  res.json({ success: true, users });
+});
+
 router.post('/strategies/toggle', async (req: Request, res: Response) => {
   try {
     const { strategyId, enabled } = req.body || {};

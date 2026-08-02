@@ -5,12 +5,18 @@ export interface User {
   name: string;
   email: string;
   role: 'trader' | 'admin';
+  tier?: 'free' | 'pro' | 'institutional';
+  marketAccess?: 'all' | 'futures' | 'forex';
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role?: 'trader' | 'admin', name?: string) => void;
+  originalAdmin: User | null;
+  isImpersonating: boolean;
+  login: (email: string, role?: 'trader' | 'admin', name?: string, tier?: 'free' | 'pro' | 'institutional') => void;
   logout: () => void;
+  impersonateUser: (targetUser: User) => void;
+  stopImpersonating: () => void;
   isAuthenticated: boolean;
 }
 
@@ -20,11 +26,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('manna_user');
-      return saved ? JSON.parse(saved) : { id: 'usr_demo', name: 'Institutional Trader', email: 'trader@mannaedge.com', role: 'trader' };
+      return saved ? JSON.parse(saved) : { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'institutional' };
     } catch {
-      return { id: 'usr_demo', name: 'Institutional Trader', email: 'trader@mannaedge.com', role: 'trader' };
+      return { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'institutional' };
     }
   });
+
+  const [originalAdmin, setOriginalAdmin] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('manna_admin_backup');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const isImpersonating = !!originalAdmin;
 
   useEffect(() => {
     if (user) {
@@ -34,23 +51,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const login = (email: string, role: 'trader' | 'admin' = 'trader', name?: string) => {
+  useEffect(() => {
+    if (originalAdmin) {
+      localStorage.setItem('manna_admin_backup', JSON.stringify(originalAdmin));
+    } else {
+      localStorage.removeItem('manna_admin_backup');
+    }
+  }, [originalAdmin]);
+
+  const login = (email: string, role: 'trader' | 'admin' = 'trader', name?: string, tier: 'free' | 'pro' | 'institutional' = 'pro') => {
     const defaultName = role === 'admin' ? 'System Administrator' : 'Institutional Trader';
     const newUser: User = {
       id: `usr_${Date.now()}`,
       name: name || defaultName,
       email,
-      role
+      role,
+      tier: role === 'admin' ? 'institutional' : tier,
+      marketAccess: 'all'
     };
+    setOriginalAdmin(null);
     setUser(newUser);
+  };
+
+  const impersonateUser = (targetUser: User) => {
+    if (user?.role === 'admin' || originalAdmin?.role === 'admin') {
+      const adminToBackup = originalAdmin || user;
+      setOriginalAdmin(adminToBackup);
+      setUser({
+        ...targetUser,
+        tier: targetUser.tier || 'pro'
+      });
+    } else {
+      console.warn('Impersonation denied: Only Admins can impersonate user accounts.');
+    }
+  };
+
+  const stopImpersonating = () => {
+    if (originalAdmin) {
+      setUser(originalAdmin);
+      setOriginalAdmin(null);
+    }
   };
 
   const logout = () => {
     setUser(null);
+    setOriginalAdmin(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        originalAdmin, 
+        isImpersonating, 
+        login, 
+        logout, 
+        impersonateUser, 
+        stopImpersonating, 
+        isAuthenticated: !!user 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,0 +1,61 @@
+.impersonation-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10000;
+  background: linear-gradient(90deg, #ffab00 0%, #ff6d00 100%);
+  color: #090314;
+  padding: 8px 20px;
+  font-size: 0.88rem;
+  box-shadow: 0 4px 16px rgba(255, 171, 0, 0.4);
+  border-bottom: 2px solid #ffd700;
+}
+
+.impersonation-content {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.impersonation-icon {
+  font-size: 1.25rem;
+}
+
+.impersonation-text {
+  flex: 1;
+}
+
+.tier-tag {
+  background: rgba(9, 3, 20, 0.25);
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.btn-stop-impersonate {
+  background: #090314;
+  color: #ffab00;
+  border: 1px solid rgba(255, 215, 0, 0.6);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-stop-impersonate:hover {
+  background: #1a0a33;
+  color: #ffffff;
+  border-color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}

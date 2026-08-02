@@ -5,9 +5,13 @@ import { LoginPage } from './pages/LoginPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
 import { useAuth } from './context/AuthContext';
+import { ImpersonationBanner } from './components/ImpersonationBanner';
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isImpersonating, originalAdmin } = useAuth();
+  if (isImpersonating && originalAdmin?.role === 'admin') {
+    return <>{children}</>;
+  }
   if (!user || user.role !== 'admin') {
     return <Navigate to="/login" replace />;
   }
@@ -16,21 +20,24 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/client" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route 
-        path="/admin" 
-        element={
-          <ProtectedAdminRoute>
-            <AdminPanel />
-          </ProtectedAdminRoute>
-        } 
-      />
-      <Route path="/setup/:id" element={<SetupDetail />} />
-    </Routes>
+    <>
+      <ImpersonationBanner />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/client" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/admin" 
+          element={
+            <ProtectedAdminRoute>
+              <AdminPanel />
+            </ProtectedAdminRoute>
+          } 
+        />
+        <Route path="/setup/:id" element={<SetupDetail />} />
+      </Routes>
+    </>
   );
 }
 

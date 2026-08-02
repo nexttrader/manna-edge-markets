@@ -11,13 +11,36 @@ import { API_BASE } from '../config';
 import { SignalReplaceModal } from '../components/SignalReplaceModal';
 
 export const AdminPanel: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, impersonateUser, isImpersonating, stopImpersonating } = useAuth();
   const navigate = useNavigate();
   const { triggerRun, disableSignal } = useAdmin();
   const { runs } = usePublishRuns(15);
   const { resetCircuitBreaker, status } = useSystemStatus();
   const { strategies: dbStrategies, toggleStrategy } = useStrategies();
   const { setups: activeSetupsList, refetch: refetchActiveSetups } = useSetups();
+
+  const [usersList, setUsersList] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/admin/users`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.users) setUsersList(data.users);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleImpersonateUser = (u: any) => {
+    impersonateUser({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: 'trader',
+      tier: u.tier,
+      marketAccess: u.marketAccess
+    });
+    navigate('/dashboard');
+  };
 
   const [rescanCandidate, setRescanCandidate] = useState<any | null>(null);
   const [rescanCurrentSetup, setRescanCurrentSetup] = useState<any | null>(null);
@@ -179,6 +202,84 @@ export const AdminPanel: React.FC = () => {
       </header>
 
       <main className="container admin-main">
+        {/* User Impersonation & Account Management Desk */}
+        <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(255, 171, 0, 0.05)', border: '1px solid rgba(255, 171, 0, 0.4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffab00', margin: 0 }}>
+              👤 USER ACCOUNTS &amp; IMPERSONATION DESK
+            </h2>
+            <span style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
+              Click &quot;🥸 Impersonate Account&quot; to log in as any trader, view their desk, and troubleshoot user issues.
+            </span>
+          </div>
+
+          {isImpersonating && (
+            <div style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', padding: '12px 16px', borderRadius: '6px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>
+                🥸 Currently impersonating <strong>{user?.name}</strong> ({user?.email}).
+              </span>
+              <button 
+                className="btn-cancel font-mono" 
+                style={{ background: '#090314', color: '#ffab00', border: '1px solid #ffab00', padding: '6px 12px', cursor: 'pointer', fontWeight: 800, borderRadius: '4px' }}
+                onClick={stopImpersonating}
+              >
+                ⏹ Exit Impersonation
+              </button>
+            </div>
+          )}
+
+          <div className="table-responsive">
+            <table className="runs-table">
+              <thead>
+                <tr>
+                  <th>User Profile &amp; Name</th>
+                  <th>Institutional Email</th>
+                  <th>Subscription Tier</th>
+                  <th>Market Access</th>
+                  <th>Last Active</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usersList.map((u: any) => (
+                  <tr key={u.id}>
+                    <td>
+                      <strong>{u.name}</strong>
+                    </td>
+                    <td className="font-mono">{u.email}</td>
+                    <td>
+                      <span className="strat-tier-tag" style={{ borderColor: u.tier === 'institutional' ? '#00e5ff' : u.tier === 'pro' ? '#ffab00' : '#888', color: u.tier === 'institutional' ? '#00e5ff' : u.tier === 'pro' ? '#ffab00' : '#ccc' }}>
+                        {(u.tier || 'pro').toUpperCase()} TIER
+                      </span>
+                    </td>
+                    <td className="font-mono text-gold">{(u.marketAccess || 'all').toUpperCase()}</td>
+                    <td className="font-mono" style={{ color: '#aaa' }}>{u.lastActive || 'Active'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="font-mono"
+                        style={{
+                          background: 'rgba(255, 171, 0, 0.2)',
+                          border: '1px solid #ffab00',
+                          color: '#ffab00',
+                          padding: '5px 12px',
+                          borderRadius: '4px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          fontSize: '0.8rem'
+                        }}
+                        onClick={() => handleImpersonateUser(u)}
+                      >
+                        🥸 Impersonate Account
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Strategy Control Panel (Enable / Disable Strategies) */}
         <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
