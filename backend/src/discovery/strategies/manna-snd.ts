@@ -373,8 +373,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           const ez_low = Number(zone.distal.toFixed(decimals));
           const ez_high = Number(zone.proximal.toFixed(decimals));
 
-          // Discard setup if current market price has breached Stop Loss, is inside/below entry zone, or is excessively displaced
-          if (currentPrice <= stop || currentPrice <= ez_high || (currentPrice - ez_high) > (atr14 * 6)) continue;
+          // Discard setup if current market price has breached Stop Loss or is excessively displaced
+          if (currentPrice <= stop || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Demand Curve. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
@@ -498,8 +498,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           const ez_low = Number(zone.proximal.toFixed(decimals));  // proximal = entry lower boundary
           const ez_high = Number(zone.distal.toFixed(decimals));   // distal = zone top (above entry, near stop)
 
-          // Discard setup if current market price has breached Stop Loss, is inside/above supply zone, or is excessively displaced
-          if (currentPrice >= stop || currentPrice >= ez_low || (ez_low - currentPrice) > (atr14 * 6)) continue;
+          // Discard setup if current market price has breached Stop Loss or is excessively displaced
+          if (currentPrice >= stop || (ez_low - currentPrice) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Supply Curve. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
