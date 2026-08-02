@@ -12,8 +12,11 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   if (isImpersonating && originalAdmin?.role === 'admin') {
     return <>{children}</>;
   }
-  if (!user || user.role !== 'admin') {
+  if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  if (user.role !== 'admin') {
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

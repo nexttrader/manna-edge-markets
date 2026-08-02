@@ -9,7 +9,8 @@ import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
 
 export const DashboardHeader: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, originalAdmin } = useAuth();
+  const isAdmin = user?.role === 'admin' || originalAdmin?.role === 'admin';
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
   const location = useLocation();
   const [showCalendar, setShowCalendar] = useState(false);
@@ -46,9 +47,11 @@ export const DashboardHeader: React.FC = () => {
               >
                 ❓ FAQ
               </button>
-              <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
-                ⚙️ Admin
-              </Link>
+              {isAdmin && (
+                <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
+                  ⚙️ Admin
+                </Link>
+              )}
             </nav>
           </div>
           
