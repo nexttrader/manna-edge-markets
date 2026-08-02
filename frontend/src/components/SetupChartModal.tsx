@@ -152,10 +152,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         let min = res?.priceRange?.minValue;
         let max = res?.priceRange?.maxValue;
 
-        const levelsToInclude = [
+        const levelsToInclude: number[] = [
           entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
           activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist
-        ].filter(p => p > 0);
+        ].filter((p): p is number => typeof p === 'number' && p > 0);
 
         for (const p of levelsToInclude) {
           if (min === undefined || p < min) min = p;
