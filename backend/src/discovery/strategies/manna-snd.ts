@@ -2,7 +2,17 @@ import { IStrategyEngine, StrategyMeta } from './strategy-interface';
 import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
 import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
 import { computeATR } from '../atr';
-import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from '../scoring';
+import { 
+  computeConvictionScore, 
+  computeLiquidityScore, 
+  computeRMultiple,
+  computeKillzoneTimingScore,
+  computeMultiTimeframeScore,
+  computeLiquidityMagnetScore,
+  computeFVGScore,
+  computeRelativeStrengthScore,
+  computeNewsProximityModifier
+} from '../scoring';
 
 type CandleType = 'base' | 'leg_up' | 'leg_down';
 
@@ -274,14 +284,28 @@ export class MannaSndStrategy implements IStrategyEngine {
           const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
           const zoneWidth = Math.abs(zone.proximal - zone.distal);
           const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
-          const momentumConfluence = Math.min(0.98, Math.max(0.75, 0.78 + (r_multiple_1 - 2.0) * 0.08));
+
+          // 6 New Institutional Factors
+          const now = new Date();
+          const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
+          const killzoneTiming = computeKillzoneTimingScore(hourET);
+          const multiTimeframeAlignment = computeMultiTimeframeScore(candles1h, candles15m, bias);
+          const liquidityPoolMagnet = computeLiquidityMagnetScore(candles15m, tp1, bias);
+          const fvgDisbalance = computeFVGScore(candles15m, bias);
+          const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
+          const newsProximityModifier = computeNewsProximityModifier(now);
 
           const conviction_score = computeConvictionScore({
             supportResistanceStrength,
-            volumeProfile,
-            atrAlignment,
             structureAlignment,
-            momentumConfluence
+            volumeProfile,
+            killzoneTiming,
+            multiTimeframeAlignment,
+            liquidityPoolMagnet,
+            fvgDisbalance,
+            relativeStrength,
+            atrAlignment,
+            newsProximityModifier
           });
 
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
@@ -369,14 +393,28 @@ export class MannaSndStrategy implements IStrategyEngine {
           const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
           const zoneWidth = Math.abs(zone.proximal - zone.distal);
           const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
-          const momentumConfluence = Math.min(0.98, Math.max(0.75, 0.78 + (r_multiple_1 - 2.0) * 0.08));
+
+          // 6 New Institutional Factors
+          const now = new Date();
+          const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
+          const killzoneTiming = computeKillzoneTimingScore(hourET);
+          const multiTimeframeAlignment = computeMultiTimeframeScore(candles1h, candles15m, bias);
+          const liquidityPoolMagnet = computeLiquidityMagnetScore(candles15m, tp1, bias);
+          const fvgDisbalance = computeFVGScore(candles15m, bias);
+          const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
+          const newsProximityModifier = computeNewsProximityModifier(now);
 
           const conviction_score = computeConvictionScore({
             supportResistanceStrength,
-            volumeProfile,
-            atrAlignment,
             structureAlignment,
-            momentumConfluence
+            volumeProfile,
+            killzoneTiming,
+            multiTimeframeAlignment,
+            liquidityPoolMagnet,
+            fvgDisbalance,
+            relativeStrength,
+            atrAlignment,
+            newsProximityModifier
           });
 
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);

@@ -48,11 +48,15 @@ export async function discoverForexSetups(killzone: KillzoneInfo, runId: string,
         
         // Scoring
         const conviction_score = computeConvictionScore({
-            supportResistanceStrength: Math.random(),
-            volumeProfile: Math.random(),
-            atrAlignment: Math.random(),
-            structureAlignment: Math.random(),
-            momentumConfluence: Math.random()
+            supportResistanceStrength: 0.88,
+            structureAlignment: 0.86,
+            volumeProfile: 0.85,
+            killzoneTiming: 0.90,
+            multiTimeframeAlignment: 0.88,
+            liquidityPoolMagnet: 0.84,
+            fvgDisbalance: 0.82,
+            relativeStrength: 0.85,
+            atrAlignment: 0.86
         });
         
         const lastVol = candles15m[candles15m.length - 1].volume;

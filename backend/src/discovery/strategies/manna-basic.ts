@@ -2,7 +2,17 @@ import { IStrategyEngine, StrategyMeta } from './strategy-interface';
 import { CandidateSetup, KillzoneInfo, Bias } from '../types';
 import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
 import { computeATR } from '../atr';
-import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from '../scoring';
+import { 
+  computeConvictionScore, 
+  computeLiquidityScore, 
+  computeRMultiple,
+  computeKillzoneTimingScore,
+  computeMultiTimeframeScore,
+  computeLiquidityMagnetScore,
+  computeFVGScore,
+  computeRelativeStrengthScore,
+  computeNewsProximityModifier
+} from '../scoring';
 
 export class MannaBasicStrategy implements IStrategyEngine {
   public meta: StrategyMeta = {
@@ -63,14 +73,28 @@ export class MannaBasicStrategy implements IStrategyEngine {
         const supportResistanceStrength = 0.88;
         const structureAlignment = 0.85;
         const atrAlignment = atr14 > 0 ? Math.min(0.95, Math.max(0.70, 0.88)) : 0.82;
-        const momentumConfluence = Math.min(0.95, Math.max(0.72, 0.76 + (r_multiple_1 - 2.0) * 0.08));
+
+        // 6 New Institutional Conviction Factors
+        const now = new Date();
+        const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
+        const killzoneTiming = computeKillzoneTimingScore(hourET);
+        const multiTimeframeAlignment = computeMultiTimeframeScore(candles15m, candles15m, bias);
+        const liquidityPoolMagnet = computeLiquidityMagnetScore(candles15m, tp1, bias);
+        const fvgDisbalance = computeFVGScore(candles15m, bias);
+        const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
+        const newsProximityModifier = computeNewsProximityModifier(now);
 
         const conviction_score = computeConvictionScore({
           supportResistanceStrength,
-          volumeProfile,
-          atrAlignment,
           structureAlignment,
-          momentumConfluence
+          volumeProfile,
+          killzoneTiming,
+          multiTimeframeAlignment,
+          liquidityPoolMagnet,
+          fvgDisbalance,
+          relativeStrength,
+          atrAlignment,
+          newsProximityModifier
         });
 
         const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
