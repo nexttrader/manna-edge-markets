@@ -17,7 +17,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
     return (user as any)?.active_strategies || ['manna_basic', 'manna_snd'];
   }, [user]);
 
-  const userTier: 'free' | 'pro' | 'institutional' = (user as any)?.tier || (isAdmin ? 'institutional' : 'pro');
+  const userTier: 'free' | 'forex_only' | 'futures_forex' = (user as any)?.tier || (isAdmin ? 'futures_forex' : 'futures_forex');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');

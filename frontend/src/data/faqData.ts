@@ -5,13 +5,35 @@ export interface FaqItem {
   answer: string;
   roleRequired: 'all' | 'admin';
   strategyRequired?: 'manna_basic' | 'manna_snd' | 'all';
-  tierRequired?: 'free' | 'pro' | 'institutional';
+  tierRequired?: 'free' | 'forex_only' | 'futures_forex';
   tags: string[];
   updatedAt: string;
 }
 
 export const FAQ_DATA: FaqItem[] = [
   // --- GENERAL / TRADER FAQS ---
+  {
+    id: 'tier-1',
+    category: '💎 Account Tiers & Access',
+    question: 'What are the user subscription tiers in Manna Edge Markets 2.0?',
+    answer: 'Manna Edge Markets 2.0 offers three user access tiers:\n\n1. 🆓 FREE TIER: Observer access offering a maximum of 2 Futures + 2 Forex setups per session using the Manna Basic strategy, real-time Killzone Clock, and interactive charts.\n\n2. ⚡ FOREX ONLY TIER: Unlocks 100% of Forex currency pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD) across both Manna Basic & Manna SnD strategies with Live Voice Alerts and Economic Calendar event warnings.\n\n3. 🏛️ FUTURES & FOREX TIER: All-access institutional tier. Unlocks all Futures markets (NQ, ES, YM, CL, GC) AND Forex pairs with unlimited signals per session, both strategy engines, Live Voice Alerts, and historical CSV trade outcome exports.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'free',
+    tags: ['tiers', 'free', 'forex_only', 'futures_forex'],
+    updatedAt: '2026-08-02'
+  },
+  {
+    id: 'tier-2',
+    category: '💎 Account Tiers & Access',
+    question: 'What is the limit for Free Tier users?',
+    answer: 'Free Tier users receive a maximum of 2 Futures setups and 2 Forex setups per session using the Manna Basic strategy. Upgrading to Forex Only or Futures & Forex unlocks unlimited setups per session, Manna SnD 1H Supply & Demand curves, and Live Voice Announcements.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'free',
+    tags: ['tiers', 'free', 'limits'],
+    updatedAt: '2026-08-02'
+  },
   {
     id: 'gen-1',
     category: '🚀 Platform Overview',
@@ -74,7 +96,7 @@ export const FAQ_DATA: FaqItem[] = [
     answer: 'Click the ⭐ icon on any signal card to add it to your Watchlist. When a watchlisted signal triggers an entry fill, reaches TP, or gets replaced by Admin, the platform triggers an instant audio voice alert (e.g. "Attention: Pending signal for NQ replaced by Admin") and visual toast notification.',
     roleRequired: 'all',
     strategyRequired: 'all',
-    tierRequired: 'free',
+    tierRequired: 'forex_only',
     tags: ['watchlist', 'audio', 'alerts'],
     updatedAt: '2026-07-31'
   },
@@ -87,7 +109,7 @@ export const FAQ_DATA: FaqItem[] = [
     answer: 'Manna SnD requires strict multi-timeframe confluence before publishing:\n1. 1H Higher Timeframe Curve: Identifies institutional Supply (Sell Zone) or Demand (Buy Zone) curve ranges.\n2. 15M Refinement Zone: Pinpoints exact 15M entry zone within the 1H HTF boundary.\n3. Canvas Visualization: The 1H Curve box and 15M Entry box draw directly on the live chart starting at the zone base candle.',
     roleRequired: 'all',
     strategyRequired: 'manna_snd',
-    tierRequired: 'pro',
+    tierRequired: 'forex_only',
     tags: ['manna_snd', 'htf_curve', 'demand', 'supply'],
     updatedAt: '2026-07-31'
   },
@@ -105,13 +127,24 @@ export const FAQ_DATA: FaqItem[] = [
 
   // --- ADMIN-ONLY FAQS ---
   {
+    id: 'admin-impersonate',
+    category: '🛡️ Admin: User Impersonation',
+    question: 'How does Admin User Impersonation work?',
+    answer: 'Platform Admins can click "🥸 Impersonate Account" on any user profile in the Admin Desk (/admin) to log in as that user, inspect their exact dashboard view, test tier capabilities, and troubleshoot user issues in real time. A sticky banner at the top of the screen allows returning to the Admin Desk with 1 click.',
+    roleRequired: 'admin',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['admin', 'impersonation', 'debug'],
+    updatedAt: '2026-08-02'
+  },
+  {
     id: 'admin-rescan',
     category: '🛡️ Admin: Rescan & Replacement',
     question: 'How does Single-Asset Rescan & Replacement work?',
     answer: 'As an Admin, pending signals (AWAITING_ENTRY) display a glowing 🔍 Rescan & Replace button. Clicking it triggers an instant scan for ONLY that instrument using its EXACT strategy. If a higher conviction setup is found:\n1. Side-by-side comparison modal displays current setup vs proposed replacement candidate using full SetupCard UI.\n2. Preview Candidate on Chart lets you visually inspect levels.\n3. Confirm Replace supersedes old signal (reason: manual_replaced_by_admin), publishes candidate, and sends watchlist replacement voice alerts to traders.',
     roleRequired: 'admin',
     strategyRequired: 'all',
-    tierRequired: 'institutional',
+    tierRequired: 'futures_forex',
     tags: ['admin', 'rescan', 'replacement'],
     updatedAt: '2026-07-31'
   },
@@ -122,7 +155,7 @@ export const FAQ_DATA: FaqItem[] = [
     answer: 'On the Admin Control Desk (/admin), click ⛔ DISABLE SIGNAL. The system prompts a mandatory confirmation dialog to prevent accidental clicks: "Are you sure you want to disable and invalidate the signal for [INSTRUMENT]?". Confirming marks the setup as non-tradable.',
     roleRequired: 'admin',
     strategyRequired: 'all',
-    tierRequired: 'institutional',
+    tierRequired: 'futures_forex',
     tags: ['admin', 'invalidation', 'disable'],
     updatedAt: '2026-07-31'
   },
@@ -133,7 +166,7 @@ export const FAQ_DATA: FaqItem[] = [
     answer: 'If the Discovery Engine encounters 5 consecutive strategy execution errors, the Circuit Breaker trips automatically into Dry-Run mode to protect market integrity. Admins can inspect logs and click RESET CIRCUIT BREAKER on the Admin Panel once resolved.',
     roleRequired: 'admin',
     strategyRequired: 'all',
-    tierRequired: 'institutional',
+    tierRequired: 'futures_forex',
     tags: ['admin', 'circuit_breaker', 'safety'],
     updatedAt: '2026-07-31'
   },
@@ -144,7 +177,7 @@ export const FAQ_DATA: FaqItem[] = [
     answer: 'The Strategy Performance Matrix tracks win rate %, total trade outcomes, and net realized R for Manna Basic vs Manna SnD strategies. Admins can click 📥 Download CSV in the Historical Archived Datasets table to export raw trade logs for quantitative backtesting.',
     roleRequired: 'admin',
     strategyRequired: 'all',
-    tierRequired: 'institutional',
+    tierRequired: 'futures_forex',
     tags: ['admin', 'analytics', 'archives', 'csv'],
     updatedAt: '2026-07-31'
   }

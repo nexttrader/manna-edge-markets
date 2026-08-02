@@ -5,7 +5,7 @@ export interface User {
   name: string;
   email: string;
   role: 'trader' | 'admin';
-  tier?: 'free' | 'pro' | 'institutional';
+  tier?: 'free' | 'forex_only' | 'futures_forex';
   marketAccess?: 'all' | 'futures' | 'forex';
 }
 
@@ -13,7 +13,7 @@ interface AuthContextType {
   user: User | null;
   originalAdmin: User | null;
   isImpersonating: boolean;
-  login: (email: string, role?: 'trader' | 'admin', name?: string, tier?: 'free' | 'pro' | 'institutional') => void;
+  login: (email: string, role?: 'trader' | 'admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex') => void;
   logout: () => void;
   impersonateUser: (targetUser: User) => void;
   stopImpersonating: () => void;
@@ -26,9 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('manna_user');
-      return saved ? JSON.parse(saved) : { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'institutional' };
+      return saved ? JSON.parse(saved) : { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'futures_forex' };
     } catch {
-      return { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'institutional' };
+      return { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'futures_forex' };
     }
   });
 
@@ -59,15 +59,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [originalAdmin]);
 
-  const login = (email: string, role: 'trader' | 'admin' = 'trader', name?: string, tier: 'free' | 'pro' | 'institutional' = 'pro') => {
+  const login = (email: string, role: 'trader' | 'admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex') => {
     const defaultName = role === 'admin' ? 'System Administrator' : 'Institutional Trader';
     const newUser: User = {
       id: `usr_${Date.now()}`,
       name: name || defaultName,
       email,
       role,
-      tier: role === 'admin' ? 'institutional' : tier,
-      marketAccess: 'all'
+      tier: role === 'admin' ? 'futures_forex' : tier,
+      marketAccess: tier === 'forex_only' ? 'forex' : 'all'
     };
     setOriginalAdmin(null);
     setUser(newUser);
@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOriginalAdmin(adminToBackup);
       setUser({
         ...targetUser,
-        tier: targetUser.tier || 'pro'
+        tier: targetUser.tier || 'futures_forex'
       });
     } else {
       console.warn('Impersonation denied: Only Admins can impersonate user accounts.');

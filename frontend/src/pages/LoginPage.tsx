@@ -12,6 +12,7 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'trader' | 'admin'>('trader');
+  const [tier, setTier] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -21,14 +22,14 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setError(null);
-    login(email, role, name || (role === 'admin' ? 'System Administrator' : 'Institutional Trader'));
-    navigate('/dashboard');
+    login(email, role, name || (role === 'admin' ? 'System Administrator' : 'Institutional Trader'), tier);
+    navigate(role === 'admin' ? '/admin' : '/dashboard');
   };
 
   const handleDemoLogin = (demoRole: 'trader' | 'admin') => {
     const demoEmail = demoRole === 'admin' ? 'admin@mannaedge.com' : 'trader@mannaedge.com';
     const demoName = demoRole === 'admin' ? 'System Administrator' : 'Institutional Trader';
-    login(demoEmail, demoRole, demoName);
+    login(demoEmail, demoRole, demoName, 'futures_forex');
     navigate(demoRole === 'admin' ? '/admin' : '/dashboard');
   };
 
@@ -127,6 +128,21 @@ export const LoginPage: React.FC = () => {
               <option value="admin">System Administrator (Telemetry & Controls)</option>
             </select>
           </div>
+
+          {role === 'trader' && (
+            <div className="form-group">
+              <label className="font-mono">Subscription Access Tier</label>
+              <select 
+                value={tier} 
+                onChange={e => setTier(e.target.value as any)}
+                className="font-mono"
+              >
+                <option value="free">🆓 Free Tier (Max 2 Futures + 2 Forex setups/session)</option>
+                <option value="forex_only">⚡ Forex Only Tier (All Forex pairs & Manna SnD)</option>
+                <option value="futures_forex">🏛️ Futures & Forex Tier (All Access - Futures & Forex)</option>
+              </select>
+            </div>
+          )}
 
           <button type="submit" className="btn-submit font-mono">
             {isRegister ? '✨ CREATE ACCOUNT & LAUNCH' : '🚀 SIGN IN TO TRADING DESK'}
