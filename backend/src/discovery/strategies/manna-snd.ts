@@ -298,10 +298,23 @@ export class MannaSndStrategy implements IStrategyEngine {
         const m15Zones = this.findZones(candles15m);
 
         if (allowedAction === 'BUY') {
-          const demandZones = m15Zones.filter(z => z.type === 'demand' && z.proximal < currentPrice && (currentPrice - z.proximal) <= atr14 * 5);
-          const zone = demandZones.length > 0
-            ? demandZones.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandZones[0])
-            : this.findFallbackZone(candles15m, 'demand', atr14);
+          // 15M Entry Zone MUST be inside or touching 1H Demand Curve boundaries
+          const demandInCurve = m15Zones.filter(z => 
+            z.type === 'demand' && 
+            z.proximal <= currentPrice &&
+            z.proximal >= (htfDemand.distal - atr14 * 0.3) &&
+            z.proximal <= (htfDemand.proximal + atr14 * 0.5)
+          );
+
+          const zone: Zone = demandInCurve.length > 0
+            ? demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0])
+            : {
+                type: 'demand',
+                formation: (htfDemand.formation as any) || 'Drop-Base-Rally',
+                proximal: htfDemand.proximal,
+                distal: htfDemand.distal,
+                timestamp: htfDemand.timestamp
+              };
 
           const bias: Bias = 'long';
           const entry_zone_mid = zone.proximal;
@@ -362,7 +375,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           // Discard setup if current market price has breached Stop Loss, is inside/below entry zone, or is excessively displaced
           if (currentPrice <= stop || currentPrice <= ez_high || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Demand Curve. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,
@@ -412,10 +425,23 @@ export class MannaSndStrategy implements IStrategyEngine {
             })
           });
         } else if (allowedAction === 'SELL') {
-          const supplyZones = m15Zones.filter(z => z.type === 'supply' && z.proximal > currentPrice && (z.proximal - currentPrice) <= atr14 * 5);
-          const zone = supplyZones.length > 0
-            ? supplyZones.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyZones[0])
-            : this.findFallbackZone(candles15m, 'supply', atr14);
+          // 15M Entry Zone MUST be inside or touching 1H Supply Curve boundaries
+          const supplyInCurve = m15Zones.filter(z => 
+            z.type === 'supply' && 
+            z.proximal >= currentPrice &&
+            z.proximal <= (htfSupply.distal + atr14 * 0.3) &&
+            z.proximal >= (htfSupply.proximal - atr14 * 0.5)
+          );
+
+          const zone: Zone = supplyInCurve.length > 0
+            ? supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0])
+            : {
+                type: 'supply',
+                formation: (htfSupply.formation as any) || 'Rally-Base-Drop',
+                proximal: htfSupply.proximal,
+                distal: htfSupply.distal,
+                timestamp: htfSupply.timestamp
+              };
 
           const bias: Bias = 'short';
           const entry_zone_mid = zone.proximal;
@@ -474,7 +500,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           // Discard setup if current market price has breached Stop Loss, is inside/above supply zone, or is excessively displaced
           if (currentPrice >= stop || currentPrice >= ez_low || (ez_low - currentPrice) > (atr14 * 6)) continue;
 
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) identified. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Supply Curve. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
           candidates.push({
             instrument,
