@@ -8,6 +8,10 @@ export interface User {
   tier?: 'free' | 'forex_only' | 'futures_forex';
   marketAccess?: 'all' | 'futures' | 'forex';
   mustChangePassword?: boolean;
+  isTrial?: boolean;
+  trialExpiresAt?: string;
+  trialDaysRemaining?: number;
+  trialExpired?: boolean;
 }
 
 interface AuthContextType {

@@ -10,6 +10,7 @@ import { useAuth } from './context/AuthContext';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { MasterPasscodeModal } from './components/MasterPasscodeModal';
 import { FirstLoginPasswordModal } from './components/FirstLoginPasswordModal';
+import { TrialExpiredModal } from './components/TrialExpiredModal';
 import { telemetryTracker } from './services/telemetryTracker';
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
@@ -99,6 +100,7 @@ function App() {
     <>
       <ImpersonationBanner />
       <FirstLoginPasswordModal />
+      <TrialExpiredModal />
       {showSecretModal && (
         <MasterPasscodeModal
           onSuccess={() => setShowSecretModal(false)}

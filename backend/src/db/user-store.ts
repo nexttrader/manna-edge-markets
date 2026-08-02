@@ -17,6 +17,10 @@ export interface UserProfile {
   deletedAt?: string;
   purgeAt?: string;
   daysRemaining?: number;
+  isTrial?: boolean;
+  trialExpiresAt?: string;
+  trialDaysRemaining?: number;
+  trialExpired?: boolean;
 }
 
 const initialUserProfiles: UserProfile[] = [
@@ -57,7 +61,21 @@ let userStore: UserProfile[] = [...initialUserProfiles];
 let holdingZoneStore: UserProfile[] = [];
 
 export const getAllUsers = (): UserProfile[] => {
-  return userStore;
+  const now = Date.now();
+  return userStore.map(u => {
+    if (u.isTrial && u.trialExpiresAt) {
+      const expiresTime = new Date(u.trialExpiresAt).getTime();
+      const remainingMs = Math.max(0, expiresTime - now);
+      const trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+      const trialExpired = remainingMs <= 0;
+      return {
+        ...u,
+        trialDaysRemaining,
+        trialExpired
+      };
+    }
+    return u;
+  });
 };
 
 export const getHoldingZoneUsers = (): UserProfile[] => {
@@ -85,7 +103,11 @@ export const addUser = (profile: {
   tier?: 'free' | 'forex_only' | 'futures_forex';
   preferredMarket?: 'Futures' | 'Forex' | 'Both';
   riskLimit?: '1%' | '2%' | '5%';
+  isTrial?: boolean;
 }): UserProfile => {
+  const now = new Date();
+  const trialExpiresDate = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000); // 21 days from now
+
   const newUser: UserProfile = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     name: profile.name,
@@ -93,15 +115,19 @@ export const addUser = (profile: {
     password: profile.password || 'temp123',
     mustChangePassword: profile.mustChangePassword !== undefined ? profile.mustChangePassword : true,
     role: profile.role || 'trader',
-    tier: profile.tier || 'free',
-    marketAccess: profile.tier === 'forex_only' ? 'forex' : profile.tier === 'free' ? '2 Futures + 2 Forex' : 'all',
+    tier: profile.tier || 'futures_forex',
+    marketAccess: 'all',
     status: 'active',
-    createdAt: new Date().toISOString(),
-    lastActive: 'Preloaded - Pending First Login',
+    createdAt: now.toISOString(),
+    lastActive: profile.isTrial ? 'Preloaded 21-Day VIP Trial' : 'Preloaded - Pending First Login',
     preferredMarket: profile.preferredMarket || 'Both',
     riskLimit: profile.riskLimit || '1%',
     signalsViewed: 0,
-    watchlistCount: 0
+    watchlistCount: 0,
+    isTrial: profile.isTrial || false,
+    trialExpiresAt: profile.isTrial ? trialExpiresDate.toISOString() : undefined,
+    trialDaysRemaining: profile.isTrial ? 21 : undefined,
+    trialExpired: false
   };
 
   const existingIdx = userStore.findIndex(u => u.email.toLowerCase() === profile.email.toLowerCase());
@@ -115,7 +141,8 @@ export const addUser = (profile: {
 };
 
 export const bulkPreloadUsers = (
-  rawUsers: Array<{ name: string; email: string; tier?: 'free' | 'forex_only' | 'futures_forex'; role?: 'trader' | 'admin' }>
+  rawUsers: Array<{ name: string; email: string; tier?: 'free' | 'forex_only' | 'futures_forex'; role?: 'trader' | 'admin' }>,
+  isTrial: boolean = false
 ): { importedCount: number; users: UserProfile[] } => {
   let count = 0;
   for (const raw of rawUsers) {
@@ -124,8 +151,9 @@ export const bulkPreloadUsers = (
         name: raw.name.trim(),
         email: raw.email.trim(),
         role: raw.role || 'trader',
-        tier: raw.tier || 'futures_forex',
-        mustChangePassword: true
+        tier: 'futures_forex',
+        mustChangePassword: true,
+        isTrial
       });
       count++;
     }

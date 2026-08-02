@@ -36,13 +36,18 @@ router.get('/users/holding', (_req: Request, res: Response) => {
 
 router.post('/users/bulk-import', (req: Request, res: Response) => {
   try {
-    const { rawUsers } = req.body || {};
+    const { rawUsers, isTrial = false } = req.body || {};
     if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of users to import' });
     }
 
-    const result = bulkPreloadUsers(rawUsers);
-    res.json({ success: true, message: `Successfully preloaded ${result.importedCount} user accounts`, importedCount: result.importedCount, users: result.users });
+    const result = bulkPreloadUsers(rawUsers, isTrial);
+    res.json({ 
+      success: true, 
+      message: `Successfully preloaded ${result.importedCount} user accounts ${isTrial ? '(21-Day VIP Trial Pass)' : ''}`, 
+      importedCount: result.importedCount, 
+      users: result.users 
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to bulk import users', details: err.message });
   }

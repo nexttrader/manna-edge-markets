@@ -7,6 +7,7 @@ import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
 import { MarketClosedBanner } from '../components/MarketClosedBanner';
+import { TrialWelcomeBanner } from '../components/TrialWelcomeBanner';
 import { FaqModal } from '../components/FaqModal';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
@@ -117,6 +118,7 @@ export const Dashboard: React.FC = () => {
       <DashboardHeader />
       
       <main className="container dashboard-main">
+        <TrialWelcomeBanner />
         <MarketClosedBanner />
 
         {/* Main Filter & Control Panel */}

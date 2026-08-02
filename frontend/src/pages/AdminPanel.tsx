@@ -54,6 +54,7 @@ export const AdminPanel: React.FC = () => {
 
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [bulkCsvText, setBulkCsvText] = useState('');
+  const [isTrialImport, setIsTrialImport] = useState(true);
 
   const handleBulkImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +101,7 @@ export const AdminPanel: React.FC = () => {
       const res = await fetch(`${API_BASE}/api/admin/users/bulk-import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawUsers })
+        body: JSON.stringify({ rawUsers, isTrial: isTrialImport })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to bulk import users');
@@ -108,7 +109,7 @@ export const AdminPanel: React.FC = () => {
       if (data.users) setUsersList(data.users);
       setShowBulkImportModal(false);
       setBulkCsvText('');
-      alert(`✅ Preloaded ${data.importedCount} user accounts! All preloaded users will be forced to set their account password on first sign-in.`);
+      alert(`✅ Preloaded ${data.importedCount} user accounts ${isTrialImport ? 'with 21-Day VIP Trial Passes' : ''}! All users will be forced to set their password on first sign-in.`);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     }
@@ -523,12 +524,25 @@ export const AdminPanel: React.FC = () => {
                 onChange={e => setBulkCsvText(e.target.value)}
                 style={{ width: '100%', padding: '10px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', fontSize: '0.82rem', fontFamily: 'monospace', marginBottom: '12px' }}
               />
+              <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="trialPassCheck"
+                  checked={isTrialImport}
+                  onChange={e => setIsTrialImport(e.target.checked)}
+                  style={{ accentColor: '#e056fd', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="trialPassCheck" style={{ fontSize: '0.85rem', color: '#ffd700', fontWeight: 800, cursor: 'pointer' }}>
+                  🎁 Issue 21-Day VIP Trial Pass (Futures &amp; Forex Access • Prompts to Pick a Plan after 21 Days)
+                </label>
+              </div>
+
               <button
                 type="submit"
                 className="font-mono"
                 style={{ background: '#e056fd', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
               >
-                🚀 Import &amp; Preload Accounts
+                🚀 {isTrialImport ? 'Import & Issue 21-Day VIP Passes' : 'Import & Preload Accounts'}
               </button>
             </form>
           )}
