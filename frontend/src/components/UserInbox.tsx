@@ -67,8 +67,16 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
   const [replyLoading, setReplyLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // New ticket form state
+  const [showNewTicket, setShowNewTicket] = useState(false);
+  const [newSubject, setNewSubject] = useState('');
+  const [newBody, setNewBody] = useState('');
+  const [newType, setNewType] = useState<'general_support' | 'billing' | 'access_issue' | 'tier_upgrade_request'>('general_support');
+  const [newTicketLoading, setNewTicketLoading] = useState(false);
+
   const userEmail = user?.email || '';
   const userName = user?.name || '';
+  const userId = user?.id || '';
 
   const fetchTickets = useCallback(async () => {
     if (!userEmail) return;
@@ -126,6 +134,41 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
     }
   };
 
+  const handleCreateTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubject.trim() || !newBody.trim()) return;
+    setNewTicketLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/support/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          userName,
+          userEmail,
+          type: newType,
+          subject: newSubject.trim(),
+          body: newBody.trim(),
+          priority: newType === 'tier_upgrade_request' ? 'urgent' : newType === 'billing' ? 'high' : 'normal'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      // Reset form
+      setNewSubject('');
+      setNewBody('');
+      setNewType('general_support');
+      setShowNewTicket(false);
+      // Refresh + open the new ticket
+      await fetchTickets();
+      if (data.ticket) setSelectedTicket(data.ticket);
+    } catch (e: any) {
+      alert(`⚠️ ${e.message}`);
+    } finally {
+      setNewTicketLoading(false);
+    }
+  };
+
   const totalUnread = tickets.reduce((sum, t) => sum + (t.unreadByUser || 0), 0);
 
   return (
@@ -135,26 +178,73 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
         {totalUnread > 0 && (
           <span className="ui-unread-count">{totalUnread} new {totalUnread === 1 ? 'message' : 'messages'}</span>
         )}
+        <button
+          className="ui-new-ticket-btn"
+          onClick={() => { setShowNewTicket(true); setSelectedTicket(null); }}
+          title="Open a new support ticket"
+        >
+          ✏️ New Ticket
+        </button>
         <button className="ui-refresh-btn" onClick={fetchTickets} title="Refresh">{loading ? '⏳' : '🔃'}</button>
       </div>
 
       <div className="ui-body">
         {/* Left: ticket list */}
         <div className="ui-list">
-          {tickets.length === 0 && (
+          {!showNewTicket && tickets.length === 0 && (
             <div className="ui-empty">
               {loading ? '⏳ Loading...' : (
                 <div>
                   <div style={{ fontSize: '2rem', marginBottom: 8 }}>📭</div>
                   <div>No support tickets yet.</div>
                   <div style={{ color: '#555', fontSize: '0.78rem', marginTop: 4 }}>
-                    Upgrade requests and admin messages will appear here.
+                    Click <strong style={{ color: '#00e5ff' }}>✏️ New Ticket</strong> above to contact admin support.
                   </div>
                 </div>
               )}
             </div>
           )}
-          {tickets.map(t => {
+
+          {/* New Ticket Form (shows when creating) */}
+          {showNewTicket && (
+            <form className="ui-new-ticket-form" onSubmit={handleCreateTicket}>
+              <div className="ui-new-ticket-title">✏️ New Support Ticket</div>
+
+              <div className="ui-form-row">
+                <label>Category</label>
+                <select value={newType} onChange={e => setNewType(e.target.value as any)} className="ui-form-select">
+                  <option value="general_support">💬 General Support</option>
+                  <option value="billing">💳 Billing Question</option>
+                  <option value="access_issue">🔐 Access / Login Issue</option>
+                  <option value="tier_upgrade_request">⬆️ Plan Upgrade Request</option>
+                </select>
+              </div>
+
+              <div className="ui-form-row">
+                <label>Subject</label>
+                <input type="text" value={newSubject} onChange={e => setNewSubject(e.target.value)}
+                  placeholder="Brief summary of your issue..." className="ui-form-input" required maxLength={120} />
+              </div>
+
+              <div className="ui-form-row">
+                <label>Message</label>
+                <textarea value={newBody} onChange={e => setNewBody(e.target.value)}
+                  placeholder="Describe your issue in detail..."
+                  className="ui-form-textarea" rows={5} required />
+              </div>
+
+              <div className="ui-form-actions">
+                <button type="button" className="ui-form-cancel" onClick={() => setShowNewTicket(false)}>Cancel</button>
+                <button type="submit" className="ui-form-submit"
+                  disabled={newTicketLoading || !newSubject.trim() || !newBody.trim()}>
+                  {newTicketLoading ? '⏳ Submitting...' : '📬 Submit Ticket'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Ticket list (shows when not in new ticket mode) */}
+          {!showNewTicket && tickets.map(t => {
             const st = STATUS_META[t.status] || STATUS_META['unassigned'];
             const hasUnread = t.unreadByUser > 0;
             const isSelected = selectedTicket?.id === t.id;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import './DashboardHeader.css';
 import { KillzoneClock } from './KillzoneClock';
@@ -7,7 +7,8 @@ import { EconomicCalendarModal } from './EconomicCalendarModal';
 import { FaqModal } from './FaqModal';
 import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
-
+import { UserInbox } from './UserInbox';
+import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
 
 export const DashboardHeader: React.FC = () => {
@@ -18,8 +19,31 @@ export const DashboardHeader: React.FC = () => {
   const location = useLocation();
   const [showCalendar, setShowCalendar] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
+
+  const isTrader = user?.role === 'trader';
+
+  // Poll for unread messages every 20s (traders only)
+  const fetchUnread = useCallback(async () => {
+    if (!user?.email || !isTrader) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/support/tickets/user/${encodeURIComponent(user.email)}`);
+      const data = await res.json();
+      if (data.tickets) {
+        const total: number = data.tickets.reduce((s: number, t: any) => s + (t.unreadByUser || 0), 0);
+        setInboxUnread(total);
+      }
+    } catch { /* ignore */ }
+  }, [user?.email, isTrader]);
+
+  useEffect(() => {
+    fetchUnread();
+    const iv = setInterval(fetchUnread, 20000);
+    return () => clearInterval(iv);
+  }, [fetchUnread]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [myNewPass, setMyNewPass] = useState('');
@@ -106,6 +130,35 @@ export const DashboardHeader: React.FC = () => {
                 <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
                   👁️ Master Desk
                 </Link>
+              )}
+              {isTrader && (
+                <button
+                  className="nav-link font-mono"
+                  style={{
+                    background: inboxUnread > 0 ? 'rgba(0,229,255,0.15)' : 'none',
+                    border: inboxUnread > 0 ? '1px solid rgba(0,229,255,0.4)' : 'none',
+                    cursor: 'pointer',
+                    color: inboxUnread > 0 ? '#00e5ff' : '#aaa',
+                    fontWeight: inboxUnread > 0 ? 900 : 600,
+                    position: 'relative',
+                    borderRadius: '6px',
+                    padding: '4px 10px'
+                  }}
+                  onClick={() => setShowInbox(true)}
+                  title="Open Support Inbox"
+                >
+                  📬 Inbox
+                  {inboxUnread > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -5, right: -5,
+                      background: '#ff3b3b', color: '#fff',
+                      fontSize: '0.55rem', fontWeight: 900,
+                      minWidth: 15, height: 15, borderRadius: 8,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 3px'
+                    }}>{inboxUnread}</span>
+                  )}
+                </button>
               )}
             </nav>
           </div>
@@ -215,6 +268,64 @@ export const DashboardHeader: React.FC = () => {
       {showFaq && (
         <FaqModal onClose={() => setShowFaq(false)} />
       )}
+
+      {/* User Support Inbox Modal */}
+      {showInbox && isTrader && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(6,2,12,0.93)', backdropFilter: 'blur(16px)',
+            zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowInbox(false); }}
+        >
+          <div style={{
+            background: '#0f0620',
+            border: '1px solid rgba(0,229,255,0.3)',
+            borderRadius: '16px', width: '100%', maxWidth: '900px',
+            height: '82vh', display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 0 60px rgba(0,229,255,0.12), 0 20px 60px rgba(0,0,0,0.5)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '18px 24px 14px',
+              borderBottom: '1px solid rgba(255,255,255,0.08)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '1.4rem' }}>📬</span>
+                <div>
+                  <div style={{ fontWeight: 900, color: '#00e5ff', fontSize: '1rem', fontFamily: 'inherit' }}>Support Inbox</div>
+                  <div style={{ color: '#666', fontSize: '0.72rem' }}>Create tickets · Read admin replies · Track upgrade requests</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInbox(false)}
+                style={{
+                  background: 'transparent', border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#888', padding: '6px 14px', borderRadius: '6px',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#888')}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Inbox content */}
+            <div style={{ flex: 1, overflow: 'hidden', padding: '20px 24px 24px' }}>
+              <UserInbox onUnreadChange={setInboxUnread} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-in banner when admin sends new reply */}
+      {isTrader && <UserInboxBanner onOpenInbox={() => setShowInbox(true)} />}
     </>
   );
 };
