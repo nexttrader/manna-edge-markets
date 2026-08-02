@@ -105,7 +105,7 @@ export class OutcomeDetector {
           else if (maxHigh >= setup.tp1 && secondsSinceEntry >= 15) { 
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1); 
           }
-          else if (minLow <= setup.stop) { 
+          else if (minLow <= setup.stop && secondsSinceEntry >= 15) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
             executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop); 
@@ -117,7 +117,7 @@ export class OutcomeDetector {
           else if (minLow <= setup.tp1 && secondsSinceEntry >= 15) { 
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1); 
           }
-          else if (maxHigh >= setup.stop) { 
+          else if (maxHigh >= setup.stop && secondsSinceEntry >= 15) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
             executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop); 
