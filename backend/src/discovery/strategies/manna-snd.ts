@@ -187,7 +187,7 @@ export class MannaSndStrategy implements IStrategyEngine {
   /**
    * Determine HTF (1H) Curve Location relative to fresh HTF RBR, DBR, RBD, DBD zones without cutting through candles
    */
-  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone?: Zone; htfDemand?: Zone; htfSupply?: Zone } {
+  private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone: Zone; htfDemand: Zone; htfSupply: Zone } {
     const indexedZones = this.findZonesWithIndex(htfCandles);
 
     // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (highest proximal line below currentPrice)
