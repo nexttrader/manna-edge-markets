@@ -6,8 +6,13 @@ import { API_BASE } from '../config';
 import { formatETTime } from '../utils/time';
 
 export const SuperAdminPanel: React.FC = () => {
-  const { logout, impersonateUser } = useAuth();
+  const { logout, impersonateUser, login } = useAuth();
   const navigate = useNavigate();
+
+  const handleReturnToAdmin = () => {
+    login('admin@mannaedge.com', 'admin', 'System Administrator', 'futures_forex');
+    navigate('/admin');
+  };
 
   const [activeTab, setActiveTab] = useState<'roster' | 'admin_audit' | 'metrics' | 'health'>('roster');
   const [data, setData] = useState<any>(null);
@@ -61,6 +66,23 @@ export const SuperAdminPanel: React.FC = () => {
             <span className="super-badge">
               🛡️ MASTER PRIVILEGE ACTIVE
             </span>
+            <button
+              type="button"
+              className="font-mono"
+              style={{
+                background: 'rgba(255, 171, 0, 0.2)',
+                border: '1px solid #ffab00',
+                color: '#ffab00',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '0.82rem'
+              }}
+              onClick={handleReturnToAdmin}
+            >
+              ⚙️ Switch to Admin Mode
+            </button>
             <button 
               className="btn-logout font-mono" 
               style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
