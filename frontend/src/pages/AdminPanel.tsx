@@ -21,14 +21,63 @@ export const AdminPanel: React.FC = () => {
 
   const [usersList, setUsersList] = useState<any[]>([]);
 
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`);
+      const data = await res.json();
+      if (data.users) setUsersList(data.users);
+    } catch {}
+  };
+
   useEffect(() => {
-    fetch(`${API_BASE}/api/admin/users`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.users) setUsersList(data.users);
-      })
-      .catch(() => {});
+    fetchUsers();
   }, []);
+
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserTier, setNewUserTier] = useState<'free' | 'forex_only' | 'futures_forex'>('free');
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName || !newUserEmail) {
+      alert('Please provide display name and email');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newUserName, email: newUserEmail, tier: newUserTier })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create user');
+      
+      if (data.users) setUsersList(data.users);
+      setShowAddUserModal(false);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserTier('free');
+      alert(`✅ Account for "${newUserName}" created successfully!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
+  const handleUpdateTier = async (userId: string, tier: 'free' | 'forex_only' | 'futures_forex') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/tier`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update tier');
+      if (data.users) setUsersList(data.users);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
 
   const handleImpersonateUser = (u: any) => {
     impersonateUser({
@@ -281,14 +330,86 @@ export const AdminPanel: React.FC = () => {
         {/* TAB 1: User Impersonation & Account Management Desk */}
         {adminTab === 'users' && (
           <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(255, 171, 0, 0.05)', border: '1px solid rgba(255, 171, 0, 0.4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffab00', margin: 0 }}>
-                👤 USER ACCOUNTS &amp; IMPERSONATION DESK
-              </h2>
-              <span style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
-                Click &quot;🥸 Impersonate Account&quot; to log in as any trader, view their desk, and troubleshoot user issues.
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffab00', margin: 0 }}>
+                  👤 USER ACCOUNTS &amp; IMPERSONATION DESK
+                </h2>
+                <span style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
+                  Manage custom trader profiles, adjust subscription tiers, or impersonate trader accounts to troubleshoot issues.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: 'rgba(0, 229, 255, 0.15)',
+                  border: '1px solid #00e5ff',
+                  color: '#00e5ff',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setShowAddUserModal(!showAddUserModal)}
+              >
+                {showAddUserModal ? '✖️ Close Form' : '➕ Add Trader Account'}
+              </button>
             </div>
+
+          {showAddUserModal && (
+            <form onSubmit={handleCreateUser} style={{ background: 'rgba(0, 229, 255, 0.05)', border: '1px solid rgba(0, 229, 255, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#00e5ff' }}>➕ Create New Trader Account</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Custom Display Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ApexTrader99"
+                    value={newUserName}
+                    onChange={e => setNewUserName(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Trader Email *</label>
+                  <input
+                    type="email"
+                    placeholder="trader@domain.com"
+                    value={newUserEmail}
+                    onChange={e => setNewUserEmail(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Subscription Access Tier</label>
+                  <select
+                    value={newUserTier}
+                    onChange={e => setNewUserTier(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #00e5ff', color: '#00e5ff', borderRadius: '4px', fontWeight: 700 }}
+                  >
+                    <option value="free">🟢 Free Tier (2 Futures + 2 Forex)</option>
+                    <option value="forex_only">🔵 Forex Only Tier (All Forex)</option>
+                    <option value="futures_forex">🟡 Futures &amp; Forex Tier (All Futures + Forex)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="font-mono"
+                style={{ background: '#00e5ff', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
+              >
+                Create Trader Account
+              </button>
+            </form>
+          )}
 
           {isImpersonating && (
             <div style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', padding: '12px 16px', borderRadius: '6px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -309,28 +430,46 @@ export const AdminPanel: React.FC = () => {
             <table className="runs-table">
               <thead>
                 <tr>
-                  <th>User Profile &amp; Name</th>
+                  <th>User Display Name</th>
                   <th>Institutional Email</th>
+                  <th>Account Role</th>
                   <th>Subscription Tier</th>
                   <th>Market Access</th>
-                  <th>Last Active</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {usersList.map((u: any) => (
-                  <tr key={u.id}>
+                  <tr key={u.id || u.email}>
                     <td>
                       <strong>{u.name}</strong>
                     </td>
                     <td className="font-mono">{u.email}</td>
                     <td>
-                      <span className="strat-tier-tag" style={{ borderColor: u.tier === 'institutional' ? '#00e5ff' : u.tier === 'pro' ? '#ffab00' : '#888', color: u.tier === 'institutional' ? '#00e5ff' : u.tier === 'pro' ? '#ffab00' : '#ccc' }}>
-                        {(u.tier || 'pro').toUpperCase()} TIER
+                      <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255,171,0,0.2)' : 'rgba(0,229,255,0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
+                        {(u.role || 'trader').toUpperCase()}
                       </span>
                     </td>
+                    <td>
+                      <select
+                        value={u.tier || 'free'}
+                        onChange={e => handleUpdateTier(u.id || u.email, e.target.value as any)}
+                        style={{
+                          background: 'rgba(9, 3, 20, 0.8)',
+                          border: `1px solid ${u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#888'}`,
+                          color: u.tier === 'futures_forex' ? '#ffd700' : u.tier === 'forex_only' ? '#00e5ff' : '#ccc',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        <option value="free">Free Tier</option>
+                        <option value="forex_only">Forex Only</option>
+                        <option value="futures_forex">Futures &amp; Forex</option>
+                      </select>
+                    </td>
                     <td className="font-mono text-gold">{(u.marketAccess || 'all').toUpperCase()}</td>
-                    <td className="font-mono" style={{ color: '#aaa' }}>{u.lastActive || 'Active'}</td>
                     <td>
                       <button
                         type="button"

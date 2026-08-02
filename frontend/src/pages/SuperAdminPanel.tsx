@@ -17,6 +17,44 @@ export const SuperAdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'roster' | 'admin_audit' | 'metrics' | 'health'>('roster');
   const [data, setData] = useState<any>(null);
 
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccEmail, setNewAccEmail] = useState('');
+  const [newAccRole, setNewAccRole] = useState<'trader' | 'admin'>('trader');
+  const [newAccTier, setNewAccTier] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
+
+  const handleSuperCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAccName || !newAccEmail) {
+      alert('Please provide display name and email');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newAccName,
+          email: newAccEmail,
+          role: newAccRole,
+          tier: newAccTier
+        })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to create account');
+
+      setShowAddAccountModal(false);
+      setNewAccName('');
+      setNewAccEmail('');
+      setNewAccRole('trader');
+      setNewAccTier('futures_forex');
+      alert(`✅ ${newAccRole.toUpperCase()} account for "${newAccName}" created successfully!`);
+      fetchSuperAdminData();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const fetchSuperAdminData = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/dashboard`);
@@ -163,10 +201,94 @@ export const SuperAdminPanel: React.FC = () => {
         {/* TAB 1: User & Admin Live Roster */}
         {activeTab === 'roster' && (
           <div className="super-card font-mono">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, color: '#b388ff' }}>👥 All Users &amp; Admins Real-Time Telemetry</h2>
-              <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Updates live every 5s</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#b388ff' }}>👥 All Users &amp; Admins Real-Time Telemetry</h2>
+                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Updates live every 5s • Super Admin Master Privilege</span>
+              </div>
+
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: 'rgba(179, 136, 255, 0.15)',
+                  border: '1px solid #b388ff',
+                  color: '#b388ff',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+                onClick={() => setShowAddAccountModal(!showAddAccountModal)}
+              >
+                {showAddAccountModal ? '✖️ Close Form' : '➕ Create Account (User or Admin)'}
+              </button>
             </div>
+
+          {showAddAccountModal && (
+            <form onSubmit={handleSuperCreateAccount} style={{ background: 'rgba(179, 136, 255, 0.05)', border: '1px solid rgba(179, 136, 255, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#b388ff' }}>➕ Super Admin: Create User or Admin Account</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Display Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Master Trader or Admin User"
+                    value={newAccName}
+                    onChange={e => setNewAccName(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Email Address *</label>
+                  <input
+                    type="email"
+                    placeholder="user@mannaedge.com"
+                    value={newAccEmail}
+                    onChange={e => setNewAccEmail(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Account Privileges / Role *</label>
+                  <select
+                    value={newAccRole}
+                    onChange={e => setNewAccRole(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #ffab00', color: '#ffab00', borderRadius: '4px', fontWeight: 800 }}
+                  >
+                    <option value="trader">👨‍💻 Standard Trader</option>
+                    <option value="admin">⚙️ System Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Subscription Access Tier</label>
+                  <select
+                    value={newAccTier}
+                    onChange={e => setNewAccTier(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #b388ff', color: '#b388ff', borderRadius: '4px', fontWeight: 700 }}
+                  >
+                    <option value="free">Free Tier (2 Futures + 2 Forex)</option>
+                    <option value="forex_only">Forex Only Tier (All Forex)</option>
+                    <option value="futures_forex">Futures &amp; Forex Tier (All Futures + Forex)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="font-mono"
+                style={{ background: '#b388ff', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
+              >
+                Create Account
+              </button>
+            </form>
+          )}
 
             <div className="table-responsive">
               <table className="runs-table">

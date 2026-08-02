@@ -21,16 +21,54 @@ router.get('/strategies/status', async (_req: Request, res: Response) => {
   }
 });
 
-// User Accounts & Impersonation Management Endpoint
+import { getAllUsers, addUser, updateUserTier } from '../db/user-store';
+
+// User Accounts Management Endpoints
 router.get('/users', (_req: Request, res: Response) => {
-  const users = [
-    { id: 'usr_david', name: 'David Chen', email: 'dchen@retailtrader.com', role: 'trader', tier: 'free', marketAccess: '2 Futures + 2 Forex', status: 'active', lastActive: 'Yesterday' },
-    { id: 'usr_sarah', name: 'Sarah Jenkins', email: 's.jenkins@forexdesk.com', role: 'trader', tier: 'forex_only', marketAccess: 'forex', status: 'active', lastActive: '2 hours ago' },
-    { id: 'usr_alex', name: 'Alex Thompson', email: 'alex.t@propfirm.com', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', lastActive: '10 mins ago' },
-    { id: 'usr_marcus', name: 'Marcus Vance', email: 'vance.m@alphaquant.co', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', lastActive: '5 mins ago' },
-    { id: 'usr_demo', name: 'Institutional Trader (Default)', email: 'trader@mannaedge.com', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', lastActive: 'Just now' }
-  ];
+  const users = getAllUsers();
   res.json({ success: true, users });
+});
+
+router.post('/users', (req: Request, res: Response) => {
+  try {
+    const { name, email, tier = 'free' } = req.body || {};
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required' });
+    }
+
+    // Admins can ONLY create trader accounts
+    const newUser = addUser({
+      name,
+      email,
+      role: 'trader',
+      tier
+    });
+
+    res.json({ success: true, user: newUser, users: getAllUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to create user account', details: err.message });
+  }
+});
+
+router.put('/users/:id/tier', (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const userId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { tier } = req.body || {};
+
+    if (!tier || !['free', 'forex_only', 'futures_forex'].includes(tier)) {
+      return res.status(400).json({ error: 'Invalid tier specified' });
+    }
+
+    const updated = updateUserTier(userId, tier);
+    if (!updated) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, user: updated, users: getAllUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update user tier', details: err.message });
+  }
 });
 
 router.post('/strategies/toggle', async (req: Request, res: Response) => {

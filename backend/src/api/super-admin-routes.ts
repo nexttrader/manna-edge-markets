@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
+import { getAllUsers, addUser, updateUserTier } from '../db/user-store';
 
 const router = express.Router();
 
@@ -143,6 +144,27 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve super admin intelligence data', details: err.message });
+  }
+});
+
+// 3. SUPER ADMIN CREATES USERS & ADMINS
+router.post('/users', (req: Request, res: Response) => {
+  try {
+    const { name, email, role = 'trader', tier = 'futures_forex' } = req.body || {};
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Display Name and Email are required' });
+    }
+
+    const newUser = addUser({
+      name,
+      email,
+      role: role === 'admin' ? 'admin' : 'trader',
+      tier
+    });
+
+    res.json({ success: true, user: newUser, allUsers: getAllUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to create user/admin account', details: err.message });
   }
 });
 
