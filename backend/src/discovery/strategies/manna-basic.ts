@@ -41,6 +41,7 @@ export class MannaBasicStrategy implements IStrategyEngine {
 
         const atr14 = computeATR(candles15m, 14);
         const currentPrice = await getLiveCurrentPrice(instrument);
+        if (!currentPrice || currentPrice <= 0) continue;
         const bias: Bias = preCalculatedBiases[instrument] || 'long';
 
         let entry_zone_mid: number;

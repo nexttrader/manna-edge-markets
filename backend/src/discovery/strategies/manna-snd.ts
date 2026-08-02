@@ -267,6 +267,7 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         const atr14 = computeATR(candles15m, 14);
         const currentPrice = await getLiveCurrentPrice(instrument);
+        if (!currentPrice || currentPrice <= 0) continue;
 
         // 1. Evaluate HTF Curve Location & 15M Trend
         const curveInfo = this.getCurveLocation(currentPrice, candles1h, atr14);

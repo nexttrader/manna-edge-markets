@@ -1,15 +1,11 @@
 import YahooFinance from 'yahoo-finance2';
 import { Candle } from './types';
-import { generateCandles, getCurrentPrice as getMockCurrentPrice } from './mock-data';
 import { createLogger } from '../telemetry/logger';
 
 const logger = createLogger('YahooProvider');
 
-const yahooFinance = typeof YahooFinance === 'function' 
-    ? new (YahooFinance as any)() 
-    : (YahooFinance as any).default 
-        ? new ((YahooFinance as any).default)() 
-        : YahooFinance;
+// Properly instantiate YahooFinance v3 client
+const yahooFinance = new YahooFinance();
 
 export const SYMBOL_MAP: Record<string, string> = {
     'ES': 'ES=F',
@@ -31,7 +27,7 @@ interface CacheEntry<T> {
     timestamp: number;
 }
 
-const CACHE_TTL_MS = 60 * 1000; // 60s cache
+const CACHE_TTL_MS = 15 * 1000; // 15s cache for fast live price updates
 const candleCache = new Map<string, CacheEntry<Candle[]>>();
 const priceCache = new Map<string, CacheEntry<number>>();
 
@@ -42,8 +38,8 @@ export async function getLiveCandles(
 ): Promise<Candle[]> {
     const yahooSymbol = SYMBOL_MAP[instrument];
     if (!yahooSymbol) {
-        logger.warn({ instrument }, 'No Yahoo Finance ticker mapping found; using fallback');
-        return getFallbackCandles(instrument, timeframe, count);
+        logger.warn({ instrument }, 'No Yahoo Finance ticker mapping found for instrument');
+        return [];
     }
 
     const cacheKey = `${instrument}_${timeframe}_${count}`;
@@ -53,7 +49,6 @@ export async function getLiveCandles(
     }
 
     try {
-        // Calculate period1 start date based on timeframe & count (capped to Yahoo API limits)
         const now = new Date();
         const timeframeMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : timeframe === '15m' ? 15 : timeframe === '1h' ? 60 : timeframe === '4h' ? 240 : 1440;
         let lookbackMs = (count + 20) * timeframeMinutes * 60 * 1000;
@@ -63,7 +58,6 @@ export async function getLiveCandles(
         lookbackMs = Math.min(lookbackMs, maxDays * 24 * 60 * 60 * 1000);
         
         const period1 = new Date(now.getTime() - lookbackMs);
-
         const interval = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe) as any;
 
         const chartResult: any = await yahooFinance.chart(yahooSymbol, {
@@ -86,23 +80,28 @@ export async function getLiveCandles(
 
             if (candles.length > 0) {
                 candleCache.set(cacheKey, { data: candles, timestamp: Date.now() });
+                
+                // Also update price cache with latest close
+                const lastCandle = candles[candles.length - 1];
+                if (lastCandle && lastCandle.close > 0) {
+                    priceCache.set(instrument, { data: lastCandle.close, timestamp: Date.now() });
+                }
+
                 return candles;
             }
         }
 
-        logger.warn({ instrument, yahooSymbol }, 'Yahoo returned empty candles; using fallback');
-        return getFallbackCandles(instrument, timeframe, count);
+        logger.warn({ instrument, yahooSymbol }, 'Yahoo returned 0 candles for instrument');
+        return [];
     } catch (err: any) {
-        logger.error({ instrument, yahooSymbol, message: err.message }, 'Failed to fetch live candles from Yahoo; using fallback');
-        return getFallbackCandles(instrument, timeframe, count);
+        logger.error({ instrument, yahooSymbol, message: err.message }, 'Failed to fetch live candles from Yahoo');
+        return [];
     }
 }
 
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const yahooSymbol = SYMBOL_MAP[instrument];
-    if (!yahooSymbol) {
-        return getMockCurrentPrice(instrument);
-    }
+    if (!yahooSymbol) return 0;
 
     const cached = priceCache.get(instrument);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -111,21 +110,25 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
 
     try {
         const quote: any = await yahooFinance.quote(yahooSymbol);
-        const price = quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.bid;
-        if (price !== undefined && price !== null) {
+        const price = quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.bid ?? quote?.ask;
+        if (price !== undefined && price !== null && price > 0) {
             const numPrice = Number(price.toFixed(5));
             priceCache.set(instrument, { data: numPrice, timestamp: Date.now() });
             return numPrice;
         }
-        return getMockCurrentPrice(instrument);
+        
+        // Fallback to latest candle close from 1m chart if quote is empty
+        const candles = await getLiveCandles(instrument, '1m', 2);
+        if (candles.length > 0) {
+            return candles[candles.length - 1].close;
+        }
+        return 0;
     } catch (err: any) {
-        logger.error({ instrument, message: err.message }, 'Failed to fetch live price from Yahoo; using fallback');
-        return getMockCurrentPrice(instrument);
+        logger.error({ instrument, message: err.message }, 'Failed to fetch live price from Yahoo');
+        const candles = await getLiveCandles(instrument, '1m', 2);
+        if (candles.length > 0) {
+            return candles[candles.length - 1].close;
+        }
+        return 0;
     }
-}
-
-function getFallbackCandles(instrument: string, timeframe: '1m' | '5m' | '15m' | '1h' | '4h' | '1d', count: number): Candle[] {
-    const tfMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : timeframe === '15m' ? 15 : timeframe === '1h' ? 60 : timeframe === '4h' ? 240 : 1440;
-    const currentPrice = priceCache.get(instrument)?.data || getMockCurrentPrice(instrument);
-    return generateCandles(instrument, count, tfMinutes, currentPrice);
 }
