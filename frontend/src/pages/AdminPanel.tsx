@@ -70,6 +70,7 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history'>('users');
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
   
@@ -202,16 +203,92 @@ export const AdminPanel: React.FC = () => {
       </header>
 
       <main className="container admin-main">
-        {/* User Impersonation & Account Management Desk */}
-        <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(255, 171, 0, 0.05)', border: '1px solid rgba(255, 171, 0, 0.4)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffab00', margin: 0 }}>
-              👤 USER ACCOUNTS &amp; IMPERSONATION DESK
-            </h2>
-            <span style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
-              Click &quot;🥸 Impersonate Account&quot; to log in as any trader, view their desk, and troubleshoot user issues.
-            </span>
-          </div>
+        {/* Admin Section Tabs Navigation */}
+        <div className="admin-nav-tabs glass-card font-mono" style={{ display: 'flex', gap: '8px', padding: '10px 14px', marginBottom: '24px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)', borderRadius: '10px', overflowX: 'auto' }}>
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'users' ? 'active' : ''}`}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '6px',
+              border: adminTab === 'users' ? '1px solid #ffab00' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: adminTab === 'users' ? 'rgba(255, 171, 0, 0.18)' : 'transparent',
+              color: adminTab === 'users' ? '#ffab00' : '#ccc',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.88rem'
+            }}
+            onClick={() => setAdminTab('users')}
+          >
+            👤 User Accounts ({usersList.length})
+          </button>
+
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'engine' ? 'active' : ''}`}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '6px',
+              border: adminTab === 'engine' ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: adminTab === 'engine' ? 'rgba(0, 229, 255, 0.18)' : 'transparent',
+              color: adminTab === 'engine' ? '#00e5ff' : '#ccc',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.88rem'
+            }}
+            onClick={() => setAdminTab('engine')}
+          >
+            ⚡ Strategy Engine &amp; Manual Scans
+          </button>
+
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'analytics' ? 'active' : ''}`}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '6px',
+              border: adminTab === 'analytics' ? '1px solid #e056fd' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: adminTab === 'analytics' ? 'rgba(224, 86, 253, 0.18)' : 'transparent',
+              color: adminTab === 'analytics' ? '#e056fd' : '#ccc',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.88rem'
+            }}
+            onClick={() => setAdminTab('analytics')}
+          >
+            🎯 Conviction &amp; Outcomes ({recentOutcomes.length})
+          </button>
+
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'history' ? 'active' : ''}`}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '6px',
+              border: adminTab === 'history' ? '1px solid #00e676' : '1px solid rgba(255, 255, 255, 0.1)',
+              background: adminTab === 'history' ? 'rgba(0, 230, 118, 0.18)' : 'transparent',
+              color: adminTab === 'history' ? '#00e676' : '#ccc',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.88rem'
+            }}
+            onClick={() => setAdminTab('history')}
+          >
+            📜 Run History &amp; Audits ({runs.length})
+          </button>
+        </div>
+
+        {/* TAB 1: User Impersonation & Account Management Desk */}
+        {adminTab === 'users' && (
+          <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(255, 171, 0, 0.05)', border: '1px solid rgba(255, 171, 0, 0.4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ffab00', margin: 0 }}>
+                👤 USER ACCOUNTS &amp; IMPERSONATION DESK
+              </h2>
+              <span style={{ fontSize: '0.8rem', color: '#e2e8f0' }}>
+                Click &quot;🥸 Impersonate Account&quot; to log in as any trader, view their desk, and troubleshoot user issues.
+              </span>
+            </div>
 
           {isImpersonating && (
             <div style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', padding: '12px 16px', borderRadius: '6px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -279,13 +356,17 @@ export const AdminPanel: React.FC = () => {
             </table>
           </div>
         </div>
+        )}
 
-        {/* Strategy Control Panel (Enable / Disable Strategies) */}
-        <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--kdt-gold)', margin: 0 }}>
-              ⚙️ STRATEGY ENGINE CONTROLS (ENABLE / DISABLE DISCOVERY)
-            </h2>
+        {/* TAB 2: Strategy Engine & Manual Scans */}
+        {adminTab === 'engine' && (
+          <>
+            {/* Strategy Control Panel (Enable / Disable Strategies) */}
+            <div className="admin-strategy-toggles-container glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--kdt-gold)', margin: 0 }}>
+                  ⚙️ STRATEGY ENGINE CONTROLS (ENABLE / DISABLE DISCOVERY)
+                </h2>
             <span style={{ fontSize: '0.8rem', color: 'var(--kdt-white-muted)' }}>
               Disabled strategies will be automatically skipped during scheduled & manual discovery runs.
             </span>
@@ -452,10 +533,15 @@ export const AdminPanel: React.FC = () => {
             </div>
           )}
         </div>
+        </>
+        )}
 
-        {/* Strategy Filter Tabs */}
-        <div className="strategy-filter-tabs glass-card font-mono">
-          <span className="filter-title">STRATEGY ANALYTICS FILTER:</span>
+        {/* TAB 3: Conviction & Trade Analytics */}
+        {adminTab === 'analytics' && (
+          <>
+            {/* Strategy Filter Tabs */}
+            <div className="strategy-filter-tabs glass-card font-mono">
+              <span className="filter-title">STRATEGY ANALYTICS FILTER:</span>
           <button 
             className={`strat-tab ${strategyFilter === 'all' ? 'active' : ''}`}
             onClick={() => setStrategyFilter('all')}
@@ -912,8 +998,13 @@ export const AdminPanel: React.FC = () => {
             )}
           </div>
         )}
+        </>
+        )}
 
-        {/* Recent Publish Runs */}
+        {/* TAB 4: Run History & Safety Audits */}
+        {adminTab === 'history' && (
+          <>
+            {/* Recent Publish Runs */}
         {runs.length > 0 && (
           <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>
             <h2>Publish Run History (Scheduled vs Manual)</h2>
@@ -1031,6 +1122,8 @@ export const AdminPanel: React.FC = () => {
             </button>
           </div>
         </div>
+        </>
+        )}
 
         {rescanCandidate && rescanCurrentSetup && (
           <SignalReplaceModal
