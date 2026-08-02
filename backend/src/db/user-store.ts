@@ -2,6 +2,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  password?: string;
   role: 'trader' | 'admin' | 'super_admin';
   tier: 'free' | 'forex_only' | 'futures_forex';
   marketAccess: string;
@@ -18,12 +19,12 @@ export interface UserProfile {
 }
 
 const initialUserProfiles: UserProfile[] = [
-  { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 90 * 86400000).toISOString(), lastActive: 'Just now', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 412, watchlistCount: 12 },
-  { id: 'usr_david', name: 'David Chen', email: 'dchen@retailtrader.com', role: 'trader', tier: 'free', marketAccess: '2 Futures + 2 Forex', status: 'active', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), lastActive: 'Yesterday', preferredMarket: 'Futures', riskLimit: '1%', signalsViewed: 45, watchlistCount: 2 },
-  { id: 'usr_sarah', name: 'Sarah Jenkins', email: 's.jenkins@forexdesk.com', role: 'trader', tier: 'forex_only', marketAccess: 'forex', status: 'active', createdAt: new Date(Date.now() - 15 * 86400000).toISOString(), lastActive: '2 hours ago', preferredMarket: 'Forex', riskLimit: '2%', signalsViewed: 89, watchlistCount: 5 },
-  { id: 'usr_alex', name: 'Alex Thompson', email: 'alex.t@propfirm.com', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 45 * 86400000).toISOString(), lastActive: '10 mins ago', preferredMarket: 'Both', riskLimit: '2%', signalsViewed: 230, watchlistCount: 9 },
-  { id: 'usr_marcus', name: 'Marcus Vance', email: 'vance.m@alphaquant.co', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 60 * 86400000).toISOString(), lastActive: '5 mins ago', preferredMarket: 'Futures', riskLimit: '5%', signalsViewed: 178, watchlistCount: 7 },
-  { id: 'usr_demo', name: 'Institutional Trader (Default)', email: 'trader@mannaedge.com', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Just now', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 310, watchlistCount: 15 }
+  { id: 'usr_admin', name: 'System Administrator', email: 'admin@mannaedge.com', password: 'password123', role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 90 * 86400000).toISOString(), lastActive: 'Just now', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 412, watchlistCount: 12 },
+  { id: 'usr_david', name: 'David Chen', email: 'dchen@retailtrader.com', password: 'password123', role: 'trader', tier: 'free', marketAccess: '2 Futures + 2 Forex', status: 'active', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), lastActive: 'Yesterday', preferredMarket: 'Futures', riskLimit: '1%', signalsViewed: 45, watchlistCount: 2 },
+  { id: 'usr_sarah', name: 'Sarah Jenkins', email: 's.jenkins@forexdesk.com', password: 'password123', role: 'trader', tier: 'forex_only', marketAccess: 'forex', status: 'active', createdAt: new Date(Date.now() - 15 * 86400000).toISOString(), lastActive: '2 hours ago', preferredMarket: 'Forex', riskLimit: '2%', signalsViewed: 89, watchlistCount: 5 },
+  { id: 'usr_alex', name: 'Alex Thompson', email: 'alex.t@propfirm.com', password: 'password123', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 45 * 86400000).toISOString(), lastActive: '10 mins ago', preferredMarket: 'Both', riskLimit: '2%', signalsViewed: 230, watchlistCount: 9 },
+  { id: 'usr_marcus', name: 'Marcus Vance', email: 'vance.m@alphaquant.co', password: 'password123', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date(Date.now() - 60 * 86400000).toISOString(), lastActive: '5 mins ago', preferredMarket: 'Futures', riskLimit: '5%', signalsViewed: 178, watchlistCount: 7 },
+  { id: 'usr_demo', name: 'Institutional Trader (Default)', email: 'trader@mannaedge.com', password: 'password123', role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Just now', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 310, watchlistCount: 15 }
 ];
 
 let userStore: UserProfile[] = [...initialUserProfiles];
@@ -52,6 +53,7 @@ export const getHoldingZoneUsers = (): UserProfile[] => {
 export const addUser = (profile: { 
   name: string; 
   email: string; 
+  password?: string;
   role?: 'trader' | 'admin' | 'super_admin'; 
   tier?: 'free' | 'forex_only' | 'futures_forex';
   preferredMarket?: 'Futures' | 'Forex' | 'Both';
@@ -61,6 +63,7 @@ export const addUser = (profile: {
     id: `usr_${Date.now()}`,
     name: profile.name,
     email: profile.email,
+    password: profile.password || 'password123',
     role: profile.role || 'trader',
     tier: profile.tier || 'free',
     marketAccess: profile.tier === 'forex_only' ? 'forex' : profile.tier === 'free' ? '2 Futures + 2 Forex' : 'all',
@@ -73,14 +76,12 @@ export const addUser = (profile: {
     watchlistCount: 0
   };
 
-  // Check active user store for exact duplicate active account
   const existingIdx = userStore.findIndex(u => u.email.toLowerCase() === profile.email.toLowerCase());
   if (existingIdx >= 0) {
     userStore[existingIdx] = { ...userStore[existingIdx], ...newUser };
     return userStore[existingIdx];
   }
 
-  // If previous user with same details is in holding zone, new user can still be added!
   userStore.unshift(newUser);
   return newUser;
 };
@@ -92,6 +93,43 @@ export const updateUserTier = (userId: string, tier: 'free' | 'forex_only' | 'fu
   user.tier = tier;
   user.marketAccess = tier === 'forex_only' ? 'forex' : tier === 'free' ? '2 Futures + 2 Forex' : 'all';
   return user;
+};
+
+export const updateUserPassword = (
+  userId: string,
+  newPassword: string,
+  requesterRole: 'trader' | 'admin' | 'super_admin',
+  requesterEmail?: string
+): { success: boolean; error?: string } => {
+  const target = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!target) {
+    return { success: false, error: 'User account not found' };
+  }
+
+  const isSelf = Boolean(requesterEmail && requesterEmail.toLowerCase() === target.email.toLowerCase());
+
+  // Rule 1: Self password change is always allowed
+  if (isSelf) {
+    target.password = newPassword;
+    return { success: true };
+  }
+
+  // Rule 2: Super Admin can change password for ANY trader or admin account
+  if (requesterRole === 'super_admin') {
+    target.password = newPassword;
+    return { success: true };
+  }
+
+  // Rule 3: Regular Admin can change password for TRADER accounts, but CANNOT change password for ADMIN accounts
+  if (requesterRole === 'admin') {
+    if (target.role === 'admin' || target.role === 'super_admin') {
+      return { success: false, error: 'Access Denied: Only Super Admin can change an Admin account password.' };
+    }
+    target.password = newPassword;
+    return { success: true };
+  }
+
+  return { success: false, error: 'Unauthorized: You do not have permission to change this password.' };
 };
 
 export const softDeleteUser = (userId: string): { success: boolean; user?: UserProfile } => {
@@ -121,7 +159,6 @@ export const restoreUser = (userId: string): { success: boolean; user?: UserProf
   delete target.purgeAt;
   delete target.daysRemaining;
 
-  // Re-add to active user store (overwrite if same ID exists)
   const activeIdx = userStore.findIndex(u => u.id === target.id);
   if (activeIdx >= 0) {
     userStore[activeIdx] = target;

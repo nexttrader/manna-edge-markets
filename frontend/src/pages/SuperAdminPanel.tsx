@@ -58,6 +58,27 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const handleSuperChangePassword = async (userId: string, userEmail: string) => {
+    const newPass = window.prompt(`🔑 SUPER ADMIN OVERRIDE:\n\nEnter NEW password for ${userEmail}:`);
+    if (!newPass) return;
+    if (newPass.length < 4) {
+      alert('⚠️ Password must be at least 4 characters long.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/users/${userId}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: newPass })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+      alert(`✅ Password for "${userEmail}" updated successfully by Super Admin!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccEmail, setNewAccEmail] = useState('');
@@ -383,23 +404,43 @@ export const SuperAdminPanel: React.FC = () => {
                         ))}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="font-mono"
-                          style={{
-                            background: 'rgba(179, 136, 255, 0.2)',
-                            border: '1px solid #b388ff',
-                            color: '#b388ff',
-                            padding: '4px 10px',
-                            borderRadius: '4px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            fontSize: '0.8rem'
-                          }}
-                          onClick={() => handleSuperImpersonate(u)}
-                        >
-                          🥸 Super-Impersonate
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(179, 136, 255, 0.2)',
+                              border: '1px solid #b388ff',
+                              color: '#b388ff',
+                              padding: '4px 10px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => handleSuperImpersonate(u)}
+                          >
+                            🥸 Super-Impersonate
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(0, 229, 255, 0.15)',
+                              border: '1px solid #00e5ff',
+                              color: '#00e5ff',
+                              padding: '4px 10px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => handleSuperChangePassword(u.id || u.email, u.email)}
+                          >
+                            🔑 Password
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

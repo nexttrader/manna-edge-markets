@@ -8,6 +8,8 @@ import { FaqModal } from './FaqModal';
 import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
 
+import { API_BASE } from '../config';
+
 export const DashboardHeader: React.FC = () => {
   const { user, logout, originalAdmin, elevateToSuperAdmin } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
@@ -18,6 +20,36 @@ export const DashboardHeader: React.FC = () => {
   const [showFaq, setShowFaq] = useState(false);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [myNewPass, setMyNewPass] = useState('');
+
+  const handleChangeMyPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!myNewPass || myNewPass.length < 4) {
+      alert('⚠️ Password must be at least 4 characters long');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${user?.email}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newPassword: myNewPass,
+          requesterRole: user?.role || 'trader',
+          requesterEmail: user?.email
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      setShowPasswordModal(false);
+      setMyNewPass('');
+      alert('✅ Your password has been changed successfully!');
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
 
   const handleAdminNameClick = () => {
     const now = Date.now();
@@ -115,6 +147,15 @@ export const DashboardHeader: React.FC = () => {
                 >
                   {user.email.split('@')[0]} {isSuperAdmin ? '👁️' : ''}
                 </span>
+                <button
+                  type="button"
+                  className="voice-toggle-btn"
+                  style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid #00e5ff', color: '#00e5ff', background: 'rgba(0,229,255,0.1)' }}
+                  onClick={() => setShowPasswordModal(true)}
+                  title="Change My Password"
+                >
+                  🔑 Pass
+                </button>
                 <button onClick={logout} className="logout-btn" title="Sign Out">
                   🚪
                 </button>
@@ -127,6 +168,45 @@ export const DashboardHeader: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Change My Password Modal */}
+      {showPasswordModal && (
+        <div className="modal-overlay font-mono" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(6,2,12,0.85)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass-card" style={{ background: '#0f0620', border: '1px solid #00e5ff', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '100%', color: '#fff' }}>
+            <h3 style={{ margin: '0 0 12px 0', color: '#00e5ff', fontSize: '1.1rem' }}>🔑 Change Your Password</h3>
+            <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '16px' }}>Account: {user?.email}</p>
+            <form onSubmit={handleChangeMyPassword}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '6px' }}>New Password *</label>
+                <input
+                  type="password"
+                  placeholder="Enter new password..."
+                  value={myNewPass}
+                  onChange={e => setMyNewPass(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#ccc', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={() => setShowPasswordModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ background: '#00e5ff', color: '#090314', border: 'none', padding: '8px 18px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  Save New Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showCalendar && (
         <EconomicCalendarModal onClose={() => setShowCalendar(false)} />

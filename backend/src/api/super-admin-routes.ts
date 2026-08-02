@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
-import { getAllUsers, addUser, updateUserTier } from '../db/user-store';
+import { getAllUsers, addUser, updateUserTier, updateUserPassword } from '../db/user-store';
 
 const router = express.Router();
 
@@ -165,6 +165,27 @@ router.post('/users', (req: Request, res: Response) => {
     res.json({ success: true, user: newUser, allUsers: getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create user/admin account', details: err.message });
+  }
+});
+
+router.put('/users/:id/password', (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const userId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { newPassword } = req.body || {};
+
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+    }
+
+    const result = updateUserPassword(userId, newPassword, 'super_admin');
+    if (!result.success) {
+      return res.status(403).json({ error: result.error || 'Failed to update password' });
+    }
+
+    res.json({ success: true, message: 'Password updated successfully by Super Admin', allUsers: getAllUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update password', details: err.message });
   }
 });
 

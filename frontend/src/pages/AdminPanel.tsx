@@ -106,6 +106,35 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const handleAdminChangePassword = async (targetId: string, targetName: string, targetRole: string) => {
+    if ((targetRole === 'admin' || targetRole === 'super_admin') && user?.role !== 'super_admin' && user?.email !== targetId) {
+      alert('⛔ PERMISSION DENIED:\n\nRegular Admins CANNOT change another Admin account password.\nOnly Super Admin or the Admin themselves can change an Admin password.');
+      return;
+    }
+    const newPass = window.prompt(`🔑 Enter NEW password for "${targetName}":`);
+    if (!newPass) return;
+    if (newPass.length < 4) {
+      alert('⚠️ Password must be at least 4 characters long.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${targetId}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newPassword: newPass,
+          requesterRole: user?.role || 'admin',
+          requesterEmail: user?.email
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+      alert(`✅ Password for "${targetName}" updated successfully!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const handleUpdateTier = async (userId: string, tier: 'free' | 'forex_only' | 'futures_forex') => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/users/${userId}/tier`, {
@@ -608,6 +637,24 @@ export const AdminPanel: React.FC = () => {
                             type="button"
                             className="font-mono"
                             style={{
+                              background: 'rgba(0, 229, 255, 0.15)',
+                              border: '1px solid #00e5ff',
+                              color: '#00e5ff',
+                              padding: '5px 10px',
+                              borderRadius: '4px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              fontSize: '0.78rem'
+                            }}
+                            onClick={() => handleAdminChangePassword(u.id || u.email, u.name, u.role || 'trader')}
+                          >
+                            🔑 Password
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
                               background: 'rgba(255, 23, 68, 0.15)',
                               border: '1px solid #ff1744',
                               color: '#ff1744',
@@ -756,7 +803,17 @@ export const AdminPanel: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '8px 16px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer' }}
+                  onClick={() => {
+                    const u = selectedUserProfile;
+                    handleAdminChangePassword(u.id || u.email, u.name, u.role || 'trader');
+                  }}
+                >
+                  🔑 Change Password
+                </button>
                 <button
                   type="button"
                   style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '8px 16px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer' }}
