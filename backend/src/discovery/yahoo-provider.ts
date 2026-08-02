@@ -53,10 +53,15 @@ export async function getLiveCandles(
     }
 
     try {
-        // Calculate period1 start date based on timeframe & count
+        // Calculate period1 start date based on timeframe & count (capped to Yahoo API limits)
         const now = new Date();
         const timeframeMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : timeframe === '15m' ? 15 : timeframe === '1h' ? 60 : timeframe === '4h' ? 240 : 1440;
-        const lookbackMs = (count + 20) * timeframeMinutes * 60 * 1000;
+        let lookbackMs = (count + 20) * timeframeMinutes * 60 * 1000;
+        
+        // Yahoo API max lookback limits: 1m (7d), 5m/15m (55d), 1h (29d)
+        const maxDays = timeframe === '1m' ? 7 : (timeframe === '5m' || timeframe === '15m') ? 55 : timeframe === '1h' ? 29 : 365;
+        lookbackMs = Math.min(lookbackMs, maxDays * 24 * 60 * 60 * 1000);
+        
         const period1 = new Date(now.getTime() - lookbackMs);
 
         const interval = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe) as any;
