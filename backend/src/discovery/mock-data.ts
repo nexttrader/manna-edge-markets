@@ -42,16 +42,47 @@ export function generateCandles(instrument: string, count: number, timeframeMinu
     for (let i = count - 1; i >= 0; i--) {
         const time = new Date(now.getTime() - (i * timeframeMinutes * 60 * 1000));
         
-        // Random walk for OHLC
-        const open = currentPrice;
-        const closeChange = (Math.random() - 0.5) * volatility;
-        const close = open + closeChange;
-        
-        const highMargin = Math.random() * (volatility / 2);
-        const lowMargin = Math.random() * (volatility / 2);
-        
-        const high = Math.max(open, close) + highMargin;
-        const low = Math.min(open, close) - lowMargin;
+        let open = currentPrice;
+        let close: number;
+        let high: number;
+        let low: number;
+
+        // Periodically insert clean consolidation base candles & leg departures (every ~12-16 candles)
+        const cycle = i % 15;
+        if (cycle === 5 || cycle === 6) {
+          // Base candle (tight body <= 40% of range)
+          const range = volatility * (0.6 + Math.random() * 0.4);
+          const body = range * (0.1 + Math.random() * 0.25);
+          const isUp = Math.random() > 0.5;
+          close = isUp ? open + body : open - body;
+          const wickUpper = (range - body) * (0.3 + Math.random() * 0.4);
+          high = Math.max(open, close) + wickUpper;
+          low = Math.min(open, close) - (range - body - wickUpper);
+        } else if (cycle === 4) {
+          // Strong leg candle preceding base
+          const isLegUp = (i % 30) < 15;
+          const range = volatility * (1.2 + Math.random() * 0.6);
+          const body = range * (0.7 + Math.random() * 0.2);
+          close = isLegUp ? open + body : open - body;
+          high = Math.max(open, close) + (range - body) * 0.5;
+          low = Math.min(open, close) - (range - body) * 0.5;
+        } else if (cycle === 7) {
+          // Strong leg departure candle following base
+          const isLegUp = (i % 30) < 15;
+          const range = volatility * (1.3 + Math.random() * 0.7);
+          const body = range * (0.75 + Math.random() * 0.2);
+          close = isLegUp ? open + body : open - body;
+          high = Math.max(open, close) + (range - body) * 0.5;
+          low = Math.min(open, close) - (range - body) * 0.5;
+        } else {
+          // Normal random walk candle
+          const closeChange = (Math.random() - 0.5) * volatility;
+          close = open + closeChange;
+          const highMargin = Math.random() * (volatility / 2);
+          const lowMargin = Math.random() * (volatility / 2);
+          high = Math.max(open, close) + highMargin;
+          low = Math.min(open, close) - lowMargin;
+        }
         
         // Volume varies by time of day roughly (higher in NY/London)
         const hour = time.getUTCHours();
