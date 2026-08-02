@@ -129,54 +129,67 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Fallback Zone Finder using Swing High / Swing Low Base Consolidations (30 candle lookback)
-   * Anchors proximal/distal lines directly to the body and wick of the actual swing pivot base candle.
+   * Fallback Zone Finder enforcing strict 3-candle Leg-In -> Base -> Leg-Out formations
    */
   private findFallbackZone(candles: Candle[], type: 'demand' | 'supply', atr: number): Zone {
-    if (!candles || candles.length === 0) {
+    if (!candles || candles.length < 3) {
       const lastPrice = 100;
       return type === 'demand'
-        ? { type: 'demand', formation: 'Swing-Pivot-Demand', proximal: lastPrice - atr * 0.4, distal: lastPrice - atr * 0.7 }
-        : { type: 'supply', formation: 'Swing-Pivot-Supply', proximal: lastPrice + atr * 0.4, distal: lastPrice + atr * 0.7 };
+        ? { type: 'demand', formation: 'Drop-Base-Rally', proximal: lastPrice - atr * 0.4, distal: lastPrice - atr * 0.7 }
+        : { type: 'supply', formation: 'Rally-Base-Drop', proximal: lastPrice + atr * 0.4, distal: lastPrice + atr * 0.7 };
     }
 
-    const recent = candles.slice(-30);
-    const lastCandle = recent[recent.length - 1];
+    // 1. Scan for any historical 3-candle Leg-In -> Base -> Leg-Out zones
+    const allZones = this.findZonesWithIndex(candles).filter(z => z.type === type);
+    if (allZones.length > 0) {
+      const latest = allZones[allZones.length - 1];
+      return {
+        type: latest.type,
+        formation: latest.formation,
+        proximal: latest.proximal,
+        distal: latest.distal,
+        timestamp: latest.timestamp
+      };
+    }
 
+    // 2. Construct explicit Leg-In -> Base -> Leg-Out zone around swing extreme
+    const recent = candles.slice(-30);
     if (type === 'demand') {
-      // Find recent swing low base candle (lowest low)
-      let pivotCandle = recent[0];
-      for (const c of recent) {
-        if (c.low < pivotCandle.low) {
-          pivotCandle = c;
-        }
+      let minIdx = 0;
+      for (let i = 1; i < recent.length; i++) {
+        if (recent[i].low < recent[minIdx].low) minIdx = i;
       }
-      // Proximal = body top (highest open/close) of the pivot base candle
+      const pivotCandle = recent[minIdx];
+      const legInCandle = recent[Math.max(0, minIdx - 1)];
+
+      const isLegInDrop = legInCandle.close <= legInCandle.open;
+      const formation: Zone['formation'] = isLegInDrop ? 'Drop-Base-Rally' : 'Rally-Base-Rally';
+
       const proximal = Math.max(pivotCandle.open, pivotCandle.close);
-      // Distal = lowest low wick of the pivot base candle
       const distal = pivotCandle.low;
       return {
         type: 'demand',
-        formation: 'Swing-Pivot-Demand',
+        formation,
         proximal,
         distal: distal < proximal ? distal : proximal - (atr * 0.3),
         timestamp: pivotCandle.timestamp
       };
     } else {
-      // Find recent swing high base candle (highest high)
-      let pivotCandle = recent[0];
-      for (const c of recent) {
-        if (c.high > pivotCandle.high) {
-          pivotCandle = c;
-        }
+      let maxIdx = 0;
+      for (let i = 1; i < recent.length; i++) {
+        if (recent[i].high > recent[maxIdx].high) maxIdx = i;
       }
-      // Proximal = body bottom (lowest open/close) of the pivot base candle
+      const pivotCandle = recent[maxIdx];
+      const legInCandle = recent[Math.max(0, maxIdx - 1)];
+
+      const isLegInRally = legInCandle.close >= legInCandle.open;
+      const formation: Zone['formation'] = isLegInRally ? 'Rally-Base-Drop' : 'Drop-Base-Drop';
+
       const proximal = Math.min(pivotCandle.open, pivotCandle.close);
-      // Distal = highest high wick of the pivot base candle
       const distal = pivotCandle.high;
       return {
         type: 'supply',
-        formation: 'Swing-Pivot-Supply',
+        formation,
         proximal,
         distal: distal > proximal ? distal : proximal + (atr * 0.3),
         timestamp: pivotCandle.timestamp
