@@ -69,18 +69,14 @@ export class LifecycleSync {
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
 
-        const secondsSinceCreation = createdTimeMs > 0 ? (Date.now() - createdTimeMs) / 1000 : 999;
-
-        // Entry fill check:
-        // Require at least 15 seconds after setup publication before checking limit order fills,
-        // ensuring new pending limit setups remain in awaiting_entry state for user visibility.
+        // Entry fill check (Limit order execution on live price):
+        // LONG (Limit Buy):  Price must touch/retrace to demand zone top (currentPrice <= setup.entry_zone_high)
+        // SHORT (Limit Sell): Price must touch/retrace to supply zone bottom (currentPrice >= setup.entry_zone_low)
         let isFilled = false;
-        if (secondsSinceCreation >= 15) {
-          if (isLong) {
-            isFilled = minLow <= setup.entry_zone_high && currentPrice > setup.stop;
-          } else {
-            isFilled = maxHigh >= setup.entry_zone_low && currentPrice < setup.stop;
-          }
+        if (isLong) {
+          isFilled = currentPrice <= setup.entry_zone_high && currentPrice > setup.stop;
+        } else {
+          isFilled = currentPrice >= setup.entry_zone_low && currentPrice < setup.stop;
         }
 
         if (isFilled) {

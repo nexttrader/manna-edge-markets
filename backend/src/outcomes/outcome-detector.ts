@@ -99,25 +99,25 @@ export class OutcomeDetector {
         let executionPrice = currentPrice;
         
         if (isLong) {
-          if (setup.tp2 && maxHigh >= setup.tp2 && secondsSinceEntry >= 15) { 
+          if (setup.tp2 && currentPrice >= setup.tp2) { 
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, setup.tp2); 
           }
-          else if (maxHigh >= setup.tp1 && secondsSinceEntry >= 15) { 
+          else if (currentPrice >= setup.tp1) { 
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1); 
           }
-          else if (minLow <= setup.stop && secondsSinceEntry >= 15) { 
+          else if (currentPrice <= setup.stop) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
             executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop); 
           }
         } else {
-          if (setup.tp2 && minLow <= setup.tp2 && secondsSinceEntry >= 15) { 
+          if (setup.tp2 && currentPrice <= setup.tp2) { 
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, setup.tp2); 
           }
-          else if (minLow <= setup.tp1 && secondsSinceEntry >= 15) { 
+          else if (currentPrice <= setup.tp1) { 
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1); 
           }
-          else if (maxHigh >= setup.stop && secondsSinceEntry >= 15) { 
+          else if (currentPrice >= setup.stop) { 
             hitDetected = true; 
             outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
             executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop); 

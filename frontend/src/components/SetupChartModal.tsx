@@ -72,13 +72,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
   // 1. True 1H HTF Demand Curve Zone (Emerald Green)
-  const activeDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : 0));
-  const activeDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : 0));
+  const activeDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : (entryLow ? entryLow * 0.995 : 0)));
+  const activeDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : (activeDemandProx ? activeDemandProx * 0.997 : 0)));
   const activeDemandTime = metadata.htf_demand_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
   // 2. True 1H HTF Supply Curve Zone (Rose Red)
-  const activeSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : 0));
-  const activeSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : 0));
+  const activeSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : (entryHigh ? entryHigh * 1.005 : 0)));
+  const activeSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : (activeSupplyProx ? activeSupplyProx * 1.003 : 0)));
   const activeSupplyTime = metadata.htf_supply_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
   // Zoom control helpers
