@@ -285,12 +285,61 @@ export async function deleteStrategy(id: string): Promise<void> {
     await queryDb(`DELETE FROM strategy_settings WHERE id = ?`, [id]);
 }
 
-export async function getHiddenStrategyIdsForRole(role: string): Promise<string[]> {
+export async function getAdminStrategyAccess(strategyId: string): Promise<string[]> {
+    try {
+        const rows = await queryDb<{ user_email: string }>(`SELECT user_email FROM admin_strategy_access WHERE strategy_id = ?`, [strategyId]);
+        return rows.map(r => r.user_email.toLowerCase());
+    } catch {
+        return [];
+    }
+}
+
+export async function setAdminStrategyAccess(strategyId: string, allowedEmails: string[]): Promise<void> {
+    try {
+        await queryDb(`DELETE FROM admin_strategy_access WHERE strategy_id = ?`, [strategyId]);
+        for (const email of allowedEmails) {
+            if (email && email.trim()) {
+                await queryDb(`INSERT INTO admin_strategy_access (user_email, strategy_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [email.trim().toLowerCase(), strategyId]);
+            }
+        }
+    } catch {}
+}
+
+export async function grantAdminStrategyAccess(userEmail: string, strategyId: string): Promise<void> {
+    try {
+        await queryDb(`INSERT INTO admin_strategy_access (user_email, strategy_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [userEmail.trim().toLowerCase(), strategyId]);
+    } catch {}
+}
+
+export async function revokeAdminStrategyAccess(userEmail: string, strategyId: string): Promise<void> {
+    try {
+        await queryDb(`DELETE FROM admin_strategy_access WHERE user_email = ? AND strategy_id = ?`, [userEmail.trim().toLowerCase(), strategyId]);
+    } catch {}
+}
+
+export async function getHiddenStrategyIdsForRole(role: string, userEmail?: string): Promise<string[]> {
     try {
         const rows = await queryDb<{ id: string, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings`);
+        const emailLower = userEmail ? userEmail.trim().toLowerCase() : '';
+        
+        let grantedAccessMap: Record<string, string[]> = {};
+        if (role === 'admin' && emailLower) {
+            const accessRows = await queryDb<{ strategy_id: string, user_email: string }>(`SELECT strategy_id, user_email FROM admin_strategy_access`);
+            for (const r of accessRows) {
+                if (!grantedAccessMap[r.strategy_id]) grantedAccessMap[r.strategy_id] = [];
+                grantedAccessMap[r.strategy_id].push(r.user_email.toLowerCase());
+            }
+        }
+
         return rows.filter(r => {
             if (role === 'super_admin') return false; // super admin sees everything
-            if (role === 'admin') return !(r.visible_to_admins === undefined ? true : Boolean(r.visible_to_admins));
+            if (role === 'admin') {
+                const isGloballyVisibleToAdmins = r.visible_to_admins === undefined ? true : Boolean(r.visible_to_admins);
+                if (isGloballyVisibleToAdmins) return false;
+                // If not globally visible to all admins, check if this specific admin was granted explicit access
+                const allowedAdmins = grantedAccessMap[r.id] || [];
+                return !allowedAdmins.includes(emailLower);
+            }
             // trader or default
             return !(r.visible_to_traders === undefined ? true : Boolean(r.visible_to_traders));
         }).map(r => r.id);

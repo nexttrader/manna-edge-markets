@@ -202,12 +202,25 @@ async function runAllTests() {
     }
     const hiddenForTrader = await queries.getHiddenStrategyIdsForRole('trader');
     assert(hiddenForTrader.includes('sentinel_v2'), 'sentinel_v2 should be hidden for trader by default');
-    const hiddenForAdmin = await queries.getHiddenStrategyIdsForRole('admin');
-    assert(hiddenForAdmin.includes('sentinel_v2'), 'sentinel_v2 should be hidden for admin by default');
+    
+    // Unauthorized admin test
+    const hiddenForUnauthAdmin = await queries.getHiddenStrategyIdsForRole('admin', 'unauth_admin@example.com');
+    assert(hiddenForUnauthAdmin.includes('sentinel_v2'), 'sentinel_v2 should be hidden for ungranted admin');
+
+    // Grant access to specific admin
+    await queries.grantAdminStrategyAccess('auth_admin@example.com', 'sentinel_v2');
+    const hiddenForAuthAdmin = await queries.getHiddenStrategyIdsForRole('admin', 'auth_admin@example.com');
+    assert(!hiddenForAuthAdmin.includes('sentinel_v2'), 'sentinel_v2 should NOT be hidden for granted admin');
+
+    // Revoke access
+    await queries.revokeAdminStrategyAccess('auth_admin@example.com', 'sentinel_v2');
+    const hiddenAfterRevoke = await queries.getHiddenStrategyIdsForRole('admin', 'auth_admin@example.com');
+    assert(hiddenAfterRevoke.includes('sentinel_v2'), 'sentinel_v2 should be hidden after access is revoked');
+
     const hiddenForSuperAdmin = await queries.getHiddenStrategyIdsForRole('super_admin');
     assert.strictEqual(hiddenForSuperAdmin.length, 0, 'sentinel_v2 should NOT be hidden for super_admin');
 
-    console.log('✅ TEST 11: Sentinel V2 Engine & Multi-Tier Visibility Control (Super Admin Exclusive)');
+    console.log('✅ TEST 11: Sentinel V2 Engine & Granular Per-Admin Access Control (Super Admin Granted)');
 
     console.log('\n🎉 ALL 11 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }

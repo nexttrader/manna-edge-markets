@@ -254,6 +254,13 @@ export async function initializeDatabase(): Promise<void> {
                         updated_at TEXT NOT NULL
                     );
 
+                    CREATE TABLE IF NOT EXISTS admin_strategy_access (
+                        user_email TEXT NOT NULL,
+                        strategy_id TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (user_email, strategy_id)
+                    );
+
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
@@ -364,6 +371,13 @@ export async function initializeDatabase(): Promise<void> {
             name TEXT NOT NULL,
             enabled INTEGER DEFAULT 1,
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS admin_strategy_access (
+            user_email TEXT NOT NULL,
+            strategy_id TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_email, strategy_id)
         );
 
         INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES

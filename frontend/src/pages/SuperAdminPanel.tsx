@@ -131,12 +131,46 @@ export const SuperAdminPanel: React.FC = () => {
 
   const [sentinelAnalytics, setSentinelAnalytics] = useState<any>(null);
   const [sentinelScanning, setSentinelScanning] = useState(false);
+  const [adminAccessRoster, setAdminAccessRoster] = useState<any[]>([]);
+  const [allowedAdminEmails, setAllowedAdminEmails] = useState<string[]>([]);
 
   const fetchSentinelAnalytics = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/sentinel/analytics`);
       if (res.ok) { const json = await res.json(); if (json.analytics) setSentinelAnalytics(json.analytics); }
     } catch {}
+  };
+
+  const fetchAdminStrategyAccess = async (strategyId: string = 'sentinel_v2') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/admin-access`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.roster) setAdminAccessRoster(json.roster);
+        if (json.allowedEmails) setAllowedAdminEmails(json.allowedEmails);
+      }
+    } catch {}
+  };
+
+  const handleToggleIndividualAdminAccess = async (userEmail: string, currentlyGranted: boolean, strategyId: string = 'sentinel_v2') => {
+    try {
+      const emailLower = userEmail.toLowerCase();
+      const updated = currentlyGranted
+        ? allowedAdminEmails.filter(e => e !== emailLower)
+        : [...allowedAdminEmails, emailLower];
+
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/admin-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowedEmails: updated })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update access');
+      if (json.allowedEmails) setAllowedAdminEmails(json.allowedEmails);
+      fetchAdminStrategyAccess(strategyId);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
   };
 
   const handleSentinelScan = async () => {
@@ -158,9 +192,11 @@ export const SuperAdminPanel: React.FC = () => {
     fetchSuperAdminData();
     fetchSuperStrategies();
     fetchSentinelAnalytics();
+    fetchAdminStrategyAccess('sentinel_v2');
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelAnalytics();
+      fetchAdminStrategyAccess('sentinel_v2');
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -683,12 +719,65 @@ export const SuperAdminPanel: React.FC = () => {
             
             <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(156, 39, 176, 0.05)', border: '1px solid rgba(156, 39, 176, 0.2)', borderRadius: '8px' }}>
               <h3 style={{ color: '#ce93d8', margin: '0 0 12px' }}>🔐 Visibility & Release Controls</h3>
-              <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '0 0 12px' }}>Control who can see Sentinel V2 signals and analytics.</p>
+              <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '0 0 12px' }}>Control global visibility for Sentinel V2 signals and analytics.</p>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" className="font-mono" style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', color: '#ffab00', padding: '5px 12px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem' }} onClick={() => handleToggleStrategyVisibility('sentinel_v2', true)}>
-                  👁️ Toggle Admin Visibility
+                  👁️ Toggle Global Admin Visibility
                 </button>
               </div>
+            </div>
+
+            {/* Individual Admin Access Control Roster */}
+            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(156, 39, 176, 0.08)', border: '1px solid rgba(156, 39, 176, 0.3)', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 style={{ color: '#ce93d8', margin: 0 }}>👤 Individual Admin Access Roster</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '4px 0 0' }}>Select specific admin accounts to grant exclusive access to Sentinel V2 signals, analytics, and controls.</p>
+                </div>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(156, 39, 176, 0.25)', color: '#e1bee7', padding: '4px 10px', borderRadius: '4px', border: '1px solid rgba(156, 39, 176, 0.4)', fontWeight: 'bold' }}>
+                  {allowedAdminEmails.length} Admin(s) Authorized
+                </span>
+              </div>
+
+              {adminAccessRoster.length === 0 ? (
+                <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', padding: '12px 0' }}>No regular admin accounts found in system roster.</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                  {adminAccessRoster.map((adminUser: any) => (
+                    <div key={adminUser.email} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: adminUser.granted ? 'rgba(156, 39, 176, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                      border: adminUser.granted ? '1px solid #ab47bc' : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '6px'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', color: adminUser.granted ? '#f3e5f5' : '#ccc', fontSize: '0.85rem' }}>{adminUser.name || adminUser.email}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#aaa' }}>{adminUser.email}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="font-mono"
+                        style={{
+                          background: adminUser.granted ? '#8e24aa' : 'rgba(255, 255, 255, 0.08)',
+                          border: adminUser.granted ? '1px solid #ba68c8' : '1px solid rgba(255, 255, 255, 0.2)',
+                          color: adminUser.granted ? '#fff' : '#aaa',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem'
+                        }}
+                        onClick={() => handleToggleIndividualAdminAccess(adminUser.email, adminUser.granted)}
+                      >
+                        {adminUser.granted ? '✅ Access Granted' : '➕ Grant Access'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

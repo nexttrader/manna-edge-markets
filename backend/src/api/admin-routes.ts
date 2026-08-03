@@ -573,7 +573,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
     const now = new Date();
     const selectedStrategy = req.query.strategy_id as string | undefined;
     const role = (req.query.role as string) || 'admin';
-    const hiddenStrategyIds = await queries.getHiddenStrategyIdsForRole(role);
+    const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+    const hiddenStrategyIds = await queries.getHiddenStrategyIdsForRole(role, email);
 
     let futuresQuery = `SELECT * FROM edge_setups`;
     let forexQuery = `SELECT * FROM forex_edge_setups`;

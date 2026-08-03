@@ -277,6 +277,47 @@ router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     }
 });
 
+router.get('/strategies/:id/admin-access', async (req: Request, res: Response) => {
+    try {
+        const rawId = req.params.id;
+        const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+        const allUsers = getAllUsers();
+        const adminUsers = allUsers.filter(u => u.role === 'admin');
+        const allowedEmails = await queries.getAdminStrategyAccess(strategyId);
+        
+        const roster = adminUsers.map(u => ({
+            email: u.email,
+            name: u.name,
+            role: u.role,
+            tier: u.tier,
+            granted: allowedEmails.includes(u.email.toLowerCase())
+        }));
+
+        res.json({ success: true, strategyId, allowedEmails, roster });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to fetch admin strategy access', details: err.message });
+    }
+});
+
+router.post('/strategies/:id/admin-access', async (req: Request, res: Response) => {
+    try {
+        const rawId = req.params.id;
+        const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+        const { allowedEmails } = req.body || {};
+        
+        if (!Array.isArray(allowedEmails)) {
+            return res.status(400).json({ error: 'allowedEmails must be an array of email strings' });
+        }
+
+        await queries.setAdminStrategyAccess(strategyId, allowedEmails);
+        const updatedAllowed = await queries.getAdminStrategyAccess(strategyId);
+        
+        res.json({ success: true, strategyId, allowedEmails: updatedAllowed });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to update admin strategy access', details: err.message });
+    }
+});
+
 router.delete('/strategies/:id', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;

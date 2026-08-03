@@ -131,9 +131,11 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
   const fetchSetups = useCallback(async () => {
     try {
       // Fetch both active AND recent past setups so exit/invalidation/replacement events are detected reliably!
+      const role = user?.role || 'trader';
+      const email = encodeURIComponent(user?.email || '');
       const [activeRes, pastRes] = await Promise.all([
-        fetch(`${API_BASE}/api/accelerate/active-setups?role=${user?.role || 'trader'}`),
-        fetch(`${API_BASE}/api/accelerate/past-setups?limit=20&role=${user?.role || 'trader'}`)
+        fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`),
+        fetch(`${API_BASE}/api/accelerate/past-setups?limit=20&role=${role}&email=${email}`)
       ]);
 
       if (!activeRes.ok) return;

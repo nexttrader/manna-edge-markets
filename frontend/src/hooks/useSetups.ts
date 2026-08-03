@@ -86,7 +86,9 @@ export function useSetups() {
 
   const fetchSetups = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${user?.role || 'trader'}`);
+      const role = user?.role || 'trader';
+      const email = encodeURIComponent(user?.email || '');
+      const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : MOCK_SETUPS;
