@@ -234,68 +234,68 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
               const outcomeReason = String(setup.invalidation_reason || (setup as any).outcome_type || (setup as any).outcome || '').toLowerCase();
               
               if (outcomeReason.includes('tp2')) {
-                const plainEng = `Target 2 hit at ${setup.tp2}! Full profit locked in (+3.0R).`;
+                const plainEng = `Trade for ${setup.instrument} RESOLVED via Take Profit 2 at ${setup.tp2}! Full profit locked in (+${setup.r_multiple_2 || 3.0}R).`;
                 speak(`Take Profit 2 Reached for ${setup.instrument} in Full Profit.`);
                 addToast({
                   type: 'tp_hit',
-                  title: 'TAKE PROFIT 2 HIT (FULL PROFIT)',
+                  title: 'TRADE RESOLVED: TAKE PROFIT 2 HIT',
                   icon: '🎯',
                   instrument: setup.instrument,
                   market: marketText,
                   bias: biasText,
-                  detail: `Target 2 reached at ${setup.tp2}! Realized profit +${setup.r_multiple_2 || 3.0}R!`,
+                  detail: `RESOLVED VIA TP2: Target 2 reached at ${setup.tp2}! Realized profit +${setup.r_multiple_2 || 3.0}R!`,
                   rMultiple: setup.r_multiple_2 || 3.0
                 }, plainEng);
               } else if (outcomeReason.includes('tp1') || outcomeReason.includes('tp')) {
-                const plainEng = `Target 1 hit at ${setup.tp1}! First profit target secured (+2.0R).`;
+                const plainEng = `Trade for ${setup.instrument} RESOLVED via Take Profit 1 at ${setup.tp1}! Target secured (+${setup.r_multiple_1 || 2.0}R).`;
                 speak(`Take Profit 1 Reached for ${setup.instrument} in Profit.`);
                 addToast({
                   type: 'tp_hit',
-                  title: 'TAKE PROFIT 1 HIT (PROFIT)',
+                  title: 'TRADE RESOLVED: TAKE PROFIT 1 HIT',
                   icon: '🟢',
                   instrument: setup.instrument,
                   market: marketText,
                   bias: biasText,
-                  detail: `Target 1 reached at ${setup.tp1}! Realized profit +${setup.r_multiple_1 || 2.0}R.`,
+                  detail: `RESOLVED VIA TP1: Target 1 reached at ${setup.tp1}! Realized profit +${setup.r_multiple_1 || 2.0}R.`,
                   rMultiple: setup.r_multiple_1 || 2.0
                 }, plainEng);
-              } else if (outcomeReason.includes('be_hit') || outcomeReason.includes('breakeven') || outcomeReason.includes('be')) {
-                const plainEng = `Price turned back after reaching profit and touched entry price. Closed with zero loss ($0.00).`;
+              } else if (outcomeReason.includes('be_hit') || outcomeReason.includes('breakeven') || outcomeReason.includes('be') || (setup as any).is_breakeven) {
+                const plainEng = `Trade for ${setup.instrument} RESOLVED via Break Even! Price retraced to entry price after hitting profit. Closed at $0 risk (0.00R).`;
                 speak(`Break Even Stop Hit for ${setup.instrument}. Trade closed at zero loss.`);
                 addToast({
                   type: 'breakeven',
-                  title: 'BREAK EVEN HIT (ZERO LOSS)',
+                  title: 'TRADE RESOLVED: BREAK EVEN HIT ($0 LOSS)',
                   icon: '🛡️',
                   instrument: setup.instrument,
                   market: marketText,
                   bias: biasText,
-                  detail: `Closed at zero loss (0.0R) after moving to Break Even.`,
+                  detail: `RESOLVED VIA BREAK EVEN: Closed at zero loss (0.00R) after moving stop loss to entry.`,
                   rMultiple: 0.0
                 }, plainEng);
               } else if (outcomeReason.includes('sl') || outcomeReason.includes('stop')) {
-                const plainEng = `Price touched stop loss level ${setup.stop}. Trade closed cleanly to protect your balance.`;
+                const plainEng = `Trade for ${setup.instrument} RESOLVED via Stop Loss at ${setup.stop}. Position closed to protect risk (-1.00R).`;
                 speak(`Stop Loss Hit for ${setup.instrument} in Loss.`);
                 addToast({
                   type: 'sl_hit',
-                  title: 'STOP LOSS HIT',
+                  title: 'TRADE RESOLVED: STOP LOSS HIT (-1.00R)',
                   icon: '🛑',
                   instrument: setup.instrument,
                   market: marketText,
                   bias: biasText,
-                  detail: `Price touched Stop Loss level ${setup.stop}. Trade closed (-1.0R).`,
+                  detail: `RESOLVED VIA STOP LOSS: Price touched Stop Loss level ${setup.stop}. Trade closed (-1.00R).`,
                   rMultiple: -1.0
                 }, plainEng);
               } else {
-                const plainEng = `Trade for ${setup.instrument} has finished and closed.`;
-                speak(`Trade Closed for ${setup.instrument}.`);
+                const plainEng = `Trade for ${setup.instrument} HAS RESOLVED and position is closed.`;
+                speak(`Trade Resolved for ${setup.instrument}.`);
                 addToast({
                   type: 'resolved',
-                  title: 'TRADE RESOLVED',
+                  title: 'TRADE RESOLVED (CLOSED)',
                   icon: '🏁',
                   instrument: setup.instrument,
                   market: marketText,
                   bias: biasText,
-                  detail: `Position resolved.`
+                  detail: `RESOLVED: Position closed.`
                 }, plainEng);
               }
             }

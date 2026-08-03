@@ -22,7 +22,15 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-        const initialStop = setup.initial_stop || setup.stop;
+        let initialStop = setup.initial_stop;
+
+        // If initial_stop is missing or equal to entry (e.g. when stop moved to BE), infer original risk from TP1 / R1
+        if (!initialStop || Math.abs(entryPrice - initialStop) < 0.000001) {
+          const tpDist = Math.abs((setup.tp1 || 0) - entryPrice);
+          const inferredRisk = (setup.r_multiple_1 && setup.r_multiple_1 > 0) ? (tpDist / setup.r_multiple_1) : (tpDist / 2.0);
+          initialStop = setup.bias === 'long' ? (entryPrice - inferredRisk) : (entryPrice + inferredRisk);
+        }
+
         const risk = Math.abs(entryPrice - initialStop);
         let unrealizedR: number | undefined = undefined;
         let unrealizedPL: number | undefined = undefined;
