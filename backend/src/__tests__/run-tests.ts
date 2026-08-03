@@ -194,7 +194,22 @@ async function runAllTests() {
     }
     console.log('✅ TEST 10: Rescan Strategy Consistency (Targeted Original Strategy Enforced)');
 
-    console.log('\n🎉 ALL 10 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 10. Sentinel V2 Strategy & Visibility Filter Test
+    const sentinelResult = await discoverUnifiedSetups(kzInfo, 'test_sentinel_run', 'futures', [], 'sentinel_v2');
+    for (const c of sentinelResult.futures) {
+        assert.strictEqual(c.strategy_id, 'sentinel_v2', 'Candidates generated must have strategy_id = sentinel_v2');
+        assert.strictEqual(c.strategy_tier, 'elite', 'Candidates generated must have strategy_tier = elite');
+    }
+    const hiddenForTrader = await queries.getHiddenStrategyIdsForRole('trader');
+    assert(hiddenForTrader.includes('sentinel_v2'), 'sentinel_v2 should be hidden for trader by default');
+    const hiddenForAdmin = await queries.getHiddenStrategyIdsForRole('admin');
+    assert(hiddenForAdmin.includes('sentinel_v2'), 'sentinel_v2 should be hidden for admin by default');
+    const hiddenForSuperAdmin = await queries.getHiddenStrategyIdsForRole('super_admin');
+    assert.strictEqual(hiddenForSuperAdmin.length, 0, 'sentinel_v2 should NOT be hidden for super_admin');
+
+    console.log('✅ TEST 11: Sentinel V2 Engine & Multi-Tier Visibility Control (Super Admin Exclusive)');
+
+    console.log('\n🎉 ALL 11 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

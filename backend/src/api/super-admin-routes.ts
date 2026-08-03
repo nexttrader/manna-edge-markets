@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
+import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword } from '../db/user-store';
@@ -211,6 +212,69 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update strategy visibility', details: err.message });
   }
+});
+
+router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
+    try {
+        // Query all setups with strategy_id = 'sentinel_v2' across both tables
+        const futuresSetups = await queryDb(`SELECT * FROM edge_setups WHERE strategy_id = 'sentinel_v2'`);
+        const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2'`);
+        const allSetups = [...futuresSetups, ...forexSetups];
+        
+        const totalSignals = allSetups.length;
+        const activeSignals = allSetups.filter((s: any) => s.signal_state === 'active' || s.signal_state === 'awaiting_entry').length;
+        const resolvedSignals = allSetups.filter((s: any) => s.signal_state === 'resolved').length;
+        const invalidatedSignals = allSetups.filter((s: any) => s.signal_state === 'invalidated').length;
+        
+        // Outcomes
+        const outcomes = await queryDb(`SELECT * FROM outcomes WHERE strategy_id = 'sentinel_v2'`);
+        const wins = outcomes.filter((o: any) => o.outcome_type === 'tp1_hit' || o.outcome_type === 'tp2_hit');
+        const losses = outcomes.filter((o: any) => o.outcome_type === 'sl_hit');
+        const winRate = (wins.length + losses.length) > 0 ? ((wins.length / (wins.length + losses.length)) * 100).toFixed(1) : '0.0';
+        const totalRealizedR = outcomes.reduce((sum: number, o: any) => sum + (o.realized_pl || 0), 0);
+        
+        // POI type distribution from metadata
+        const poiTypes: Record<string, number> = { FVG: 0, OC: 0, REVERSAL: 0, CONSOLIDATION: 0 };
+        let cyclePriorityCount = 0;
+        for (const s of allSetups) {
+            try {
+                const meta = JSON.parse((s as any).metadata || '{}');
+                if (meta.poi_type && poiTypes[meta.poi_type] !== undefined) poiTypes[meta.poi_type]++;
+                if (meta.cycle_priority) cyclePriorityCount++;
+            } catch {}
+        }
+        
+        res.json({
+            success: true,
+            analytics: {
+                totalSignals, activeSignals, resolvedSignals, invalidatedSignals,
+                winRate: Number(winRate), totalRealizedR: Number(totalRealizedR.toFixed(2)),
+                poiTypeDistribution: poiTypes,
+                cyclePriorityCount,
+                cyclePriorityRate: totalSignals > 0 ? Number(((cyclePriorityCount / totalSignals) * 100).toFixed(1)) : 0,
+                totalWins: wins.length, totalLosses: losses.length
+            }
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to fetch Sentinel analytics', details: err.message });
+    }
+});
+
+router.post('/sentinel/scan', async (_req: Request, res: Response) => {
+    try {
+        const { getCurrentKillzone } = await import('../scheduler/killzone-mapper');
+        const { discoverUnifiedSetups } = await import('../discovery/unified-discovery');
+        const { executePublishRun } = await import('../publish-gate/publish-gate');
+        
+        const now = new Date();
+        const kzInfo = getCurrentKillzone(now);
+        const runId = `sentinel_manual_${Date.now()}`;
+        const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both', [], 'sentinel_v2');
+        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
+        res.json({ success: true, result, runId });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Sentinel manual scan failed', details: err.message });
+    }
 });
 
 router.delete('/strategies/:id', async (req: Request, res: Response) => {

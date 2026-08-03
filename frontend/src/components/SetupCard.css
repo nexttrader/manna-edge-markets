@@ -559,3 +559,79 @@
   line-height: 1.5;
   color: var(--kdt-white);
 }
+
+/* Sentinel V2 Elite Purple Border Glow */
+.setup-card.strat-border-sentinel_v2 {
+  border: 1px solid rgba(156, 39, 176, 0.5);
+  box-shadow: 0 0 12px rgba(156, 39, 176, 0.15), inset 0 0 8px rgba(156, 39, 176, 0.05);
+}
+
+.setup-card.strat-border-sentinel_v2:hover {
+  border-color: rgba(186, 104, 200, 0.8);
+  box-shadow: 0 0 20px rgba(156, 39, 176, 0.3), inset 0 0 12px rgba(156, 39, 176, 0.08);
+}
+
+/* Strategy Tag - Sentinel V2 */
+.strategy-tag-sentinel_v2 {
+  background: linear-gradient(135deg, rgba(156, 39, 176, 0.25), rgba(103, 58, 183, 0.25));
+  color: #ce93d8 !important;
+  border: 1px solid rgba(156, 39, 176, 0.4) !important;
+}
+
+/* POI Type Badge */
+.poi-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: rgba(103, 58, 183, 0.2);
+  color: #b39ddb;
+  border: 1px solid rgba(103, 58, 183, 0.4);
+}
+
+/* Cycle Priority Badge */
+.cycle-priority-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Sentinel Pipeline Stepper */
+.sentinel-pipeline {
+  display: flex;
+  gap: 2px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.sentinel-pipeline .pipeline-stage {
+  padding: 3px 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.sentinel-pipeline .pipeline-stage.active {
+  background: rgba(156, 39, 176, 0.2);
+  color: #ce93d8;
+  border-color: rgba(156, 39, 176, 0.5);
+  box-shadow: 0 0 6px rgba(156, 39, 176, 0.2);
+}

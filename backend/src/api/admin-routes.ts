@@ -228,11 +228,24 @@ router.post('/strategies/toggle', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing strategyId or enabled boolean' });
     }
     await queries.updateStrategyEnabled(strategyId, enabled);
-    const updated = await queries.getStrategySettings();
+    const updated = await queries.getStrategySettings('admin');
     res.json({ success: true, message: `Strategy ${strategyId} ${enabled ? 'enabled' : 'disabled'}`, strategies: updated });
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle strategy', details: String(error) });
   }
+});
+
+router.post('/strategies/:id/trader-visibility', async (req: Request, res: Response) => {
+    try {
+        const rawId = req.params.id;
+        const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+        const { visibleToTraders } = req.body || {};
+        await queries.updateStrategyTraderVisibility(strategyId, Boolean(visibleToTraders));
+        const updated = await queries.getStrategySettings('admin');
+        res.json({ success: true, strategies: updated });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to update trader visibility', details: err.message });
+    }
 });
 
 router.post('/signals/:id/invalidate', async (req: Request, res: Response) => {
@@ -559,32 +572,43 @@ router.get('/analytics', async (req: Request, res: Response) => {
   try {
     const now = new Date();
     const selectedStrategy = req.query.strategy_id as string | undefined;
+    const role = (req.query.role as string) || 'admin';
+    const hiddenStrategyIds = await queries.getHiddenStrategyIdsForRole(role);
 
-    let futuresQuery = `SELECT COUNT(*) as c FROM edge_setups`;
-    let forexQuery = `SELECT COUNT(*) as c FROM forex_edge_setups`;
-    let outcomesQuery = `SELECT * FROM outcomes ORDER BY created_at DESC`;
-    const params: any[] = [];
+    let futuresQuery = `SELECT * FROM edge_setups`;
+    let forexQuery = `SELECT * FROM forex_edge_setups`;
+    let outcomesQuery = `
+      SELECT o.* FROM outcomes o
+      LEFT JOIN edge_setups e ON o.setup_id = e.id
+      LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
+    `;
+    
+    // We will do filtering in-memory to ensure hiddenStrategyIds are properly excluded
+    let allFutures = await queryDb(futuresQuery);
+    let allForex = await queryDb(forexQuery);
+    let allOutcomes = await queryDb(outcomesQuery);
+
+    allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
+    allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
+    allOutcomes = allOutcomes.filter((o: any) => {
+      const sId = o.strategy_id || 'manna_basic'; // It's selected by COALESCE logic implicitly via table join if we wanted to replicate the raw query perfectly, but we can rely on o.strategy_id mostly, or just filter it when processing. Let's do it below safely.
+      return !hiddenStrategyIds.includes(sId);
+    });
 
     if (selectedStrategy && selectedStrategy !== 'all') {
-      futuresQuery += ` WHERE strategy_id = ?`;
-      forexQuery += ` WHERE strategy_id = ?`;
-      outcomesQuery = `
-        SELECT o.* FROM outcomes o
-        LEFT JOIN edge_setups e ON o.setup_id = e.id
-        LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
-        WHERE COALESCE(o.strategy_id, e.strategy_id, f.strategy_id, 'manna_basic') = ?
-        ORDER BY o.created_at DESC
-      `;
-      params.push(selectedStrategy);
+      allFutures = allFutures.filter((s: any) => (s.strategy_id || 'manna_basic') === selectedStrategy);
+      allForex = allForex.filter((s: any) => (s.strategy_id || 'manna_basic') === selectedStrategy);
+      allOutcomes = allOutcomes.filter((o: any) => (o.strategy_id || 'manna_basic') === selectedStrategy);
     }
 
-    const futuresCountRow = await queryDb<{ c: string | number }>(futuresQuery, params);
-    const forexCountRow = await queryDb<{ c: string | number }>(forexQuery, params);
-    const futuresTotal = futuresCountRow.length > 0 ? Number(futuresCountRow[0].c) : 0;
-    const forexTotal = forexCountRow.length > 0 ? Number(forexCountRow[0].c) : 0;
+    const futuresTotal = allFutures.length;
+    const forexTotal = allForex.length;
     
     let futuresActiveSetups = await queries.getActiveSetups('futures');
     let forexActiveSetups = await queries.getActiveSetups('forex');
+
+    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
+    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
 
     let futuresActive = futuresActiveSetups.length;
     let forexActive = forexActiveSetups.length;
@@ -594,7 +618,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       forexActive = forexActiveSetups.filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
     }
     
-    let outcomes = await queryDb(outcomesQuery, params);
+    let outcomes = allOutcomes;
     let wins = 0;
     let losses = 0;
     let totalRealizedR = 0;

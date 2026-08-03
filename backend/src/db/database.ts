@@ -85,6 +85,8 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE publish_runs ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'scheduled'`,
                     `ALTER TABLE invalidation_audit ADD COLUMN IF NOT EXISTS instrument TEXT`,
                     `ALTER TABLE performance_reports ADD COLUMN IF NOT EXISTS published_by_email TEXT`,
+                    `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_admins INTEGER DEFAULT 1`,
+                    `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_traders INTEGER DEFAULT 1`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
                 ];
@@ -257,6 +259,12 @@ export async function initializeDatabase(): Promise<void> {
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING;
 
+                    INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
+                    ('sentinel_v2', 'Sentinel V2', 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO NOTHING;
+
+                    UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2' AND visible_to_admins IS NULL;
+
                     UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%';
                     UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%';
 
@@ -314,6 +322,8 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_admins INTEGER DEFAULT 1`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_traders INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
@@ -360,7 +370,13 @@ export async function initializeDatabase(): Promise<void> {
         ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
         ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
         ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
+        ('sentinel_v2', 'Sentinel V2', 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (id) DO NOTHING;
     `);
+
+    try { db.exec(`UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2'`); } catch {}
 
     console.log('Database initialized successfully.');
 }

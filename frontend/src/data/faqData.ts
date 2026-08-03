@@ -124,6 +124,50 @@ export const FAQ_DATA: FaqItem[] = [
     tags: ['manna_basic', 'fvg', 'liquidity_sweep'],
     updatedAt: '2026-07-31'
   },
+  {
+    id: 'sentinel-1',
+    category: '🟣 Sentinel V2 Guide',
+    question: 'What is the Sentinel V2 strategy?',
+    answer: 'Sentinel V2 is an Elite Frameworks Fractal Swing Points 4-stage system. It tracks HTF expansions and looks for multi-timeframe swing confirmations down to the 1M chart for extreme precision.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['sentinel', 'sentinel_v2', 'fractal'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'sentinel-2',
+    category: '🟣 Sentinel V2 Guide',
+    question: 'What do the POI types mean (FVG, OC, Reversal, Consolidation)?',
+    answer: '• FVG (Fair Value Gap): A price gap where the market moved too fast.\n• OC (Order Block / Open Close): A price zone where big money placed trades.\n• Reversal: A shift in market direction after a liquidity grab.\n• Consolidation: A tight price range before a big breakout.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['poi', 'fvg', 'oc', 'reversal'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'sentinel-3',
+    category: '🟣 Sentinel V2 Guide',
+    question: 'What is Cycle Priority?',
+    answer: 'Cycle Priority highlights an elite candle 3-4 re-entry window, signaling a high-probability continuation based on precise time and price fractal alignment.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['cycle_priority', 'sentinel', 'entry'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'sentinel-4',
+    category: '🟣 Sentinel V2 Guide',
+    question: 'How does Sentinel V2 differ from Manna Basic and Manna SnD?',
+    answer: 'While Manna Basic and SnD rely heavily on 15M and 1H zones, Sentinel V2 acts as a state machine tracking price across 4 distinct phases (HTF Expansion -> POI Detected -> POI Mitigated -> MTF/LTF Confirmed), enabling micro-entries that aren\'t apparent on single timeframes.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['sentinel', 'manna_basic', 'manna_snd', 'comparison'],
+    updatedAt: '2026-08-03'
+  },
 
   // --- ADMIN-ONLY FAQS ---
   {

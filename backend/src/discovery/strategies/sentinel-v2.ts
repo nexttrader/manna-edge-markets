@@ -1,0 +1,351 @@
+import { IStrategyEngine, StrategyMeta } from './strategy-interface';
+import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
+import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
+import { computeATR } from '../atr';
+import {
+  computeConvictionScore,
+  computeLiquidityScore,
+  computeRMultiple,
+  computeKillzoneTimingScore,
+  computeMultiTimeframeScore,
+  computeLiquidityMagnetScore,
+  computeFVGScore,
+  computeRelativeStrengthScore,
+  computeNewsProximityModifier
+} from '../scoring';
+import { getLogicalStopDistance, getInstrumentDecimals } from '../stop-loss-rules';
+
+interface POI {
+  type: 'FVG' | 'OC' | 'REVERSAL' | 'CONSOLIDATION';
+  high: number;
+  low: number;
+}
+
+export class SentinelV2Strategy implements IStrategyEngine {
+  public meta: StrategyMeta = {
+    id: 'sentinel_v2',
+    name: 'Sentinel V2',
+    tier: 'elite',
+    description: 'Elite Frameworks: Fractal Swing Points — 4-stage state machine across H1/15M/1M for institutional expansion → POI → swing confirmation → precision entry.',
+    enabled: true
+  };
+
+  private getExplanation(poiType: POI['type'], bias: Bias): string {
+    const isBull = bias === 'long';
+    switch (poiType) {
+      case 'FVG':
+        return isBull
+          ? "Price returned to an unmitigated fair value gap on the 1-hour chart created during a strong bullish move."
+          : "Price returned to an unmitigated fair value gap on the 1-hour chart created during a strong bearish move.";
+      case 'OC':
+        return isBull
+          ? "Price pulled back to the order block where institutions were buying on the 1-hour chart."
+          : "Price touched a strong seller zone on the 1-hour chart where big institutions sold earlier.";
+      case 'REVERSAL':
+        return isBull
+          ? "Price swept liquidity below key support and reversed sharply — a classic institutional stop hunt."
+          : "Price swept liquidity above key resistance and reversed sharply — a classic stop hunt by institutions.";
+      case 'CONSOLIDATION':
+        return isBull
+          ? "Price is returning to the consolidation base it broke out from — a high-probability re-entry zone."
+          : "Price is returning to the consolidation ceiling it broke down from — a high-probability re-entry zone.";
+    }
+  }
+
+  public async evaluateSetups(
+    killzone: KillzoneInfo,
+    runId: string,
+    market: 'futures' | 'forex',
+    instruments: string[],
+    preCalculatedBiases: Record<string, Bias>
+  ): Promise<CandidateSetup[]> {
+    const candidates: CandidateSetup[] = [];
+
+    for (const instrument of instruments) {
+      try {
+        // Stage 1: HTF Expansion Candle Detection
+        const candles1h = await getLiveCandles(instrument, '1h', 120);
+        if (candles1h.length < 30) continue;
+
+        // Calculate average range of last 10 closed candles
+        const closed1h = candles1h.slice(0, -1);
+        if (closed1h.length < 20) continue;
+
+        const last10 = closed1h.slice(-10);
+        const avgRange = last10.reduce((acc, c) => acc + (c.high - c.low), 0) / 10;
+
+        let expansionIdx = -1;
+        let expansionCandle: Candle | null = null;
+        // Walk backward up to 20 candles
+        const walkLimit = Math.max(0, closed1h.length - 20);
+        for (let i = closed1h.length - 1; i >= walkLimit; i--) {
+          const c = closed1h[i];
+          const range = c.high - c.low;
+          const body = Math.abs(c.close - c.open);
+          if (range > 0 && (body / range) >= 0.60 && range > avgRange * 1.10) {
+            expansionIdx = i;
+            expansionCandle = c;
+            break; // First passing candle walking backwards = most recent
+          }
+        }
+
+        if (expansionIdx === -1 || !expansionCandle) continue;
+
+        const bias: Bias = expansionCandle.close > expansionCandle.open ? 'long' : 'short';
+        const cycleCount = closed1h.length - 1 - expansionIdx;
+        const cyclePriority = cycleCount === 3 || cycleCount === 4;
+
+        // Phase high/low since expansion
+        const postExpansion = closed1h.slice(expansionIdx);
+        const phaseHigh = Math.max(...postExpansion.map(c => c.high));
+        const phaseLow = Math.min(...postExpansion.map(c => c.low));
+        const phaseMidpoint = (phaseHigh + phaseLow) / 2;
+
+        const price = await getLiveCurrentPrice(instrument);
+        if (!price || price <= 0) continue;
+
+        const quadrantPassed = bias === 'long' ? price > phaseMidpoint : price < phaseMidpoint;
+
+        // Stage 2: POI Scanning
+        const pois: POI[] = [];
+
+        // 1. FVG
+        for (let i = expansionIdx; i < closed1h.length - 1; i++) {
+          if (i < 2) continue;
+          if (bias === 'long' && closed1h[i].low > closed1h[i - 2].high) {
+            pois.push({ type: 'FVG', high: closed1h[i].low, low: closed1h[i - 2].high });
+          } else if (bias === 'short' && closed1h[i - 2].low > closed1h[i].high) {
+            pois.push({ type: 'FVG', high: closed1h[i - 2].low, low: closed1h[i].high });
+          }
+        }
+
+        // 2. OC
+        let ocFound = false;
+        const ocLimit = Math.max(0, expansionIdx - 8);
+        for (let i = expansionIdx - 1; i >= ocLimit; i--) {
+          const c = closed1h[i];
+          if (bias === 'long' && c.close < c.open) {
+            pois.push({ type: 'OC', high: Math.max(c.open, c.close), low: Math.min(c.open, c.close) });
+            ocFound = true;
+            break;
+          } else if (bias === 'short' && c.close > c.open) {
+            pois.push({ type: 'OC', high: Math.max(c.open, c.close), low: Math.min(c.open, c.close) });
+            ocFound = true;
+            break;
+          }
+        }
+
+        // 3. REVERSAL
+        for (let i = Math.max(1, expansionIdx - 5); i < closed1h.length - 1; i++) {
+          const c = closed1h[i];
+          const prev = closed1h[i - 1];
+          const next = closed1h[i + 1];
+          if (bias === 'long' && c.low < prev.low && c.close > prev.low && next.close > next.open) {
+            pois.push({ type: 'REVERSAL', high: c.close, low: c.low });
+          } else if (bias === 'short' && c.high > prev.high && c.close < prev.high && next.close < next.open) {
+            pois.push({ type: 'REVERSAL', high: c.high, low: c.close });
+          }
+        }
+
+        // 4. CONSOLIDATION
+        if (expansionIdx >= 3) {
+          const consCandles = closed1h.slice(Math.max(0, expansionIdx - 6), expansionIdx - 2);
+          if (consCandles.length >= 3) {
+            const maxR = Math.max(...consCandles.map(c => c.high - c.low));
+            if (maxR < avgRange * 1.5) {
+              const cHigh = Math.max(...consCandles.map(c => c.high));
+              const cLow = Math.min(...consCandles.map(c => c.low));
+              pois.push({ type: 'CONSOLIDATION', high: cHigh, low: cLow });
+            }
+          }
+        }
+
+        if (pois.length === 0) continue;
+
+        // Check Mitigation on latest HTF candle
+        const latestHTF = candles1h[candles1h.length - 1];
+        let mitigatedPoi: POI | null = null;
+        for (const p of pois) {
+          if (bias === 'long' && latestHTF.low <= p.high && latestHTF.close >= p.low) {
+            mitigatedPoi = p;
+            break;
+          }
+          if (bias === 'short' && latestHTF.high >= p.low && latestHTF.close <= p.high) {
+            mitigatedPoi = p;
+            break;
+          }
+        }
+
+        if (!mitigatedPoi) continue;
+
+        // Stage 3: 15M Swing Confirmation
+        const candles15m = await getLiveCandles(instrument, '15m', 50);
+        if (candles15m.length < 8) continue;
+        const closed15m = candles15m.slice(0, -1);
+        const last6 = closed15m.slice(-6);
+
+        let mtfConfirmCandle: Candle | null = null;
+        for (const c of last6) {
+          if (bias === 'long' && c.close > c.open && c.low <= mitigatedPoi.high && c.close >= mitigatedPoi.low) {
+            mtfConfirmCandle = c;
+            break;
+          }
+          if (bias === 'short' && c.close < c.open && c.high >= mitigatedPoi.low && c.close <= mitigatedPoi.high) {
+            mtfConfirmCandle = c;
+            break;
+          }
+        }
+
+        if (!mtfConfirmCandle) continue;
+
+        // Stage 4: 1M Precision Entry
+        const candles1m = await getLiveCandles(instrument, '1m', 15);
+        if (candles1m.length < 6) continue;
+
+        const current1M = candles1m[candles1m.length - 1];
+        const prior1M = candles1m[candles1m.length - 2];
+
+        // Execution window check
+        if (current1M.close < mtfConfirmCandle.low || current1M.close > mtfConfirmCandle.high) {
+          continue;
+        }
+
+        let entryConfirmed = false;
+        if (bias === 'long' && current1M.close > prior1M.high && current1M.close > current1M.open) {
+          entryConfirmed = true;
+        } else if (bias === 'short' && current1M.close < prior1M.low && current1M.close < current1M.open) {
+          entryConfirmed = true;
+        }
+
+        if (!entryConfirmed) continue;
+
+        const entry = current1M.close;
+        const last5_1m = candles1m.slice(-5);
+        let stop = 0;
+        if (bias === 'long') {
+          const minLow1m = Math.min(...last5_1m.map(c => c.low));
+          stop = Math.min(minLow1m, mtfConfirmCandle.low);
+        } else {
+          const maxHigh1m = Math.max(...last5_1m.map(c => c.high));
+          stop = Math.max(maxHigh1m, mtfConfirmCandle.high);
+        }
+
+        const atr14 = computeATR(candles15m, 14);
+        const rawRisk = Math.abs(entry - stop);
+        const logicalRisk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
+        
+        // Recalculate stop based on logical risk to respect floors
+        stop = bias === 'long' ? entry - logicalRisk : entry + logicalRisk;
+        
+        let tp1 = bias === 'long' ? entry + (logicalRisk * 2) : entry - (logicalRisk * 2);
+        let tp2 = bias === 'long' ? phaseHigh : phaseLow;
+        
+        const tp2_rr = computeRMultiple(entry, tp2, stop, bias);
+        if (tp2_rr < 2.0) {
+          tp2 = bias === 'long' ? entry + (logicalRisk * 2.0) : entry - (logicalRisk * 2.0);
+        }
+
+        const actualRR = computeRMultiple(entry, tp1, stop, bias);
+        if (actualRR < 2.0) continue;
+
+        // Conviction Score
+        let rawPoints = 0;
+        rawPoints += 20; // HTF Expansion detected
+        if (cyclePriority) rawPoints += 10;
+        if (quadrantPassed) rawPoints += 10;
+        rawPoints += 15; // POI detected
+        if (mitigatedPoi.type === 'FVG') rawPoints += 5;
+        if (mitigatedPoi.type === 'REVERSAL') rawPoints += 5;
+        rawPoints += 15; // POI mitigated
+        rawPoints += 15; // 15M swing confirmed
+        rawPoints += 10; // 1M BOS entry confirmed
+
+        const sentinel_raw_conviction = rawPoints;
+        const normalizedScore = Math.min(99.5, Math.max(65.0, (rawPoints / 100) * 100));
+
+        // Also compute platform conviction
+        const now = new Date();
+        const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
+        const conviction_score = computeConvictionScore({
+          supportResistanceStrength: 0.90,
+          structureAlignment: 0.95,
+          volumeProfile: 0.85,
+          killzoneTiming: computeKillzoneTimingScore(hourET),
+          multiTimeframeAlignment: computeMultiTimeframeScore(candles1h, candles15m, bias),
+          liquidityPoolMagnet: computeLiquidityMagnetScore(candles15m, tp1, bias),
+          fvgDisbalance: computeFVGScore(candles15m, bias),
+          relativeStrength: computeRelativeStrengthScore(candles15m, bias),
+          atrAlignment: 0.90,
+          newsProximityModifier: computeNewsProximityModifier(now)
+        });
+
+        // Use maximum of normalized specific score and platform score
+        const final_score = Math.max(normalizedScore, conviction_score);
+        
+        const spread = price * (market === 'futures' ? 0.0001 : 0.0002);
+        const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
+        const liquidity_score = computeLiquidityScore(current1M.volume, avgVol, spread);
+
+        const decimals = getInstrumentDecimals(instrument, market);
+        const ez_mid = Number(entry.toFixed(decimals));
+        const ez_low = Number((entry - (logicalRisk * 0.1)).toFixed(decimals));
+        const ez_high = Number((entry + (logicalRisk * 0.1)).toFixed(decimals));
+
+        const r_multiple_1 = computeRMultiple(entry, tp1, stop, bias);
+        const r_multiple_2 = computeRMultiple(entry, tp2, stop, bias);
+        
+        const selection_rationale = `[SENTINEL V2] ${this.getExplanation(mitigatedPoi.type, bias)} Limit ${bias === 'long' ? 'Buy' : 'Sell'} at ${entry.toFixed(decimals)}, SL ${stop.toFixed(decimals)}.`;
+
+        candidates.push({
+          instrument,
+          market,
+          created_by_run: runId,
+          killzone_origin: killzone.killzone,
+          killzone_origin_at: killzone.boundaryUTC,
+          bias,
+          entry_zone_low: ez_low,
+          entry_zone_high: ez_high,
+          entry_zone_mid: ez_mid,
+          stop: Number(stop.toFixed(decimals)),
+          tp1: Number(tp1.toFixed(decimals)),
+          tp2: Number(tp2.toFixed(decimals)),
+          r_multiple_1,
+          r_multiple_2,
+          conviction_score: Number(final_score.toFixed(1)),
+          liquidity_score,
+          strategy_id: this.meta.id,
+          strategy_tier: this.meta.tier,
+          metadata: JSON.stringify({
+            source: `yahoo_finance_${market}`,
+            strategy_name: this.meta.name,
+            htf: "1H",
+            mtf: "15M",
+            ltf: "1M",
+            selection_rationale,
+            sentinel_phase: "LTF_ENTRY_ACTIVE",
+            sentinel_raw_conviction,
+            poi_type: mitigatedPoi.type,
+            cycle_count: cycleCount,
+            cycle_priority: cyclePriority,
+            expansion_direction: bias === 'long' ? 'BULLISH' : 'BEARISH',
+            poi_zone_high: Number(mitigatedPoi.high.toFixed(decimals)),
+            poi_zone_low: Number(mitigatedPoi.low.toFixed(decimals)),
+            phase_high: Number(phaseHigh.toFixed(decimals)),
+            phase_low: Number(phaseLow.toFixed(decimals)),
+            mtf_confirm_high: Number(mtfConfirmCandle.high.toFixed(decimals)),
+            mtf_confirm_low: Number(mtfConfirmCandle.low.toFixed(decimals)),
+            quadrant_passed: quadrantPassed,
+            order_type: bias === 'long' ? "BUY_LIMIT" : "SELL_LIMIT",
+            context_tf: "1H Context",
+            entry_tf: "1M Entry"
+          })
+        });
+
+      } catch (err) {
+        console.error(`[Sentinel V2] Error evaluating ${instrument}:`, err);
+      }
+    }
+
+    return candidates;
+  }
+}

@@ -143,6 +143,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   );
 
   const stratId = (setup.strategy_id || 'manna_basic').toLowerCase();
+  const strategyId = setup.strategy_id || 'manna_basic';
+  const meta = (() => {
+    try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }
+  })();
 
   return (
     <div className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${stratId}`}>
@@ -153,17 +157,50 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
           </div>
           <div className="sc-badges-row">
-            <span className={`strategy-badge strat-${(setup.strategy_id || 'manna_basic').toLowerCase()}`}>
-              {(setup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC')}
+            <span className={`strategy-badge strat-${(setup.strategy_id || 'manna_basic').toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
+              {strategyId === 'sentinel_v2' ? 'SENTINEL V2' : (strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC')}
             </span>
-            <span className="tf-badge htf">1H Context</span>
-            <span className="tf-badge ltf">15M Entry</span>
+            {strategyId === 'sentinel_v2' ? (
+              <>
+                {meta?.context_tf && (
+                  <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700 }}>{meta.context_tf}</span>
+                )}
+                {meta?.entry_tf && (
+                  <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700 }}>{meta.entry_tf}</span>
+                )}
+                {meta?.poi_type && (
+                  <span className="poi-badge font-mono">{meta.poi_type}</span>
+                )}
+                {meta?.cycle_priority && (
+                  <span className="cycle-priority-badge font-mono">🔥 CYCLE PRIORITY</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="tf-badge htf">1H Context</span>
+                <span className="tf-badge ltf">15M Entry</span>
+              </>
+            )}
             {isBreakeven && (
               <span className="be-badge font-mono animate-pulse" title="Stop Loss moved to Entry to lock in risk-free position">
                 🛡️ BREAK EVEN
               </span>
             )}
           </div>
+          {strategyId === 'sentinel_v2' && (
+            <div className="sentinel-pipeline font-mono">
+              {['HTF Expansion', 'POI Detected', 'POI Mitigated', '15M Confirmed', '1M Entry'].map((phase, i) => {
+                const phaseMap = ['HTF_EXPANSION_ACTIVE', 'POI_DETECTED', 'POI_MITIGATED', 'MTF_SWING_CONFIRMED', 'LTF_ENTRY_ACTIVE'];
+                const currentPhaseIdx = phaseMap.indexOf(meta?.sentinel_phase || '');
+                const isActive = i <= currentPhaseIdx;
+                return (
+                  <span key={phase} className={`pipeline-stage ${isActive ? 'active' : ''}`}>
+                    {phase}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="sc-header-actions font-mono">
           {onToggleWatchlist && (

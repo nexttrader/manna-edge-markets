@@ -9,12 +9,16 @@ const router = express.Router();
 router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   try {
     const market = (req.query.market as string) || 'all';
+    const role = (req.query.role as string) || 'trader';
     let rawSetups;
     if (market === 'all') {
       rawSetups = await queries.getAllActiveSetups();
     } else {
       rawSetups = await queries.getActiveSetups(market);
     }
+
+    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role);
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
 
 
 
@@ -131,6 +135,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
 router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
   try {
     const market = (req.query.market as string) || 'all';
+    const role = (req.query.role as string) || 'trader';
     const limit = parseInt(req.query.limit as string) || 50;
     let setups;
     if (market === 'all') {
@@ -138,6 +143,9 @@ router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
     } else {
       setups = await queries.getPastSetups(market, limit);
     }
+    
+    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role);
+    setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
     
     res.json({ setups, count: setups.length });
   } catch (error) {

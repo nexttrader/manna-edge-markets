@@ -9,6 +9,16 @@ export function translateRationaleToPlainEnglish(rationale: string | undefined, 
     return `Looking for a strong ${bias.toUpperCase()} entry for ${instrument}.`;
   }
 
+  if (rationale.includes('[SENTINEL V2]')) {
+    let plain = rationale.replace('[SENTINEL V2] ', '');
+    plain = plain.replace(/fair value gap/gi, 'a price gap where the market moved too fast');
+    plain = plain.replace(/order block/gi, 'a price zone where big money was buying/selling');
+    plain = plain.replace(/liquidity sweep/gi, 'price briefly dipped to grab stop losses before reversing');
+    plain = plain.replace(/stop hunt/gi, 'price briefly dipped to grab stop losses before reversing');
+    plain = plain.replace(/consolidation/gi, 'a tight price range before a big move');
+    return plain;
+  }
+
   const upper = rationale.toUpperCase();
 
   if (upper.includes('MANNA SND') || upper.includes('DEMAND CURVE') || upper.includes('SUPPLY CURVE')) {

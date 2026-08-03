@@ -14,7 +14,7 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'strategies' | 'admin_audit' | 'metrics' | 'health'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'strategies' | 'admin_audit' | 'metrics' | 'health' | 'sentinel'>('roster');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
@@ -129,10 +129,39 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const [sentinelAnalytics, setSentinelAnalytics] = useState<any>(null);
+  const [sentinelScanning, setSentinelScanning] = useState(false);
+
+  const fetchSentinelAnalytics = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/sentinel/analytics`);
+      if (res.ok) { const json = await res.json(); if (json.analytics) setSentinelAnalytics(json.analytics); }
+    } catch {}
+  };
+
+  const handleSentinelScan = async () => {
+    try {
+      setSentinelScanning(true);
+      const res = await fetch(`${API_BASE}/api/super-admin/sentinel/scan`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Scan failed');
+      alert(`✅ Sentinel scan completed! ${data.result?.stats?.created || 0} signals created.`);
+      fetchSentinelAnalytics();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    } finally {
+      setSentinelScanning(false);
+    }
+  };
+
   useEffect(() => {
     fetchSuperAdminData();
     fetchSuperStrategies();
-    const interval = setInterval(fetchSuperAdminData, 5000);
+    fetchSentinelAnalytics();
+    const interval = setInterval(() => {
+      fetchSuperAdminData();
+      fetchSentinelAnalytics();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -271,6 +300,19 @@ export const SuperAdminPanel: React.FC = () => {
             onClick={() => setActiveTab('health')}
           >
             ⚡ System Telemetry &amp; Circuit Breaker
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'sentinel' ? '1px solid #ce93d8' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'sentinel' ? 'rgba(156, 39, 176, 0.2)' : 'transparent',
+              color: activeTab === 'sentinel' ? '#ce93d8' : '#ccc'
+            }}
+            onClick={() => setActiveTab('sentinel')}
+          >
+            🎯 Sentinel V2 Intelligence
           </button>
         </div>
 
@@ -600,6 +642,52 @@ export const SuperAdminPanel: React.FC = () => {
                 <div className="stat-box-value" style={{ color: metrics.circuitBreakerFailures === 0 ? '#00e676' : '#ffab00' }}>
                   {metrics.circuitBreakerFailures || 0} / 5
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Sentinel V2 Intelligence */}
+        {activeTab === 'sentinel' && (
+          <div className="super-card font-mono">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#ce93d8' }}>🎯 Sentinel V2 — Elite Fractal Swing Points Intelligence</h2>
+                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Super Admin Exclusive: Multi-timeframe state machine analytics • Strategy ID: sentinel_v2</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className="font-mono" style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '8px 16px', borderRadius: '6px', fontWeight: 800, cursor: 'pointer' }} onClick={handleSentinelScan} disabled={sentinelScanning}>
+                  {sentinelScanning ? '⏳ Scanning...' : '🔍 Trigger Manual Scan'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="stat-grid-4 font-mono" style={{ marginBottom: '20px' }}>
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">Total Signals</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.totalSignals || 0}</div>
+              </div>
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">Win Rate</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.winRate || '0.0%'}</div>
+              </div>
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">Active Signals</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.activeSignals || 0}</div>
+              </div>
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">Total Realized R</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.totalRealizedR || '0.00R'}</div>
+              </div>
+            </div>
+            
+            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(156, 39, 176, 0.05)', border: '1px solid rgba(156, 39, 176, 0.2)', borderRadius: '8px' }}>
+              <h3 style={{ color: '#ce93d8', margin: '0 0 12px' }}>🔐 Visibility & Release Controls</h3>
+              <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '0 0 12px' }}>Control who can see Sentinel V2 signals and analytics.</p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className="font-mono" style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', color: '#ffab00', padding: '5px 12px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem' }} onClick={() => handleToggleStrategyVisibility('sentinel_v2', true)}>
+                  👁️ Toggle Admin Visibility
+                </button>
               </div>
             </div>
           </div>

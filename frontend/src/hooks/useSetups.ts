@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignalState, Bias, Market, Killzone, type EdgeSetup } from '../types';
 import { useVoice } from '../context/VoiceContext';
+import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 
 const MOCK_SETUPS: EdgeSetup[] = [
@@ -79,12 +80,13 @@ export function useSetups() {
   const [error, setError] = useState<string | null>(null);
 
   const { speak } = useVoice();
+  const { user } = useAuth();
   const knownSetupIdsRef = useRef<Set<string>>(new Set());
   const isInitialFetchRef = useRef<boolean>(true);
 
   const fetchSetups = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/accelerate/active-setups`);
+      const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${user?.role || 'trader'}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : MOCK_SETUPS;

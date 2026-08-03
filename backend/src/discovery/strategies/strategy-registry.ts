@@ -1,6 +1,7 @@
 import { IStrategyEngine, StrategyMeta } from './strategy-interface';
 import { MannaBasicStrategy } from './manna-basic';
 import { MannaSndStrategy } from './manna-snd';
+import { SentinelV2Strategy } from './sentinel-v2';
 import * as queries from '../../db/queries';
 
 class StrategyRegistry {
@@ -9,6 +10,7 @@ class StrategyRegistry {
   constructor() {
     this.register(new MannaBasicStrategy());
     this.register(new MannaSndStrategy());
+    this.register(new SentinelV2Strategy());
   }
 
   public register(strategy: IStrategyEngine): void {
