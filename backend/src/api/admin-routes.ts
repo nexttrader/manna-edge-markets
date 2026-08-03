@@ -991,6 +991,43 @@ router.post('/signals/reset-stale', async (_req: Request, res: Response) => {
   }
 });
 
+router.post('/signals/delete-all', async (req: Request, res: Response) => {
+  try {
+    const { confirmAll = false, scope = 'all' } = req.body || {};
+    if (!confirmAll) {
+      return res.status(400).json({ error: 'Confirmation checkbox (confirmAll: true) is required to delete signals.' });
+    }
+
+    if (scope === 'pending_only') {
+      const futures = await queryDb(`DELETE FROM edge_setups WHERE signal_state IN ('awaiting_entry', 'active')`);
+      const forex = await queryDb(`DELETE FROM forex_edge_setups WHERE signal_state IN ('awaiting_entry', 'active')`);
+      return res.json({
+        success: true,
+        message: 'All active & pending signals cleared.',
+        scope: 'pending_only',
+        cleared: { futures: (futures as any).changes ?? 'ok', forex: (forex as any).changes ?? 'ok' }
+      });
+    } else {
+      // Full system reset: Wipes all setups across futures, forex, outcomes, audit, and runs
+      const futures = await queryDb(`DELETE FROM edge_setups`);
+      const forex = await queryDb(`DELETE FROM forex_edge_setups`);
+      await queryDb(`DELETE FROM outcomes`);
+      await queryDb(`DELETE FROM invalidation_audit`);
+      await queryDb(`DELETE FROM publish_runs`);
+
+      return res.json({
+        success: true,
+        message: '⚠️ All signals, trade history, and run logs have been permanently deleted.',
+        scope: 'all',
+        cleared: { futures: (futures as any).changes ?? 'ok', forex: (forex as any).changes ?? 'ok' }
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete signals', details: error?.message || String(error) });
+  }
+});
+
+
 router.post('/analytics/reset', async (req: Request, res: Response) => {
   try {
     const { archiveName = `Archive Epoch (${new Date().toLocaleDateString()})` } = req.body || {};

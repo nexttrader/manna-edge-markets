@@ -230,6 +230,48 @@ export const AdminPanel: React.FC = () => {
   const [rescanCurrentSetup, setRescanCurrentSetup] = useState<any | null>(null);
   const [rescanningId, setRescanningId] = useState<string | null>(null);
 
+  const [confirmDeleteSignals, setConfirmDeleteSignals] = useState(false);
+  const [deleteSignalsScope, setDeleteSignalsScope] = useState<'all' | 'pending_only'>('all');
+  const [isDeletingSignals, setIsDeletingSignals] = useState(false);
+
+  const handleDeleteAllSignals = async () => {
+    if (!confirmDeleteSignals) {
+      alert('⚠️ Please check the confirmation checkbox first.');
+      return;
+    }
+
+    const scopeText = deleteSignalsScope === 'all' 
+      ? 'PERMANENTLY DELETE ALL SIGNALS & HISTORICAL RECORDS' 
+      : 'DELETE ALL ACTIVE & PENDING SIGNALS';
+
+    if (!window.confirm(`⚠️ CONFIRM DELETION:\n\nAre you sure you want to ${scopeText}?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setIsDeletingSignals(true);
+      const res = await fetch(`${API_BASE}/api/admin/signals/delete-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmAll: true,
+          scope: deleteSignalsScope
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete signals');
+
+      alert(`✅ ${data.message}`);
+      setConfirmDeleteSignals(false);
+      refetchActiveSetups();
+      if (typeof refetchAnalytics === 'function') refetchAnalytics();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Deletion failed'}`);
+    } finally {
+      setIsDeletingSignals(false);
+    }
+  };
+
   const handleAdminSingleRescan = async (setup: any) => {
     try {
       setRescanningId(setup.id);
@@ -1046,10 +1088,72 @@ export const AdminPanel: React.FC = () => {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
                   }}
                 >
-                  {strat.enabled ? '⏹ TURN OFF' : '▶ TURN ON'}
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Danger Zone: Delete All Signals Control Desk */}
+        <div className="glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(255, 23, 68, 0.08)', border: '1px solid rgba(255, 23, 68, 0.4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ff1744', margin: '0 0 4px 0' }}>
+                🗑️ DANGER ZONE: DELETE SIGNALS
+              </h2>
+              <span style={{ fontSize: '0.8rem', color: '#ffcdd2' }}>
+                Permanently purge active, pending, or historical signal records from the database.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <select
+                value={deleteSignalsScope}
+                onChange={e => setDeleteSignalsScope(e.target.value as any)}
+                style={{
+                  background: '#090314',
+                  border: '1px solid rgba(255, 23, 68, 0.5)',
+                  color: '#fff',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <option value="all">🔥 Delete ALL Signals &amp; History</option>
+                <option value="pending_only">⚡ Delete Active &amp; Pending Signals Only</option>
+              </select>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#ff4081', fontWeight: 700 }}>
+                <input
+                  type="checkbox"
+                  checked={confirmDeleteSignals}
+                  onChange={e => setConfirmDeleteSignals(e.target.checked)}
+                  style={{ accentColor: '#ff1744', width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                Confirm Deletion
+              </label>
+
+              <button
+                type="button"
+                className="font-mono"
+                onClick={handleDeleteAllSignals}
+                disabled={!confirmDeleteSignals || isDeletingSignals}
+                style={{
+                  background: confirmDeleteSignals ? '#ff1744' : 'rgba(255, 23, 68, 0.2)',
+                  border: '1px solid #ff1744',
+                  color: confirmDeleteSignals ? '#ffffff' : 'rgba(255, 255, 255, 0.4)',
+                  padding: '9px 18px',
+                  borderRadius: '6px',
+                  fontWeight: 900,
+                  cursor: confirmDeleteSignals ? 'pointer' : 'not-allowed',
+                  fontSize: '0.85rem',
+                  boxShadow: confirmDeleteSignals ? '0 0 12px rgba(255, 23, 68, 0.5)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {isDeletingSignals ? '⏳ DELETING...' : '🗑️ DELETE SIGNALS'}
+              </button>
+            </div>
           </div>
         </div>
 
