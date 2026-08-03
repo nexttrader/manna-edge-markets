@@ -313,6 +313,11 @@ export class MannaSndStrategy implements IStrategyEngine {
         const htfSupply = curveInfo.htfSupply;
         const trend15m = this.get15mTrend(candles15m);
 
+        // Enforce: Current Price & 15M Trend MUST be strictly inside the 1H HTF Curve Channel
+        if (currentPrice < htfDemand.distal || currentPrice > htfSupply.distal) {
+          continue;
+        }
+
         // 2. Decision Matrix Lookup
         let allowedAction: 'BUY' | 'SELL' = 'BUY'; // Default fallback
 
@@ -331,16 +336,16 @@ export class MannaSndStrategy implements IStrategyEngine {
           allowedAction = currentPrice >= firstClose ? 'BUY' : 'SELL';
         }
 
-        // 3. Search for 15M Imbalance Zone (with Fallback)
+        // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
         const m15Zones = this.findZones(candles15m);
 
         if (allowedAction === 'BUY') {
-          // 15M Entry Zone MUST be inside or touching 1H Demand Curve boundaries
+          // 15M Entry Zone MUST sit strictly BETWEEN 1H Demand distal and 1H Supply proximal boundaries
           const demandInCurve = m15Zones.filter(z => 
             z.type === 'demand' && 
             z.proximal <= currentPrice &&
-            z.proximal >= (htfDemand.distal - atr14 * 0.3) &&
-            z.proximal <= (htfDemand.proximal + atr14 * 0.5)
+            z.distal >= htfDemand.distal &&
+            z.proximal <= htfSupply.proximal
           );
 
           const zone: Zone = demandInCurve.length > 0
@@ -364,8 +369,16 @@ export class MannaSndStrategy implements IStrategyEngine {
           const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
           const tp2 = entry_zone_mid + (risk * 3.0); // 3:1 RR
 
+          const decimals = market === 'futures' ? 2 : 5;
+          const ez_mid = Number(zone.proximal.toFixed(decimals));
+          const ez_low = Number(zone.distal.toFixed(decimals));
+          const ez_high = Number(zone.proximal.toFixed(decimals));
+
+          // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
+          if (ez_low < htfDemand.distal || ez_high > htfSupply.proximal) continue;
+
           // Discard setup if current market price has breached Stop Loss or is excessively displaced (> 6x ATR)
-          if (currentPrice <= stop || (currentPrice - entry_zone_mid) > (atr14 * 6)) continue;
+          if (currentPrice <= stop || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
@@ -403,14 +416,6 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
-
-          const decimals = market === 'futures' ? 2 : 5;
-          const ez_mid = Number(zone.proximal.toFixed(decimals));
-          const ez_low = Number(zone.distal.toFixed(decimals));
-          const ez_high = Number(zone.proximal.toFixed(decimals));
-
-          // Discard setup if current market price has breached Stop Loss or is excessively displaced
-          if (currentPrice <= stop || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Demand Curve. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
@@ -462,12 +467,12 @@ export class MannaSndStrategy implements IStrategyEngine {
             })
           });
         } else if (allowedAction === 'SELL') {
-          // 15M Entry Zone MUST be inside or touching 1H Supply Curve boundaries
+          // 15M Entry Zone MUST sit strictly BETWEEN 1H Supply distal and 1H Demand proximal boundaries
           const supplyInCurve = m15Zones.filter(z => 
             z.type === 'supply' && 
             z.proximal >= currentPrice &&
-            z.proximal <= (htfSupply.distal + atr14 * 0.3) &&
-            z.proximal >= (htfSupply.proximal - atr14 * 0.5)
+            z.distal <= htfSupply.distal &&
+            z.proximal >= htfDemand.proximal
           );
 
           const zone: Zone = supplyInCurve.length > 0
@@ -533,6 +538,9 @@ export class MannaSndStrategy implements IStrategyEngine {
           // For a SUPPLY zone: proximal = bottom of the zone (limit sell entry), distal = top (above proximal, zone ceiling/stop boundary)
           const ez_low = Number(zone.proximal.toFixed(decimals));  // proximal = entry lower boundary
           const ez_high = Number(zone.distal.toFixed(decimals));   // distal = zone top (above entry, near stop)
+
+          // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
+          if (ez_high > htfSupply.distal || ez_low < htfDemand.proximal) continue;
 
           // Discard setup if current market price has breached Stop Loss or is excessively displaced
           if (currentPrice >= stop || (ez_low - currentPrice) > (atr14 * 6)) continue;
