@@ -26,12 +26,7 @@ export const LoginPage: React.FC = () => {
     navigate(role === 'admin' ? '/admin' : '/dashboard');
   };
 
-  const handleDemoLogin = (demoRole: 'trader' | 'admin' | 'super_admin') => {
-    const demoEmail = demoRole === 'super_admin' ? 'superadmin@mannaedge.com' : demoRole === 'admin' ? 'admin@mannaedge.com' : 'trader@mannaedge.com';
-    const demoName = demoRole === 'super_admin' ? 'Super Administrator (Master)' : demoRole === 'admin' ? 'System Administrator' : 'Institutional Trader';
-    login(demoEmail, demoRole, demoName, 'futures_forex');
-    navigate(demoRole === 'super_admin' ? '/super-admin' : demoRole === 'admin' ? '/admin' : '/dashboard');
-  };
+
 
   return (
     <div className="login-page-container">
@@ -63,18 +58,7 @@ export const LoginPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Quick Demo Login Bar */}
-        <div className="demo-login-box">
-          <span className="demo-label font-mono">⚡ 1-CLICK DEMO LOGINS:</span>
-          <div className="demo-btns">
-            <button className="btn-demo trader font-mono" onClick={() => handleDemoLogin('trader')}>
-              👨‍💻 Trader Demo
-            </button>
-            <button className="btn-demo admin font-mono" onClick={() => handleDemoLogin('admin')}>
-              ⚙️ Admin Demo
-            </button>
-          </div>
-        </div>
+
 
         {error && <div className="login-error-msg">{error}</div>}
 
