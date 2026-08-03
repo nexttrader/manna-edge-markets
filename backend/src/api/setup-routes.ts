@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
+import { queryDb } from '../db/database';
 import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 
@@ -46,7 +47,22 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           }
         }
 
-        const isBreakeven = (unrealizedR !== undefined && unrealizedR >= 1.0) || setup.invalidation_reason === 'tp1_hit';
+        const isBreakeven = Boolean(
+          setup.is_breakeven === 1 ||
+          setup.is_breakeven === true ||
+          setup.invalidation_reason === 'tp1_hit' ||
+          (unrealizedR !== undefined && unrealizedR >= 1.0)
+        );
+
+        if (isBreakeven && !setup.is_breakeven && setup.signal_state === 'active') {
+          setup.is_breakeven = 1;
+          if (!setup.initial_stop) {
+            setup.initial_stop = setup.stop;
+          }
+          setup.stop = entryPrice;
+          const tbl = (setup.market || '').toLowerCase() === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+          queryDb(`UPDATE ${tbl} SET is_breakeven = 1, stop = ?, initial_stop = COALESCE(initial_stop, ?) WHERE id = ?`, [entryPrice, setup.stop, setup.id]).catch(() => {});
+        }
 
         return {
           ...setup,
@@ -54,7 +70,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,
           distance_to_entry_r: distanceToEntryR,
-          is_breakeven: isBreakeven
+          is_breakeven: isBreakeven ? 1 : 0
         };
       })
     );

@@ -65,6 +65,14 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
 
   const prevSetupsRef = useRef<Map<string, EdgeSetup>>(new Map());
   const isInitialLoad = useRef(true);
+  const announcedBERef = useRef<Set<string>>((() => {
+    try {
+      const saved = localStorage.getItem('manna_announced_be');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  })());
 
   const dismissToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -198,12 +206,15 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
             }
 
             // 3. MOVE TO BREAKEVEN (+1.0R reached or backend flag)
-            const prevR = prev.unrealizedR ?? 0;
             const currR = setup.unrealizedR ?? 0;
-            const isBE = (setup as any).is_breakeven || currR >= 1.0;
-            const prevBE = (prev as any).is_breakeven || prevR >= 1.0;
+            const isBE = Boolean((setup as any).is_breakeven === 1 || (setup as any).is_breakeven === true || currR >= 1.0);
 
-            if (isBE && !prevBE && (currState === 'active' || currState === 'resolved')) {
+            if (isBE && !announcedBERef.current.has(setup.id) && (currState === 'active' || currState === 'resolved')) {
+              announcedBERef.current.add(setup.id);
+              try {
+                localStorage.setItem('manna_announced_be', JSON.stringify(Array.from(announcedBERef.current)));
+              } catch {}
+
               const plainEng = `Trade reached +1.0R profit! Your stop loss moved to entry price. You now have $0 risk on this trade.`;
               speak(`Move Stop Loss to Break Even for ${setup.instrument}. Position is now Risk Free.`);
               addToast({
