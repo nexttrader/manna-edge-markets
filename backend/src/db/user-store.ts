@@ -70,6 +70,11 @@ const initialUserProfiles: UserProfile[] = [
 let userStore: UserProfile[] = [...initialUserProfiles];
 let holdingZoneStore: UserProfile[] = [];
 
+export const findUserByEmail = (email: string): UserProfile | undefined => {
+  const all = getAllUsers();
+  return all.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+};
+
 export const getAllUsers = (): UserProfile[] => {
   const now = Date.now();
   return userStore.map(u => {

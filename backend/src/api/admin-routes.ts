@@ -21,7 +21,55 @@ router.get('/strategies/status', async (_req: Request, res: Response) => {
   }
 });
 
-import { getAllUsers, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers, updateUserPassword, bulkPreloadUsers, completeFirstLoginPasswordSetup } from '../db/user-store';
+import { getAllUsers, findUserByEmail, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers, updateUserPassword, bulkPreloadUsers, completeFirstLoginPasswordSetup } from '../db/user-store';
+
+// Smart Email Auth Check Endpoint
+router.post('/auth/check-email', (req: Request, res: Response) => {
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  const user = findUserByEmail(email);
+  if (!user) {
+    return res.json({ status: 'not_found', email: email.trim() });
+  }
+
+  if (user.mustChangePassword) {
+    return res.json({
+      status: 'preloaded_first_login',
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tier: user.tier,
+      isTrial: user.isTrial || false,
+      trialDaysRemaining: user.trialDaysRemaining || 21
+    });
+  }
+
+  return res.json({
+    status: 'existing_member',
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    tier: user.tier
+  });
+});
+
+// Smart Password Activation for First-Time Preloaded Logins
+router.post('/auth/setup-first-password', (req: Request, res: Response) => {
+  const { email, password } = req.body || {};
+  if (!email || !password || password.length < 4) {
+    return res.status(400).json({ error: 'Please provide a valid password (at least 4 characters)' });
+  }
+
+  const result = completeFirstLoginPasswordSetup(email, password);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || 'Failed to update password' });
+  }
+
+  return res.json({ success: true, user: result.user });
+});
 
 // User Accounts Management Endpoints
 router.get('/users', (_req: Request, res: Response) => {

@@ -268,6 +268,58 @@
   color: var(--kdt-white-muted);
 }
 
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid var(--kdt-gold);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.welcome-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.welcome-banner h4 {
+  margin: 0 0 4px 0;
+  color: var(--kdt-gold);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.welcome-banner p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--kdt-white-muted);
+  line-height: 1.35;
+}
+
+.disabled-input {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+
+.btn-back-step {
+  background: transparent;
+  border: none;
+  color: var(--kdt-white-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-top: 4px;
+  text-align: center;
+  transition: color 0.2s;
+}
+
+.btn-back-step:hover {
+  color: var(--kdt-gold);
+}
+
 .animate-scale-up {
   animation: scaleUp 0.2s ease-out;
 }
