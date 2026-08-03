@@ -282,7 +282,7 @@ router.get('/strategies/:id/admin-access', async (req: Request, res: Response) =
         const rawId = req.params.id;
         const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
         const allUsers = getAllUsers();
-        const adminUsers = allUsers.filter(u => u.role === 'admin');
+        const adminUsers = allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
         const allowedEmails = await queries.getAdminStrategyAccess(strategyId);
         
         const roster = adminUsers.map(u => ({

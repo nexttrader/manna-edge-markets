@@ -754,7 +754,12 @@ export const SuperAdminPanel: React.FC = () => {
                       borderRadius: '6px'
                     }}>
                       <div>
-                        <div style={{ fontWeight: 'bold', color: adminUser.granted ? '#f3e5f5' : '#ccc', fontSize: '0.85rem' }}>{adminUser.name || adminUser.email}</div>
+                        <div style={{ fontWeight: 'bold', color: adminUser.granted ? '#f3e5f5' : '#ccc', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {adminUser.name || adminUser.email}
+                          {adminUser.role === 'super_admin' && (
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(255, 215, 0, 0.2)', color: '#ffd700', border: '1px solid rgba(255, 215, 0, 0.4)', padding: '1px 4px', borderRadius: '3px' }}>👑 SUPER ADMIN</span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '0.75rem', color: '#aaa' }}>{adminUser.email}</div>
                       </div>
                       <button
