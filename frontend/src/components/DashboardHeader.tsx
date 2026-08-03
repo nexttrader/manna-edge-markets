@@ -270,7 +270,7 @@ export const DashboardHeader: React.FC = () => {
       )}
 
       {/* User Support Inbox Modal */}
-      {showInbox && isTrader && (
+      {showInbox && (
         <div
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
