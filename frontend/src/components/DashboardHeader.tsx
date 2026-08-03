@@ -140,6 +140,11 @@ export const DashboardHeader: React.FC = () => {
               >
                 ❓ FAQ
               </button>
+
+              <div className="nav-clock-wrapper" style={{ margin: '0 4px' }}>
+                <KillzoneClock />
+              </div>
+
               {isAdmin && (
                 <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
                   ⚙️ Admin
@@ -151,10 +156,6 @@ export const DashboardHeader: React.FC = () => {
                 </Link>
               )}
             </nav>
-          </div>
-          
-          <div className="header-center">
-            <KillzoneClock />
           </div>
           
           <div className="header-actions">

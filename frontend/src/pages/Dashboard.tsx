@@ -9,9 +9,6 @@ import { NewsWarningBanner } from '../components/NewsWarningBanner';
 import { MarketClosedBanner } from '../components/MarketClosedBanner';
 import { TrialWelcomeBanner } from '../components/TrialWelcomeBanner';
 import { FaqModal } from '../components/FaqModal';
-import { UserInbox } from '../components/UserInbox';
-import { UserInboxBanner } from '../components/UserInboxBanner';
-import { useAuth } from '../context/AuthContext';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
@@ -23,7 +20,6 @@ type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 export const Dashboard: React.FC = () => {
   const { setups, loading } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
-  const { user } = useAuth();
 
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
@@ -32,10 +28,6 @@ export const Dashboard: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('conviction');
   const [showFaq, setShowFaq] = useState(false);
-  const [showInbox, setShowInbox] = useState(false);
-  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
-
-  const isTrader = user?.role === 'trader';
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
@@ -172,38 +164,6 @@ export const Dashboard: React.FC = () => {
                 ❓ FAQ
               </button>
             </div>
-
-            {isTrader && (
-              <button
-                className="tab tab-faq font-mono"
-                onClick={() => setShowInbox(true)}
-                style={{
-                  background: inboxUnreadCount > 0 ? 'rgba(0,229,255,0.2)' : 'rgba(255,255,255,0.04)',
-                  color: inboxUnreadCount > 0 ? '#00e5ff' : '#aaa',
-                  border: `1px solid ${inboxUnreadCount > 0 ? 'rgba(0,229,255,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                  fontWeight: 800,
-                  position: 'relative'
-                }}
-                title="Open Support Inbox"
-              >
-                📬 Inbox
-                {inboxUnreadCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: -6, right: -6,
-                    background: '#ff3b3b', color: '#fff',
-                    fontSize: '0.6rem', fontWeight: 900,
-                    minWidth: 16, height: 16, borderRadius: 8,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '0 3px'
-                  }}>{inboxUnreadCount}</span>
-                )}
-              </button>
-            )}
-
-            <div className="auto-refresh">
-              <span className="refresh-dot"></span>
-              Live (5s poll)
-            </div>
           </div>
 
           {/* Secondary Controls: Dropdown Filters & Sort Options */}
@@ -257,6 +217,11 @@ export const Dashboard: React.FC = () => {
               </select>
             </div>
 
+            <div className="auto-refresh" style={{ margin: 0, alignSelf: 'center' }}>
+              <span className="refresh-dot"></span>
+              Live (5s poll)
+            </div>
+
             {hasActiveFilter && (
               <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">
                 ↺ Reset Filters
@@ -306,46 +271,6 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
-
-      {/* User Inbox Modal */}
-      {showInbox && isTrader && (
-        <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(6,2,12,0.92)', backdropFilter: 'blur(16px)',
-            zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '20px'
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setShowInbox(false); }}
-        >
-          <div style={{
-            background: '#0f0620', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '16px', width: '100%', maxWidth: '860px',
-            height: '80vh', display: 'flex', flexDirection: 'column',
-            padding: '24px', boxShadow: '0 0 60px rgba(0,229,255,0.1)',
-            overflow: 'hidden'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0 }}>
-              <div />
-              <button
-                onClick={() => setShowInbox(false)}
-                style={{
-                  background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#aaa', padding: '6px 12px', borderRadius: '6px',
-                  cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem'
-                }}
-              >
-                ✕ Close
-              </button>
-            </div>
-            <UserInbox onUnreadChange={setInboxUnreadCount} />
-          </div>
-        </div>
-      )}
-
-      {/* User Inbox Banner - appears when new messages arrive */}
-      {isTrader && <UserInboxBanner onOpenInbox={() => setShowInbox(true)} />}
-
       <HawkeyePanel />
     </div>
   );

@@ -162,11 +162,6 @@ export const ClientDashboard: React.FC = () => {
                 ⭐ Watchlist ({watchlistCount})
               </button>
             </div>
-
-            <div className="auto-refresh">
-              <span className="refresh-dot"></span>
-              Live Client Feed (5s poll)
-            </div>
           </div>
 
           <div className="filter-controls-row">
@@ -208,6 +203,11 @@ export const ClientDashboard: React.FC = () => {
                 <option value="live_rr">📈 Highest Live RR</option>
                 <option value="closest_entry">📍 Closest to Entry Zone</option>
               </select>
+            </div>
+
+            <div className="auto-refresh" style={{ margin: 0, alignSelf: 'center' }}>
+              <span className="refresh-dot"></span>
+              Live (5s poll)
             </div>
 
             {hasActiveFilter && (
