@@ -240,7 +240,7 @@ export const AdminPanel: React.FC = () => {
           setupId: setup.id,
           instrument: setup.instrument,
           market: setup.market,
-          strategy_id: setup.strategy_id || setup.strategyId || 'manna_basic'
+          strategy_id: setup.strategy_id || (setup as any).strategyId || 'manna_basic'
         })
       });
       const data = await res.json();
