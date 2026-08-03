@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS edge_setups (
     liquidity_score REAL,
     strategy_id TEXT DEFAULT 'manna_basic',
     strategy_tier TEXT DEFAULT 'basic',
-    metadata TEXT
+    metadata TEXT,
+    resolved_at TEXT,
+    is_breakeven INTEGER DEFAULT 0,
+    initial_stop REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_edge_setups_instrument_state ON edge_setups(instrument, signal_state, superseded);
@@ -67,7 +70,10 @@ CREATE TABLE IF NOT EXISTS forex_edge_setups (
     liquidity_score REAL,
     strategy_id TEXT DEFAULT 'manna_basic',
     strategy_tier TEXT DEFAULT 'basic',
-    metadata TEXT
+    metadata TEXT,
+    resolved_at TEXT,
+    is_breakeven INTEGER DEFAULT 0,
+    initial_stop REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_instrument_state ON forex_edge_setups(instrument, signal_state, superseded);
@@ -77,6 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(s
 CREATE TABLE IF NOT EXISTS invalidation_audit (
     id TEXT PRIMARY KEY,
     setup_id TEXT NOT NULL,
+    instrument TEXT,
     setup_market TEXT NOT NULL,
     run_id TEXT,
     timestamp TEXT NOT NULL,
@@ -99,6 +106,7 @@ CREATE TABLE IF NOT EXISTS publish_runs (
     setups_preserved INTEGER DEFAULT 0,
     summary_json TEXT,
     error_detail TEXT,
+    trigger_type TEXT DEFAULT 'scheduled',
     created_at TEXT NOT NULL
 );
 
@@ -115,4 +123,40 @@ CREATE TABLE IF NOT EXISTS outcomes (
     strategy_id TEXT DEFAULT 'manna_basic',
     notes TEXT,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS analytics_archives (
+    id TEXT PRIMARY KEY,
+    archive_name TEXT NOT NULL,
+    captured_from TEXT NOT NULL,
+    captured_until TEXT NOT NULL,
+    total_setups INTEGER NOT NULL,
+    total_resolved INTEGER NOT NULL,
+    win_rate REAL NOT NULL,
+    total_realized_r REAL NOT NULL,
+    avg_fill_time_min REAL NOT NULL,
+    avg_hold_duration_min REAL NOT NULL,
+    csv_content TEXT NOT NULL,
+    summary_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS performance_reports (
+    id TEXT PRIMARY KEY,
+    period_type TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    summary_json TEXT NOT NULL,
+    admin_notes TEXT,
+    status TEXT NOT NULL DEFAULT 'draft_pending_approval',
+    created_at TEXT NOT NULL,
+    published_at TEXT,
+    published_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS strategy_settings (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    updated_at TEXT NOT NULL
 );
