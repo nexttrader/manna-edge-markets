@@ -303,7 +303,7 @@ export const AdminPanel: React.FC = () => {
 
   const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history' | 'support'>('users');
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
-  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
 
   const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
@@ -487,7 +487,7 @@ export const AdminPanel: React.FC = () => {
     fetchArchives();
   }, []);
 
-  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2'>('all');
 
   const handleTrigger = async () => {
     setIsTriggering(true);
@@ -1264,7 +1264,7 @@ export const AdminPanel: React.FC = () => {
                 style={{
                   padding: '16px',
                   borderRadius: '8px',
-                  border: `1px solid ${strat.enabled ? (strat.id === 'manna_snd' ? '#ffab00' : '#00e5ff') : 'rgba(255,255,255,0.1)'}`,
+                  border: `1px solid ${strat.enabled ? (strat.id === 'sentinel_v2' ? '#ce93d8' : (strat.id === 'manna_snd' ? '#ffab00' : '#00e5ff')) : 'rgba(255,255,255,0.1)'}`,
                   background: strat.enabled ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.3)',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -1505,6 +1505,17 @@ export const AdminPanel: React.FC = () => {
             onClick={() => setStrategyFilter('manna_snd')}
           >
             🟡 Manna SnD
+          </button>
+          <button 
+            className={`strat-tab ${strategyFilter === 'sentinel_v2' ? 'active' : ''}`}
+            onClick={() => setStrategyFilter('sentinel_v2')}
+            style={{
+              borderColor: strategyFilter === 'sentinel_v2' ? '#ce93d8' : undefined,
+              color: strategyFilter === 'sentinel_v2' ? '#ce93d8' : undefined,
+              background: strategyFilter === 'sentinel_v2' ? 'rgba(156, 39, 176, 0.2)' : undefined
+            }}
+          >
+            🟣 Sentinel V2
           </button>
         </div>
 
@@ -2254,6 +2265,7 @@ export const AdminPanel: React.FC = () => {
                 <option value="all">⚡ All Strategies</option>
                 <option value="manna_basic">🔵 Manna Basic Strategy</option>
                 <option value="manna_snd">🟡 Manna SnD Strategy</option>
+                <option value="sentinel_v2">🟣 Sentinel V2 Strategy</option>
               </select>
             </div>
             

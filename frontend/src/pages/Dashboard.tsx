@@ -14,7 +14,7 @@ type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
 type BiasFilter = 'all' | 'long' | 'short';
 type OrderTypeFilter = 'all' | 'market' | 'limit';
-type StrategyFilter = 'all' | 'manna_basic' | 'manna_snd';
+type StrategyFilter = 'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 export const Dashboard: React.FC = () => {
@@ -174,6 +174,7 @@ export const Dashboard: React.FC = () => {
                 <option value="all">⚡ All Strategies</option>
                 <option value="manna_basic">🔵 Manna Basic</option>
                 <option value="manna_snd">🟡 Manna SnD</option>
+                <option value="sentinel_v2">🟣 Sentinel V2 (Elite)</option>
               </select>
             </div>
 
