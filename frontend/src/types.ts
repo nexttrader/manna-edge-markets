@@ -92,6 +92,9 @@ export interface EdgeSetup {
   strategy_id?: string;
   strategy_tier?: string;
   metadata?: string;
+  opposing_strategy_warning?: string;
+  correlation_note?: string;
+  correlation_penalty_applied?: boolean;
 }
 
 export interface InvalidationAudit {

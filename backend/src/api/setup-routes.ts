@@ -83,11 +83,43 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       })
     );
 
+    const finalSetups = enrichedSetups.map((setup: any) => {
+      let metaObj: any = {};
+      try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
+
+      const oppSetup = enrichedSetups.find((other: any) => {
+        if (other.id === setup.id) return false;
+        const sameInst = other.instrument === setup.instrument;
+        const sameGroup = (
+          (['ES', 'NQ', 'YM'].includes(setup.instrument.toUpperCase()) && ['ES', 'NQ', 'YM'].includes(other.instrument.toUpperCase())) ||
+          (['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(setup.instrument.toUpperCase()) && ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(other.instrument.toUpperCase()))
+        );
+        if (!sameInst && !sameGroup) return false;
+
+        const otherStrat = other.strategy_id || 'manna_basic';
+        const myStrat = setup.strategy_id || 'manna_basic';
+        return other.bias !== setup.bias && otherStrat !== myStrat;
+      });
+
+      let opposingStrategyWarning: string | null = null;
+      if (oppSetup) {
+        const oppStratName = oppSetup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC';
+        opposingStrategyWarning = `⚠️ STRATEGY DIVERGENCE: ${oppStratName} currently has an opposing ${oppSetup.bias.toUpperCase()} setup on ${oppSetup.instrument}.`;
+      }
+
+      return {
+        ...setup,
+        opposing_strategy_warning: opposingStrategyWarning,
+        correlation_note: metaObj.correlation_note || null,
+        correlation_penalty_applied: metaObj.correlation_penalty_applied || false
+      };
+    });
+
     const kz = getCurrentKillzone(new Date());
     
     res.json({
-      setups: enrichedSetups.sort((a: any, b: any) => (b.conviction_score || 0) - (a.conviction_score || 0)),
-      count: enrichedSetups.length,
+      setups: finalSetups.sort((a: any, b: any) => (b.conviction_score || 0) - (a.conviction_score || 0)),
+      count: finalSetups.length,
       killzone: kz?.killzone || 'unknown',
       timestamp: new Date().toISOString()
     });

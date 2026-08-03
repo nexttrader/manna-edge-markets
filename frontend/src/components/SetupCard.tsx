@@ -194,6 +194,12 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         </div>
       </div>
 
+      {setup.opposing_strategy_warning && (
+        <div className="font-mono text-gold animate-fade-in" style={{ background: 'rgba(255, 215, 0, 0.1)', border: '1px solid rgba(255, 215, 0, 0.4)', borderRadius: '6px', padding: '8px 12px', fontSize: '0.78rem', margin: '10px 0', lineHeight: 1.3 }}>
+          {setup.opposing_strategy_warning}
+        </div>
+      )}
+
       {isStillInZone && (
         <div className="sc-in-zone-opportunity font-mono animate-pulse">
           <div className="in-zone-left">
@@ -309,6 +315,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         </div>
         {translateRationaleToPlainEnglish(getSelectionRationale(setup), isLong ? 'long' : 'short', setup.instrument)}
       </div>
+
+      {setup.correlation_note && (
+        <div style={{ margin: '8px 0 12px 0', padding: '10px 12px', background: 'rgba(255, 171, 0, 0.08)', borderLeft: '3px solid #ffab00', borderRadius: '6px', fontSize: '0.8rem', color: '#ffd700', lineHeight: 1.4 }} className="font-mono animate-fade-in">
+          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ffab00', textTransform: 'uppercase', marginBottom: '4px' }}>
+            ⚠️ Correlated Outlier Notice (-15% Conviction)
+          </div>
+          {setup.correlation_note}
+        </div>
+      )}
 
       <div className="sc-actions font-mono">
         <button className="btn-action btn-copy" onClick={handleCopy}>

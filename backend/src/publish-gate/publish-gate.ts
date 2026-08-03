@@ -212,6 +212,69 @@ export async function executePublishRun(
         }
       }
     }
+
+    // ── CORRELATED OUTLIER CONVICTION PENALTY PASS ──
+    for (const marketName of ['futures', 'forex']) {
+      try {
+        const activeSetups = await queries.getActiveSetups(marketName);
+        const groups: Record<string, typeof activeSetups> = {};
+        if (marketName === 'futures') {
+          groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM'].includes(s.instrument.toUpperCase()));
+        } else {
+          groups['forex_dollar'] = activeSetups.filter(s => ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(s.instrument.toUpperCase()));
+        }
+
+        for (const [groupName, groupSetups] of Object.entries(groups)) {
+          if (groupSetups.length < 2) continue;
+
+          const normalizedLongCount = groupSetups.filter(s => {
+            const inst = s.instrument.toUpperCase();
+            if (inst === 'USD/JPY') return s.bias === 'short';
+            return s.bias === 'long';
+          }).length;
+
+          const normalizedShortCount = groupSetups.length - normalizedLongCount;
+          if (normalizedLongCount === normalizedShortCount) continue;
+
+          const majorityNormalizedBias = normalizedLongCount > normalizedShortCount ? 'long' : 'short';
+
+          for (const setup of groupSetups) {
+            const inst = setup.instrument.toUpperCase();
+            const setupNormalizedBias = (inst === 'USD/JPY') ? (setup.bias === 'short' ? 'long' : 'short') : setup.bias;
+            const isOutlier = setupNormalizedBias !== majorityNormalizedBias;
+
+            let metaObj: any = {};
+            try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
+
+            if (isOutlier) {
+              const groupLabel = groupName === 'indices' ? 'Index Futures (ES, NQ, YM)' : 'Dollar pairs (EUR/USD, GBP/USD, USD/JPY)';
+              const plainNote = `Conviction score reduced by 15%: This ${setup.bias.toUpperCase()} signal does not align with the general ${majorityNormalizedBias.toUpperCase()} direction of other correlated ${groupLabel}.`;
+              
+              if (!metaObj.correlation_penalty_applied) {
+                const baseScore = setup.conviction_score || 85;
+                const penalizedScore = Math.max(60, Number((baseScore - 15).toFixed(1)));
+
+                metaObj.correlation_penalty_applied = true;
+                metaObj.correlation_note = plainNote;
+
+                await queries.updateSetupState(setup.id, marketName, setup.signal_state, {
+                  conviction_score: penalizedScore,
+                  metadata: JSON.stringify(metaObj)
+                });
+              }
+            } else if (metaObj.correlation_penalty_applied) {
+              delete metaObj.correlation_penalty_applied;
+              delete metaObj.correlation_note;
+              await queries.updateSetupState(setup.id, marketName, setup.signal_state, {
+                metadata: JSON.stringify(metaObj)
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        logger.error({ err: err?.message || String(err) }, 'Error in correlated outlier conviction penalty pass');
+      }
+    }
     
     if (actualMode === 'dry_run') {
       throw new Error('DRY_RUN_ROLLBACK');
