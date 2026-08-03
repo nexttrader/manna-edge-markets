@@ -180,5 +180,73 @@ export const FAQ_DATA: FaqItem[] = [
     tierRequired: 'futures_forex',
     tags: ['admin', 'analytics', 'archives', 'csv'],
     updatedAt: '2026-07-31'
+  },
+
+  // --- NEW FEATURE FAQS (Tuned with Tier & Role Access Rules) ---
+  {
+    id: 'be-rules-1',
+    category: '🛡️ Risk & Breakeven Rules',
+    question: 'How does the Break Even (BE) Risk-Free feature work?',
+    answer: 'When an active trade reaches +1.0R profit or hits Take Profit 1 (TP1), its stop loss is automatically moved to your exact entry price to lock in a $0 risk position. The 🛡️ BREAK EVEN badge stays permanently locked on the setup card even if price retraces, and you will receive a single audio voice alert ("Move Stop Loss to Break Even").',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'free',
+    tags: ['breakeven', 'risk_free', 'stop_loss', 'alerts'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'perf-reports-1',
+    category: '📊 Performance Reports & Mailbox',
+    question: 'Where can I see Daily, Weekly, and Monthly performance reports?',
+    answer: 'Automated performance reports are generated at the start of the Asia session (20:00 ET). After our admin team reviews and approves the report, it is pushed directly to your Inbox under the 📊 Performance Reports tab. An instant banner alert will notify you on your dashboard as soon as a new report arrives.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'free',
+    tags: ['reports', 'inbox', 'performance', 'win_rate'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'strat-divergence-1',
+    category: '⚡ Strategies Explained',
+    question: 'What does the Strategy Divergence Warning mean?',
+    answer: 'When Manna Basic and Manna SnD detect opposing trade directions on the same pair (e.g., Manna Basic signals LONG while Manna SnD signals SHORT), a soft gold warning badge appears on the setup card. This gives you a heads-up that the two strategy algorithms are currently seeing different market structure signals.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'forex_only',
+    tags: ['divergence', 'strategy', 'manna_basic', 'manna_snd'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'correlated-outlier-1',
+    category: '🎯 Conviction Scores & Correlation',
+    question: 'Why was a signal’s conviction score reduced by 15% for being a Correlated Outlier?',
+    answer: 'The scanner analyzes correlated asset groups (such as Index Futures ES, NQ, YM or Forex Dollar pairs EUR/USD, GBP/USD, USD/JPY). If a setup’s direction opposes the general group majority (e.g. NQ goes SHORT while ES & YM go LONG), its conviction score is reduced by 15%, and an amber explanation note is added to the card to warn you of intermarket divergence.',
+    roleRequired: 'all',
+    strategyRequired: 'all',
+    tierRequired: 'forex_only',
+    tags: ['conviction', 'correlation', 'outlier', 'index', 'forex'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'admin-health-1',
+    category: '🛡️ Admin: System Health Diagnostics',
+    question: 'How does the Automated 15-Minute System Health Diagnostic Desk work?',
+    answer: 'The background diagnostic engine runs every 15 minutes without hitting API rate limits. It audits 5 core subsystems: 🗄️ Database Query Speed, 📈 Live Price Data Stream, ⏱️ Session Scheduler Liveness, 📡 Real-Time SSE Feed, and 📬 Support Inbox Pipeline. A green status card with 8th-grade explanations displays at the top of the Admin Panel.',
+    roleRequired: 'admin',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['admin', 'diagnostics', 'health', 'database'],
+    updatedAt: '2026-08-03'
+  },
+  {
+    id: 'admin-report-desk-1',
+    category: '🛡️ Admin: Performance Report Approval Desk',
+    question: 'How do Admins approve, update notes, or recall performance reports?',
+    answer: 'In the Admin Panel under 📈 Analytics -> 📊 PERFORMANCE REPORT APPROVAL DESK, admins can review auto-drafted reports, add custom notes, and click "Approve & Push". The system logs the approving admin’s name and email for internal audit tracking while presenting only "Manna Edge Team" to traders. Admins can also recall or update published reports anytime.',
+    roleRequired: 'admin',
+    strategyRequired: 'all',
+    tierRequired: 'futures_forex',
+    tags: ['admin', 'reports', 'audit', 'recall'],
+    updatedAt: '2026-08-03'
   }
 ];
