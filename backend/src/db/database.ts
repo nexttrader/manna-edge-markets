@@ -231,6 +231,19 @@ export async function initializeDatabase(): Promise<void> {
                         created_at TEXT NOT NULL
                     );
 
+                    CREATE TABLE IF NOT EXISTS performance_reports (
+                        id TEXT PRIMARY KEY,
+                        period_type TEXT NOT NULL,
+                        period_start TEXT NOT NULL,
+                        period_end TEXT NOT NULL,
+                        summary_json TEXT NOT NULL,
+                        admin_notes TEXT,
+                        status TEXT NOT NULL DEFAULT 'draft_pending_approval',
+                        created_at TEXT NOT NULL,
+                        published_at TEXT,
+                        published_by TEXT
+                    );
+
                     CREATE TABLE IF NOT EXISTS strategy_settings (
                         id TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
@@ -317,6 +330,19 @@ export async function initializeDatabase(): Promise<void> {
             csv_content TEXT NOT NULL,
             summary_json TEXT NOT NULL,
             created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS performance_reports (
+            id TEXT PRIMARY KEY,
+            period_type TEXT NOT NULL,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            summary_json TEXT NOT NULL,
+            admin_notes TEXT,
+            status TEXT NOT NULL DEFAULT 'draft_pending_approval',
+            created_at TEXT NOT NULL,
+            published_at TEXT,
+            published_by TEXT
         );
 
         CREATE TABLE IF NOT EXISTS strategy_settings (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './AdminPanel.css';
 import { MetricsPanel } from '../components/MetricsPanel';
@@ -305,6 +305,125 @@ export const AdminPanel: React.FC = () => {
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
+
+  const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
+    if (!window.confirm(`⚠️ Are you sure you want to PERMANENTLY DELETE archive dataset '${archiveName}' (${archiveId})?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/analytics/archives/${archiveId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete archive');
+      alert(`✅ ${data.message}`);
+      refetchAnalytics();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Deletion failed'}`);
+    }
+  };
+
+  // Performance Reports Approval Pipeline State
+  const [perfReports, setPerfReports] = useState<any[]>([]);
+  const [reportTab, setReportTab] = useState<'drafts' | 'published' | 'recalled'>('drafts');
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [isReportActionLoading, setIsReportActionLoading] = useState(false);
+
+  const fetchPerfReports = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.reports) setPerfReports(data.reports);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchPerfReports();
+  }, [fetchPerfReports]);
+
+  const handleGenerateReport = async (periodType: 'daily' | 'weekly' | 'monthly') => {
+    try {
+      setIsReportActionLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodType })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate report');
+      alert(`✅ ${data.message}`);
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Report generation failed'}`);
+    } finally {
+      setIsReportActionLoading(false);
+    }
+  };
+
+  const handleApproveReport = async (reportId: string, notes: string) => {
+    try {
+      setIsReportActionLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/${reportId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminNotes: notes, publishedBy: user?.name || 'Admin' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to approve report');
+      alert(`🚀 ${data.message}`);
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Report approval failed'}`);
+    } finally {
+      setIsReportActionLoading(false);
+    }
+  };
+
+  const handleRecallReport = async (reportId: string) => {
+    if (!window.confirm('⚠️ RECALL REPORT:\n\nAre you sure you want to RECALL this published report? It will be hidden from traders\' mailboxes until resent.')) {
+      return;
+    }
+    try {
+      setIsReportActionLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/${reportId}/recall`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to recall report');
+      alert(`🛡️ ${data.message}`);
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Recall failed'}`);
+    } finally {
+      setIsReportActionLoading(false);
+    }
+  };
+
+  const handleSaveReportNotes = async (reportId: string, notes: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/${reportId}/update-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminNotes: notes })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save notes');
+      alert('💾 Admin notes saved!');
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Failed to save notes'}`);
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    if (!window.confirm('⚠️ Are you sure you want to delete this performance report?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/${reportId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete report');
+      alert('🗑️ Report deleted.');
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Failed to delete report'}`);
+    }
+  };
   
   const [mode, setMode] = useState<'live' | 'dry_run'>('live');
   const [market, setMarket] = useState<'FUTURES' | 'FOREX' | 'ALL'>('ALL');
@@ -1445,6 +1564,205 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
+        {/* Performance Report Approval Queue & Control Desk */}
+        <div className="glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 229, 255, 0.04)', border: '1px solid rgba(0, 229, 255, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#00e5ff', margin: '0 0 4px 0' }}>
+                📊 PERFORMANCE REPORT APPROVAL DESK
+              </h2>
+              <span style={{ fontSize: '0.8rem', color: '#ccc' }}>
+                Reports auto-generate at Asia session start (20:00 ET). Review metrics, add admin commentary/notes, and approve to push to traders.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="font-mono"
+                onClick={() => handleGenerateReport('daily')}
+                disabled={isReportActionLoading}
+                style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }}
+              >
+                ➕ Generate Daily Draft
+              </button>
+              <button
+                type="button"
+                className="font-mono"
+                onClick={() => handleGenerateReport('weekly')}
+                disabled={isReportActionLoading}
+                style={{ background: 'rgba(255, 215, 0, 0.15)', border: '1px solid #ffd700', color: '#ffd700', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }}
+              >
+                ➕ Generate Weekly Draft
+              </button>
+              <button
+                type="button"
+                className="font-mono"
+                onClick={() => handleGenerateReport('monthly')}
+                disabled={isReportActionLoading}
+                style={{ background: 'rgba(224, 86, 253, 0.15)', border: '1px solid #e056fd', color: '#e056fd', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }}
+              >
+                ➕ Generate Monthly Draft
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Filter */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '8px' }}>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => setReportTab('drafts')}
+              style={{
+                padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 800,
+                border: reportTab === 'drafts' ? '1px solid #ffd700' : '1px solid rgba(255,255,255,0.1)',
+                background: reportTab === 'drafts' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
+                color: reportTab === 'drafts' ? '#ffd700' : '#888'
+              }}
+            >
+              ⏳ Drafts Pending Approval ({perfReports.filter(r => r.status === 'draft_pending_approval').length})
+            </button>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => setReportTab('published')}
+              style={{
+                padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 800,
+                border: reportTab === 'published' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
+                background: reportTab === 'published' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
+                color: reportTab === 'published' ? '#00e676' : '#888'
+              }}
+            >
+              🚀 Published to Traders ({perfReports.filter(r => r.status === 'published').length})
+            </button>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => setReportTab('recalled')}
+              style={{
+                padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 800,
+                border: reportTab === 'recalled' ? '1px solid #ff1744' : '1px solid rgba(255,255,255,0.1)',
+                background: reportTab === 'recalled' ? 'rgba(255, 23, 68, 0.2)' : 'transparent',
+                color: reportTab === 'recalled' ? '#ff1744' : '#888'
+              }}
+            >
+              🛡️ Recalled Reports ({perfReports.filter(r => r.status === 'recalled').length})
+            </button>
+          </div>
+
+          {/* List of Reports */}
+          {perfReports.filter(r => (reportTab === 'drafts' ? r.status === 'draft_pending_approval' : reportTab === 'published' ? r.status === 'published' : r.status === 'recalled')).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: '#666', fontSize: '0.85rem' }}>
+              No {reportTab} performance reports found. Click a button above to generate a draft report manually!
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {perfReports
+                .filter(r => (reportTab === 'drafts' ? r.status === 'draft_pending_approval' : reportTab === 'published' ? r.status === 'published' : r.status === 'recalled'))
+                .map(r => {
+                  let summary: any = {};
+                  try { summary = typeof r.summary_json === 'string' ? JSON.parse(r.summary_json) : r.summary_json; } catch {}
+                  const notesVal = editingNotes[r.id] !== undefined ? editingNotes[r.id] : (r.admin_notes || '');
+
+                  return (
+                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
+                            📊 {(r.period_type || 'daily').toUpperCase()} PERFORMANCE REPORT
+                          </strong>
+                          <span style={{ fontSize: '0.78rem', color: '#aaa', marginLeft: '10px' }}>
+                            Period: {r.period_start?.slice(0, 10)} to {r.period_end?.slice(0, 10)}
+                          </span>
+                        </div>
+                        <span className={`state-badge ${r.status === 'published' ? 'committed' : r.status === 'recalled' ? 'rolled_back' : ''}`}>
+                          {r.status === 'published' ? '🚀 PUBLISHED' : r.status === 'recalled' ? '🛡️ RECALLED' : '⏳ DRAFT PENDING APPROVAL'}
+                        </span>
+                      </div>
+
+                      {/* Metrics Bar */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px' }}>
+                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Total Trades:</span> <strong style={{ color: '#fff' }}>{summary.totalTrades ?? 0}</strong></div>
+                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Wins / Losses / BE:</span> <strong style={{ color: '#00e676' }}>{summary.wins ?? 0}W</strong> / <strong style={{ color: '#ff1744' }}>{summary.losses ?? 0}L</strong> / <strong style={{ color: '#ffd700' }}>{summary.breakevens ?? 0}BE</strong></div>
+                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Win Rate:</span> <strong style={{ color: '#00e676' }}>{summary.winRate ?? 0}%</strong></div>
+                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Net Realized R:</span> <strong className={(summary.totalRealizedR ?? 0) >= 0 ? 'text-green' : 'text-red'}>{(summary.totalRealizedR ?? 0) >= 0 ? '+' : ''}{summary.totalRealizedR ?? 0}R</strong></div>
+                      </div>
+
+                      {/* Admin Notes Box */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '0.78rem', color: '#ffd700', fontWeight: 800, marginBottom: '4px' }}>
+                          ✏️ Admin Commentary / Corrections (Visible to Traders in Mailbox):
+                        </div>
+                        <textarea
+                          rows={2}
+                          placeholder="Add notes, error corrections, or market context before approving..."
+                          value={notesVal}
+                          onChange={e => setEditingNotes({ ...editingNotes, [r.id]: e.target.value })}
+                          style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid rgba(255,215,0,0.3)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveReportNotes(r.id, notesVal)}
+                            style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid #ffd700', color: '#ffd700', padding: '3px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 800 }}
+                          >
+                            💾 Save Notes
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                        <span style={{ fontSize: '0.72rem', color: '#666' }}>
+                          Created: {r.created_at?.slice(0, 16)} {r.published_at ? `| Published: ${r.published_at?.slice(0, 16)} by ${r.published_by}` : ''}
+                        </span>
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {r.status !== 'published' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveReport(r.id, notesVal)}
+                              disabled={isReportActionLoading}
+                              style={{ background: '#00e676', border: 'none', color: '#090314', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '0.8rem' }}
+                            >
+                              🚀 APPROVE &amp; PUSH TO TRADERS
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveReport(r.id, notesVal)}
+                                disabled={isReportActionLoading}
+                                style={{ background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00e676', color: '#00e676', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
+                              >
+                                🔄 RESEND REPORT
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRecallReport(r.id)}
+                                disabled={isReportActionLoading}
+                                style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
+                              >
+                                🛡️ RECALL REPORT
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReport(r.id)}
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', color: '#888', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem' }}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
         {/* Archived Datasets History Table */}
         {archives.length > 0 && (
           <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>
@@ -1472,14 +1790,34 @@ export const AdminPanel: React.FC = () => {
                         {arch.total_realized_r > 0 ? '+' : ''}{arch.total_realized_r.toFixed(2)}R
                       </td>
                       <td>
-                        <a 
-                          href={`${API_BASE}/api/admin/analytics/archives/${arch.id}/download`}
-                          target="_blank" 
-                          rel="noreferrer"
-                          style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: 700 }}
-                        >
-                          📥 Download CSV
-                        </a>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <a 
+                            href={`${API_BASE}/api/admin/analytics/archives/${arch.id}/download`}
+                            target="_blank" 
+                            rel="noreferrer"
+                            style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: 700 }}
+                          >
+                            📥 Download CSV
+                          </a>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            onClick={() => handleDeleteArchive(arch.id, arch.archive_name)}
+                            style={{
+                              background: 'rgba(255, 23, 68, 0.15)',
+                              border: '1px solid #ff1744',
+                              color: '#ff1744',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.78rem',
+                              fontWeight: 800
+                            }}
+                            title="Delete this historical archived dataset"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

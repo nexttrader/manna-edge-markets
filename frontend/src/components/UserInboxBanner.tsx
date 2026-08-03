@@ -9,6 +9,7 @@ interface UserInboxBannerProps {
 export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox }) => {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [reportBannerText, setReportBannerText] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [lastSeenCount, setLastSeenCount] = useState(0);
@@ -21,17 +22,13 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
       if (data.tickets !== undefined) {
         const total: number = data.tickets.reduce((sum: number, t: any) => sum + (t.unreadByUser || 0), 0);
         setUnreadCount(total);
-        // Show banner when new unread arrive
         if (total > lastSeenCount && total > 0) {
           setDismissed(false);
           setVisible(true);
         }
-        setLastSeenCount(prev => {
-          if (total < prev) return total; // reset when they read
-          return prev;
-        });
+        setLastSeenCount(prev => (total < prev ? total : prev));
       }
-    } catch { /* ignore */ }
+    } catch {}
   }, [user?.email, user?.role, lastSeenCount]);
 
   useEffect(() => {
@@ -40,17 +37,41 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
     return () => clearInterval(interval);
   }, [fetchUnread]);
 
+  // Connect to SSE stream for instant performance report notifications!
   useEffect(() => {
-    if (unreadCount > 0 && !dismissed) {
+    if (!user || user.role === 'admin' || user.role === 'super_admin') return;
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`${API_BASE}/api/events`);
+      es.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 'performance_report_published') {
+            const period = (parsed.payload?.periodType || 'daily').toUpperCase();
+            setReportBannerText(`📊 New ${period} Performance Report published! Check your mailbox.`);
+            setDismissed(false);
+            setVisible(true);
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (es) es.close();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if ((unreadCount > 0 || reportBannerText) && !dismissed) {
       setVisible(true);
-    } else if (unreadCount === 0) {
-      setVisible(false);
     }
-  }, [unreadCount, dismissed]);
+  }, [unreadCount, reportBannerText, dismissed]);
 
   const handleDismiss = () => {
     setDismissed(true);
     setVisible(false);
+    setReportBannerText(null);
     setLastSeenCount(unreadCount);
   };
 
@@ -70,12 +91,14 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
         right: 24,
         zIndex: 9999,
         background: 'linear-gradient(135deg, #0f0620 0%, #1a0940 100%)',
-        border: '1px solid rgba(0, 229, 255, 0.5)',
+        border: reportBannerText ? '1px solid rgba(255, 215, 0, 0.7)' : '1px solid rgba(0, 229, 255, 0.5)',
         borderRadius: '14px',
         padding: '16px 20px',
-        maxWidth: '340px',
+        maxWidth: '360px',
         width: '100%',
-        boxShadow: '0 0 30px rgba(0,229,255,0.2), 0 8px 32px rgba(0,0,0,0.4)',
+        boxShadow: reportBannerText
+          ? '0 0 30px rgba(255,215,0,0.3), 0 8px 32px rgba(0,0,0,0.4)'
+          : '0 0 30px rgba(0,229,255,0.2), 0 8px 32px rgba(0,0,0,0.4)',
         animation: 'banner-slide-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
         display: 'flex',
         flexDirection: 'column',
@@ -88,22 +111,16 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
           from { transform: translateY(100px); opacity: 0; }
           to   { transform: translateY(0);    opacity: 1; }
         }
-        @keyframes banner-pulse {
-          0%, 100% { box-shadow: 0 0 30px rgba(0,229,255,0.2), 0 8px 32px rgba(0,0,0,0.4); }
-          50%       { box-shadow: 0 0 50px rgba(0,229,255,0.4), 0 8px 32px rgba(0,0,0,0.4); }
-        }
       `}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>📬</span>
+        <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{reportBannerText ? '📊' : '📬'}</span>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 900, color: '#00e5ff', fontSize: '0.88rem', marginBottom: '3px' }}>
-            New message from Admin
+          <div style={{ fontWeight: 900, color: reportBannerText ? '#ffd700' : '#00e5ff', fontSize: '0.88rem', marginBottom: '3px' }}>
+            {reportBannerText ? 'Performance Report Alert' : 'New message from Admin'}
           </div>
           <div style={{ color: '#bbb', fontSize: '0.78rem', lineHeight: 1.4 }}>
-            {unreadCount === 1
-              ? 'You have 1 new message in your inbox.'
-              : `You have ${unreadCount} new messages in your inbox.`}
+            {reportBannerText || (unreadCount === 1 ? 'You have 1 new message in your inbox.' : `You have ${unreadCount} new messages in your inbox.`)}
           </div>
         </div>
         <button
@@ -123,26 +140,21 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
         <button
           onClick={handleOpen}
           style={{
-            flex: 1, background: '#00e5ff', color: '#000', border: 'none',
+            flex: 1, background: reportBannerText ? '#ffd700' : '#00e5ff', color: '#000', border: 'none',
             padding: '9px 16px', borderRadius: '8px',
             fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 900, cursor: 'pointer',
             transition: 'all 0.15s'
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#40eeff')}
-          onMouseLeave={e => (e.currentTarget.style.background = '#00e5ff')}
         >
-          📬 Open Inbox
+          📬 Open Mailbox
         </button>
         <button
           onClick={handleDismiss}
           style={{
             background: 'transparent', border: '1px solid rgba(255,255,255,0.12)',
             color: '#888', padding: '9px 14px', borderRadius: '8px',
-            fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-            transition: 'all 0.15s'
+            fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer'
           }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#888')}
         >
           Later
         </button>

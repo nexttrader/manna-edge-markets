@@ -169,22 +169,61 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
     }
   };
 
+  const [activeTab, setActiveTab] = useState<'support' | 'reports'>('support');
+  const [perfReports, setPerfReports] = useState<any[]>([]);
+
+  const fetchPerfReports = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/user/performance-reports`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.reports) setPerfReports(data.reports);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchPerfReports();
+  }, [fetchPerfReports]);
+
   const totalUnread = tickets.reduce((sum, t) => sum + (t.unreadByUser || 0), 0);
 
   return (
     <div className="ui-root">
       <div className="ui-header">
-        <span className="ui-title">📬 My Support Inbox</span>
-        {totalUnread > 0 && (
-          <span className="ui-unread-count">{totalUnread} new {totalUnread === 1 ? 'message' : 'messages'}</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="font-mono"
+            onClick={() => setActiveTab('support')}
+            style={{
+              background: activeTab === 'support' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+              border: activeTab === 'support' ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: activeTab === 'support' ? '#00e5ff' : '#888',
+              padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem'
+            }}
+          >
+            📬 Support Tickets {totalUnread > 0 && `(${totalUnread})`}
+          </button>
+          <button
+            type="button"
+            className="font-mono"
+            onClick={() => setActiveTab('reports')}
+            style={{
+              background: activeTab === 'reports' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
+              border: activeTab === 'reports' ? '1px solid #ffd700' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: activeTab === 'reports' ? '#ffd700' : '#888',
+              padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem'
+            }}
+          >
+            📊 Performance Reports ({perfReports.length})
+          </button>
+        </div>
+
+        {activeTab === 'support' && (
+          <button className="ui-new-ticket-btn" onClick={() => { setShowNewTicket(true); setSelectedTicket(null); }}>
+            + New Ticket
+          </button>
         )}
-        <button
-          className="ui-new-ticket-btn"
-          onClick={() => { setShowNewTicket(true); setSelectedTicket(null); }}
-          title="Open a new support ticket"
-        >
-          ✏️ New Ticket
-        </button>
         <button className="ui-refresh-btn" onClick={fetchTickets} title="Refresh">{loading ? '⏳' : '🔃'}</button>
       </div>
 

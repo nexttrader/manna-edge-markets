@@ -7,6 +7,7 @@ import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { generateReportMetrics } from '../analytics/report-generator';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
@@ -1183,6 +1184,170 @@ router.get('/analytics/archives/:id/download', async (req: Request, res: Respons
     res.status(500).json({ error: 'Failed to download archive CSV', details: String(error) });
   }
 });
+
+// Delete Historical Archive Dataset by ID
+router.delete('/analytics/archives/:id', async (req: Request, res: Response) => {
+  try {
+    const archiveId = req.params.id;
+    await queryDb(`DELETE FROM analytics_archives WHERE id = ?`, [archiveId]);
+    res.json({ success: true, message: `Archive dataset '${archiveId}' deleted successfully.` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete archive dataset', details: String(error) });
+  }
+});
+
+// ─── PERFORMANCE REPORT APPROVAL PIPELINE ─────────────────────────────────────
+
+// 1. Get all performance reports (Admin Queue)
+router.get('/performance-reports', async (_req: Request, res: Response) => {
+  try {
+    const reports = await queryDb(`SELECT * FROM performance_reports ORDER BY created_at DESC`);
+    res.json({ reports });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch performance reports', details: String(error) });
+  }
+});
+
+// 2. Generate a new Performance Report draft (Daily, Weekly, Monthly)
+router.post('/performance-reports/generate', async (req: Request, res: Response) => {
+  try {
+    const { periodType = 'daily', customStart, customEnd, adminNotes = '' } = req.body || {};
+    const metrics = await generateReportMetrics(periodType, customStart, customEnd);
+    const reportId = `report_${periodType}_${Date.now()}`;
+
+    await queryDb(`
+      INSERT INTO performance_reports (
+        id, period_type, period_start, period_end, summary_json,
+        admin_notes, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'draft_pending_approval', ?)
+    `, [
+      reportId,
+      periodType,
+      metrics.periodStart,
+      metrics.periodEnd,
+      JSON.stringify(metrics),
+      adminNotes,
+      new Date().toISOString()
+    ]);
+
+    res.json({
+      success: true,
+      reportId,
+      periodType,
+      metrics,
+      status: 'draft_pending_approval',
+      message: `${periodType.toUpperCase()} performance report draft generated successfully! Pending Admin Approval.`
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to generate performance report draft', details: error?.message || String(error) });
+  }
+});
+
+// 3. Approve & Push Performance Report to Traders' Mailbox
+router.post('/performance-reports/:id/approve', async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id;
+    const { adminNotes, publishedBy = 'Admin' } = req.body || {};
+    const rows = await queryDb(`SELECT * FROM performance_reports WHERE id = ?`, [reportId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Report not found' });
+
+    const nowIso = new Date().toISOString();
+    let updateNotesSql = '';
+    const params: any[] = [nowIso, publishedBy];
+
+    if (adminNotes !== undefined) {
+      updateNotesSql = ', admin_notes = ?';
+      params.push(adminNotes);
+    }
+    params.push(reportId);
+
+    await queryDb(`
+      UPDATE performance_reports 
+      SET status = 'published', published_at = ?${updateNotesSql}, published_by = ?
+      WHERE id = ?
+    `, params);
+
+    const updatedRows = await queryDb(`SELECT * FROM performance_reports WHERE id = ?`, [reportId]);
+    const updatedReport = updatedRows[0];
+
+    // Broadcast SSE event so trader browsers show the banner alert instantly!
+    publishEvents.emit('performance_report_published', {
+      reportId,
+      periodType: updatedReport.period_type,
+      publishedAt: nowIso,
+      publishedBy
+    });
+
+    res.json({
+      success: true,
+      report: updatedReport,
+      message: `🚀 Performance report approved and pushed to traders' mailboxes!`
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to approve performance report', details: error?.message || String(error) });
+  }
+});
+
+// 4. Recall a published Performance Report
+router.post('/performance-reports/:id/recall', async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id;
+    const rows = await queryDb(`SELECT * FROM performance_reports WHERE id = ?`, [reportId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Report not found' });
+
+    await queryDb(`UPDATE performance_reports SET status = 'recalled' WHERE id = ?`, [reportId]);
+
+    // Broadcast SSE event so trader inboxes hide the report
+    publishEvents.emit('performance_report_recalled', { reportId });
+
+    res.json({
+      success: true,
+      reportId,
+      message: `🛡️ Performance report recalled! It is now hidden from traders' mailboxes.`
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to recall performance report', details: error?.message || String(error) });
+  }
+});
+
+// 5. Update Admin Notes / Commentary on a Report
+router.post('/performance-reports/:id/update-notes', async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id;
+    const { adminNotes } = req.body || {};
+    await queryDb(`UPDATE performance_reports SET admin_notes = ? WHERE id = ?`, [adminNotes ?? '', reportId]);
+    res.json({ success: true, message: 'Admin notes updated successfully.' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update admin notes', details: error?.message || String(error) });
+  }
+});
+
+// 6. Delete a Performance Report
+router.delete('/performance-reports/:id', async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id;
+    await queryDb(`DELETE FROM performance_reports WHERE id = ?`, [reportId]);
+    res.json({ success: true, message: 'Performance report deleted.' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete performance report', details: error?.message || String(error) });
+  }
+});
+
+// ─── TRADER USER-FACING PERFORMANCE REPORTS ENDPOINT ─────────────────────────
+router.get('/user/performance-reports', async (_req: Request, res: Response) => {
+  try {
+    const reports = await queryDb(`
+      SELECT id, period_type, period_start, period_end, summary_json, admin_notes, published_at, published_by
+      FROM performance_reports 
+      WHERE status = 'published'
+      ORDER BY published_at DESC
+    `);
+    res.json({ success: true, reports });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch performance reports', details: error?.message || String(error) });
+  }
+});
+
 
 router.get('/analytics/strategies', async (_req: Request, res: Response) => {
   try {

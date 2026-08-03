@@ -20,6 +20,8 @@ router.get('/events', (req: Request, res: Response) => {
   const handleSetupEntered = (payload: any) => sendEvent('setup_entered', payload);
   const handleSetupResolved = (payload: any) => sendEvent('setup_resolved', payload);
   const handleCircuitBreaker = (payload: any) => sendEvent('circuit_breaker', payload);
+  const handleReportPublished = (payload: any) => sendEvent('performance_report_published', payload);
+  const handleReportRecalled = (payload: any) => sendEvent('performance_report_recalled', payload);
 
   publishEvents.on('run_complete', handleRunComplete);
   publishEvents.on('setup_created', handleSetupCreated);
@@ -27,6 +29,8 @@ router.get('/events', (req: Request, res: Response) => {
   publishEvents.on('setup_entered', handleSetupEntered);
   publishEvents.on('setup_resolved', handleSetupResolved);
   publishEvents.on('circuit_breaker', handleCircuitBreaker);
+  publishEvents.on('performance_report_published', handleReportPublished);
+  publishEvents.on('performance_report_recalled', handleReportRecalled);
 
   const keepAlive = setInterval(() => {
     res.write(': keep-alive\n\n');
@@ -39,6 +43,8 @@ router.get('/events', (req: Request, res: Response) => {
     publishEvents.off('setup_entered', handleSetupEntered);
     publishEvents.off('setup_resolved', handleSetupResolved);
     publishEvents.off('circuit_breaker', handleCircuitBreaker);
+    publishEvents.off('performance_report_published', handleReportPublished);
+    publishEvents.off('performance_report_recalled', handleReportRecalled);
     clearInterval(keepAlive);
   });
 });
