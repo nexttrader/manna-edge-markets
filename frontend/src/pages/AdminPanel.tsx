@@ -717,6 +717,7 @@ export const AdminPanel: React.FC = () => {
                   <tr>
                     <th>User Display Name</th>
                     <th>Institutional Email</th>
+                    <th>Last Login</th>
                     <th>Account Role</th>
                     <th>Subscription Tier</th>
                     <th>Market Focus</th>
@@ -736,6 +737,9 @@ export const AdminPanel: React.FC = () => {
                         </button>
                       </td>
                       <td className="font-mono">{u.email}</td>
+                      <td className="font-mono" style={{ fontSize: '0.78rem', color: u.lastActive?.includes('Just') ? '#00e676' : '#aaa' }}>
+                        {u.lastActive || 'Preloaded - Pending Login'}
+                      </td>
                       <td>
                         <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255,171,0,0.2)' : 'rgba(0,229,255,0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
                           {(u.role || 'trader').toUpperCase()}

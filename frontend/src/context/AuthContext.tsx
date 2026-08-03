@@ -12,6 +12,7 @@ export interface User {
   trialExpiresAt?: string;
   trialDaysRemaining?: number;
   trialExpired?: boolean;
+  lastActive?: string;
 }
 
 interface AuthContextType {

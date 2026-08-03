@@ -196,9 +196,16 @@ export const DashboardHeader: React.FC = () => {
                   className="user-email-chip"
                   onClick={handleAdminNameClick}
                   style={{ cursor: 'pointer', userSelect: 'none', border: isSuperAdmin ? '1px solid #b388ff' : undefined }}
-                  title="Trader Profile"
+                  title={`Logged in as ${user.name || user.email}`}
                 >
-                  {user.email.split('@')[0]} {isSuperAdmin ? '👁️' : ''}
+                  👤 {user.name || user.email.split('@')[0]} {isSuperAdmin ? '👁️' : ''}
+                </span>
+                <span 
+                  className="last-login-badge font-mono"
+                  style={{ fontSize: '0.72rem', color: '#888', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}
+                  title="Last Login Timestamp"
+                >
+                  🕒 {user.lastActive || 'Just now'}
                 </span>
                 <button
                   type="button"
