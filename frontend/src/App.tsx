@@ -132,6 +132,7 @@ function App() {
         <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="/vault-7729" element={<Navigate to="/dashboard" replace />} />
         <Route path="/setup/:id" element={<SetupDetail />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
