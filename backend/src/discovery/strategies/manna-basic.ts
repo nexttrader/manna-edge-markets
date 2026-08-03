@@ -14,7 +14,7 @@ import {
   computeNewsProximityModifier
 } from '../scoring';
 
-import { getLogicalStopDistance } from '../stop-loss-rules';
+import { getLogicalStopDistance, getInstrumentDecimals } from '../stop-loss-rules';
 
 export class MannaBasicStrategy implements IStrategyEngine {
   public meta: StrategyMeta = {
@@ -43,6 +43,7 @@ export class MannaBasicStrategy implements IStrategyEngine {
         const currentPrice = await getLiveCurrentPrice(instrument);
         if (!currentPrice || currentPrice <= 0) continue;
         const bias: Bias = preCalculatedBiases[instrument] || 'long';
+        const decimals = getInstrumentDecimals(instrument, market);
 
         let entry_zone_mid: number;
         let stop: number;
@@ -57,20 +58,47 @@ export class MannaBasicStrategy implements IStrategyEngine {
           stop = entry_zone_mid + stopDistance;
         }
 
-        const zoneWidth = market === 'futures' ? atr14 * 0.15 : atr14 * 0.1;
+        const zoneWidth = market === 'futures' ? Math.max(atr14 * 0.15, 0.25) : Math.max(atr14 * 0.1, 0.00015);
         const entry_zone_low = entry_zone_mid - zoneWidth;
         const entry_zone_high = entry_zone_mid + zoneWidth;
 
-        const risk = Math.abs(entry_zone_mid - stop);
-        const tp1 = bias === 'long' ? entry_zone_mid + (risk * 2.0) : entry_zone_mid - (risk * 2.0);
-        const tp2 = bias === 'long' ? entry_zone_mid + (risk * 3.0) : entry_zone_mid - (risk * 3.0);
+        // Hard Guard: Stop loss must be strictly outside entry zone with a mandatory buffer
+        const minStopBuffer = market === 'futures' ? 0.50 : (instrument.includes('JPY') ? 0.10 : 0.00030);
+        if (bias === 'long') {
+          if (stop >= entry_zone_low - minStopBuffer) {
+            stop = entry_zone_low - minStopBuffer;
+          }
+        } else {
+          if (stop <= entry_zone_high + minStopBuffer) {
+            stop = entry_zone_high + minStopBuffer;
+          }
+        }
+
+        // Format to instrument decimals
+        const ez_mid = Number(entry_zone_mid.toFixed(decimals));
+        const ez_low = Number(entry_zone_low.toFixed(decimals));
+        const ez_high = Number(entry_zone_high.toFixed(decimals));
+        let stopVal = Number(stop.toFixed(decimals));
+
+        // Absolute safeguard against entry and stoploss rounding to the exact same value
+        if (stopVal === ez_mid || stopVal === ez_low || stopVal === ez_high) {
+          const shift = market === 'futures' ? 1.00 : (instrument.includes('JPY') ? 0.15 : 0.00050);
+          stopVal = bias === 'long' ? ez_low - shift : ez_high + shift;
+          stopVal = Number(stopVal.toFixed(decimals));
+        }
+
+        const risk = Math.abs(ez_mid - stopVal);
+        if (risk <= 0) continue;
+
+        const tp1 = bias === 'long' ? ez_mid + (risk * 2.0) : ez_mid - (risk * 2.0);
+        const tp2 = bias === 'long' ? ez_mid + (risk * 3.0) : ez_mid - (risk * 3.0);
 
         // Discard setup if current market price has already reached TP1, breached Stop Loss, or already passed/inside entry zone
-        if (bias === 'long' && (currentPrice >= tp1 || currentPrice <= stop || currentPrice <= entry_zone_high)) continue;
-        if (bias === 'short' && (currentPrice <= tp1 || currentPrice >= stop || currentPrice >= entry_zone_low)) continue;
+        if (bias === 'long' && (currentPrice >= tp1 || currentPrice <= stopVal || currentPrice <= ez_high)) continue;
+        if (bias === 'short' && (currentPrice <= tp1 || currentPrice >= stopVal || currentPrice >= ez_low)) continue;
 
-        const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
-        const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
+        const r_multiple_1 = computeRMultiple(ez_mid, tp1, stopVal, bias);
+        const r_multiple_2 = computeRMultiple(ez_mid, tp2, stopVal, bias);
 
         const lastVol = candles15m[candles15m.length - 1].volume;
         const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
@@ -105,8 +133,7 @@ export class MannaBasicStrategy implements IStrategyEngine {
         const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
         const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
-        const decimals = market === 'futures' ? 2 : 5;
-        const selection_rationale = `[MANNA BASIC] Selected during ${killzone.killzone.toUpperCase().replace('_', ' ')} scan. ${bias.toUpperCase()} liquidity sweep & Order Block identified on 15M timeframe at ${entry_zone_mid.toFixed(decimals)}. ${r_multiple_1.toFixed(2)}R TP1 target.`;
+        const selection_rationale = `[MANNA BASIC] Selected during ${killzone.killzone.toUpperCase().replace('_', ' ')} scan. ${bias.toUpperCase()} liquidity sweep & Order Block identified on 15M timeframe at ${ez_mid.toFixed(decimals)}. ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
         candidates.push({
           instrument,
@@ -115,10 +142,10 @@ export class MannaBasicStrategy implements IStrategyEngine {
           killzone_origin: killzone.killzone,
           killzone_origin_at: killzone.boundaryUTC,
           bias,
-          entry_zone_low: Number(entry_zone_low.toFixed(decimals)),
-          entry_zone_high: Number(entry_zone_high.toFixed(decimals)),
-          entry_zone_mid: Number(entry_zone_mid.toFixed(decimals)),
-          stop: Number(stop.toFixed(decimals)),
+          entry_zone_low: ez_low,
+          entry_zone_high: ez_high,
+          entry_zone_mid: ez_mid,
+          stop: stopVal,
           tp1: Number(tp1.toFixed(decimals)),
           tp2: Number(tp2.toFixed(decimals)),
           r_multiple_1,
@@ -137,3 +164,4 @@ export class MannaBasicStrategy implements IStrategyEngine {
     return candidates;
   }
 }
+

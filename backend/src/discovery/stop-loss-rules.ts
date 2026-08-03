@@ -23,8 +23,19 @@ export const MIN_STOP_FLOORS: Record<string, number> = {
 };
 
 /**
+ * Returns exact decimal places required for formatting prices of a given instrument
+ */
+export function getInstrumentDecimals(instrument: string, market: 'futures' | 'forex'): number {
+  if (instrument.includes('JPY')) return 3;
+  if (instrument === 'SI') return 3;
+  if (market === 'futures') return 2;
+  return 5;
+}
+
+/**
  * Calculates a logical stop loss distance for an instrument based on 15M ATR,
  * target risk multiplier, and institutional minimum stop loss floors.
+ * Guaranteed to return a non-zero distance.
  */
 export function getLogicalStopDistance(
   instrument: string,
@@ -32,13 +43,21 @@ export function getLogicalStopDistance(
   rawCalculatedRisk: number,
   market: 'futures' | 'forex'
 ): number {
-  // Default ATR risk distance (e.g. 1.25x ATR) if raw risk is insufficient
-  const atrRiskDistance = Math.max(rawCalculatedRisk, atr14 * 1.25);
+  const safeAtr = (isNaN(atr14) || atr14 <= 0) ? (market === 'futures' ? 2.0 : 0.0010) : atr14;
+  const safeRaw = (isNaN(rawCalculatedRisk) || rawCalculatedRisk <= 0) ? safeAtr * 1.25 : rawCalculatedRisk;
+  const atrRiskDistance = Math.max(safeRaw, safeAtr * 1.25);
   
   // Instrument-specific logical minimum floor
   const floor = MIN_STOP_FLOORS[instrument] !== undefined
     ? MIN_STOP_FLOORS[instrument]
-    : (market === 'futures' ? 5.0 : 0.0010);
+    : (market === 'futures' ? 1.0 : (instrument.includes('JPY') ? 0.10 : 0.00050));
 
-  return Number(Math.max(atrRiskDistance, floor).toFixed(market === 'futures' ? 2 : 5));
+  const distance = Math.max(atrRiskDistance, floor);
+  const decimals = getInstrumentDecimals(instrument, market);
+  const rounded = Number(distance.toFixed(decimals));
+
+  // Ensure stop distance is strictly non-zero
+  const minNonZero = market === 'futures' ? 0.25 : (instrument.includes('JPY') ? 0.05 : 0.00020);
+  return Math.max(rounded, minNonZero);
 }
+
