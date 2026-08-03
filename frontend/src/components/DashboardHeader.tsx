@@ -108,6 +108,25 @@ export const DashboardHeader: React.FC = () => {
                 📊 Dashboard
               </Link>
               <button 
+                className="nav-link font-mono support-nav-btn"
+                style={{
+                  background: inboxUnread > 0 ? 'rgba(0,229,255,0.2)' : 'rgba(0,229,255,0.08)',
+                  border: '1px solid rgba(0,229,255,0.3)',
+                  cursor: 'pointer',
+                  color: '#00e5ff',
+                  fontWeight: 800,
+                  position: 'relative',
+                  borderRadius: '6px'
+                }}
+                onClick={() => setShowInbox(true)}
+                title="Open Support Desk & Submit Tickets"
+              >
+                📬 Support
+                {inboxUnread > 0 && (
+                  <span className="support-badge-count">{inboxUnread}</span>
+                )}
+              </button>
+              <button 
                 className="nav-link font-mono" 
                 style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                 onClick={() => setShowCalendar(true)}
@@ -130,35 +149,6 @@ export const DashboardHeader: React.FC = () => {
                 <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
                   👁️ Master Desk
                 </Link>
-              )}
-              {isTrader && (
-                <button
-                  className="nav-link font-mono"
-                  style={{
-                    background: inboxUnread > 0 ? 'rgba(0,229,255,0.15)' : 'none',
-                    border: inboxUnread > 0 ? '1px solid rgba(0,229,255,0.4)' : 'none',
-                    cursor: 'pointer',
-                    color: inboxUnread > 0 ? '#00e5ff' : '#aaa',
-                    fontWeight: inboxUnread > 0 ? 900 : 600,
-                    position: 'relative',
-                    borderRadius: '6px',
-                    padding: '4px 10px'
-                  }}
-                  onClick={() => setShowInbox(true)}
-                  title="Open Support Inbox"
-                >
-                  📬 Inbox
-                  {inboxUnread > 0 && (
-                    <span style={{
-                      position: 'absolute', top: -5, right: -5,
-                      background: '#ff3b3b', color: '#fff',
-                      fontSize: '0.55rem', fontWeight: 900,
-                      minWidth: 15, height: 15, borderRadius: 8,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '0 3px'
-                    }}>{inboxUnread}</span>
-                  )}
-                </button>
               )}
             </nav>
           </div>
