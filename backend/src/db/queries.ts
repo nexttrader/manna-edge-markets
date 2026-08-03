@@ -243,7 +243,7 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 // ── Strategy Settings ──
 
-export async function getStrategySettings(role?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
+export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
     try {
         const rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
         const mapped = rows.map(r => ({
@@ -256,11 +256,10 @@ export async function getStrategySettings(role?: string): Promise<{ id: string, 
 
         if (role === 'super_admin') {
             return mapped;
-        } else if (role === 'admin') {
-            return mapped.filter(s => s.visibleToAdmins);
-        } else {
-            return mapped.filter(s => s.visibleToAdmins && s.visibleToTraders);
         }
+
+        const hiddenIds = await getHiddenStrategyIdsForRole(role || 'trader', userEmail);
+        return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
             { id: 'manna_basic', name: 'Manna Basic', enabled: true, visibleToAdmins: true, visibleToTraders: true },

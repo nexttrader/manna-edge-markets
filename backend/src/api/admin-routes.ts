@@ -14,9 +14,11 @@ import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
 const router = express.Router();
 
-router.get('/strategies/status', async (_req: Request, res: Response) => {
+router.get('/strategies/status', async (req: Request, res: Response) => {
   try {
-    const strategies = await queries.getStrategySettings('admin');
+    const role = (req.query.role as string) || 'admin';
+    const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+    const strategies = await queries.getStrategySettings(role, email);
     res.json({ strategies });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch strategy status', details: String(error) });
@@ -1401,8 +1403,12 @@ router.get('/user/performance-reports', async (_req: Request, res: Response) => 
 });
 
 
-router.get('/analytics/strategies', async (_req: Request, res: Response) => {
+router.get('/analytics/strategies', async (req: Request, res: Response) => {
   try {
+    const role = (req.query.role as string) || 'admin';
+    const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
+
     const futuresSetups = await queryDb(`SELECT * FROM edge_setups`);
     const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups`);
     const allSetups = [...futuresSetups, ...forexSetups];
@@ -1520,7 +1526,7 @@ router.get('/analytics/strategies', async (_req: Request, res: Response) => {
       s.totalRealizedR = Number(s.totalRealizedR.toFixed(2));
     }
 
-    const stratsArray = Object.values(strategyStats);
+    const stratsArray = Object.values(strategyStats).filter(s => !hiddenIds.includes(s.id));
 
     const collectiveWins = stratsArray.reduce((acc, s) => acc + s.wins, 0);
     const collectiveLosses = stratsArray.reduce((acc, s) => acc + s.losses, 0);

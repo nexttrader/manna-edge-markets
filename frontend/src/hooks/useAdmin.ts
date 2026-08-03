@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { type SystemStatus, type PublishRun } from '../types';
 import { API_BASE } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 export function useAdmin() {
   const triggerRun = async (mode: 'live' | 'dry_run', market: 'FUTURES' | 'FOREX' | 'ALL', strategyId?: string) => {
@@ -35,10 +36,13 @@ export function useAdmin() {
 
 export function useStrategies() {
   const [strategies, setStrategies] = useState<{ id: string; name: string; enabled: boolean }[]>([]);
+  const { user } = useAuth();
 
   const fetchStrategies = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/strategies/status`);
+      const role = user?.role || 'admin';
+      const email = encodeURIComponent(user?.email || '');
+      const res = await fetch(`${API_BASE}/api/admin/strategies/status?role=${role}&email=${email}`);
       if (res.ok) {
         const data = await res.json();
         setStrategies(data.strategies || []);
@@ -46,7 +50,7 @@ export function useStrategies() {
     } catch {
       // Fallback
     }
-  }, []);
+  }, [user]);
 
   const toggleStrategy = async (strategyId: string, enabled: boolean) => {
     try {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { API_BASE } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 export interface StrategyStat {
   id: string;
@@ -84,19 +85,22 @@ export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number 
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const url = strategyId && strategyId !== 'all'
-        ? `${API_BASE}/api/admin/analytics?strategy_id=${encodeURIComponent(strategyId)}`
-        : `${API_BASE}/api/admin/analytics`;
-      const res = await fetch(url);
+      const role = user?.role || 'admin';
+      const email = encodeURIComponent(user?.email || '');
+      const baseUrl = strategyId && strategyId !== 'all'
+        ? `${API_BASE}/api/admin/analytics?strategy_id=${encodeURIComponent(strategyId)}&role=${role}&email=${email}`
+        : `${API_BASE}/api/admin/analytics?role=${role}&email=${email}`;
+      const res = await fetch(baseUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
       // Also fetch strategy matrix if not already included
       try {
-        const stratRes = await fetch(`${API_BASE}/api/admin/analytics/strategies`);
+        const stratRes = await fetch(`${API_BASE}/api/admin/analytics/strategies?role=${role}&email=${email}`);
         if (stratRes.ok) {
           const stratData = await stratRes.json();
           data.collective = stratData.collective;
@@ -111,7 +115,7 @@ export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number 
     } finally {
       setLoading(false);
     }
-  }, [strategyId]);
+  }, [strategyId, user]);
 
   useEffect(() => {
     fetchAnalytics();
