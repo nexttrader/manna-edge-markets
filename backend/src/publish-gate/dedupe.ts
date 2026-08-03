@@ -56,22 +56,7 @@ export function dedupeAndSelect(
       return { action: 'preserve', invalidations };
     }
 
-    // 2. Stale awaiting_entry setups: if older than 30 minutes, replace unconditionally.
-    //    Setups created under a broken discovery run (bad zone data, instant-fill bug, etc.)
-    //    should not block fresh signals from the current scan.
-    const ageMs = existingSetup.created_at
-      ? Date.now() - new Date(existingSetup.created_at).getTime()
-      : Infinity;
-    if (ageMs > 30 * 60 * 1000) {
-      invalidations.push({
-        setupId: existingSetup.id,
-        reason: 'stale_replaced',
-        detail: `Awaiting_entry setup was older than 30 minutes (${Math.round(ageMs / 60000)} min) — replaced by fresh discovery`
-      });
-      return { action: 'replace', selectedCandidate: selected, invalidations };
-    }
-
-    // 3. Pending AWAITING_ENTRY setups: Check for opposing signal
+    // 2. Pending AWAITING_ENTRY setups: Check for opposing signal
     if (shouldInvalidateForOpposingSignal(existingSetup, selected)) {
        invalidations.push({
          setupId: existingSetup.id,
