@@ -9,6 +9,9 @@ import { NewsWarningBanner } from '../components/NewsWarningBanner';
 import { MarketClosedBanner } from '../components/MarketClosedBanner';
 import { TrialWelcomeBanner } from '../components/TrialWelcomeBanner';
 import { FaqModal } from '../components/FaqModal';
+import { AssetDecisionMatrix } from '../components/AssetDecisionMatrix';
+import { PositionCalculatorModal } from '../components/PositionCalculatorModal';
+import type { EdgeSetup } from '../types';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
@@ -28,6 +31,7 @@ export const Dashboard: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('conviction');
   const [showFaq, setShowFaq] = useState(false);
+  const [calcSetup, setCalcSetup] = useState<EdgeSetup | null>(null);
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
@@ -120,6 +124,12 @@ export const Dashboard: React.FC = () => {
       <main className="container dashboard-main">
         <TrialWelcomeBanner />
         <MarketClosedBanner />
+
+        {/* Real-Time Asset Decision Matrix */}
+        <AssetDecisionMatrix 
+          rawSetups={safeSetups}
+          onOpenCalculator={(s) => setCalcSetup(s)}
+        />
 
         {/* Main Filter & Control Panel */}
         <div className="filter-bar glass-card font-mono">
@@ -272,6 +282,12 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
+      {calcSetup && (
+        <PositionCalculatorModal
+          setup={calcSetup}
+          onClose={() => setCalcSetup(null)}
+        />
+      )}
       <HawkeyePanel />
     </div>
   );

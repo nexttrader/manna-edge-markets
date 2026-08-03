@@ -6,6 +6,7 @@ import { DashboardHeader } from '../components/DashboardHeader';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
 import { HawkeyePanel } from '../components/HawkeyePanel';
 import { PositionCalculatorModal } from '../components/PositionCalculatorModal';
+import { AssetDecisionMatrix } from '../components/AssetDecisionMatrix';
 import type { EdgeSetup } from '../types';
 import './ClientDashboard.css';
 
@@ -132,6 +133,12 @@ export const ClientDashboard: React.FC = () => {
             <span className="client-stat-val text-blue">AUTOMATED 24/7</span>
           </div>
         </section>
+
+        {/* Real-Time Asset Decision Matrix */}
+        <AssetDecisionMatrix 
+          rawSetups={setups} 
+          onOpenCalculator={(s) => setCalcSetup(s)} 
+        />
 
         {/* Full Rich Filter Bar */}
         <div className="filter-bar glass-card font-mono" style={{ marginBottom: '24px' }}>

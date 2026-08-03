@@ -3,6 +3,7 @@ import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { calculateAssetMatrix } from '../analytics/decision-matrix';
 
 const router = express.Router();
 
@@ -184,6 +185,50 @@ router.get('/candles/:instrument', async (req: Request, res: Response) => {
     res.json({ instrument, timeframe, candles });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candles', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/accelerate/decision-matrix', async (req: Request, res: Response) => {
+  try {
+    const market = (req.query.market as string) || 'all';
+    const role = (req.query.role as string) || 'trader';
+    const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+    
+    let rawSetups;
+    if (market === 'all') {
+      rawSetups = await queries.getAllActiveSetups();
+    } else {
+      rawSetups = await queries.getActiveSetups(market);
+    }
+
+    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+
+    const priceMap: Record<string, number> = {};
+    const enrichedSetups = await Promise.all(
+      rawSetups.map(async (setup: any) => {
+        const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        if (currentPrice) {
+          priceMap[setup.instrument] = currentPrice;
+        }
+        return {
+          ...setup,
+          current_price: currentPrice
+        };
+      })
+    );
+
+    const matrixItems = calculateAssetMatrix(enrichedSetups, priceMap);
+    const topFocus = matrixItems.length > 0 ? matrixItems[0] : null;
+
+    res.json({
+      matrix: matrixItems,
+      topFocus,
+      count: matrixItems.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
