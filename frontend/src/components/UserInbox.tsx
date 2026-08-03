@@ -235,7 +235,7 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
                 <div style={{ fontSize: '2rem', marginBottom: 8 }}>📊</div>
                 <div>No performance reports published yet.</div>
                 <div style={{ color: '#555', fontSize: '0.78rem', marginTop: 4 }}>
-                  Automated performance summaries are generated at Asia session start and pushed here after admin review.
+                  Automated performance summaries are generated at session boundaries and pushed here after admin review.
                 </div>
               </div>
             ) : (
@@ -243,11 +243,21 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
                 {perfReports.map(report => {
                   let summary: any = {};
                   try { summary = typeof report.summary_json === 'string' ? JSON.parse(report.summary_json) : report.summary_json; } catch {}
+                  const isSessionType = report.period_type === 'session';
+                  let titleStr = (report.period_type || 'daily').toUpperCase();
+                  if (isSessionType) {
+                    const sessName = (summary.sessionName || 'session').toLowerCase();
+                    const sMap: Record<string, string> = { asia: 'ASIA', london: 'LONDON', ny_am: 'NY AM', ny_pm: 'NY PM', all: 'PER-SESSION' };
+                    titleStr = `${sMap[sessName] || sessName.toUpperCase()} SESSION`;
+                  }
+                  const totalCount = summary.totalTrades !== undefined ? summary.totalTrades : (summary.totalSetups || 0);
+                  const beCount = summary.breakevens !== undefined ? summary.breakevens : (summary.breakeven || 0);
+
                   return (
                     <div key={report.id} className="glass-card font-mono" style={{ padding: '16px', borderRadius: '8px', background: 'rgba(255, 215, 0, 0.03)', border: '1px solid rgba(255, 215, 0, 0.2)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                         <strong style={{ fontSize: '1rem', color: '#ffd700' }}>
-                          📊 {report.period_type?.toUpperCase()} PERFORMANCE REPORT
+                          📊 {titleStr} PERFORMANCE REPORT
                         </strong>
                         <span style={{ fontSize: '0.75rem', color: '#888' }}>
                           {report.published_at?.slice(0, 10)} | Published by: Manna Edge Team
@@ -263,7 +273,7 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
                           💰 Realized R: {summary.totalRealizedR !== undefined ? `${summary.totalRealizedR >= 0 ? '+' : ''}${summary.totalRealizedR}R` : 'N/A'}
                         </span>
                         <span style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                          📈 Total Signals: {summary.totalSetups || 0} ({summary.wins || 0} Wins, {summary.losses || 0} Losses, {summary.breakeven || 0} BE)
+                          📈 Total Signals: {totalCount} ({summary.wins || 0} Wins, {summary.losses || 0} Losses, {beCount} BE)
                         </span>
                       </div>
 

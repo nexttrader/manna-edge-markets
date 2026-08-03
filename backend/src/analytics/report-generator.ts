@@ -2,7 +2,8 @@ import { queryDb } from '../db/database';
 import * as queries from '../db/queries';
 
 export interface ReportSummary {
-  periodType: 'daily' | 'weekly' | 'monthly';
+  periodType: 'daily' | 'weekly' | 'monthly' | 'session';
+  sessionName?: string;
   periodStart: string;
   periodEnd: string;
   totalTrades: number;
@@ -21,9 +22,10 @@ export interface ReportSummary {
 }
 
 export async function generateReportMetrics(
-  periodType: 'daily' | 'weekly' | 'monthly',
+  periodType: 'daily' | 'weekly' | 'monthly' | 'session',
   customStart?: string,
-  customEnd?: string
+  customEnd?: string,
+  sessionName?: string
 ): Promise<ReportSummary> {
   const now = new Date();
   let periodStartIso: string;
@@ -31,7 +33,7 @@ export async function generateReportMetrics(
 
   if (customStart) {
     periodStartIso = customStart;
-  } else if (periodType === 'daily') {
+  } else if (periodType === 'daily' || periodType === 'session') {
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     periodStartIso = yesterday.toISOString();
   } else if (periodType === 'weekly') {
@@ -62,8 +64,21 @@ export async function generateReportMetrics(
     manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
   };
 
+  let processedTrades = 0;
+
   for (const o of outcomesRaw) {
     const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+
+    // Filter by session if periodType === 'session' and sessionName is provided and not 'all'
+    if (periodType === 'session' && sessionName && sessionName !== 'all') {
+      const setupKz = (setup?.killzone_origin || o.killzone_origin || '').toLowerCase();
+      const targetKz = sessionName.toLowerCase();
+      if (setupKz !== targetKz) {
+        continue;
+      }
+    }
+
+    processedTrades++;
     const stratKey = (o.strategy_id || setup?.strategy_id || 'manna_basic').toLowerCase() === 'manna_snd' ? 'manna_snd' : 'manna_basic';
 
     let rVal = 0;
@@ -106,7 +121,7 @@ export async function generateReportMetrics(
     }
   }
 
-  const totalTrades = outcomesRaw.length;
+  const totalTrades = processedTrades;
   const winRate = totalTrades > 0 ? Number(((wins / totalTrades) * 100).toFixed(1)) : 0;
   const avgFillTimeMin = fillCount > 0 ? Number((totalFillMs / fillCount / 60000).toFixed(1)) : 0;
   const avgHoldDurationMin = holdCount > 0 ? Number((totalHoldMs / holdCount / 60000).toFixed(1)) : 0;
@@ -120,13 +135,20 @@ export async function generateReportMetrics(
     stratStats.manna_snd.totalR = Number(stratStats.manna_snd.totalR.toFixed(2));
   }
 
-  const periodLabel = periodType === 'daily' ? 'Daily' : periodType === 'weekly' ? 'Weekly' : 'Monthly';
+  let periodLabel = periodType === 'daily' ? 'Daily' : periodType === 'weekly' ? 'Weekly' : periodType === 'monthly' ? 'Monthly' : 'Session';
+  if (periodType === 'session' && sessionName && sessionName !== 'all') {
+    const sMap: Record<string, string> = { asia: 'Asia', london: 'London', ny_am: 'NY AM', ny_pm: 'NY PM' };
+    const niceSession = sMap[sessionName.toLowerCase()] || sessionName.toUpperCase();
+    periodLabel = `${niceSession} Session`;
+  }
+
   const plainEnglishSummary = totalTrades > 0
     ? `During this ${periodLabel.toLowerCase()} period, we had ${totalTrades} finished trades (${wins} Wins, ${losses} Losses, ${breakevens} Risk-Free Breakevens). Overall win rate was ${winRate}% with a total profit of ${totalRealizedR >= 0 ? '+' : ''}${totalRealizedR.toFixed(2)}R!`
     : `No trades were completed during this ${periodLabel.toLowerCase()} tracking period.`;
 
   return {
     periodType,
+    sessionName,
     periodStart: periodStartIso,
     periodEnd: periodEndIso,
     totalTrades,
@@ -142,48 +164,63 @@ export async function generateReportMetrics(
   };
 }
 
-export async function autoGenerateAsiaPerformanceReports(): Promise<void> {
+export async function autoGenerateSessionPerformanceReports(targetSession: string = 'asia'): Promise<void> {
   try {
     const now = new Date();
 
-    // 1. Daily Report
-    const dailyMetrics = await generateReportMetrics('daily');
-    const dailyId = `report_daily_${Date.now()}`;
+    // 1. Session Report
+    const sessionMetrics = await generateReportMetrics('session', undefined, undefined, targetSession);
+    const sessionId = `report_session_${targetSession.toLowerCase()}_${Date.now()}`;
     await queryDb(`
       INSERT INTO performance_reports (
         id, period_type, period_start, period_end, summary_json,
         admin_notes, status, created_at
-      ) VALUES (?, 'daily', ?, ?, ?, '', 'draft_pending_approval', ?)
-    `, [dailyId, dailyMetrics.periodStart, dailyMetrics.periodEnd, JSON.stringify(dailyMetrics), now.toISOString()]);
-    console.log(`📊 Auto-generated Daily Performance Report draft (${dailyId}) for Admin Approval Queue`);
+      ) VALUES (?, 'session', ?, ?, ?, '', 'draft_pending_approval', ?)
+    `, [sessionId, sessionMetrics.periodStart, sessionMetrics.periodEnd, JSON.stringify(sessionMetrics), now.toISOString()]);
+    console.log(`📊 Auto-generated ${targetSession.toUpperCase()} Session Performance Report draft (${sessionId}) for Admin Approval Queue`);
 
-    // 2. Weekly Report (if Sunday)
-    if (now.getDay() === 0) {
-      const weeklyMetrics = await generateReportMetrics('weekly');
-      const weeklyId = `report_weekly_${Date.now()}`;
+    if (targetSession.toLowerCase() === 'asia') {
+      // 2. Daily Report
+      const dailyMetrics = await generateReportMetrics('daily');
+      const dailyId = `report_daily_${Date.now()}`;
       await queryDb(`
         INSERT INTO performance_reports (
           id, period_type, period_start, period_end, summary_json,
           admin_notes, status, created_at
-        ) VALUES (?, 'weekly', ?, ?, ?, '', 'draft_pending_approval', ?)
-      `, [weeklyId, weeklyMetrics.periodStart, weeklyMetrics.periodEnd, JSON.stringify(weeklyMetrics), now.toISOString()]);
-      console.log(`📊 Auto-generated Weekly Performance Report draft (${weeklyId}) for Admin Approval Queue`);
-    }
+        ) VALUES (?, 'daily', ?, ?, ?, '', 'draft_pending_approval', ?)
+      `, [dailyId, dailyMetrics.periodStart, dailyMetrics.periodEnd, JSON.stringify(dailyMetrics), now.toISOString()]);
+      console.log(`📊 Auto-generated Daily Performance Report draft (${dailyId}) for Admin Approval Queue`);
 
-    // 3. Monthly Report (if 1st of month)
-    if (now.getDate() === 1) {
-      const monthlyMetrics = await generateReportMetrics('monthly');
-      const monthlyId = `report_monthly_${Date.now()}`;
-      await queryDb(`
-        INSERT INTO performance_reports (
-          id, period_type, period_start, period_end, summary_json,
-          admin_notes, status, created_at
-        ) VALUES (?, 'monthly', ?, ?, ?, '', 'draft_pending_approval', ?)
-      `, [monthlyId, monthlyMetrics.periodStart, monthlyMetrics.periodEnd, JSON.stringify(monthlyMetrics), now.toISOString()]);
-      console.log(`📊 Auto-generated Monthly Performance Report draft (${monthlyId}) for Admin Approval Queue`);
+      // 3. Weekly Report (if Sunday)
+      if (now.getDay() === 0) {
+        const weeklyMetrics = await generateReportMetrics('weekly');
+        const weeklyId = `report_weekly_${Date.now()}`;
+        await queryDb(`
+          INSERT INTO performance_reports (
+            id, period_type, period_start, period_end, summary_json,
+            admin_notes, status, created_at
+          ) VALUES (?, 'weekly', ?, ?, ?, '', 'draft_pending_approval', ?)
+        `, [weeklyId, weeklyMetrics.periodStart, weeklyMetrics.periodEnd, JSON.stringify(weeklyMetrics), now.toISOString()]);
+        console.log(`📊 Auto-generated Weekly Performance Report draft (${weeklyId}) for Admin Approval Queue`);
+      }
+
+      // 4. Monthly Report (if 1st of month)
+      if (now.getDate() === 1) {
+        const monthlyMetrics = await generateReportMetrics('monthly');
+        const monthlyId = `report_monthly_${Date.now()}`;
+        await queryDb(`
+          INSERT INTO performance_reports (
+            id, period_type, period_start, period_end, summary_json,
+            admin_notes, status, created_at
+          ) VALUES (?, 'monthly', ?, ?, ?, '', 'draft_pending_approval', ?)
+        `, [monthlyId, monthlyMetrics.periodStart, monthlyMetrics.periodEnd, JSON.stringify(monthlyMetrics), now.toISOString()]);
+        console.log(`📊 Auto-generated Monthly Performance Report draft (${monthlyId}) for Admin Approval Queue`);
+      }
     }
   } catch (error) {
-    console.error('Error auto-generating Asia Performance Reports:', error);
+    console.error('Error auto-generating Performance Reports:', error);
   }
 }
+
+export const autoGenerateAsiaPerformanceReports = autoGenerateSessionPerformanceReports;
 

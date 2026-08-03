@@ -1,7 +1,7 @@
 import cron = require('node-cron');
 import { mapTimestampToKillzone, KillzoneInfo } from './killzone-mapper';
 import { Killzone } from '../discovery/types';
-import { autoGenerateAsiaPerformanceReports } from '../analytics/report-generator';
+import { autoGenerateSessionPerformanceReports } from '../analytics/report-generator';
 
 let scheduledTasks: cron.ScheduledTask[] = [];
 
@@ -26,9 +26,7 @@ export function startScheduler(
             if (kzInfo && kzInfo.killzone === b.expected) {
                 try {
                     await onKillzoneBoundary(kzInfo);
-                    if (b.expected === 'asia') {
-                        await autoGenerateAsiaPerformanceReports();
-                    }
+                    await autoGenerateSessionPerformanceReports(b.expected);
                 } catch (error) {
                     console.error(`Error in onKillzoneBoundary handler for ${b.expected}:`, error);
                 }

@@ -326,6 +326,7 @@ export const AdminPanel: React.FC = () => {
   const [reportTab, setReportTab] = useState<'drafts' | 'published' | 'recalled'>('drafts');
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
   const [isReportActionLoading, setIsReportActionLoading] = useState(false);
+  const [selectedReportSession, setSelectedReportSession] = useState<'asia' | 'london' | 'ny_am' | 'ny_pm' | 'all'>('asia');
 
   const fetchPerfReports = useCallback(async () => {
     try {
@@ -340,13 +341,13 @@ export const AdminPanel: React.FC = () => {
     fetchPerfReports();
   }, [fetchPerfReports]);
 
-  const handleGenerateReport = async (periodType: 'daily' | 'weekly' | 'monthly') => {
+  const handleGenerateReport = async (periodType: 'daily' | 'weekly' | 'monthly' | 'session', sessionName?: string) => {
     try {
       setIsReportActionLoading(true);
       const res = await fetch(`${API_BASE}/api/admin/performance-reports/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodType })
+        body: JSON.stringify({ periodType, sessionName: periodType === 'session' ? (sessionName || selectedReportSession) : undefined })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate report');
@@ -1670,11 +1671,11 @@ export const AdminPanel: React.FC = () => {
                 📊 PERFORMANCE REPORT APPROVAL DESK
               </h2>
               <span style={{ fontSize: '0.8rem', color: '#ccc' }}>
-                Reports auto-generate at Asia session start (20:00 ET). Review metrics, add admin commentary/notes, and approve to push to traders.
+                Reports auto-generate at session boundaries (Asia, London, NY AM, NY PM). Review metrics, add admin commentary/notes, and approve to push to traders.
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <button
                 type="button"
                 className="font-mono"
@@ -1702,6 +1703,30 @@ export const AdminPanel: React.FC = () => {
               >
                 ➕ Generate Monthly Draft
               </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 230, 118, 0.08)', padding: '2px 4px 2px 8px', borderRadius: '6px', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
+                <select
+                  value={selectedReportSession}
+                  onChange={(e: any) => setSelectedReportSession(e.target.value)}
+                  className="font-mono"
+                  style={{ background: '#090314', color: '#00e676', border: '1px solid rgba(0, 230, 118, 0.4)', borderRadius: '4px', padding: '4px 6px', fontSize: '0.78rem', fontWeight: 800 }}
+                >
+                  <option value="asia">🌏 Asia Session</option>
+                  <option value="london">🏛️ London Session</option>
+                  <option value="ny_am">📈 NY AM Session</option>
+                  <option value="ny_pm">🎯 NY PM Session</option>
+                  <option value="all">🌐 All Sessions</option>
+                </select>
+                <button
+                  type="button"
+                  className="font-mono"
+                  onClick={() => handleGenerateReport('session', selectedReportSession)}
+                  disabled={isReportActionLoading}
+                  style={{ background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00e676', color: '#00e676', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }}
+                >
+                  ➕ Generate Session Draft
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1762,12 +1787,20 @@ export const AdminPanel: React.FC = () => {
                   try { summary = typeof r.summary_json === 'string' ? JSON.parse(r.summary_json) : r.summary_json; } catch {}
                   const notesVal = editingNotes[r.id] !== undefined ? editingNotes[r.id] : (r.admin_notes || '');
 
+                  const isSessionType = r.period_type === 'session';
+                  let sessionTitleStr = (r.period_type || 'daily').toUpperCase();
+                  if (isSessionType) {
+                    const sessName = (summary.sessionName || 'session').toLowerCase();
+                    const sMap: Record<string, string> = { asia: 'ASIA', london: 'LONDON', ny_am: 'NY AM', ny_pm: 'NY PM', all: 'PER-SESSION' };
+                    sessionTitleStr = `${sMap[sessName] || sessName.toUpperCase()} SESSION`;
+                  }
+
                   return (
                     <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                         <div>
                           <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
-                            📊 {(r.period_type || 'daily').toUpperCase()} PERFORMANCE REPORT
+                            📊 {sessionTitleStr} PERFORMANCE REPORT
                           </strong>
                           <span style={{ fontSize: '0.78rem', color: '#aaa', marginLeft: '10px' }}>
                             Period: {r.period_start?.slice(0, 10)} to {r.period_end?.slice(0, 10)}

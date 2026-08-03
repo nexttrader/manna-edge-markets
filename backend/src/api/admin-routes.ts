@@ -1237,12 +1237,13 @@ router.get('/performance-reports', async (_req: Request, res: Response) => {
   }
 });
 
-// 2. Generate a new Performance Report draft (Daily, Weekly, Monthly)
+// 2. Generate a new Performance Report draft (Daily, Weekly, Monthly, Session)
 router.post('/performance-reports/generate', async (req: Request, res: Response) => {
   try {
-    const { periodType = 'daily', customStart, customEnd, adminNotes = '' } = req.body || {};
-    const metrics = await generateReportMetrics(periodType, customStart, customEnd);
-    const reportId = `report_${periodType}_${Date.now()}`;
+    const { periodType = 'daily', sessionName, customStart, customEnd, adminNotes = '' } = req.body || {};
+    const metrics = await generateReportMetrics(periodType, customStart, customEnd, sessionName);
+    const sessionTag = periodType === 'session' && sessionName ? `_${sessionName}` : '';
+    const reportId = `report_${periodType}${sessionTag}_${Date.now()}`;
 
     await queryDb(`
       INSERT INTO performance_reports (
@@ -1259,13 +1260,15 @@ router.post('/performance-reports/generate', async (req: Request, res: Response)
       new Date().toISOString()
     ]);
 
+    const typeLabel = periodType === 'session' && sessionName ? `${sessionName.toUpperCase()} SESSION` : periodType.toUpperCase();
     res.json({
       success: true,
       reportId,
       periodType,
+      sessionName,
       metrics,
       status: 'draft_pending_approval',
-      message: `${periodType.toUpperCase()} performance report draft generated successfully! Pending Admin Approval.`
+      message: `${typeLabel} performance report draft generated successfully! Pending Admin Approval.`
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to generate performance report draft', details: error?.message || String(error) });

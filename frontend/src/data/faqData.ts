@@ -241,13 +241,13 @@ export const FAQ_DATA: FaqItem[] = [
   {
     id: 'perf-reports-1',
     category: '📊 Performance Reports & Mailbox',
-    question: 'Where can I see Daily, Weekly, and Monthly performance reports?',
-    answer: 'Automated performance reports are generated at the start of the Asia session (20:00 ET). After our admin team reviews and approves the report, it is pushed directly to your Inbox under the 📊 Performance Reports tab. An instant banner alert will notify you on your dashboard as soon as a new report arrives.',
+    question: 'Where can I see Per-Session, Daily, Weekly, and Monthly performance reports?',
+    answer: 'Automated performance reports are generated at session boundaries (Asia, London, NY AM, NY PM). After our admin team reviews and approves the report in the Performance Report Approval Desk, it is pushed directly to your Inbox under the 📊 Performance Reports tab. An instant banner alert will notify you on your dashboard as soon as a new report arrives.',
     roleRequired: 'all',
     strategyRequired: 'all',
     tierRequired: 'free',
     tags: ['reports', 'inbox', 'performance', 'win_rate'],
-    updatedAt: '2026-08-03'
+    updatedAt: '2026-08-04'
   },
   {
     id: 'strat-divergence-1',
@@ -286,7 +286,7 @@ export const FAQ_DATA: FaqItem[] = [
     id: 'admin-report-desk-1',
     category: '🛡️ Admin: Performance Report Approval Desk',
     question: 'How do Admins approve, update notes, or recall performance reports?',
-    answer: 'In the Admin Panel under 📈 Analytics -> 📊 PERFORMANCE REPORT APPROVAL DESK, admins can review auto-drafted reports, add custom notes, and click "Approve & Push". The system logs the approving admin’s name and email for internal audit tracking while presenting only "Manna Edge Team" to traders. Admins can also recall or update published reports anytime.',
+    answer: 'In the Admin Panel under 📈 Analytics -> 📊 PERFORMANCE REPORT APPROVAL DESK, admins can review auto-drafted Per-Session, Daily, Weekly, and Monthly reports, add custom commentary, and click "Approve & Push". The system logs the approving admin’s name and email for internal audit tracking while presenting only "Manna Edge Team" to traders. Admins can also generate manual drafts per session or recall published reports anytime.',
     roleRequired: 'admin',
     strategyRequired: 'all',
     tierRequired: 'futures_forex',
