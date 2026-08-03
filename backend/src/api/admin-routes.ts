@@ -8,6 +8,7 @@ import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { generateReportMetrics } from '../analytics/report-generator';
+import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/health-checker';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
@@ -1248,13 +1249,13 @@ router.post('/performance-reports/generate', async (req: Request, res: Response)
 router.post('/performance-reports/:id/approve', async (req: Request, res: Response) => {
   try {
     const reportId = req.params.id;
-    const { adminNotes, publishedBy = 'Admin' } = req.body || {};
+    const { adminNotes, publishedBy = 'Admin', publishedByEmail = '' } = req.body || {};
     const rows = await queryDb(`SELECT * FROM performance_reports WHERE id = ?`, [reportId]);
     if (rows.length === 0) return res.status(404).json({ error: 'Report not found' });
 
     const nowIso = new Date().toISOString();
     let updateNotesSql = '';
-    const params: any[] = [nowIso, publishedBy];
+    const params: any[] = [nowIso, publishedBy, publishedByEmail];
 
     if (adminNotes !== undefined) {
       updateNotesSql = ', admin_notes = ?';
@@ -1264,7 +1265,7 @@ router.post('/performance-reports/:id/approve', async (req: Request, res: Respon
 
     await queryDb(`
       UPDATE performance_reports 
-      SET status = 'published', published_at = ?${updateNotesSql}, published_by = ?
+      SET status = 'published', published_at = ?, published_by = ?, published_by_email = ?${updateNotesSql}
       WHERE id = ?
     `, params);
 
@@ -1286,6 +1287,31 @@ router.post('/performance-reports/:id/approve', async (req: Request, res: Respon
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to approve performance report', details: error?.message || String(error) });
+  }
+});
+
+// ─── SYSTEM HEALTH DIAGNOSTICS ENDPOINTS (ADMIN ONLY) ──────────────────────────
+
+// Get System Health Overview
+router.get('/system-health', async (_req: Request, res: Response) => {
+  try {
+    let health = getCachedSystemHealth();
+    if (!health) {
+      health = await runSystemHealthCheck();
+    }
+    res.json({ success: true, health });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch system health diagnostics', details: error?.message || String(error) });
+  }
+});
+
+// Run Instant Diagnostic Check
+router.post('/system-health/run-check', async (_req: Request, res: Response) => {
+  try {
+    const health = await runSystemHealthCheck();
+    res.json({ success: true, health, message: '🏥 System health diagnostic check completed successfully!' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to run health check', details: error?.message || String(error) });
   }
 });
 

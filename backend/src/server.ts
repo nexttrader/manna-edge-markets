@@ -11,6 +11,7 @@ import { discoverUnifiedSetups } from './discovery/unified-discovery';
 import { executePublishRun } from './publish-gate/publish-gate';
 import { lifecycleSync } from './lifecycle/lifecycle-sync';
 import { outcomeDetector } from './outcomes/outcome-detector';
+import { startAutomatedHealthDiagnostics } from './diagnostics/health-checker';
 import { createLogger } from './telemetry/logger';
 
 import setupRoutes from './api/setup-routes';
@@ -121,6 +122,9 @@ async function startServer() {
 
         logger.info('Starting outcome detector...');
         outcomeDetector.start(15000);
+
+        logger.info('Starting automated 15-minute system health diagnostic checker...');
+        startAutomatedHealthDiagnostics();
 
         logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
         startScheduler(

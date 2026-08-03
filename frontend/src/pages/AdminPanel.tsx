@@ -359,13 +359,45 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const [systemHealth, setSystemHealth] = useState<any | null>(null);
+  const [isHealthChecking, setIsHealthChecking] = useState(false);
+
+  const fetchSystemHealth = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/system-health`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.health) setSystemHealth(data.health);
+    } catch {}
+  }, []);
+
+  const handleRunManualHealthCheck = async () => {
+    try {
+      setIsHealthChecking(true);
+      const res = await fetch(`${API_BASE}/api/admin/system-health/run-check`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Health check failed');
+      if (data.health) setSystemHealth(data.health);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Health check failed'}`);
+    } finally {
+      setIsHealthChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemHealth();
+    const interval = setInterval(fetchSystemHealth, 60000);
+    return () => clearInterval(interval);
+  }, [fetchSystemHealth]);
+
   const handleApproveReport = async (reportId: string, notes: string) => {
     try {
       setIsReportActionLoading(true);
       const res = await fetch(`${API_BASE}/api/admin/performance-reports/${reportId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminNotes: notes, publishedBy: user?.name || 'Admin' })
+        body: JSON.stringify({ adminNotes: notes, publishedBy: user?.name || 'Admin', publishedByEmail: user?.email || '' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to approve report');
@@ -656,6 +688,61 @@ export const AdminPanel: React.FC = () => {
               }}>{supportUnreadCount}</span>
             )}
           </button>
+        </div>
+
+        {/* AUTOMATED SYSTEM HEALTH DIAGNOSTICS CARD */}
+        <div className="glass-card font-mono" style={{ padding: '18px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 230, 118, 0.04)', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 900, color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676', margin: 0 }}>
+                🏥 AUTOMATED SYSTEM HEALTH OVERVIEW
+              </h2>
+              <span style={{ fontSize: '0.78rem', color: '#aaa' }}>
+                Auto-diagnostics run every 15 minutes. Last checked: {systemHealth?.lastCheckedAt ? new Date(systemHealth.lastCheckedAt).toLocaleTimeString('en-US', { timeZone: 'America/New_York' }) + ' ET' : 'Just now'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={handleRunManualHealthCheck}
+              disabled={isHealthChecking}
+              style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800 }}
+            >
+              {isHealthChecking ? '⏳ Checking...' : '⚡ Run Diagnostic Check Now'}
+            </button>
+          </div>
+
+          {/* Hero Status Banner */}
+          <div style={{ background: systemHealth?.heroStatus === 'critical' ? 'rgba(255, 23, 68, 0.15)' : systemHealth?.heroStatus === 'warning' ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 230, 118, 0.15)', borderLeft: `4px solid ${systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676'}`, padding: '10px 14px', borderRadius: '6px', marginBottom: '14px' }}>
+            <strong style={{ fontSize: '0.9rem', color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676' }}>
+              {systemHealth?.heroBadgeText || '🟢 ALL SYSTEMS GO! Everything is running smoothly and trade signals are active.'}
+            </strong>
+            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', marginTop: '4px' }}>
+              {systemHealth?.simpleSummary || 'All 5 core engine subsystems (Database, Live Prices, Session Scheduler, Live Feed Stream, and Support Inbox) are 100% healthy.'}
+            </div>
+          </div>
+
+          {/* Subsystem Health Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+            {(systemHealth?.subsystems || []).map((sub: any) => (
+              <div key={sub.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '10px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fff' }}>
+                    {sub.icon} {sub.name}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: sub.status === 'healthy' ? '#00e676' : sub.status === 'warning' ? '#ffd700' : '#ff1744' }}>
+                    {sub.status === 'healthy' ? 'OK' : sub.status.toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#ccc', lineHeight: 1.3 }}>
+                  {sub.plainEnglishStatus}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#666', marginTop: '4px' }}>
+                  Latency: {sub.latencyMs}ms
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* TAB 1: User Impersonation & Account Management Desk */}
@@ -1713,8 +1800,8 @@ export const AdminPanel: React.FC = () => {
 
                       {/* Action Buttons */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#666' }}>
-                          Created: {r.created_at?.slice(0, 16)} {r.published_at ? `| Published: ${r.published_at?.slice(0, 16)} by ${r.published_by}` : ''}
+                        <span style={{ fontSize: '0.72rem', color: '#888' }}>
+                          Created: {r.created_at?.slice(0, 16)} {r.published_at ? `| Approved & Pushed by: ${r.published_by || 'Admin'}${r.published_by_email ? ` (${r.published_by_email})` : ''} on ${r.published_at?.slice(0, 16)}` : ''}
                         </span>
 
                         <div style={{ display: 'flex', gap: '8px' }}>

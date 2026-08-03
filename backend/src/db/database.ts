@@ -84,6 +84,7 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS strategy_id TEXT DEFAULT 'manna_basic'`,
                     `ALTER TABLE publish_runs ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'scheduled'`,
                     `ALTER TABLE invalidation_audit ADD COLUMN IF NOT EXISTS instrument TEXT`,
+                    `ALTER TABLE performance_reports ADD COLUMN IF NOT EXISTS published_by_email TEXT`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
                 ];
@@ -307,6 +308,7 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE edge_setups ADD COLUMN entry_triggered_at TEXT`); } catch {}
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN entry_triggered_at TEXT`); } catch {}
     try { db.exec(`ALTER TABLE invalidation_audit ADD COLUMN instrument TEXT`); } catch {}
+    try { db.exec(`ALTER TABLE performance_reports ADD COLUMN published_by_email TEXT`); } catch {}
     try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
     try { db.exec(`ALTER TABLE edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}

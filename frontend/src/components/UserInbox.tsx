@@ -228,6 +228,66 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
       </div>
 
       <div className="ui-body">
+        {activeTab === 'reports' ? (
+          <div style={{ padding: '16px', width: '100%' }}>
+            {perfReports.length === 0 ? (
+              <div className="ui-empty">
+                <div style={{ fontSize: '2rem', marginBottom: 8 }}>📊</div>
+                <div>No performance reports published yet.</div>
+                <div style={{ color: '#555', fontSize: '0.78rem', marginTop: 4 }}>
+                  Automated performance summaries are generated at Asia session start and pushed here after admin review.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {perfReports.map(report => {
+                  let summary: any = {};
+                  try { summary = typeof report.summary_json === 'string' ? JSON.parse(report.summary_json) : report.summary_json; } catch {}
+                  return (
+                    <div key={report.id} className="glass-card font-mono" style={{ padding: '16px', borderRadius: '8px', background: 'rgba(255, 215, 0, 0.03)', border: '1px solid rgba(255, 215, 0, 0.2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                        <strong style={{ fontSize: '1rem', color: '#ffd700' }}>
+                          📊 {report.period_type?.toUpperCase()} PERFORMANCE REPORT
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                          {report.published_at?.slice(0, 10)} | Published by: Manna Edge Team
+                        </span>
+                      </div>
+
+                      {/* Metric Chips */}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                        <span style={{ background: 'rgba(0, 230, 118, 0.15)', border: '1px solid #00e676', color: '#00e676', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
+                          🏆 Win Rate: {summary.winRate !== undefined ? `${summary.winRate}%` : 'N/A'}
+                        </span>
+                        <span style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
+                          💰 Realized R: {summary.totalRealizedR !== undefined ? `${summary.totalRealizedR >= 0 ? '+' : ''}${summary.totalRealizedR}R` : 'N/A'}
+                        </span>
+                        <span style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                          📈 Total Signals: {summary.totalSetups || 0} ({summary.wins || 0} Wins, {summary.losses || 0} Losses, {summary.breakeven || 0} BE)
+                        </span>
+                      </div>
+
+                      {/* Plain English Summary */}
+                      {summary.plainEnglishSummary && (
+                        <div style={{ fontSize: '0.82rem', color: '#e2e8f0', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '6px', marginBottom: '10px', lineHeight: 1.4 }}>
+                          {summary.plainEnglishSummary}
+                        </div>
+                      )}
+
+                      {/* Admin Notes */}
+                      {report.admin_notes && (
+                        <div style={{ fontSize: '0.8rem', color: '#ffd700', background: 'rgba(255, 215, 0, 0.08)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid #ffd700' }}>
+                          💡 <strong>Admin Note:</strong> {report.admin_notes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         {/* Left: ticket list */}
         <div className="ui-list">
           {!showNewTicket && tickets.length === 0 && (
@@ -407,6 +467,8 @@ export const UserInbox: React.FC<UserInboxProps> = ({ onUnreadChange }) => {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
