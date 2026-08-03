@@ -301,11 +301,28 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Setup not found' });
     }
 
-    const bodyStrat = strategy_id || strategyId;
-    const targetStrategy = bodyStrat || existingSetup.strategy_id || 'manna_basic';
-    if (!existingSetup.strategy_id) {
-      existingSetup.strategy_id = targetStrategy;
+    // ── Strategy Lock: SOURCE OF TRUTH is always the DB, never the frontend ──
+    // Derive target strategy from the existing setup record only.
+    // Frontend-supplied strategy_id is IGNORED to prevent mismatch.
+    let targetStrategy = existingSetup.strategy_id;
+
+    // If DB value is absent or defaulted to manna_basic, check metadata for evidence of Manna SnD
+    if (!targetStrategy || targetStrategy === 'manna_basic') {
+      try {
+        const meta = typeof existingSetup.metadata === 'string'
+          ? JSON.parse(existingSetup.metadata || '{}')
+          : (existingSetup.metadata || {});
+        const rationale: string = meta.selection_rationale || meta.strategy_name || '';
+        if (rationale.toUpperCase().includes('MANNA SND') || meta.strategy_name === 'Manna SnD') {
+          targetStrategy = 'manna_snd';
+        }
+      } catch { /* ignore parse errors */ }
     }
+
+    if (!targetStrategy) targetStrategy = 'manna_basic';
+
+    // Always keep existingSetup in sync so the response reflects truth
+    existingSetup.strategy_id = targetStrategy;
 
     const stateStr = (existingSetup.signal_state || (existingSetup as any).state || '').toLowerCase();
     if (stateStr !== 'awaiting_entry') {
@@ -328,14 +345,26 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], targetStrategy);
 
     const candidates = targetMarket === 'futures' ? futures : forex;
+    // Find candidate matching instrument AND correct strategy
     const matchingCandidate = candidates.find(c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === targetStrategy);
 
     isSingleRescanActive = false;
 
+    // Hard validation: if somehow a wrong-strategy candidate slipped through, reject it
+    if (matchingCandidate && matchingCandidate.strategy_id !== targetStrategy) {
+      console.warn(`[RESCAN] Strategy mismatch rejected: expected=${targetStrategy}, got=${matchingCandidate.strategy_id} for ${instrument}`);
+      return res.json({
+        found: false,
+        message: `No valid ${targetStrategy === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'} candidate found for ${instrument}. Current setup remains untouched.`,
+        currentSetup: existingSetup,
+        candidate: null
+      });
+    }
+
     if (!matchingCandidate) {
       return res.json({
         found: false,
-        message: `No new signal candidate discovered for ${instrument}. Current setup remains untouched.`,
+        message: `No new ${targetStrategy === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'} signal candidate discovered for ${instrument}. Current setup remains untouched.`,
         currentSetup: existingSetup,
         candidate: null
       });
