@@ -305,6 +305,7 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     // Derive target strategy from the existing setup record only.
     // Frontend-supplied strategy_id is IGNORED to prevent mismatch.
     let targetStrategy = existingSetup.strategy_id;
+    const dbStrategyId = existingSetup.strategy_id; // capture raw DB value for debug
 
     // If DB value is absent or defaulted to manna_basic, check metadata for evidence of Manna SnD
     if (!targetStrategy || targetStrategy === 'manna_basic') {
@@ -323,6 +324,9 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
 
     // Always keep existingSetup in sync so the response reflects truth
     existingSetup.strategy_id = targetStrategy;
+
+    // ── DEBUG: log to server output so we can diagnose strategy resolution ──
+    console.log(`[RESCAN DEBUG] setupId=${setupId} instrument=${instrument} db_strategy_id=${dbStrategyId ?? 'NULL'} resolved_target=${targetStrategy}`);
 
     const stateStr = (existingSetup.signal_state || (existingSetup as any).state || '').toLowerCase();
     if (stateStr !== 'awaiting_entry') {
@@ -357,7 +361,8 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
         found: false,
         message: `No valid ${targetStrategy === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'} candidate found for ${instrument}. Current setup remains untouched.`,
         currentSetup: existingSetup,
-        candidate: null
+        candidate: null,
+        _debug: { db_strategy_id: dbStrategyId, resolved_target: targetStrategy, candidate_strategy: matchingCandidate?.strategy_id }
       });
     }
 
@@ -366,7 +371,8 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
         found: false,
         message: `No new ${targetStrategy === 'manna_snd' ? 'Manna SnD' : 'Manna Basic'} signal candidate discovered for ${instrument}. Current setup remains untouched.`,
         currentSetup: existingSetup,
-        candidate: null
+        candidate: null,
+        _debug: { db_strategy_id: dbStrategyId, resolved_target: targetStrategy, candidates_found: 0 }
       });
     }
 
@@ -374,7 +380,8 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
       found: true,
       message: `New signal candidate discovered for ${instrument}! Review and confirm replacement.`,
       currentSetup: existingSetup,
-      candidate: matchingCandidate
+      candidate: matchingCandidate,
+      _debug: { db_strategy_id: dbStrategyId, resolved_target: targetStrategy, candidate_strategy: matchingCandidate.strategy_id }
     });
   } catch (error: any) {
     isSingleRescanActive = false;
