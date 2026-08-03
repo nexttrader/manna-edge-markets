@@ -236,7 +236,12 @@ export const AdminPanel: React.FC = () => {
       const res = await fetch(`${API_BASE}/api/admin/single-asset-rescan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setupId: setup.id, instrument: setup.instrument, market: setup.market })
+        body: JSON.stringify({
+          setupId: setup.id,
+          instrument: setup.instrument,
+          market: setup.market,
+          strategy_id: setup.strategy_id || setup.strategyId || 'manna_basic'
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Rescan failed');

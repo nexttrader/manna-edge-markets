@@ -10,6 +10,7 @@ import { dedupeAndSelect, selectBestCandidate } from '../publish-gate/dedupe';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { executePublishRun } from '../publish-gate/publish-gate';
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
+import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import * as queries from '../db/queries';
 import { EdgeSetup, CandidateSetup, Candle, KillzoneInfo } from '../discovery/types';
 
@@ -164,7 +165,36 @@ async function runAllTests() {
     assert.strictEqual(circuitBreaker.isTripped(), false, 'Circuit breaker should reset cleanly');
     console.log('✅ TEST 9: Circuit Breaker Safety System (Auto Dry-Run Trigger)');
 
-    console.log('\n🎉 ALL 9 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 9. Single Signal Rescan Strategy Match Test
+    const sndSetup: EdgeSetup = {
+        id: 'test_snd_setup_1',
+        instrument: 'NQ',
+        market: 'futures',
+        created_at: new Date().toISOString(),
+        killzone_origin: 'ny_am',
+        bias: 'long',
+        entry_zone_low: 18000,
+        entry_zone_high: 18050,
+        entry_zone_mid: 18025,
+        stop: 17950,
+        tp1: 18200,
+        signal_state: 'awaiting_entry',
+        superseded: 0,
+        tradable: 1,
+        strategy_id: 'manna_snd'
+    };
+    await queries.insertSetup(sndSetup, 'futures');
+    const fetchedSetup = await queries.getSetupById('test_snd_setup_1', 'futures');
+    assert.strictEqual(fetchedSetup?.strategy_id, 'manna_snd', 'Setup should preserve original strategy_id');
+
+    const rescanResult = await discoverUnifiedSetups(kzInfo, 'test_rescan_run', 'futures', [], fetchedSetup?.strategy_id || 'manna_basic');
+    const rescanCandidates = rescanResult.futures;
+    for (const c of rescanCandidates) {
+        assert.strictEqual(c.strategy_id, 'manna_snd', 'Rescan candidates must strictly match original strategy_id');
+    }
+    console.log('✅ TEST 10: Rescan Strategy Consistency (Targeted Original Strategy Enforced)');
+
+    console.log('\n🎉 ALL 10 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

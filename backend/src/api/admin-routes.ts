@@ -284,7 +284,7 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
   }
 
   try {
-    const { setupId, instrument, market = 'futures' } = req.body || {};
+    const { setupId, instrument, market = 'futures', strategy_id, strategyId } = req.body || {};
     if (!setupId || !instrument) {
       return res.status(400).json({ error: 'Missing setupId or instrument' });
     }
@@ -299,6 +299,12 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
 
     if (!existingSetup) {
       return res.status(404).json({ error: 'Setup not found' });
+    }
+
+    const bodyStrat = strategy_id || strategyId;
+    const targetStrategy = bodyStrat || existingSetup.strategy_id || 'manna_basic';
+    if (!existingSetup.strategy_id) {
+      existingSetup.strategy_id = targetStrategy;
     }
 
     const stateStr = (existingSetup.signal_state || (existingSetup as any).state || '').toLowerCase();
@@ -319,12 +325,10 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     const runId = `single_rescan_${Date.now()}`;
     const scope = (targetMarket.toLowerCase() as 'both' | 'futures' | 'forex');
 
-    const targetStrategy = 'all';
-
     const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], targetStrategy);
 
     const candidates = targetMarket === 'futures' ? futures : forex;
-    const matchingCandidate = candidates.find(c => c.instrument === instrument);
+    const matchingCandidate = candidates.find(c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === targetStrategy);
 
     isSingleRescanActive = false;
 

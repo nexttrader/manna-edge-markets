@@ -58,7 +58,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         body: JSON.stringify({
           setupId: setup.id,
           instrument: setup.instrument,
-          market: setup.market || 'futures'
+          market: setup.market || 'futures',
+          strategy_id: setup.strategy_id || setup.strategyId || 'manna_basic'
         })
       });
       const data = await res.json();

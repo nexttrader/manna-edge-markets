@@ -24,7 +24,12 @@ export async function discoverUnifiedSetups(
   let activeStrategies = await strategyRegistry.getActiveStrategiesAsync();
 
   if (targetStrategyId && targetStrategyId !== 'all') {
-    activeStrategies = activeStrategies.filter(s => s.meta.id === targetStrategyId);
+    const specificStrat = strategyRegistry.getStrategy(targetStrategyId);
+    if (specificStrat) {
+      activeStrategies = [specificStrat];
+    } else {
+      activeStrategies = activeStrategies.filter(s => s.meta.id === targetStrategyId);
+    }
   }
 
   const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
