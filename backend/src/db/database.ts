@@ -64,6 +64,33 @@ export async function initializeDatabase(): Promise<void> {
             const pool = getPgPool();
             const client = await pool.connect();
             try {
+                // ── Safe column migrations (idempotent, run before CREATE TABLE block) ──
+                // These ADD COLUMN IF NOT EXISTS calls handle tables that existed BEFORE
+                // a column was introduced. Each runs independently so one failure doesn't
+                // abort the rest.
+                const safeAlters = [
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS strategy_id TEXT DEFAULT 'manna_basic'`,
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS strategy_tier TEXT DEFAULT 'basic'`,
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS resolved_at TEXT`,
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS initial_stop DOUBLE PRECISION`,
+                    `ALTER TABLE edge_setups ADD COLUMN IF NOT EXISTS entry_triggered_at TEXT`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS strategy_id TEXT DEFAULT 'manna_basic'`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS strategy_tier TEXT DEFAULT 'basic'`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS resolved_at TEXT`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS initial_stop DOUBLE PRECISION`,
+                    `ALTER TABLE forex_edge_setups ADD COLUMN IF NOT EXISTS entry_triggered_at TEXT`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS strategy_id TEXT DEFAULT 'manna_basic'`,
+                    `ALTER TABLE publish_runs ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'scheduled'`,
+                    `ALTER TABLE invalidation_audit ADD COLUMN IF NOT EXISTS instrument TEXT`,
+                    `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
+                    `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
+                ];
+                for (const sql of safeAlters) {
+                    try { await client.query(sql); } catch (_) { /* column/index already exists — safe to ignore */ }
+                }
+
                 await client.query(`
                     CREATE TABLE IF NOT EXISTS edge_setups (
                         id TEXT PRIMARY KEY,
