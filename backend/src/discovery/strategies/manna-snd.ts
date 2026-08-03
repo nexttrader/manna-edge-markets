@@ -152,47 +152,66 @@ export class MannaSndStrategy implements IStrategyEngine {
       };
     }
 
-    // 2. Construct explicit Leg-In -> Base -> Leg-Out zone around swing extreme
-    const recent = candles.slice(-30);
+    // 2. Construct explicit Leg-In -> Base -> Leg-Out zone around unmitigated swing extreme
+    const currentPrice = candles[candles.length - 1].close;
     if (type === 'demand') {
-      let minIdx = 0;
-      for (let i = 1; i < recent.length; i++) {
-        if (recent[i].low < recent[minIdx].low) minIdx = i;
+      for (let i = candles.length - 2; i >= 1; i--) {
+        const c = candles[i];
+        if (c.low <= currentPrice) {
+          const subsequent = candles.slice(i + 1);
+          const cutThrough = subsequent.some(sub => sub.low < c.low);
+          if (!cutThrough) {
+            const proximal = Math.max(c.open, c.close);
+            const distal = c.low;
+            const legIn = candles[i - 1];
+            const isLegInDrop = legIn.close <= legIn.open;
+            return {
+              type: 'demand',
+              formation: isLegInDrop ? 'Drop-Base-Rally' : 'Rally-Base-Rally',
+              proximal,
+              distal: distal < proximal ? distal : proximal - (atr * 0.3),
+              timestamp: c.timestamp
+            };
+          }
+        }
       }
-      const pivotCandle = recent[minIdx];
-      const legInCandle = recent[Math.max(0, minIdx - 1)];
-
-      const isLegInDrop = legInCandle.close <= legInCandle.open;
-      const formation: Zone['formation'] = isLegInDrop ? 'Drop-Base-Rally' : 'Rally-Base-Rally';
-
-      const proximal = Math.max(pivotCandle.open, pivotCandle.close);
-      const distal = pivotCandle.low;
+      const last = candles[candles.length - 1];
       return {
         type: 'demand',
-        formation,
-        proximal,
-        distal: distal < proximal ? distal : proximal - (atr * 0.3),
-        timestamp: pivotCandle.timestamp
+        formation: 'Drop-Base-Rally',
+        proximal: last.low,
+        distal: last.low - (atr * 0.5),
+        timestamp: last.timestamp
       };
     } else {
-      let maxIdx = 0;
-      for (let i = 1; i < recent.length; i++) {
-        if (recent[i].high > recent[maxIdx].high) maxIdx = i;
+      // Supply: Find nearest unmitigated high ABOVE current price (Rally-Base-Drop preference)
+      for (let i = candles.length - 2; i >= 1; i--) {
+        const c = candles[i];
+        const proximal = Math.min(c.open, c.close);
+        if (proximal >= currentPrice) {
+          const subsequent = candles.slice(i + 1);
+          const cutThrough = subsequent.some(sub => sub.high > proximal);
+          if (!cutThrough) {
+            const distal = c.high;
+            return {
+              type: 'supply',
+              formation: 'Rally-Base-Drop',
+              proximal,
+              distal: distal > proximal ? distal : proximal + (atr * 0.3),
+              timestamp: c.timestamp
+            };
+          }
+        }
       }
-      const pivotCandle = recent[maxIdx];
-      const legInCandle = recent[Math.max(0, maxIdx - 1)];
-
-      const isLegInRally = legInCandle.close >= legInCandle.open;
-      const formation: Zone['formation'] = isLegInRally ? 'Rally-Base-Drop' : 'Drop-Base-Drop';
-
-      const proximal = Math.min(pivotCandle.open, pivotCandle.close);
-      const distal = pivotCandle.high;
+      // Fallback above current price
+      const highest = candles.reduce((max, c) => c.high > max.high ? c : max, candles[0]);
+      const prox = Math.max(currentPrice * 1.002, Math.min(highest.open, highest.close));
       return {
         type: 'supply',
-        formation,
-        proximal,
-        distal: distal > proximal ? distal : proximal + (atr * 0.3),
-        timestamp: pivotCandle.timestamp
+        formation: 'Rally-Base-Drop',
+        proximal: prox,
+        distal: Math.max(prox + atr * 0.5, highest.high),
+        timestamp: highest.timestamp
       };
     }
   }
@@ -206,7 +225,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     // 1. Look DOWN and to the LEFT for nearest fresh Demand zone (highest proximal line below currentPrice)
     const freshDemandZones = indexedZones.filter(z => z.type === 'demand' && z.proximal <= currentPrice && this.isFreshZone(z, htfCandles, z.index));
     
-    // 2. Look UP and to the LEFT for nearest fresh Supply zone (lowest proximal line above currentPrice)
+    // 2. Look UP and to the LEFT for nearest fresh Supply zone (lowest proximal line above currentPrice without candle cut-throughs)
     const freshSupplyZones = indexedZones.filter(z => z.type === 'supply' && z.proximal >= currentPrice && this.isFreshZone(z, htfCandles, z.index));
 
     const nearestDemand = freshDemandZones.length > 0 
@@ -214,7 +233,11 @@ export class MannaSndStrategy implements IStrategyEngine {
       : this.findFallbackZone(htfCandles, 'demand', atr);
 
     const nearestSupply = freshSupplyZones.length > 0 
-      ? freshSupplyZones.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, freshSupplyZones[0])
+      ? freshSupplyZones.sort((a, b) => {
+          if (a.formation === 'Rally-Base-Drop' && b.formation !== 'Rally-Base-Drop') return -1;
+          if (b.formation === 'Rally-Base-Drop' && a.formation !== 'Rally-Base-Drop') return 1;
+          return a.proximal - b.proximal;
+        })[0]
       : this.findFallbackZone(htfCandles, 'supply', atr);
 
     // Calculate percentage range between fresh Demand & fresh Supply
