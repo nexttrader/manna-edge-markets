@@ -80,17 +80,17 @@ export const HawkeyePanel: React.FC = () => {
   return (
     <>
       <button className="hawkeye-toggle glass-card font-mono" onClick={() => setIsOpen(!isOpen)}>
-        🤖 Manna AI Assistant <span className="badge">{safeInvalidations.length}</span>
+        📜 Manna Live Trade Log <span className="badge">{safeInvalidations.length}</span>
       </button>
 
       {isOpen && (
         <div className="hawkeye-panel glass-card animate-slide-up">
           <div className="hp-header font-mono">
-            <h3>🤖 Manna AI Assistant Audit Trail</h3>
+            <h3>📜 Manna Live Trade Log</h3>
             <div className="hp-controls">
               <input 
                 type="text" 
-                placeholder="Search symbol or audit reason..." 
+                placeholder="Search symbol or trade reason..." 
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
                 className="hp-search font-mono"
@@ -101,9 +101,9 @@ export const HawkeyePanel: React.FC = () => {
           
           <div className="hp-content font-sans">
             {loading ? (
-              <div className="hp-loading font-mono">Loading Manna AI Assistant audit log...</div>
+              <div className="hp-loading font-mono">Loading Manna Live Trade Log...</div>
             ) : filtered.length === 0 ? (
-              <div className="hp-empty font-mono">No AI Assistant audit records logged yet.</div>
+              <div className="hp-empty font-mono">No Live Trade Log records recorded yet.</div>
             ) : (
               <div className="hp-list">
                 {filtered.map((inv: any) => {

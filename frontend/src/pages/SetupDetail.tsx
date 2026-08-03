@@ -67,7 +67,7 @@ export const SetupDetail: React.FC = () => {
 
           <div className="sd-sidebar">
             <div className="history-card glass-card">
-              <h3>🤖 Manna AI Assistant Audit Trail</h3>
+              <h3>📜 Manna Live Trade Log</h3>
               
               {historyLoading ? (
                 <div className="history-loading">Loading history...</div>

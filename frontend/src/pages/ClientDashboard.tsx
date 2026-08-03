@@ -247,7 +247,7 @@ export const ClientDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Manna AI Assistant Floating Audit Panel */}
+        {/* Manna Live Trade Log Floating Panel */}
         <HawkeyePanel />
       </main>
 
