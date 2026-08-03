@@ -6,10 +6,16 @@ import './AssetDecisionMatrix.css';
 interface AssetDecisionMatrixProps {
   onOpenCalculator?: (setup: EdgeSetup) => void;
   rawSetups?: EdgeSetup[];
+  defaultMaximized?: boolean;
 }
 
-export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ onOpenCalculator, rawSetups = [] }) => {
+export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ 
+  onOpenCalculator, 
+  rawSetups = [],
+  defaultMaximized = false
+}) => {
   const { matrix, topFocus, loading, refetch } = useDecisionMatrix();
+  const [isMaximized, setIsMaximized] = useState<boolean>(defaultMaximized);
   const [marketFilter, setMarketFilter] = useState<'all' | 'futures' | 'forex' | 'imminent'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -26,7 +32,6 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ onOpen
   const handleCalculatorClick = (item: DecisionMatrixItem) => {
     if (!onOpenCalculator) return;
     
-    // Find matching setup in rawSetups or construct lightweight EdgeSetup
     const foundSetup = rawSetups.find(s => s.id === item.id) || {
       id: item.id,
       instrument: item.instrument,
@@ -64,8 +69,40 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ onOpen
     );
   };
 
+  // Compact Collapsed / Minimized Bar Mode
+  if (!isMaximized) {
+    return (
+      <div className="asset-decision-matrix-collapsed">
+        <div className="collapsed-left" onClick={() => setIsMaximized(true)}>
+          <div className="matrix-pulse-dot" />
+          <span className="collapsed-title">REAL-TIME ASSET DECISION MATRIX</span>
+          <span className="matrix-live-pill">LIVE SCANNER</span>
+          
+          {activeTopFocus && (
+            <div className="collapsed-top-ticker">
+              <span className="ticker-label">#1 FOCUS:</span>
+              <span className="ticker-symbol">{activeTopFocus.instrument}</span>
+              {getBiasBadge(activeTopFocus.bias)}
+              <span className="ticker-score">{activeTopFocus.priority_score} PTS</span>
+              <span className="ticker-status">{activeTopFocus.status_label}</span>
+            </div>
+          )}
+        </div>
+
+        <button 
+          className="maximize-matrix-btn"
+          onClick={() => setIsMaximized(true)}
+          title="Maximize Real-Time Decision Matrix"
+        >
+          ⤢ MAXIMIZE DECISION MATRIX
+        </button>
+      </div>
+    );
+  }
+
+  // Maximized Full View Mode
   return (
-    <div className="asset-decision-matrix-container">
+    <div className="asset-decision-matrix-container animate-fade-in">
       {/* Header Bar */}
       <div className="matrix-header">
         <div className="matrix-title-group">
@@ -104,6 +141,14 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ onOpen
           
           <button className="matrix-refresh-btn" onClick={refetch} title="Force scan recalculation">
             ↻
+          </button>
+
+          <button 
+            className="minimize-matrix-btn"
+            onClick={() => setIsMaximized(false)}
+            title="Minimize Decision Matrix"
+          >
+            ⤡ HIDE MATRIX
           </button>
         </div>
       </div>
