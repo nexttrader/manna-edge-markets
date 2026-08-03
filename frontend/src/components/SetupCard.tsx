@@ -4,6 +4,7 @@ import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { formatETTime, formatDuration } from '../utils/time';
 import { SetupChartModal } from './SetupChartModal';
+import { translateRationaleToPlainEnglish } from '../utils/plainLanguage';
 
 function getSelectionRationale(setup: EdgeSetup): string {
   if (setup.metadata) {
@@ -286,6 +287,23 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           {rescanMessage}
         </div>
       )}
+
+      {/* 8th-Grade Simple Explanation Box */}
+      <div style={{
+        margin: '12px 0',
+        padding: '10px 12px',
+        background: 'rgba(0, 229, 255, 0.05)',
+        borderLeft: '3px solid #00e5ff',
+        borderRadius: '6px',
+        fontSize: '0.82rem',
+        color: '#e2e8f0',
+        lineHeight: 1.4
+      }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#00e5ff', textTransform: 'uppercase', marginBottom: '4px' }} className="font-mono">
+          💡 Simple Explanation
+        </div>
+        {translateRationaleToPlainEnglish(getSelectionRationale(setup), isLong ? 'long' : 'short', setup.instrument)}
+      </div>
 
       <div className="sc-actions font-mono">
         <button className="btn-action btn-copy" onClick={handleCopy}>

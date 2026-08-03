@@ -7,6 +7,8 @@ import { EconomicCalendarModal } from './EconomicCalendarModal';
 import { FaqModal } from './FaqModal';
 import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
+import { useSignalNotifications } from '../context/SignalNotificationContext';
+import { LiveActivityFeed } from './LiveActivityFeed';
 import { UserInbox } from './UserInbox';
 import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
@@ -16,6 +18,7 @@ export const DashboardHeader: React.FC = () => {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
   const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
+  const { activityLogs, setShowActivityFeed } = useSignalNotifications();
   const location = useLocation();
   const [showCalendar, setShowCalendar] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
@@ -124,6 +127,19 @@ export const DashboardHeader: React.FC = () => {
                 📬 Support
                 {inboxUnread > 0 && (
                   <span className="support-badge-count">{inboxUnread}</span>
+                )}
+              </button>
+              <button 
+                className="nav-link font-mono" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', color: '#00e5ff' }}
+                onClick={() => setShowActivityFeed(true)}
+                title="Open Live Signal Activity Log & Timeline Feed"
+              >
+                📡 Live Feed
+                {activityLogs.length > 0 && (
+                  <span className="support-badge-count" style={{ background: '#00e5ff', color: '#090314' }}>
+                    {activityLogs.length}
+                  </span>
                 )}
               </button>
               <button 
@@ -326,6 +342,9 @@ export const DashboardHeader: React.FC = () => {
 
       {/* Slide-in banner when admin sends new reply */}
       {isTrader && <UserInboxBanner onOpenInbox={() => setShowInbox(true)} />}
+
+      {/* User-Facing Live Signal Activity Feed Side Drawer */}
+      <LiveActivityFeed />
     </>
   );
 };
