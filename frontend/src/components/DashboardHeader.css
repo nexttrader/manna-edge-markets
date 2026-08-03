@@ -15,26 +15,33 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 68px;
+  height: 62px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .header-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-family: var(--font-headline);
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   color: var(--kdt-gold);
   text-decoration: none;
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .logo-emblem {
@@ -242,6 +249,22 @@
 .login-nav-btn:hover {
   background: var(--kdt-gold-light);
   transform: translateY(-1px);
+}
+
+.header-sub-bar {
+  background: rgba(14, 6, 28, 0.85);
+  border-top: 1px solid rgba(201, 168, 76, 0.15);
+  padding: 4px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sub-bar-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
 @media (max-width: 900px) {

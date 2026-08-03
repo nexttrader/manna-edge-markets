@@ -141,10 +141,6 @@ export const DashboardHeader: React.FC = () => {
                 ❓ FAQ
               </button>
 
-              <div className="nav-clock-wrapper" style={{ margin: '0 4px' }}>
-                <KillzoneClock />
-              </div>
-
               {isAdmin && (
                 <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
                   ⚙️ Admin
@@ -193,15 +189,14 @@ export const DashboardHeader: React.FC = () => {
                 </span>
                 <span 
                   className="last-login-badge font-mono"
-                  style={{ fontSize: '0.72rem', color: '#888', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}
                   title="Last Login Timestamp"
                 >
                   🕒 {user.lastActive || 'Just now'}
                 </span>
                 <button
                   type="button"
-                  className="voice-toggle-btn"
-                  style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid #00e5ff', color: '#00e5ff', background: 'rgba(0,229,255,0.1)' }}
+                  className="voice-toggle-btn pass-btn"
+                  style={{ padding: '3px 8px', fontSize: '0.75rem', border: '1px solid #00e5ff', color: '#00e5ff', background: 'rgba(0,229,255,0.1)' }}
                   onClick={() => setShowPasswordModal(true)}
                   title="Change My Password"
                 >
@@ -212,10 +207,17 @@ export const DashboardHeader: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <Link to="/login" className="login-nav-btn font-mono">
-                🔑 Sign In
+              <Link to="/login" className="login-nav-btn">
+                Sign In
               </Link>
             )}
+          </div>
+        </div>
+
+        {/* Secondary Sub-Bar for Killzone Scanner Clock */}
+        <div className="header-sub-bar font-mono">
+          <div className="container sub-bar-container">
+            <KillzoneClock />
           </div>
         </div>
       </header>
