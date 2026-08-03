@@ -128,7 +128,8 @@ export class OutcomeDetector {
           const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
           const realizedPL = isLong ? executionPrice - entryPrice : entryPrice - executionPrice;
           
-          const risk = Math.abs(entryPrice - setup.stop);
+          const initialStop = setup.initial_stop || setup.stop;
+          const risk = Math.abs(entryPrice - initialStop);
           let mae = 0;
           if (outcomeType === 'sl_hit') {
             mae = risk;

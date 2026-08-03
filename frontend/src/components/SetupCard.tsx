@@ -245,8 +245,13 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
       {stateStr === 'active' && (setup.unrealizedR !== undefined || setup.current_price) && (
         <div className={`sc-unrealized-banner ${((setup.unrealizedR ?? 0) >= 0) ? 'is-profit' : 'is-drawdown'}`}>
           <div className="unrealized-left">
-            <span className="unrealized-fire">{(setup.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'}</span>
+            <span className="unrealized-fire">{isBreakeven ? '🛡️' : (setup.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'}</span>
             <span className="unrealized-title">LIVE RR:</span>
+            {isBreakeven && (
+              <span className="font-mono text-gold" style={{ fontSize: '0.75rem', fontWeight: 800, marginLeft: '6px' }}>
+                (RISK FREE)
+              </span>
+            )}
           </div>
           <div className="unrealized-right font-mono">
             <span className="unrealized-r-val">

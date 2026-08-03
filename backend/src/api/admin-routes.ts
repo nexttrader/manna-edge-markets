@@ -626,7 +626,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
         tradeR = 0.0;
       } else if (setup) {
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-        const risk = Math.abs(entryPrice - setup.stop);
+        const initialStop = setup.initial_stop || setup.stop;
+        const risk = Math.abs(entryPrice - initialStop);
         const isLong = setup.bias === 'long';
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
