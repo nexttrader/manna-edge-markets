@@ -4,10 +4,11 @@ import { API_BASE } from '../config';
 
 export interface DecisionMatrixFactors {
   conviction: number;
-  proximity: number;
-  killzone: number;
-  newsSafety: number;
+  winrate?: number;
+  liquiditySweep?: number;
   riskReward: number;
+  timing?: number;
+  proximity: number;
 }
 
 export interface DecisionMatrixItem {

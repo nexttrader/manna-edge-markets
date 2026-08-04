@@ -212,24 +212,34 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
           {/* Factor Breakdown Bars */}
           <div className="spotlight-factors">
             <div className="factor-bar-item">
-              <span className="factor-name">Conviction (35%)</span>
+              <span className="factor-name">Conviction (25%)</span>
               <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.conviction}%` }} /></div>
               <span className="factor-val">{activeTopFocus.factors.conviction}%</span>
             </div>
             <div className="factor-bar-item">
-              <span className="factor-name">Proximity (30%)</span>
+              <span className="factor-name">Win Rate Edge (25%)</span>
+              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.winrate || 75}%` }} /></div>
+              <span className="factor-val">{activeTopFocus.factors.winrate || 75}%</span>
+            </div>
+            <div className="factor-bar-item">
+              <span className="factor-name">Liquidity Sweep (15%)</span>
+              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.liquiditySweep || 80}%` }} /></div>
+              <span className="factor-val">{activeTopFocus.factors.liquiditySweep || 80}%</span>
+            </div>
+            <div className="factor-bar-item">
+              <span className="factor-name">Risk Reward (15%)</span>
+              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.riskReward}%` }} /></div>
+              <span className="factor-val">{activeTopFocus.factors.riskReward}%</span>
+            </div>
+            <div className="factor-bar-item">
+              <span className="factor-name">Timing & KZ (10%)</span>
+              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.timing || 85}%` }} /></div>
+              <span className="factor-val">{activeTopFocus.factors.timing || 85}%</span>
+            </div>
+            <div className="factor-bar-item">
+              <span className="factor-name">Zone Proximity (10%)</span>
               <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.proximity}%` }} /></div>
               <span className="factor-val">{activeTopFocus.factors.proximity}%</span>
-            </div>
-            <div className="factor-bar-item">
-              <span className="factor-name">Killzone (15%)</span>
-              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.killzone}%` }} /></div>
-              <span className="factor-val">{activeTopFocus.factors.killzone}%</span>
-            </div>
-            <div className="factor-bar-item">
-              <span className="factor-name">News Safety (10%)</span>
-              <div className="factor-progress"><div className="factor-fill" style={{ width: `${activeTopFocus.factors.newsSafety}%` }} /></div>
-              <span className="factor-val">{activeTopFocus.factors.newsSafety}%</span>
             </div>
           </div>
         </div>
@@ -272,11 +282,12 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
                     </span>
                   </div>
 
-                  {/* Factor Summary Pill */}
+                  {/* Factor Summary Pills */}
                   <div className="factor-summary-pills">
-                    <span className="factor-badge" title="Conviction Score">🧠 Conv {item.factors.conviction}%</span>
-                    <span className="factor-badge" title="Proximity Score">📍 Prox {item.factors.proximity}%</span>
-                    <span className="factor-badge" title="Killzone Alignment">⏰ KZ {item.factors.killzone}%</span>
+                    <span className="factor-badge" title="Conviction Score (25%)">🧠 Conv {item.factors.conviction}%</span>
+                    <span className="factor-badge" title="Historical Win-Rate Edge (25%)">📈 WinEdge {item.factors.winrate || 75}%</span>
+                    <span className="factor-badge" title="Liquidity Sweep Score (15%)">🌊 Liq {item.factors.liquiditySweep || 80}%</span>
+                    <span className="factor-badge" title="Zone Proximity (10%)">📍 Prox {item.factors.proximity}%</span>
                   </div>
 
                   {isExpanded && (
