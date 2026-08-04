@@ -82,7 +82,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
           const c = closed1h[i];
           const range = c.high - c.low;
           const body = Math.abs(c.close - c.open);
-          if (range > 0 && (body / range) >= 0.60 && range > avgRange * 1.10) {
+          if (range > 0 && (body / range) >= 0.50 && range > avgRange * 1.02) {
             expansionIdx = i;
             expansionCandle = c;
             break; // First passing candle walking backwards = most recent
@@ -103,8 +103,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         const price = await getLiveCurrentPrice(instrument);
         if (!price || price <= 0) continue;
-
-        const quadrantPassed = bias === 'long' ? price > phaseMidpoint : price < phaseMidpoint;
 
         // Stage 2: POI Scanning
         const pois: POI[] = [];
@@ -162,18 +160,21 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         if (pois.length === 0) continue;
 
-        // Check Mitigation on latest HTF candle
-        const latestHTF = candles1h[candles1h.length - 1];
+        // Check Mitigation on recent HTF candles (last 4 hours)
+        const recentHTF = candles1h.slice(-4);
         let mitigatedPoi: POI | null = null;
         for (const p of pois) {
-          if (bias === 'long' && latestHTF.low <= p.high && latestHTF.close >= p.low) {
-            mitigatedPoi = p;
-            break;
+          for (const htf of recentHTF) {
+            if (bias === 'long' && htf.low <= p.high && htf.high >= p.low) {
+              mitigatedPoi = p;
+              break;
+            }
+            if (bias === 'short' && htf.high >= p.low && htf.low <= p.high) {
+              mitigatedPoi = p;
+              break;
+            }
           }
-          if (bias === 'short' && latestHTF.high >= p.low && latestHTF.close <= p.high) {
-            mitigatedPoi = p;
-            break;
-          }
+          if (mitigatedPoi) break;
         }
 
         if (!mitigatedPoi) continue;
@@ -186,11 +187,11 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         let mtfConfirmCandle: Candle | null = null;
         for (const c of last6) {
-          if (bias === 'long' && c.close > c.open && c.low <= mitigatedPoi.high && c.close >= mitigatedPoi.low) {
+          if (bias === 'long' && c.close > c.open && c.low <= mitigatedPoi.high * 1.002 && c.high >= mitigatedPoi.low * 0.998) {
             mtfConfirmCandle = c;
             break;
           }
-          if (bias === 'short' && c.close < c.open && c.high >= mitigatedPoi.low && c.close <= mitigatedPoi.high) {
+          if (bias === 'short' && c.close < c.open && c.high >= mitigatedPoi.low * 0.998 && c.low <= mitigatedPoi.high * 1.002) {
             mtfConfirmCandle = c;
             break;
           }
@@ -198,35 +199,39 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         if (!mtfConfirmCandle) continue;
 
-        // Stage 4: 1M Precision Entry
+        // Stage 4: 1M / Precision Entry Trigger
         const candles1m = await getLiveCandles(instrument, '1m', 15);
-        if (candles1m.length < 6) continue;
+        let entryConfirmed = false;
 
-        const current1M = candles1m[candles1m.length - 1];
-        const prior1M = candles1m[candles1m.length - 2];
-
-        // Execution window check
-        if (current1M.close < mtfConfirmCandle.low || current1M.close > mtfConfirmCandle.high) {
-          continue;
+        if (candles1m.length >= 6) {
+          const current1M = candles1m[candles1m.length - 1];
+          const prior1M = candles1m[candles1m.length - 2];
+          if (bias === 'long' && (current1M.close >= prior1M.high || current1M.close >= current1M.open)) {
+            entryConfirmed = true;
+          } else if (bias === 'short' && (current1M.close <= prior1M.low || current1M.close <= current1M.open)) {
+            entryConfirmed = true;
+          }
         }
 
-        let entryConfirmed = false;
-        if (bias === 'long' && current1M.close > prior1M.high && current1M.close > current1M.open) {
-          entryConfirmed = true;
-        } else if (bias === 'short' && current1M.close < prior1M.low && current1M.close < current1M.open) {
-          entryConfirmed = true;
+        // Robust Precision Fallback if 1M is tight
+        if (!entryConfirmed && price > 0) {
+          if (bias === 'long' && price >= mitigatedPoi.low * 0.998 && price <= mitigatedPoi.high * 1.005) {
+            entryConfirmed = true;
+          } else if (bias === 'short' && price <= mitigatedPoi.high * 1.002 && price >= mitigatedPoi.low * 0.995) {
+            entryConfirmed = true;
+          }
         }
 
         if (!entryConfirmed) continue;
 
-        const entry = current1M.close;
+        const entry = price > 0 ? price : (candles1m.length > 0 ? candles1m[candles1m.length - 1].close : mtfConfirmCandle.close);
         const last5_1m = candles1m.slice(-5);
         let stop = 0;
         if (bias === 'long') {
-          const minLow1m = Math.min(...last5_1m.map(c => c.low));
+          const minLow1m = last5_1m.length > 0 ? Math.min(...last5_1m.map(c => c.low)) : mtfConfirmCandle.low;
           stop = Math.min(minLow1m, mtfConfirmCandle.low);
         } else {
-          const maxHigh1m = Math.max(...last5_1m.map(c => c.high));
+          const maxHigh1m = last5_1m.length > 0 ? Math.max(...last5_1m.map(c => c.high)) : mtfConfirmCandle.high;
           stop = Math.max(maxHigh1m, mtfConfirmCandle.high);
         }
 
@@ -247,6 +252,8 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         const actualRR = computeRMultiple(entry, tp1, stop, bias);
         if (actualRR < 2.0) continue;
+
+        const quadrantPassed = bias === 'long' ? entry > phaseMidpoint : entry < phaseMidpoint;
 
         // Conviction Score
         let rawPoints = 0;
@@ -284,7 +291,8 @@ export class SentinelV2Strategy implements IStrategyEngine {
         
         const spread = price * (market === 'futures' ? 0.0001 : 0.0002);
         const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
-        const liquidity_score = computeLiquidityScore(current1M.volume, avgVol, spread);
+        const curVol = candles1m.length > 0 ? candles1m[candles1m.length - 1].volume : avgVol;
+        const liquidity_score = computeLiquidityScore(curVol, avgVol, spread);
 
         const decimals = getInstrumentDecimals(instrument, market);
         const ez_mid = Number(entry.toFixed(decimals));
