@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import './SuperAdminPanel.css';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
-import { formatETTime } from '../utils/time';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout, impersonateUser, login } = useAuth();
@@ -14,9 +13,21 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'strategies' | 'admin_audit' | 'metrics' | 'health' | 'sentinel'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'sentinel'>('marketing');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
+
+  // User Activity Audit Modal State
+  const [activityModalEmail, setActivityModalEmail] = useState<string | null>(null);
+  const [userActivityData, setUserActivityData] = useState<any>(null);
+  const [loadingUserActivity, setLoadingUserActivity] = useState(false);
+
+  // Edit User Governance Modal State
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState<'trader' | 'admin' | 'super_admin'>('trader');
+  const [editTier, setEditTier] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
+  const [editStatus, setEditStatus] = useState<'active' | 'suspended'>('active');
 
   const fetchSuperStrategies = async () => {
     try {
@@ -26,6 +37,65 @@ export const SuperAdminPanel: React.FC = () => {
         if (json.strategies) setStrategiesList(json.strategies);
       }
     } catch {}
+  };
+
+  const fetchSuperAdminData = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/dashboard`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
+    } catch {}
+  };
+
+  const fetchUserActivity = async (email: string) => {
+    try {
+      setLoadingUserActivity(true);
+      setActivityModalEmail(email);
+      const res = await fetch(`${API_BASE}/api/super-admin/users/${encodeURIComponent(email)}/activity`);
+      if (res.ok) {
+        const json = await res.json();
+        setUserActivityData(json);
+      }
+    } catch (err: any) {
+      alert(`⚠️ Failed to load user activity: ${err.message}`);
+    } finally {
+      setLoadingUserActivity(false);
+    }
+  };
+
+  const handleOpenEditModal = (u: any) => {
+    setEditingUser(u);
+    setEditName(u.name || '');
+    setEditRole(u.role || 'trader');
+    setEditTier(u.tier || 'futures_forex');
+    setEditStatus(u.status || 'active');
+  };
+
+  const handleSaveUserGovernance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/users/${editingUser.id || editingUser.email}/full`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          role: editRole,
+          tier: editTier,
+          status: editStatus
+        })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to update user');
+      
+      setEditingUser(null);
+      alert(`✅ Account for "${editingUser.email}" updated successfully!`);
+      fetchSuperAdminData();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
   };
 
   const handleToggleStrategyVisibility = async (strategyId: string, currentVisible: boolean) => {
@@ -45,7 +115,7 @@ export const SuperAdminPanel: React.FC = () => {
   };
 
   const handleDeleteStrategy = async (strategyId: string, name: string) => {
-    const confirmed = window.confirm(`⚠️ SUPER ADMIN PERMANENT DELETION:\n\nAre you sure you want to PERMANENTLY DELETE strategy "${name}" (${strategyId})?\n\nRegular admins will lose all access to this strategy.`);
+    const confirmed = window.confirm(`⚠️ SUPER ADMIN PERMANENT DELETION:\n\nAre you sure you want to PERMANENTLY DELETE strategy "${name}" (${strategyId})?`);
     if (!confirmed) return;
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}`, { method: 'DELETE' });
@@ -117,60 +187,14 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
-  const fetchSuperAdminData = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/super-admin/dashboard`);
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
-    } catch {
-      // Ignore
-    }
-  };
-
   const [sentinelAnalytics, setSentinelAnalytics] = useState<any>(null);
   const [sentinelScanning, setSentinelScanning] = useState(false);
-  const [adminAccessRoster, setAdminAccessRoster] = useState<any[]>([]);
-  const [allowedAdminEmails, setAllowedAdminEmails] = useState<string[]>([]);
 
   const fetchSentinelAnalytics = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/sentinel/analytics`);
       if (res.ok) { const json = await res.json(); if (json.analytics) setSentinelAnalytics(json.analytics); }
     } catch {}
-  };
-
-  const fetchAdminStrategyAccess = async (strategyId: string = 'sentinel_v2') => {
-    try {
-      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/admin-access`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.roster) setAdminAccessRoster(json.roster);
-        if (json.allowedEmails) setAllowedAdminEmails(json.allowedEmails);
-      }
-    } catch {}
-  };
-
-  const handleToggleIndividualAdminAccess = async (userEmail: string, currentlyGranted: boolean, strategyId: string = 'sentinel_v2') => {
-    try {
-      const emailLower = userEmail.toLowerCase();
-      const updated = currentlyGranted
-        ? allowedAdminEmails.filter(e => e !== emailLower)
-        : [...allowedAdminEmails, emailLower];
-
-      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/admin-access`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allowedEmails: updated })
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to update access');
-      if (json.allowedEmails) setAllowedAdminEmails(json.allowedEmails);
-      fetchAdminStrategyAccess(strategyId);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
   };
 
   const handleSentinelScan = async () => {
@@ -192,11 +216,9 @@ export const SuperAdminPanel: React.FC = () => {
     fetchSuperAdminData();
     fetchSuperStrategies();
     fetchSentinelAnalytics();
-    fetchAdminStrategyAccess('sentinel_v2');
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelAnalytics();
-      fetchAdminStrategyAccess('sentinel_v2');
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -215,6 +237,8 @@ export const SuperAdminPanel: React.FC = () => {
   const roster = data?.roster || [];
   const adminLogs = data?.adminLogs || [];
   const metrics = data?.metrics || {};
+  const marketing = data?.marketing || {};
+  const heatmap = data?.heatmap || {};
 
   return (
     <div className="super-admin-panel">
@@ -224,7 +248,7 @@ export const SuperAdminPanel: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link to="/" className="back-btn" style={{ color: '#b388ff' }}>← Back to Public Home</Link>
             <h1 className="super-title">
-              👁️ MANNA EDGE — MASTER SUPER ADMIN TELEMETRY DESK
+              👁️ MANNA EDGE — MARKETING, USAGE &amp; USER GOVERNANCE POWERHOUSE
             </h1>
           </div>
 
@@ -263,24 +287,24 @@ export const SuperAdminPanel: React.FC = () => {
       <main className="container" style={{ maxWidth: '1400px', margin: '24px auto', padding: '0 20px' }}>
         {/* High-Level Executive Summary Cards */}
         <div className="stat-grid-4 font-mono">
-          <div className="stat-box" style={{ borderColor: '#b388ff', background: 'rgba(179, 136, 255, 0.05)' }}>
-            <div className="stat-box-title">👥 Active Users Tracked</div>
-            <div className="stat-box-value" style={{ color: '#b388ff' }}>{metrics.totalTrackedUsers || 0}</div>
-          </div>
-
           <div className="stat-box" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.05)' }}>
-            <div className="stat-box-title">🟢 Currently Online</div>
-            <div className="stat-box-value" style={{ color: '#00e676' }}>{metrics.onlineCount || 0}</div>
-          </div>
-
-          <div className="stat-box" style={{ borderColor: '#ffab00', background: 'rgba(255, 171, 0, 0.05)' }}>
-            <div className="stat-box-title">⚙️ Tracked Admins</div>
-            <div className="stat-box-value" style={{ color: '#ffab00' }}>{metrics.adminCount || 0}</div>
+            <div className="stat-box-title">💵 Estimated Monthly MRR</div>
+            <div className="stat-box-value" style={{ color: '#00e676' }}>${marketing.estimatedMRR || 0} / mo</div>
           </div>
 
           <div className="stat-box" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
-            <div className="stat-box-title">📊 Total Events Recorded</div>
-            <div className="stat-box-value" style={{ color: '#00e5ff' }}>{metrics.totalEventsLogged || 0}</div>
+            <div className="stat-box-title">🎯 Paid Conversion Rate</div>
+            <div className="stat-box-value" style={{ color: '#00e5ff' }}>{marketing.conversionRate || 0}%</div>
+          </div>
+
+          <div className="stat-box" style={{ borderColor: '#b388ff', background: 'rgba(179, 136, 255, 0.05)' }}>
+            <div className="stat-box-title">👥 Total Tracked Traders</div>
+            <div className="stat-box-value" style={{ color: '#b388ff' }}>{roster.length}</div>
+          </div>
+
+          <div className="stat-box" style={{ borderColor: '#ffab00', background: 'rgba(255, 171, 0, 0.05)' }}>
+            <div className="stat-box-title">🟢 Currently Online</div>
+            <div className="stat-box-value" style={{ color: '#ffab00' }}>{metrics.onlineCount || 0}</div>
           </div>
         </div>
 
@@ -290,22 +314,48 @@ export const SuperAdminPanel: React.FC = () => {
             type="button"
             className="super-tab-btn"
             style={{
-              border: activeTab === 'roster' ? '1px solid #b388ff' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'roster' ? 'rgba(179, 136, 255, 0.2)' : 'transparent',
-              color: activeTab === 'roster' ? '#b388ff' : '#ccc'
+              border: activeTab === 'marketing' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'marketing' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
+              color: activeTab === 'marketing' ? '#00e676' : '#ccc'
             }}
-            onClick={() => setActiveTab('roster')}
+            onClick={() => setActiveTab('marketing')}
           >
-            👥 User &amp; Admin Live Roster ({roster.length})
+            📈 Marketing &amp; Conversion Funnel
           </button>
 
           <button
             type="button"
             className="super-tab-btn"
             style={{
-              border: activeTab === 'strategies' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'strategies' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
-              color: activeTab === 'strategies' ? '#00e5ff' : '#ccc'
+              border: activeTab === 'heatmap' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'heatmap' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+              color: activeTab === 'heatmap' ? '#00e5ff' : '#ccc'
+            }}
+            onClick={() => setActiveTab('heatmap')}
+          >
+            📊 Website Usage &amp; Feature Heatmap
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'roster' || activeTab === 'governance' ? '1px solid #b388ff' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'roster' || activeTab === 'governance' ? 'rgba(179, 136, 255, 0.2)' : 'transparent',
+              color: activeTab === 'roster' || activeTab === 'governance' ? '#b388ff' : '#ccc'
+            }}
+            onClick={() => setActiveTab('roster')}
+          >
+            👥 User Governance Roster ({roster.length})
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'strategies' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'strategies' ? 'rgba(255, 171, 0, 0.2)' : 'transparent',
+              color: activeTab === 'strategies' ? '#ffab00' : '#ccc'
             }}
             onClick={() => setActiveTab('strategies')}
           >
@@ -322,20 +372,7 @@ export const SuperAdminPanel: React.FC = () => {
             }}
             onClick={() => setActiveTab('admin_audit')}
           >
-            🛡️ Admin Command Audit Log ({adminLogs.length})
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'health' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'health' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
-              color: activeTab === 'health' ? '#00e676' : '#ccc'
-            }}
-            onClick={() => setActiveTab('health')}
-          >
-            ⚡ System Telemetry &amp; Circuit Breaker
+            🛡️ Admin Audit ({adminLogs.length})
           </button>
 
           <button
@@ -352,13 +389,137 @@ export const SuperAdminPanel: React.FC = () => {
           </button>
         </div>
 
-        {/* TAB 1: User & Admin Live Roster */}
+        {/* TAB 1: Marketing & Conversion Funnel */}
+        {activeTab === 'marketing' && (
+          <div className="font-mono">
+            <div className="powerhouse-grid">
+              <div className="powerhouse-card">
+                <div className="powerhouse-card-title">📈 Conversion Funnel Stage Analysis</div>
+                <div className="funnel-stage">
+                  <span className="funnel-label">Total Registered Traders</span>
+                  <span className="funnel-val">{marketing.totalTraders || 0}</span>
+                </div>
+                <div className="funnel-stage">
+                  <span className="funnel-label">Free Tier Users</span>
+                  <span className="funnel-val" style={{ color: '#aaa' }}>{marketing.freeTierCount || 0}</span>
+                </div>
+                <div className="funnel-stage">
+                  <span className="funnel-label">Forex Only Paid Tier ($79/mo)</span>
+                  <span className="funnel-val" style={{ color: '#00e5ff' }}>{marketing.forexTierCount || 0}</span>
+                </div>
+                <div className="funnel-stage">
+                  <span className="funnel-label">Futures + Forex VIP Tier ($149/mo)</span>
+                  <span className="funnel-val" style={{ color: '#00e676' }}>{marketing.futuresForexTierCount || 0}</span>
+                </div>
+              </div>
+
+              <div className="powerhouse-card">
+                <div className="powerhouse-card-title">💵 Revenue &amp; ARPU Intelligence</div>
+                <div style={{ padding: '12px', background: 'rgba(0, 230, 118, 0.08)', borderRadius: '8px', marginBottom: '12px', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#aaa' }}>ESTIMATED MONTHLY REVENUE (MRR)</div>
+                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#00e676' }}>${marketing.estimatedMRR || 0} USD</div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ padding: '10px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#aaa' }}>ARPU (AVG REV/USER)</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffab00' }}>${marketing.arpu || 0}</div>
+                  </div>
+                  <div style={{ padding: '10px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#aaa' }}>CONVERSION %</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#00e5ff' }}>{marketing.conversionRate || 0}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="powerhouse-card">
+                <div className="powerhouse-card-title">🚨 At-Risk &amp; Inactive User Alerts</div>
+                <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '12px' }}>
+                  Traders registered over 7 days ago with low recent logins. Ideal for marketing re-engagement campaigns.
+                </div>
+                {marketing.atRiskUsers && marketing.atRiskUsers.length > 0 ? (
+                  marketing.atRiskUsers.map((u: any) => (
+                    <div key={u.email} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255, 23, 68, 0.1)', border: '1px solid rgba(255, 23, 68, 0.3)', borderRadius: '4px', marginBottom: '6px', fontSize: '0.8rem' }}>
+                      <span style={{ color: '#fff' }}>{u.email}</span>
+                      <span style={{ color: '#ff1744' }}>Inactive {u.lastActiveAgo}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: '#00e676', fontSize: '0.85rem' }}>✅ All active traders are engaged! No churn risks detected.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Traffic Attribution Table */}
+            <div className="super-card font-mono">
+              <h2 style={{ margin: '0 0 16px 0', color: '#00e5ff' }}>📍 Marketing Traffic Source &amp; UTM Attribution</h2>
+              <div className="table-responsive">
+                <table className="runs-table">
+                  <thead>
+                    <tr>
+                      <th>Traffic Origin / UTM Source</th>
+                      <th>Total Signups</th>
+                      <th>Paid Conversions</th>
+                      <th>Conversion Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(marketing.trafficSources || {}).map(([src, counts]: any) => {
+                      const rate = counts.total > 0 ? ((counts.paid / counts.total) * 100).toFixed(1) : '0.0';
+                      return (
+                        <tr key={src}>
+                          <td style={{ color: '#b388ff', fontWeight: 800 }}>{src}</td>
+                          <td>{counts.total} traders</td>
+                          <td style={{ color: '#00e676' }}>{counts.paid} paid</td>
+                          <td style={{ color: '#ffab00', fontWeight: 800 }}>{rate}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Website Usage & Feature Heatmap */}
+        {activeTab === 'heatmap' && (
+          <div className="font-mono">
+            <div className="powerhouse-grid">
+              <div className="powerhouse-card">
+                <div className="powerhouse-card-title">🔥 Top Visited Routes &amp; Pages</div>
+                {Object.entries(heatmap.pageViewCounts || {}).map(([path, count]: any) => (
+                  <div key={path} className="heatmap-item">
+                    <span className="heatmap-label">{path}</span>
+                    <span className="heatmap-count">{count} views</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="powerhouse-card">
+                <div className="powerhouse-card-title">⚡ Feature Click Adoption Heatmap</div>
+                {Object.entries(heatmap.featureClickCounts || {}).length > 0 ? (
+                  Object.entries(heatmap.featureClickCounts || {}).map(([feat, count]: any) => (
+                    <div key={feat} className="heatmap-item">
+                      <span className="heatmap-label" style={{ color: '#ffab00' }}>{feat.toUpperCase()}</span>
+                      <span className="heatmap-count" style={{ color: '#00e5ff' }}>{count} clicks</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>No feature clicks recorded yet. Logging live in background...</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: User Governance & Roster */}
         {activeTab === 'roster' && (
           <div className="super-card font-mono">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <h2 style={{ margin: 0, color: '#b388ff' }}>👥 All Users &amp; Admins Real-Time Telemetry</h2>
-                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Updates live every 5s • Super Admin Master Privilege</span>
+                <h2 style={{ margin: 0, color: '#b388ff' }}>👥 All Users &amp; Admins Real-Time Governance Roster</h2>
+                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Updates live every 5s • Full User Management &amp; Activity Timelines</span>
               </div>
 
               <button
@@ -380,93 +541,97 @@ export const SuperAdminPanel: React.FC = () => {
               </button>
             </div>
 
-          {showAddAccountModal && (
-            <form onSubmit={handleSuperCreateAccount} style={{ background: 'rgba(179, 136, 255, 0.05)', border: '1px solid rgba(179, 136, 255, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#b388ff' }}>➕ Super Admin: Create User or Admin Account</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Display Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Master Trader or Admin User"
-                    value={newAccName}
-                    onChange={e => setNewAccName(e.target.value)}
-                    required
-                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
-                  />
+            {showAddAccountModal && (
+              <form onSubmit={handleSuperCreateAccount} style={{ background: 'rgba(179, 136, 255, 0.05)', border: '1px solid rgba(179, 136, 255, 0.3)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#b388ff' }}>➕ Super Admin: Create User or Admin Account</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Display Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Master Trader"
+                      value={newAccName}
+                      onChange={e => setNewAccName(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Email Address *</label>
+                    <input
+                      type="email"
+                      placeholder="user@mannaedge.com"
+                      value={newAccEmail}
+                      onChange={e => setNewAccEmail(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Role</label>
+                    <select
+                      value={newAccRole}
+                      onChange={e => setNewAccRole(e.target.value as any)}
+                      style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #ffab00', color: '#ffab00', borderRadius: '4px', fontWeight: 800 }}
+                    >
+                      <option value="trader">👨‍💻 Standard Trader</option>
+                      <option value="admin">⚙️ System Administrator</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Tier</label>
+                    <select
+                      value={newAccTier}
+                      onChange={e => setNewAccTier(e.target.value as any)}
+                      style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #b388ff', color: '#b388ff', borderRadius: '4px', fontWeight: 700 }}
+                    >
+                      <option value="free">Free Tier</option>
+                      <option value="forex_only">Forex Only Tier</option>
+                      <option value="futures_forex">Futures &amp; Forex Tier</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Email Address *</label>
-                  <input
-                    type="email"
-                    placeholder="user@mannaedge.com"
-                    value={newAccEmail}
-                    onChange={e => setNewAccEmail(e.target.value)}
-                    required
-                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '4px' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Account Privileges / Role *</label>
-                  <select
-                    value={newAccRole}
-                    onChange={e => setNewAccRole(e.target.value as any)}
-                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #ffab00', color: '#ffab00', borderRadius: '4px', fontWeight: 800 }}
-                  >
-                    <option value="trader">👨‍💻 Standard Trader</option>
-                    <option value="admin">⚙️ System Administrator</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>Subscription Access Tier</label>
-                  <select
-                    value={newAccTier}
-                    onChange={e => setNewAccTier(e.target.value as any)}
-                    style={{ width: '100%', padding: '8px 12px', background: '#090314', border: '1px solid #b388ff', color: '#b388ff', borderRadius: '4px', fontWeight: 700 }}
-                  >
-                    <option value="free">Free Tier (2 Futures + 2 Forex)</option>
-                    <option value="forex_only">Forex Only Tier (All Forex)</option>
-                    <option value="futures_forex">Futures &amp; Forex Tier (All Futures + Forex)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="font-mono"
-                style={{ background: '#b388ff', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
-              >
-                Create Account
-              </button>
-            </form>
-          )}
+                <button
+                  type="submit"
+                  className="font-mono"
+                  style={{ background: '#b388ff', color: '#090314', border: 'none', padding: '8px 20px', borderRadius: '4px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  Create Account
+                </button>
+              </form>
+            )}
 
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
                   <tr>
-                    <th>Account &amp; Role</th>
-                    <th>Status</th>
-                    <th>Current Active Page</th>
-                    <th>Total Session Time</th>
-                    <th>Time Spent Per Page</th>
-                    <th>Action</th>
+                    <th>Account &amp; Name</th>
+                    <th>Role &amp; Tier</th>
+                    <th>Status / Last Active</th>
+                    <th>Current Page</th>
+                    <th>Session Duration</th>
+                    <th>Actions &amp; Governance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {roster.map((u: any) => (
                     <tr key={u.email}>
                       <td>
-                        <strong>{u.email}</strong>{' '}
-                        <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255, 171, 0, 0.2)' : 'rgba(0, 229, 255, 0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff' }}>
+                        <strong>{u.name || u.email}</strong>
+                        <div style={{ fontSize: '0.75rem', color: '#888' }}>{u.email}</div>
+                      </td>
+                      <td>
+                        <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255, 171, 0, 0.2)' : 'rgba(0, 229, 255, 0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff', marginRight: '6px' }}>
                           {u.role.toUpperCase()}
                         </span>
+                        <span style={{ fontSize: '0.78rem', color: '#b388ff' }}>{u.tier}</span>
                       </td>
-                      <td style={{ color: u.isOnline ? '#00e676' : '#888' }}>
-                        {u.lastActiveAgo}
+                      <td style={{ color: u.isOnline ? '#00e676' : u.status === 'suspended' ? '#ff1744' : '#888' }}>
+                        {u.status === 'suspended' ? '🚫 SUSPENDED' : u.lastActiveAgo}
                       </td>
                       <td className="font-mono text-gold">
                         {u.currentPath}
@@ -474,49 +639,46 @@ export const SuperAdminPanel: React.FC = () => {
                       <td className="font-mono">
                         {u.totalDurationFormatted}
                       </td>
-                      <td className="font-mono" style={{ fontSize: '0.8rem' }}>
-                        {Object.entries(u.timePerPageFormatted || {}).map(([p, t]: any) => (
-                          <div key={p}>
-                            <span style={{ color: '#b388ff' }}>{p}:</span> {t}
-                          </div>
-                        ))}
-                      </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '6px' }}>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           <button
                             type="button"
                             className="font-mono"
-                            style={{
-                              background: 'rgba(179, 136, 255, 0.2)',
-                              border: '1px solid #b388ff',
-                              color: '#b388ff',
-                              padding: '4px 10px',
-                              borderRadius: '4px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              fontSize: '0.8rem'
-                            }}
+                            style={{ background: 'rgba(179, 136, 255, 0.2)', border: '1px solid #b388ff', color: '#b388ff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
                             onClick={() => handleSuperImpersonate(u)}
+                            title="Log in as this user to view their screen"
                           >
-                            🥸 Super-Impersonate
+                            👁️ View As
                           </button>
 
                           <button
                             type="button"
                             className="font-mono"
-                            style={{
-                              background: 'rgba(0, 229, 255, 0.15)',
-                              border: '1px solid #00e5ff',
-                              color: '#00e5ff',
-                              padding: '4px 10px',
-                              borderRadius: '4px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              fontSize: '0.8rem'
-                            }}
-                            onClick={() => handleSuperChangePassword(u.id || u.email, u.email)}
+                            style={{ background: 'rgba(0, 229, 255, 0.2)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                            onClick={() => fetchUserActivity(u.email)}
+                            title="Inspect complete activity timeline"
                           >
-                            🔑 Password
+                            📜 Activity
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                            onClick={() => handleOpenEditModal(u)}
+                            title="Edit role, tier, and status"
+                          >
+                            ⚙️ Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                            onClick={() => handleSuperChangePassword(u.id || u.email, u.email)}
+                            title="Reset password"
+                          >
+                            🔑 Pass
                           </button>
                         </div>
                       </td>
@@ -528,42 +690,28 @@ export const SuperAdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: Strategy Governance & Visibility (Super Admin Only) */}
+        {/* TAB 4: Strategy Governance */}
         {activeTab === 'strategies' && (
           <div className="super-card font-mono">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#00e5ff' }}>⚙️ Strategy Access, Visibility &amp; Deletion Governance</h2>
-                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                  Super Admin Exclusive: Controls which strategies regular Admins can see/toggle, and permanently delete strategies.
-                </span>
-              </div>
-            </div>
-
+            <h2 style={{ margin: '0 0 16px 0', color: '#00e5ff' }}>⚙️ Strategy Governance &amp; Admin Access Control</h2>
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
                   <tr>
                     <th>Strategy ID &amp; Name</th>
-                    <th>Execution Status</th>
-                    <th>Admin Visibility Status</th>
-                    <th>Governance Actions</th>
+                    <th>Admin Visibility</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {strategiesList.map((strat: any) => (
-                    <tr key={strat.id}>
+                  {strategiesList.map((s: any) => (
+                    <tr key={s.strategyId}>
                       <td>
-                        <strong>{strat.name}</strong> <span style={{ color: '#aaa', fontSize: '0.8rem' }}>({strat.id})</span>
+                        <strong style={{ color: '#fff' }}>{s.name}</strong> ({s.strategyId})
                       </td>
                       <td>
-                        <span className="market-tag font-mono" style={{ background: strat.enabled ? 'rgba(0, 230, 118, 0.2)' : 'rgba(255, 23, 68, 0.2)', color: strat.enabled ? '#00e676' : '#ff1744' }}>
-                          {strat.enabled ? '🟢 ENABLED' : '🔴 DISABLED'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="market-tag font-mono" style={{ background: strat.visibleToAdmins ? 'rgba(0, 229, 255, 0.2)' : 'rgba(255, 171, 0, 0.2)', color: strat.visibleToAdmins ? '#00e5ff' : '#ffab00' }}>
-                          {strat.visibleToAdmins ? '👁️ VISIBLE TO ADMINS' : '🙈 HIDDEN FROM ADMINS'}
+                        <span style={{ color: s.visibleToAdmins ? '#00e676' : '#ff1744', fontWeight: 800 }}>
+                          {s.visibleToAdmins ? '👁️ VISIBLE TO ADMINS' : '🔒 SUPER ADMIN ONLY'}
                         </span>
                       </td>
                       <td>
@@ -572,36 +720,25 @@ export const SuperAdminPanel: React.FC = () => {
                             type="button"
                             className="font-mono"
                             style={{
-                              background: strat.visibleToAdmins ? 'rgba(255, 171, 0, 0.15)' : 'rgba(0, 229, 255, 0.15)',
-                              border: `1px solid ${strat.visibleToAdmins ? '#ffab00' : '#00e5ff'}`,
-                              color: strat.visibleToAdmins ? '#ffab00' : '#00e5ff',
-                              padding: '5px 12px',
+                              background: s.visibleToAdmins ? 'rgba(255, 23, 68, 0.15)' : 'rgba(0, 230, 118, 0.15)',
+                              border: s.visibleToAdmins ? '1px solid #ff1744' : '1px solid #00e676',
+                              color: s.visibleToAdmins ? '#ff1744' : '#00e676',
+                              padding: '4px 10px',
                               borderRadius: '4px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              fontSize: '0.8rem'
+                              cursor: 'pointer'
                             }}
-                            onClick={() => handleToggleStrategyVisibility(strat.id, strat.visibleToAdmins)}
+                            onClick={() => handleToggleStrategyVisibility(s.strategyId, s.visibleToAdmins)}
                           >
-                            {strat.visibleToAdmins ? '🙈 Hide from Admins' : '👁️ Make Visible to Admins'}
+                            {s.visibleToAdmins ? '🔒 Hide from Admins' : '👁️ Show to Admins'}
                           </button>
 
                           <button
                             type="button"
                             className="font-mono"
-                            style={{
-                              background: 'rgba(255, 23, 68, 0.2)',
-                              border: '1px solid #ff1744',
-                              color: '#ff1744',
-                              padding: '5px 12px',
-                              borderRadius: '4px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              fontSize: '0.8rem'
-                            }}
-                            onClick={() => handleDeleteStrategy(strat.id, strat.name)}
+                            style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                            onClick={() => handleDeleteStrategy(s.strategyId, s.name)}
                           >
-                            🗑️ Delete Strategy Permanently
+                            🗑️ Delete Strategy
                           </button>
                         </div>
                       </td>
@@ -613,39 +750,27 @@ export const SuperAdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: Admin Command Audit Log */}
+        {/* TAB 5: Admin Audit Log */}
         {activeTab === 'admin_audit' && (
           <div className="super-card font-mono">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, color: '#ffab00' }}>🛡️ Admin Command Audit Trail</h2>
-              <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Tracks every rescan, replacement, and manual trigger by Admins</span>
-            </div>
-
+            <h2 style={{ margin: '0 0 16px 0', color: '#ffab00' }}>🛡️ Admin Command Audit Trail ({adminLogs.length} Events)</h2>
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
                   <tr>
-                    <th>Timestamp (ET)</th>
+                    <th>Timestamp</th>
                     <th>Admin Email</th>
-                    <th>Executed Command / Action</th>
-                    <th>Target Instrument</th>
-                    <th>Details</th>
+                    <th>Action</th>
+                    <th>Target / Details</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {adminLogs.map((log: any, i: number) => (
-                    <tr key={i}>
-                      <td>{formatETTime(log.timestamp)}</td>
-                      <td className="text-gold"><strong>{log.userEmail}</strong></td>
-                      <td>
-                        <span className="badge badge-manual">
-                          {log.actionDetails?.action?.toUpperCase() || log.eventType.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="font-mono">{log.actionDetails?.instrument || '--'}</td>
-                      <td className="font-mono" style={{ fontSize: '0.8rem', color: '#ccc' }}>
-                        {JSON.stringify(log.actionDetails?.extra || log.actionDetails || {})}
-                      </td>
+                  {adminLogs.map((l: any, idx: number) => (
+                    <tr key={idx}>
+                      <td style={{ fontSize: '0.8rem', color: '#888' }}>{l.timestamp}</td>
+                      <td style={{ color: '#ffab00' }}>{l.userEmail}</td>
+                      <td><span className="market-tag font-mono" style={{ background: 'rgba(255, 171, 0, 0.2)', color: '#ffab00' }}>{l.actionDetails?.action || l.eventType}</span></td>
+                      <td style={{ fontSize: '0.82rem', color: '#aaa' }}>{JSON.stringify(l.actionDetails || {})}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -654,139 +779,133 @@ export const SuperAdminPanel: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 3: System Health & Telemetry */}
-        {activeTab === 'health' && (
-          <div className="super-card font-mono">
-            <h2 style={{ color: '#00e676', marginBottom: '16px' }}>⚡ System Telemetry &amp; Health Matrix</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <div className="stat-box">
-                <div className="stat-box-title">Circuit Breaker Status</div>
-                <div className="stat-box-value" style={{ color: metrics.circuitBreakerStatus === 'ok' ? '#00e676' : '#ff1744' }}>
-                  {metrics.circuitBreakerStatus?.toUpperCase() || 'OK'}
-                </div>
-              </div>
-
-              <div className="stat-box">
-                <div className="stat-box-title">Market Session Status</div>
-                <div className="stat-box-value" style={{ color: metrics.isMarketOpen ? '#00e676' : '#ffab00' }}>
-                  {metrics.isMarketOpen ? '🟢 OPEN (TRADING)' : '🔴 CLOSED (PAUSED)'}
-                </div>
-              </div>
-
-              <div className="stat-box">
-                <div className="stat-box-title">Strategy Failure Count</div>
-                <div className="stat-box-value" style={{ color: metrics.circuitBreakerFailures === 0 ? '#00e676' : '#ffab00' }}>
-                  {metrics.circuitBreakerFailures || 0} / 5
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: Sentinel V2 Intelligence */}
+        {/* TAB 6: Sentinel Intelligence */}
         {activeTab === 'sentinel' && (
           <div className="super-card font-mono">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#ce93d8' }}>🎯 Sentinel V2 — Elite Fractal Swing Points Intelligence</h2>
-                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Super Admin Exclusive: Multi-timeframe state machine analytics • Strategy ID: sentinel_v2</span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" className="font-mono" style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '8px 16px', borderRadius: '6px', fontWeight: 800, cursor: 'pointer' }} onClick={handleSentinelScan} disabled={sentinelScanning}>
-                  {sentinelScanning ? '⏳ Scanning...' : '🔍 Trigger Manual Scan'}
-                </button>
-              </div>
-            </div>
-            
-            <div className="stat-grid-4 font-mono" style={{ marginBottom: '20px' }}>
-              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-                <div className="stat-box-title">Total Signals</div>
-                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.totalSignals || 0}</div>
-              </div>
-              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-                <div className="stat-box-title">Win Rate</div>
-                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.winRate || '0.0%'}</div>
-              </div>
-              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-                <div className="stat-box-title">Active Signals</div>
-                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.activeSignals || 0}</div>
-              </div>
-              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-                <div className="stat-box-title">Total Realized R</div>
-                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelAnalytics?.totalRealizedR || '0.00R'}</div>
-              </div>
-            </div>
-            
-            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(156, 39, 176, 0.05)', border: '1px solid rgba(156, 39, 176, 0.2)', borderRadius: '8px' }}>
-              <h3 style={{ color: '#ce93d8', margin: '0 0 12px' }}>🔐 Visibility & Release Controls</h3>
-              <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '0 0 12px' }}>Control global visibility for Sentinel V2 signals and analytics.</p>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" className="font-mono" style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', color: '#ffab00', padding: '5px 12px', borderRadius: '4px', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem' }} onClick={() => handleToggleStrategyVisibility('sentinel_v2', true)}>
-                  👁️ Toggle Global Admin Visibility
-                </button>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, color: '#ce93d8' }}>🎯 Sentinel V2 Intelligence Dashboard</h2>
+              <button
+                type="button"
+                className="font-mono"
+                style={{ background: '#ce93d8', color: '#000', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 900, cursor: 'pointer' }}
+                onClick={handleSentinelScan}
+                disabled={sentinelScanning}
+              >
+                {sentinelScanning ? 'Scanning...' : '⚡ Trigger Manual Sentinel Scan'}
+              </button>
             </div>
 
-            {/* Individual Admin Access Control Roster */}
-            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(156, 39, 176, 0.08)', border: '1px solid rgba(156, 39, 176, 0.3)', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <h3 style={{ color: '#ce93d8', margin: 0 }}>👤 Individual Admin Access Roster</h3>
-                  <p style={{ fontSize: '0.8rem', color: '#aaa', margin: '4px 0 0' }}>Select specific admin accounts to grant exclusive access to Sentinel V2 signals, analytics, and controls.</p>
+            {sentinelAnalytics && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#aaa' }}>TOTAL SIGNALS</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ce93d8' }}>{sentinelAnalytics.totalSignals}</div>
                 </div>
-                <span style={{ fontSize: '0.75rem', background: 'rgba(156, 39, 176, 0.25)', color: '#e1bee7', padding: '4px 10px', borderRadius: '4px', border: '1px solid rgba(156, 39, 176, 0.4)', fontWeight: 'bold' }}>
-                  {allowedAdminEmails.length} Admin(s) Authorized
-                </span>
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#aaa' }}>WIN RATE</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#00e676' }}>{sentinelAnalytics.winRate}%</div>
+                </div>
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#aaa' }}>REALIZED R-MULTIPLE</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#00e5ff' }}>+{sentinelAnalytics.totalRealizedR}R</div>
+                </div>
               </div>
-
-              {adminAccessRoster.length === 0 ? (
-                <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', padding: '12px 0' }}>No regular admin accounts found in system roster.</div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
-                  {adminAccessRoster.map((adminUser: any) => (
-                    <div key={adminUser.email} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      background: adminUser.granted ? 'rgba(156, 39, 176, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                      border: adminUser.granted ? '1px solid #ab47bc' : '1px solid rgba(255, 255, 255, 0.08)',
-                      borderRadius: '6px'
-                    }}>
-                      <div>
-                        <div style={{ fontWeight: 'bold', color: adminUser.granted ? '#f3e5f5' : '#ccc', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {adminUser.name || adminUser.email}
-                          {adminUser.role === 'super_admin' && (
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(255, 215, 0, 0.2)', color: '#ffd700', border: '1px solid rgba(255, 215, 0, 0.4)', padding: '1px 4px', borderRadius: '3px' }}>👑 SUPER ADMIN</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#aaa' }}>{adminUser.email}</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="font-mono"
-                        style={{
-                          background: adminUser.granted ? '#8e24aa' : 'rgba(255, 255, 255, 0.08)',
-                          border: adminUser.granted ? '1px solid #ba68c8' : '1px solid rgba(255, 255, 255, 0.2)',
-                          color: adminUser.granted ? '#fff' : '#aaa',
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          fontWeight: 'bold',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem'
-                        }}
-                        onClick={() => handleToggleIndividualAdminAccess(adminUser.email, adminUser.granted)}
-                      >
-                        {adminUser.granted ? '✅ Access Granted' : '➕ Grant Access'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
       </main>
+
+      {/* User Activity Audit Modal */}
+      {activityModalEmail && (
+        <div className="super-modal-overlay">
+          <div className="super-modal-content font-mono">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+              <h2 style={{ margin: 0, color: '#00e5ff' }}>📜 Activity Audit Timeline: {activityModalEmail}</h2>
+              <button onClick={() => setActivityModalEmail(null)} style={{ background: 'none', border: 'none', color: '#ff1744', fontSize: '1.2rem', cursor: 'pointer' }}>✖</button>
+            </div>
+
+            {loadingUserActivity ? (
+              <div style={{ color: '#aaa', padding: '20px 0' }}>Loading user timeline...</div>
+            ) : userActivityData?.logs?.length === 0 ? (
+              <div style={{ color: '#aaa', padding: '20px 0' }}>No specific events recorded for this user session yet.</div>
+            ) : (
+              <div>
+                {userActivityData?.logs?.map((l: any, idx: number) => (
+                  <div key={idx} className="timeline-event">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888', marginBottom: '4px' }}>
+                      <span>{l.timestamp}</span>
+                      <span style={{ color: '#b388ff' }}>{l.eventType.toUpperCase()}</span>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#fff', fontWeight: 700 }}>
+                      Path: <span style={{ color: '#ffab00' }}>{l.path}</span>
+                    </div>
+                    {l.actionDetails && (
+                      <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '4px' }}>
+                        Action: {l.actionDetails.action} {l.actionDetails.instrument ? `(${l.actionDetails.instrument})` : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Governance Modal */}
+      {editingUser && (
+        <div className="super-modal-overlay">
+          <div className="super-modal-content font-mono" style={{ maxWidth: '500px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+              <h2 style={{ margin: 0, color: '#b388ff' }}>⚙️ User Account Governance</h2>
+              <button onClick={() => setEditingUser(null)} style={{ background: 'none', border: 'none', color: '#ff1744', fontSize: '1.2rem', cursor: 'pointer' }}>✖</button>
+            </div>
+
+            <form onSubmit={handleSaveUserGovernance}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#aaa', marginBottom: '4px' }}>Email Address</label>
+                <input type="text" value={editingUser.email} disabled style={{ width: '100%', padding: '8px', background: '#111', border: '1px solid #333', color: '#888', borderRadius: '4px' }} />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#aaa', marginBottom: '4px' }}>Display Name</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid #7c4dff', color: '#fff', borderRadius: '4px' }} />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#aaa', marginBottom: '4px' }}>Role Privileges</label>
+                <select value={editRole} onChange={e => setEditRole(e.target.value as any)} style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid #ffab00', color: '#ffab00', borderRadius: '4px', fontWeight: 800 }}>
+                  <option value="trader">👨‍💻 Standard Trader</option>
+                  <option value="admin">⚙️ System Administrator</option>
+                  <option value="super_admin">👁️ Master Super Admin</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#aaa', marginBottom: '4px' }}>Subscription Access Tier</label>
+                <select value={editTier} onChange={e => setEditTier(e.target.value as any)} style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid #b388ff', color: '#b388ff', borderRadius: '4px', fontWeight: 700 }}>
+                  <option value="free">Free Tier (2 Futures + 2 Forex)</option>
+                  <option value="forex_only">Forex Only Tier ($79/mo)</option>
+                  <option value="futures_forex">Futures &amp; Forex VIP Tier ($149/mo)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#aaa', marginBottom: '4px' }}>Account Status</label>
+                <select value={editStatus} onChange={e => setEditStatus(e.target.value as any)} style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid #00e676', color: editStatus === 'active' ? '#00e676' : '#ff1744', borderRadius: '4px', fontWeight: 800 }}>
+                  <option value="active">🟢 Active Account</option>
+                  <option value="suspended">🚫 Suspended Account</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setEditingUser(null)} style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#ccc', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ padding: '8px 20px', background: '#b388ff', border: 'none', color: '#090314', fontWeight: 900, borderRadius: '4px', cursor: 'pointer' }}>Save Governance Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

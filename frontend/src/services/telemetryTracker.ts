@@ -1,17 +1,20 @@
 import { API_BASE } from '../config';
 
 export interface TelemetryEvent {
-  eventType: 'page_view' | 'admin_action' | 'trader_action' | 'session_heartbeat';
+  eventType: 'page_view' | 'admin_action' | 'trader_action' | 'session_heartbeat' | 'feature_click';
   userEmail?: string;
   userRole?: string;
   userTier?: string;
   path: string;
   durationMs?: number;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  refSource?: string;
   actionDetails?: {
-    action: string; // e.g. 'rescan_signal', 'disable_signal', 'toggle_voice', 'add_watchlist'
-    targetId?: string;
+    action: string;
     instrument?: string;
-    market?: string;
+    targetId?: string;
     extra?: any;
   };
   timestamp: string;
@@ -20,9 +23,52 @@ export interface TelemetryEvent {
 class TelemetryTrackerService {
   private currentPath: string = window.location.pathname;
   private pageStartTime: number = Date.now();
+  private utmSource: string = '';
+  private utmMedium: string = '';
+  private utmCampaign: string = '';
+  private refSource: string = '';
 
   constructor() {
+    this.initUtmParams();
     this.initPathTracking();
+  }
+
+  private initUtmParams() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const source = urlParams.get('utm_source') || urlParams.get('ref');
+      const medium = urlParams.get('utm_medium');
+      const campaign = urlParams.get('utm_campaign');
+      const ref = document.referrer;
+
+      if (source) {
+        this.utmSource = source;
+        localStorage.setItem('manna_utm_source', source);
+      } else {
+        this.utmSource = localStorage.getItem('manna_utm_source') || '';
+      }
+
+      if (medium) {
+        this.utmMedium = medium;
+        localStorage.setItem('manna_utm_medium', medium);
+      } else {
+        this.utmMedium = localStorage.getItem('manna_utm_medium') || '';
+      }
+
+      if (campaign) {
+        this.utmCampaign = campaign;
+        localStorage.setItem('manna_utm_campaign', campaign);
+      } else {
+        this.utmCampaign = localStorage.getItem('manna_utm_campaign') || '';
+      }
+
+      if (ref) {
+        this.refSource = ref;
+        localStorage.setItem('manna_ref_source', ref);
+      } else {
+        this.refSource = localStorage.getItem('manna_ref_source') || '';
+      }
+    } catch {}
   }
 
   private getUserInfo() {
@@ -49,6 +95,10 @@ class TelemetryTrackerService {
       userTier: userInfo.tier,
       path: event.path || this.currentPath,
       durationMs: event.durationMs || 0,
+      utmSource: this.utmSource,
+      utmMedium: this.utmMedium,
+      utmCampaign: this.utmCampaign,
+      refSource: this.refSource,
       actionDetails: event.actionDetails,
       timestamp: new Date().toISOString()
     };
@@ -79,7 +129,6 @@ class TelemetryTrackerService {
     const oldPath = this.currentPath;
 
     if (oldPath !== newPath) {
-      // Send page exit event for old path
       this.sendEvent({
         eventType: 'page_view',
         path: oldPath,
@@ -89,6 +138,17 @@ class TelemetryTrackerService {
       this.currentPath = newPath;
       this.pageStartTime = Date.now();
     }
+  }
+
+  public trackFeatureClick(featureName: string, extra?: any) {
+    this.sendEvent({
+      eventType: 'feature_click',
+      path: window.location.pathname,
+      actionDetails: {
+        action: `feature_${featureName}`,
+        extra
+      }
+    });
   }
 
   public trackAdminAction(action: string, instrument?: string, targetId?: string, extra?: any) {

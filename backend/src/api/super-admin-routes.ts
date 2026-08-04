@@ -3,17 +3,21 @@ import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
-import { getAllUsers, addUser, updateUserTier, updateUserPassword } from '../db/user-store';
+import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
 
 const router = express.Router();
 
 interface TelemetryEventPayload {
-  eventType: 'page_view' | 'admin_action' | 'trader_action' | 'session_heartbeat';
+  eventType: 'page_view' | 'admin_action' | 'trader_action' | 'session_heartbeat' | 'feature_click';
   userEmail: string;
   userRole: string;
   userTier: string;
   path: string;
   durationMs: number;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  refSource?: string;
   actionDetails?: {
     action: string;
     instrument?: string;
@@ -34,6 +38,8 @@ const userSessions: Record<string, {
   totalDurationSec: number;
   timePerPageSec: Record<string, number>;
   actionsCount: number;
+  utmSource?: string;
+  refSource?: string;
 }> = {};
 
 // 1. SILENT TELEMETRY INGESTION ENDPOINT
@@ -45,8 +51,8 @@ router.post('/telemetry', (req: Request, res: Response) => {
     }
 
     telemetryLogs.push(payload);
-    if (telemetryLogs.length > 5000) {
-      telemetryLogs.shift(); // Keep last 5,000 events
+    if (telemetryLogs.length > 10000) {
+      telemetryLogs.shift(); // Keep last 10,000 events
     }
 
     const email = payload.userEmail;
@@ -59,7 +65,9 @@ router.post('/telemetry', (req: Request, res: Response) => {
         lastActive: payload.timestamp || new Date().toISOString(),
         totalDurationSec: 0,
         timePerPageSec: {},
-        actionsCount: 0
+        actionsCount: 0,
+        utmSource: payload.utmSource || '',
+        refSource: payload.refSource || ''
       };
     }
 
@@ -68,6 +76,8 @@ router.post('/telemetry', (req: Request, res: Response) => {
     sess.lastActive = payload.timestamp || new Date().toISOString();
     sess.role = payload.userRole || sess.role;
     sess.tier = payload.userTier || sess.tier;
+    if (payload.utmSource) sess.utmSource = payload.utmSource;
+    if (payload.refSource) sess.refSource = payload.refSource;
 
     if (payload.durationMs && payload.durationMs > 0) {
       const addedSec = Math.round(payload.durationMs / 1000);
@@ -76,7 +86,7 @@ router.post('/telemetry', (req: Request, res: Response) => {
       sess.timePerPageSec[pathKey] = (sess.timePerPageSec[pathKey] || 0) + addedSec;
     }
 
-    if (payload.eventType === 'admin_action' || payload.eventType === 'trader_action') {
+    if (payload.eventType === 'admin_action' || payload.eventType === 'trader_action' || payload.eventType === 'feature_click') {
       sess.actionsCount++;
     }
 
@@ -90,29 +100,73 @@ router.post('/telemetry', (req: Request, res: Response) => {
 router.get('/dashboard', async (_req: Request, res: Response) => {
   try {
     const now = Date.now();
+    const allUsers = getAllUsers();
     
     // Process Active Roster (User & Admin activity)
-    const roster = Object.values(userSessions).map(sess => {
-      const lastActiveMs = new Date(sess.lastActive).getTime();
-      const diffMin = Math.round((now - lastActiveMs) / (1000 * 60));
+    const roster = allUsers.map(u => {
+      const sess = userSessions[u.email.toLowerCase()] || userSessions[u.email];
+      const lastActiveMs = sess ? new Date(sess.lastActive).getTime() : 0;
+      const diffMin = lastActiveMs > 0 ? Math.round((now - lastActiveMs) / (1000 * 60)) : 9999;
       const isOnline = diffMin <= 5;
 
       return {
-        email: sess.email,
-        role: sess.role,
-        tier: sess.tier,
-        currentPath: sess.currentPath,
-        lastActive: sess.lastActive,
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        tier: u.tier,
+        status: u.status || 'active',
+        currentPath: sess?.currentPath || '/dashboard',
+        lastActive: sess?.lastActive || u.createdAt,
         isOnline,
-        lastActiveAgo: isOnline ? '🟢 Live Now' : `${diffMin} mins ago`,
-        totalDurationFormatted: `${Math.floor(sess.totalDurationSec / 60)}m ${sess.totalDurationSec % 60}s`,
-        timePerPageFormatted: Object.entries(sess.timePerPageSec).reduce((acc, [path, sec]) => {
+        lastActiveAgo: isOnline ? '🟢 Live Now' : diffMin < 1440 ? `${diffMin} mins ago` : `${Math.floor(diffMin / 1440)} days ago`,
+        totalDurationFormatted: sess ? `${Math.floor(sess.totalDurationSec / 60)}m ${sess.totalDurationSec % 60}s` : '0m 0s',
+        timePerPageFormatted: sess ? Object.entries(sess.timePerPageSec).reduce((acc, [path, sec]) => {
           acc[path] = `${Math.floor(sec / 60)}m ${sec % 60}s`;
           return acc;
-        }, {} as Record<string, string>),
-        actionsCount: sess.actionsCount
+        }, {} as Record<string, string>) : {},
+        actionsCount: sess?.actionsCount || 0,
+        utmSource: sess?.utmSource || 'Direct / Organic',
+        refSource: sess?.refSource || 'Direct'
       };
     });
+
+    // Marketing & Revenue Analytics Calculations
+    const totalTraders = allUsers.length;
+    const freeTierCount = allUsers.filter(u => u.tier === 'free').length;
+    const forexTierCount = allUsers.filter(u => u.tier === 'forex_only').length;
+    const futuresForexTierCount = allUsers.filter(u => u.tier === 'futures_forex').length;
+    
+    // Revenue Estimate ($79 for Forex, $149 for Futures+Forex)
+    const estimatedMRR = (forexTierCount * 79) + (futuresForexTierCount * 149);
+    const arpu = totalTraders > 0 ? Number((estimatedMRR / totalTraders).toFixed(2)) : 0;
+    const conversionRate = totalTraders > 0 ? Number((((forexTierCount + futuresForexTierCount) / totalTraders) * 100).toFixed(1)) : 0;
+
+    // Traffic Attribution Breakdown
+    const trafficSources: Record<string, { total: number; paid: number }> = {};
+    roster.forEach(u => {
+      const src = u.utmSource || 'Direct / Organic';
+      if (!trafficSources[src]) trafficSources[src] = { total: 0, paid: 0 };
+      trafficSources[src].total++;
+      if (u.tier !== 'free') trafficSources[src].paid++;
+    });
+
+    // Page View & Heatmap Analytics
+    const pageViewCounts: Record<string, number> = {};
+    const featureClickCounts: Record<string, number> = {};
+    telemetryLogs.forEach(l => {
+      if (l.eventType === 'page_view') {
+        const p = l.path || '/';
+        pageViewCounts[p] = (pageViewCounts[p] || 0) + 1;
+      }
+      if (l.eventType === 'feature_click' && l.actionDetails?.action) {
+        const feat = l.actionDetails.action.replace('feature_', '');
+        featureClickCounts[feat] = (featureClickCounts[feat] || 0) + 1;
+      }
+    });
+
+    // At-Risk Churn Alerts (Users registered over 7 days ago with 0 active minutes)
+    const atRiskUsers = roster.filter(u => !u.isOnline && u.lastActiveAgo.includes('days') && parseInt(u.lastActiveAgo) >= 7);
 
     // Admin Specific Audit Trail
     const adminLogs = telemetryLogs
@@ -120,11 +174,6 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
       .slice(-100)
       .reverse();
 
-    // Trader Engagement Heatmap Data
-    const traderActions = telemetryLogs.filter(l => l.eventType === 'trader_action');
-    const pageViews = telemetryLogs.filter(l => l.eventType === 'page_view');
-
-    // System Telemetry
     const cbStatus = circuitBreaker.getStatus();
     const marketOpenStatus = isMarketOpen();
 
@@ -132,12 +181,28 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
       success: true,
       roster,
       adminLogs,
+      marketing: {
+        totalTraders,
+        freeTierCount,
+        forexTierCount,
+        futuresForexTierCount,
+        estimatedMRR,
+        arpu,
+        conversionRate,
+        trafficSources,
+        atRiskUsersCount: atRiskUsers.length,
+        atRiskUsers: atRiskUsers.slice(0, 10)
+      },
+      heatmap: {
+        pageViewCounts,
+        featureClickCounts,
+        totalEventsLogged: telemetryLogs.length
+      },
       metrics: {
         totalTrackedUsers: roster.length,
         onlineCount: roster.filter(r => r.isOnline).length,
         adminCount: roster.filter(r => r.role === 'admin' || r.role === 'super_admin').length,
         totalEventsLogged: telemetryLogs.length,
-        totalTraderActions: traderActions.length,
         circuitBreakerStatus: cbStatus.tripped ? 'tripped' : 'ok',
         circuitBreakerFailures: cbStatus.failureCount,
         isMarketOpen: marketOpenStatus
@@ -145,6 +210,48 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve super admin intelligence data', details: err.message });
+  }
+});
+
+// 2B. GET SPECIFIC USER ACTIVITY TIMELINE
+router.get('/users/:email/activity', (req: Request, res: Response) => {
+  try {
+    const email = req.params.email;
+    const targetEmail = Array.isArray(email) ? email[0] : email;
+    
+    const userLogs = telemetryLogs
+      .filter(l => l.userEmail.toLowerCase() === targetEmail.toLowerCase())
+      .slice(-100)
+      .reverse();
+
+    const session = userSessions[targetEmail.toLowerCase()] || userSessions[targetEmail];
+
+    res.json({
+      success: true,
+      email: targetEmail,
+      session,
+      logs: userLogs
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch user activity', details: err.message });
+  }
+});
+
+// 2C. FULL USER ACCOUNT GOVERNANCE (Tier, Role, Status, Name)
+router.put('/users/:id/full', (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const userId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { name, tier, role, status, preferredMarket, riskLimit } = req.body || {};
+
+    const updated = updateUserFull(userId, { name, tier, role, status, preferredMarket, riskLimit });
+    if (!updated) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    res.json({ success: true, message: 'User updated successfully', user: updated, allUsers: getAllUsers() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update user', details: err.message });
   }
 });
 

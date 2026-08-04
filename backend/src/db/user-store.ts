@@ -272,3 +272,33 @@ export const restoreUser = (userId: string): { success: boolean; user?: UserProf
 
   return { success: true, user: target };
 };
+
+export const updateUserRole = (userId: string, role: 'trader' | 'admin' | 'super_admin'): UserProfile | null => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return null;
+  user.role = role;
+  return user;
+};
+
+export const updateUserStatus = (userId: string, status: 'active' | 'suspended'): UserProfile | null => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return null;
+  user.status = status;
+  return user;
+};
+
+export const updateUserFull = (
+  userId: string, 
+  updates: Partial<Pick<UserProfile, 'name' | 'tier' | 'role' | 'status' | 'preferredMarket' | 'riskLimit'>>
+): UserProfile | null => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return null;
+  if (updates.name) user.name = updates.name;
+  if (updates.tier) user.tier = updates.tier;
+  if (updates.role) user.role = updates.role;
+  if (updates.status) user.status = updates.status;
+  if (updates.preferredMarket) user.preferredMarket = updates.preferredMarket;
+  if (updates.riskLimit) user.riskLimit = updates.riskLimit;
+  return user;
+};
+
