@@ -12,6 +12,7 @@ import { executePublishRun } from '../publish-gate/publish-gate';
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import * as queries from '../db/queries';
+import { processKillzoneMidpointScan } from '../scheduler/midpoint-scanner';
 import { EdgeSetup, CandidateSetup, Candle, KillzoneInfo } from '../discovery/types';
 
 async function runAllTests() {
@@ -19,8 +20,10 @@ async function runAllTests() {
 
     // Remove old test db if exists
     const testDbPath = path.resolve(__dirname, '../../../killzone.db');
-    if (fs.existsSync(testDbPath)) {
-        try { fs.unlinkSync(testDbPath); } catch (e) {}
+    for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+        if (fs.existsSync(f)) {
+            try { fs.unlinkSync(f); } catch (e) {}
+        }
     }
 
     // Initialize DB
@@ -222,7 +225,56 @@ async function runAllTests() {
 
     console.log('✅ TEST 11: Sentinel V2 Engine & Granular Per-Admin Access Control (Super Admin Granted)');
 
-    console.log('\n🎉 ALL 11 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 12. Mid-Killzone Booster Rescan Rule Test (< 2 assets per asset class triggers rescan, >= 2 skips)
+    const clearAllActive = async () => {
+        const futuresBefore = await queries.getActiveSetups('futures');
+        for (const s of futuresBefore) {
+            await queries.updateSetupState(s.id, 'futures', 'superseded', { superseded: 1 });
+        }
+        const forexBefore = await queries.getActiveSetups('forex');
+        for (const s of forexBefore) {
+            await queries.updateSetupState(s.id, 'forex', 'superseded', { superseded: 1 });
+        }
+    };
+
+    // Subtest A: 0 futures, 0 forex (< 2 per asset class) -> must trigger rescan for 'both'
+    await clearAllActive();
+    const midResA = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    assert.strictEqual(midResA.scanned, true, 'Should trigger scan when asset classes have < 2 active setups');
+    assert.strictEqual(midResA.marketScope, 'both', 'Should scan both when both asset classes have < 2 setups');
+
+    // Subtest B: Insert 2 futures setups and 2 forex setups (>= 2 per asset class) -> must skip rescan
+    await clearAllActive();
+    const dummyFutures1B: EdgeSetup = { ...mockSetup, id: 'kz_mid_f1_b', instrument: 'ES', market: 'futures' };
+    const dummyFutures2B: EdgeSetup = { ...mockSetup, id: 'kz_mid_f2_b', instrument: 'NQ', market: 'futures' };
+    const dummyForex1B: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx1_b', instrument: 'EUR/USD', market: 'forex' };
+    const dummyForex2B: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx2_b', instrument: 'GBP/USD', market: 'forex' };
+
+    await queries.insertSetup(dummyFutures1B, 'futures');
+    await queries.insertSetup(dummyFutures2B, 'futures');
+    await queries.insertSetup(dummyForex1B, 'forex');
+    await queries.insertSetup(dummyForex2B, 'forex');
+
+    const midResB = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    assert.strictEqual(midResB.scanned, false, 'Should NOT rescan when both asset classes have >= 2 active setups on dash');
+
+    // Subtest C: 1 futures setup, 2 forex setups (futures < 2, forex >= 2) -> must trigger rescan only for 'futures'
+    await clearAllActive();
+    const dummyFutures1C: EdgeSetup = { ...mockSetup, id: 'kz_mid_f1_c', instrument: 'ES', market: 'futures' };
+    const dummyForex1C: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx1_c', instrument: 'EUR/USD', market: 'forex' };
+    const dummyForex2C: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx2_c', instrument: 'GBP/USD', market: 'forex' };
+
+    await queries.insertSetup(dummyFutures1C, 'futures');
+    await queries.insertSetup(dummyForex1C, 'forex');
+    await queries.insertSetup(dummyForex2C, 'forex');
+
+    const midResC = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    assert.strictEqual(midResC.scanned, true, 'Should trigger scan when futures has < 2 setups');
+    assert.strictEqual(midResC.marketScope, 'futures', 'Should target futures market scope when futures < 2 and forex >= 2');
+
+    console.log('✅ TEST 12: Mid-Killzone Booster Rescan Rule (< 2 Per Asset Class Rescans Missing Assets, >= 2 Skips Rescan)');
+
+    console.log('\n🎉 ALL 12 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

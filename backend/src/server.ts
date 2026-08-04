@@ -14,6 +14,7 @@ import { outcomeDetector } from './outcomes/outcome-detector';
 import { startAutomatedHealthDiagnostics } from './diagnostics/health-checker';
 import { createLogger } from './telemetry/logger';
 
+import { processKillzoneMidpointScan } from './scheduler/midpoint-scanner';
 import setupRoutes from './api/setup-routes';
 import adminRoutes from './api/admin-routes';
 import superAdminRoutes from './api/super-admin-routes';
@@ -144,21 +145,7 @@ async function startServer() {
             async (kzInfo) => {
                 logger.info({ killzone: kzInfo.killzone }, 'Killzone midpoint boundary triggered');
                 try {
-                    const activeSetups = await queries.getAllActiveSetups();
-                    if (activeSetups.length < 5) {
-                        const activeInstruments = activeSetups.map((s: any) => s.instrument).filter(Boolean);
-                        logger.info({
-                            activeCount: activeSetups.length,
-                            excludedInstruments: activeInstruments
-                        }, '🔍 Killzone midpoint active setups < 5. Running targeted scan for un-represented symbols.');
-
-                        const runId = `mid_run_${Date.now()}`;
-                        const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both', activeInstruments);
-                        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
-                        logger.info({ result }, 'Mid-killzone booster publish run completed');
-                    } else {
-                        logger.info({ activeCount: activeSetups.length }, 'Killzone midpoint active setups >= 5. No booster scan required.');
-                    }
+                    await processKillzoneMidpointScan(kzInfo, 'live');
                 } catch (err) {
                     logger.error({ err }, 'Killzone midpoint handler failed');
                 }
