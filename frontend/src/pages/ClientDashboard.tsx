@@ -7,17 +7,18 @@ import { NewsWarningBanner } from '../components/NewsWarningBanner';
 import { HawkeyePanel } from '../components/HawkeyePanel';
 import { PositionCalculatorModal } from '../components/PositionCalculatorModal';
 import { AssetDecisionMatrix } from '../components/AssetDecisionMatrix';
+import { RunnersPanel } from '../components/RunnersPanel';
 import type { EdgeSetup } from '../types';
 import './ClientDashboard.css';
 
 type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
-type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'resolved' | 'invalidated';
+type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'runner' | 'resolved' | 'invalidated';
 type BiasFilter = 'all' | 'long' | 'short';
 type OrderTypeFilter = 'all' | 'market' | 'limit';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 export const ClientDashboard: React.FC = () => {
-  const { setups, loading } = useSetups();
+  const { setups, runnerSetups, loading } = useSetups();
   const { watchlistIds } = useWatchlist();
 
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
@@ -140,6 +141,9 @@ export const ClientDashboard: React.FC = () => {
           onOpenCalculator={(s) => setCalcSetup(s)} 
         />
 
+        {/* Active Runners Desk */}
+        <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
+
         {/* Full Rich Filter Bar */}
         <div className="filter-bar glass-card font-mono" style={{ marginBottom: '24px' }}>
           <div className="filter-top-row">
@@ -177,6 +181,7 @@ export const ClientDashboard: React.FC = () => {
               <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value as StateFilter)}>
                 <option value="all">All States</option>
                 <option value="active">🟢 Active Positions</option>
+                <option value="runner">🏃 Active Runners (TP1 Logged)</option>
                 <option value="in_zone">🎯 Still In Entry Zone</option>
                 <option value="awaiting_entry">⏳ Awaiting Entry</option>
                 <option value="resolved">🏁 Resolved (History)</option>

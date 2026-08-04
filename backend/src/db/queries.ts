@@ -207,12 +207,12 @@ export async function getSetupsByRun(runId: string): Promise<EdgeSetup[]> {
 // ── Outcomes ──
 
 export async function insertOutcome(outcome: Outcome): Promise<void> {
-    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, strategy_id, notes, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, strategy_id, was_runner, notes, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         outcome.id, outcome.setup_id, outcome.setup_market, outcome.run_id || null,
         outcome.outcome_type, outcome.execution_price || null, outcome.execution_time || null,
         outcome.realized_pl || null, outcome.mae || null, outcome.strategy_id || 'manna_basic',
-        outcome.notes || null, outcome.created_at
+        (outcome as any).was_runner || 0, outcome.notes || null, outcome.created_at
     ]);
 }
 
@@ -230,8 +230,16 @@ export const createOutcome = async (outcome: any): Promise<void> => {
         notes: outcome.notes,
         created_at: outcome.created_at || new Date().toISOString()
     };
+    (o as any).was_runner = outcome.was_runner || 0;
     await insertOutcome(o);
 };
+
+export async function updateOutcomeBySetupId(setupId: string, updates: Partial<Outcome>): Promise<void> {
+    const keys = Object.keys(updates);
+    const values = Object.values(updates);
+    const setClause = keys.map(k => `${k} = ?`).join(', ');
+    await queryDb(`UPDATE outcomes SET ${setClause} WHERE setup_id = ?`, [...values, setupId]);
+}
 
 export async function getOutcomesBySetup(setupId: string): Promise<Outcome[]> {
     return await queryDb<Outcome>(`SELECT * FROM outcomes WHERE setup_id = ?`, [setupId]);

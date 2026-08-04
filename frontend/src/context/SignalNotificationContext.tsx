@@ -213,7 +213,7 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
             const currR = setup.unrealizedR ?? 0;
             const isBE = Boolean((setup as any).is_breakeven === 1 || (setup as any).is_breakeven === true || currR >= 1.0);
 
-            if (isBE && !announcedBERef.current.has(setup.id) && (currState === 'active' || currState === 'resolved')) {
+            if (isBE && !announcedBERef.current.has(setup.id) && (currState === 'active' || currState === 'runner' || currState === 'resolved')) {
               announcedBERef.current.add(setup.id);
               try {
                 localStorage.setItem('manna_announced_be', JSON.stringify(Array.from(announcedBERef.current)));
@@ -233,11 +233,55 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
               }, plainEng);
             }
 
+            // 3.5 TRANSITION TO RUNNER TAB (TP1 Hit)
+            if (currState === 'runner' && prevState !== 'runner') {
+              const plainEng = `Take Profit 1 hit (+2.00R)! Recorded to analytics as 2R win. Trade moved to RUNNERS tab to track for TP2 (+3.00R).`;
+              speak(`Take Profit 1 Reached for ${setup.instrument}. Trade logged at 2R and moved to Runners.`);
+              addToast({
+                type: 'tp_hit',
+                title: 'TP1 HIT (+2.00R LOGGED) · MOVED TO RUNNERS TAB',
+                icon: '🏃',
+                instrument: setup.instrument,
+                market: marketText,
+                bias: biasText,
+                detail: `Target 1 secured (+2.00R)! Logged to analytics and moved to Runners tab to track for TP2 (+3.00R).`,
+                rMultiple: setup.r_multiple_1 || 2.0
+              }, plainEng);
+            }
+
             // 4. RESOLVED OUTCOMES (Exits & Target Hits)
             if (prevState !== 'resolved' && currState === 'resolved') {
               const outcomeReason = String(setup.invalidation_reason || (setup as any).outcome_type || (setup as any).outcome || '').toLowerCase();
               
-              if (outcomeReason.includes('tp2')) {
+              if (outcomeReason.includes('tp2') || prevState === 'runner') {
+                if (outcomeReason.includes('tp2')) {
+                  const plainEng = `Runner for ${setup.instrument} RESOLVED via Take Profit 2 at ${setup.tp2}! Analytics upgraded from 2R to 3R (+${setup.r_multiple_2 || 3.0}R)!`;
+                  speak(`Take Profit 2 Reached for ${setup.instrument}. Analytics upgraded to 3R.`);
+                  addToast({
+                    type: 'tp_hit',
+                    title: 'RUNNER REACHED TP2 HIT (+3.00R)',
+                    icon: '🎯',
+                    instrument: setup.instrument,
+                    market: marketText,
+                    bias: biasText,
+                    detail: `RESOLVED VIA TP2: Target 2 reached at ${setup.tp2}! Analytics record upgraded from +2.00R to +3.00R!`,
+                    rMultiple: setup.r_multiple_2 || 3.0
+                  }, plainEng);
+                } else {
+                  const plainEng = `Runner for ${setup.instrument} RESOLVED via Break Even stop. Initial +2.00R win retained in analytics.`;
+                  speak(`Runner Closed at Break Even for ${setup.instrument}. 2R win retained.`);
+                  addToast({
+                    type: 'breakeven',
+                    title: 'RUNNER RESOLVED (2R WIN RETAINED)',
+                    icon: '🛡️',
+                    instrument: setup.instrument,
+                    market: marketText,
+                    bias: biasText,
+                    detail: `Runner retraced to Break Even. Original +2.00R realized profit remains locked in analytics.`,
+                    rMultiple: setup.r_multiple_1 || 2.0
+                  }, plainEng);
+                }
+              } else if (outcomeReason.includes('tp1') || outcomeReason.includes('tp')) {
                 const plainEng = `Trade for ${setup.instrument} RESOLVED via Take Profit 2 at ${setup.tp2}! Full profit locked in (+${setup.r_multiple_2 || 3.0}R).`;
                 speak(`Take Profit 2 Reached for ${setup.instrument} in Full Profit.`);
                 addToast({

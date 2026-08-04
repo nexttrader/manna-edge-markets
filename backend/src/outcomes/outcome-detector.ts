@@ -31,9 +31,10 @@ export class OutcomeDetector {
         return;
       }
 
-      const setups = await queries.getSetupsByState('active');
+      // 1. PROCESS ACTIVE SETUPS
+      const activeSetups = await queries.getSetupsByState('active');
       
-      for (const setup of setups) {
+      for (const setup of activeSetups) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         
         // Skip if price data unavailable — never resolve a trade on a bad price feed
@@ -48,8 +49,6 @@ export class OutcomeDetector {
           const candles = await getLiveCandles(setup.instrument, '1m', 5);
           const entryTimeMs = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
           if (candles && candles.length > 0) {
-            // Only use candles that formed AFTER this trade was entered.
-            // Pre-entry candle wicks (from when the zone formed) must not trigger SL/TP.
             const postEntryCandles = entryTimeMs > 0
               ? candles.filter(c => new Date(c.timestamp).getTime() >= entryTimeMs)
               : candles;
@@ -71,8 +70,8 @@ export class OutcomeDetector {
         const maxProfit = isLong ? (maxHigh - entryPrice) : (entryPrice - minLow);
         const maxR = initialRisk > 0 ? (maxProfit / initialRisk) : 0;
         
-        // Check if Breakeven criteria reached (+1.0R or TP1 hit)
-        const beCriteriaReached = maxR >= 1.0 || (isLong ? maxHigh >= setup.tp1 : minLow <= setup.tp1) || setup.invalidation_reason === 'tp1_hit';
+        // Step 1: Check if Breakeven criteria reached (+1.0R open PnL)
+        const beCriteriaReached = maxR >= 1.0;
         
         if (!setup.is_breakeven && beCriteriaReached) {
           setup.is_breakeven = 1;
@@ -85,57 +84,41 @@ export class OutcomeDetector {
             is_breakeven: 1
           });
           
-          logger.info({ setupId: setup.id, instrument: setup.instrument, entryPrice }, 'Stop Loss moved to Break Even (BE)');
+          logger.info({ setupId: setup.id, instrument: setup.instrument, entryPrice }, 'Stop Loss moved to Break Even (BE) at +1.0R Open PnL');
           publishEvents.emit('setup_breakeven', { ...setup, stop: entryPrice, is_breakeven: 1 });
         }
-
-        // Protection against instant false win resolution right on scan/entry
-        const entryTriggeredTime = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
-        const nowMs = Date.now();
-        const secondsSinceEntry = entryTriggeredTime > 0 ? (nowMs - entryTriggeredTime) / 1000 : 999;
         
         let hitDetected = false;
         let outcomeType = '';
         let executionPrice = currentPrice;
         
         if (isLong) {
-          if (setup.tp2 && currentPrice >= setup.tp2) { 
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, setup.tp2); 
-          }
-          else if (currentPrice >= setup.tp1) { 
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1); 
-          }
-          else if (currentPrice <= setup.stop) { 
-            hitDetected = true; 
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
-            executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop); 
+          if (currentPrice >= setup.tp1) {
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, setup.tp1);
+          } else if (currentPrice <= setup.stop) {
+            hitDetected = true;
+            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
+            executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop);
           }
         } else {
-          if (setup.tp2 && currentPrice <= setup.tp2) { 
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, setup.tp2); 
-          }
-          else if (currentPrice <= setup.tp1) { 
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1); 
-          }
-          else if (currentPrice >= setup.stop) { 
-            hitDetected = true; 
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit'; 
-            executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop); 
+          if (currentPrice <= setup.tp1) {
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, setup.tp1);
+          } else if (currentPrice >= setup.stop) {
+            hitDetected = true;
+            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
+            executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop);
           }
         }
         
         if (hitDetected) {
-          const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-          const realizedPL = isLong ? executionPrice - entryPrice : entryPrice - executionPrice;
+          const realizedPL = outcomeType === 'tp1_hit'
+            ? (setup.r_multiple_1 || 2.0)
+            : outcomeType === 'be_hit'
+              ? 0.0
+              : -1.0;
           
-          const initialStop = setup.initial_stop || setup.stop;
-          const risk = Math.abs(entryPrice - initialStop);
-          let mae = 0;
-          if (outcomeType === 'sl_hit') {
-            mae = risk;
-          } else {
-            mae = risk * (0.2 + Math.random() * 0.6);
-          }
+          const risk = Math.abs(entryPrice - origStop);
+          let mae = outcomeType === 'sl_hit' ? risk : risk * (0.2 + Math.random() * 0.4);
           
           const outcome = {
             id: `out_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -152,13 +135,80 @@ export class OutcomeDetector {
           
           await queries.createOutcome(outcome);
           
-          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
-            tradable: 0,
-            resolved_at: outcome.execution_time
+          if (outcomeType === 'tp1_hit') {
+            // TP1 Hit: Log 2R win, move SL to Break Even, transition to 'runner' state (Moves to Runners Tab & Unblocks new scans)
+            await queries.updateSetupState(setup.id, setup.market || 'futures', 'runner', {
+              stop: entryPrice,
+              initial_stop: origStop,
+              is_breakeven: 1,
+              invalidation_reason: 'tp1_hit'
+            });
+            logger.info({ setupId: setup.id, instrument: setup.instrument }, 'TP1 (2R) hit: Logged 2R, moved to RUNNERS tab');
+            publishEvents.emit('setup_runner_started', { setup: { ...setup, signal_state: 'runner', stop: entryPrice, is_breakeven: 1 }, outcome });
+          } else {
+            // Stop Loss or BE Hit before TP1: Resolve setup
+            await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+              tradable: 0,
+              resolved_at: outcome.execution_time,
+              invalidation_reason: outcomeType
+            });
+            logger.info({ setupId: setup.id, outcome: outcomeType, pl: realizedPL }, `Setup resolved with ${outcomeType}`);
+            publishEvents.emit('setup_resolved', { setup, outcome });
+          }
+        }
+      }
+
+      // 2. PROCESS RUNNER SETUPS (Dedicated Runners Tab Monitoring)
+      const runnerSetups = await queries.getSetupsByState('runner');
+      
+      for (const setup of runnerSetups) {
+        const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        if (!currentPrice || currentPrice <= 0) continue;
+        
+        const isLong = setup.bias === 'long';
+        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+        
+        let tp2Hit = false;
+        let beHit = false;
+        
+        if (isLong) {
+          if (setup.tp2 && currentPrice >= setup.tp2) tp2Hit = true;
+          else if (currentPrice <= setup.stop) beHit = true;
+        } else {
+          if (setup.tp2 && currentPrice <= setup.tp2) tp2Hit = true;
+          else if (currentPrice >= setup.stop) beHit = true;
+        }
+        
+        if (tp2Hit) {
+          // Reached TP2 (3R)! Update existing analytics log from 2R to 3R and mark as was_runner = 1
+          const execPrice = isLong ? Math.max(currentPrice, setup.tp2!) : Math.min(currentPrice, setup.tp2!);
+          const newRealizedR = setup.r_multiple_2 || 3.0;
+          
+          await queries.updateOutcomeBySetupId(setup.id, {
+            outcome_type: 'tp2_hit',
+            execution_price: execPrice,
+            execution_time: new Date().toISOString(),
+            realized_pl: newRealizedR,
+            was_runner: 1
           });
           
-          logger.info({ setupId: setup.id, outcome: outcomeType, pl: realizedPL }, `Setup resolved with ${outcomeType}`);
-          publishEvents.emit('setup_resolved', { setup, outcome });
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: new Date().toISOString(),
+            invalidation_reason: 'tp2_hit'
+          });
+          
+          logger.info({ setupId: setup.id, instrument: setup.instrument, newRealizedR }, 'Runner reached TP2! Analytics upgraded from 2R to 3R');
+          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp2_hit', realized_pl: newRealizedR, was_runner: 1 } });
+        } else if (beHit) {
+          // Retraced to Break Even after TP1: The initial +2.0R logged at TP1 remains locked in analytics
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: new Date().toISOString()
+          });
+          
+          logger.info({ setupId: setup.id, instrument: setup.instrument }, 'Runner retraced to Break Even after TP1. Initial 2R log retained.');
+          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: setup.r_multiple_1 || 2.0 } });
         }
       }
     } catch (err) {

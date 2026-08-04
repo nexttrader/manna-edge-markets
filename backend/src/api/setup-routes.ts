@@ -134,6 +134,47 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
+  try {
+    const role = (req.query.role as string) || 'trader';
+    const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+    
+    let rawSetups = await queries.getSetupsByState('runner');
+    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+
+    const enrichedSetups = await Promise.all(
+      rawSetups.map(async (setup: any) => {
+        const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+        let initialStop = setup.initial_stop || setup.stop;
+        const risk = Math.abs(entryPrice - initialStop);
+
+        const isLong = setup.bias === 'long';
+        const diff = isLong ? (currentPrice - entryPrice) : (entryPrice - currentPrice);
+        const unrealizedPL = Number(diff.toFixed(5));
+        const unrealizedR = risk > 0 ? Number((diff / risk).toFixed(2)) : 2.0;
+
+        return {
+          ...setup,
+          current_price: currentPrice,
+          unrealized_pl: unrealizedPL,
+          unrealizedR: unrealizedR,
+          is_breakeven: 1
+        };
+      })
+    );
+
+    res.json({
+      setups: enrichedSetups,
+      count: enrichedSetups.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
   try {
     const market = (req.query.market as string) || 'all';

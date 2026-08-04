@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS outcomes (
     realized_pl REAL,
     mae REAL,
     strategy_id TEXT DEFAULT 'manna_basic',
+    was_runner INTEGER DEFAULT 0,
     notes TEXT,
     created_at TEXT NOT NULL
 );

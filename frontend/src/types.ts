@@ -1,12 +1,13 @@
 export const SignalState = {
   ACTIVE: 'active',
   AWAITING_ENTRY: 'awaiting_entry',
+  RUNNER: 'runner',
   INVALIDATED: 'invalidated',
   SUPERSEDED: 'superseded',
   RESOLVED: 'resolved'
 } as const;
 
-export type SignalState = typeof SignalState[keyof typeof SignalState] | 'ACTIVE' | 'AWAITING_ENTRY' | 'INVALIDATED' | 'SUPERSEDED' | 'RESOLVED';
+export type SignalState = typeof SignalState[keyof typeof SignalState] | 'ACTIVE' | 'AWAITING_ENTRY' | 'RUNNER' | 'INVALIDATED' | 'SUPERSEDED' | 'RESOLVED';
 
 export const Bias = {
   LONG: 'long',
@@ -147,6 +148,7 @@ export interface Outcome {
   mae?: number;
   maeR?: number;
   executionDetails?: string;
+  was_runner?: boolean | number;
   notes?: string;
   created_at?: string;
 }

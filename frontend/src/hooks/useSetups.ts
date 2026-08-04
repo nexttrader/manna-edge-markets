@@ -76,6 +76,7 @@ const MOCK_SETUPS: EdgeSetup[] = [
 
 export function useSetups() {
   const [setups, setSetups] = useState<EdgeSetup[]>(MOCK_SETUPS);
+  const [runnerSetups, setRunnerSetups] = useState<EdgeSetup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +93,19 @@ export function useSetups() {
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : MOCK_SETUPS;
+
+      // Fetch active runners
+      try {
+        const runnersRes = await fetch(`${API_BASE}/api/accelerate/runner-setups?role=${role}&email=${email}`);
+        if (runnersRes.ok) {
+          const runnersData = await runnersRes.json();
+          if (Array.isArray(runnersData.setups)) {
+            setRunnerSetups(runnersData.setups);
+          }
+        }
+      } catch (rErr) {
+        console.warn('Failed to fetch runner setups:', rErr);
+      }
 
       // Check for newly discovered signals
       if (!isInitialFetchRef.current && currentList.length > 0) {
@@ -117,7 +131,7 @@ export function useSetups() {
     } finally {
       setLoading(false);
     }
-  }, [speak]);
+  }, [speak, user]);
 
   useEffect(() => {
     fetchSetups();
@@ -125,5 +139,5 @@ export function useSetups() {
     return () => clearInterval(interval);
   }, [fetchSetups]);
 
-  return { setups: Array.isArray(setups) ? setups : MOCK_SETUPS, loading, error, refetch: fetchSetups };
+  return { setups: Array.isArray(setups) ? setups : MOCK_SETUPS, runnerSetups, loading, error, refetch: fetchSetups };
 }
