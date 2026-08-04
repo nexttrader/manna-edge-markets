@@ -367,6 +367,65 @@ router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
     }
 });
 
+router.get('/sentinel/setups', async (_req: Request, res: Response) => {
+    try {
+        const futuresSetups = await queryDb(`SELECT * FROM edge_setups WHERE strategy_id = 'sentinel_v2' ORDER BY created_at DESC`);
+        const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2' ORDER BY created_at DESC`);
+        const allSetups = [...futuresSetups, ...forexSetups];
+
+        // Fetch live market prices
+        const { getLiveCurrentPrice } = await import('../discovery/yahoo-provider');
+        const enriched = await Promise.all(allSetups.map(async (s: any) => {
+            const livePrice = await getLiveCurrentPrice(s.instrument);
+            return {
+                ...s,
+                current_price: livePrice || s.entry_zone_mid
+            };
+        }));
+
+        // Get current strategy rollout visibility settings
+        const settingsRows = await queryDb<{ visible_to_admins?: number, visible_to_traders?: number }>(`SELECT visible_to_admins, visible_to_traders FROM strategy_settings WHERE id = 'sentinel_v2'`);
+        const setting = settingsRows[0] || {};
+
+        res.json({
+            success: true,
+            setups: enriched,
+            rollout: {
+                visibleToAdmins: Boolean(setting.visible_to_admins),
+                visibleToTraders: Boolean(setting.visible_to_traders)
+            }
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to fetch Sentinel setups', details: err.message });
+    }
+});
+
+router.post('/sentinel/rollout', async (req: Request, res: Response) => {
+    try {
+        const { visibleToAdmins, visibleToTraders } = req.body || {};
+        
+        if (visibleToAdmins !== undefined) {
+            await queries.updateStrategyVisibility('sentinel_v2', Boolean(visibleToAdmins));
+        }
+        if (visibleToTraders !== undefined) {
+            await queries.updateStrategyTraderVisibility('sentinel_v2', Boolean(visibleToTraders));
+        }
+
+        const settingsRows = await queryDb<{ visible_to_admins?: number, visible_to_traders?: number }>(`SELECT visible_to_admins, visible_to_traders FROM strategy_settings WHERE id = 'sentinel_v2'`);
+        const setting = settingsRows[0] || {};
+
+        res.json({
+            success: true,
+            rollout: {
+                visibleToAdmins: Boolean(setting.visible_to_admins),
+                visibleToTraders: Boolean(setting.visible_to_traders)
+            }
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to update Sentinel rollout settings', details: err.message });
+    }
+});
+
 router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     try {
         const { getCurrentKillzone } = await import('../scheduler/killzone-mapper');
