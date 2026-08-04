@@ -1,14 +1,29 @@
 .runners-panel {
   margin-bottom: 24px;
-  padding: 20px;
+  padding: 16px 20px;
   background: rgba(10, 15, 29, 0.75);
   border: 1px solid rgba(0, 229, 255, 0.2);
   border-radius: 12px;
   backdrop-filter: blur(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.runners-header {
-  margin-bottom: 18px;
+.runners-panel.minimized {
+  padding: 12px 20px;
+  background: rgba(10, 15, 29, 0.55);
+  border-color: rgba(255, 171, 0, 0.25);
+}
+
+.runners-header-clickable {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.runners-header-clickable:hover .runners-title {
+  color: #00e5ff;
 }
 
 .runners-title-area {
@@ -20,11 +35,12 @@
 .runners-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 1.1rem;
+  gap: 10px;
+  font-size: 1.05rem;
   font-weight: 800;
   color: #ffab00;
   letter-spacing: 0.5px;
+  transition: color 0.2s ease;
 }
 
 .runners-icon {
@@ -44,21 +60,44 @@
 .runners-subtitle {
   color: #8a99ad;
   font-size: 0.78rem;
-  margin: 0;
+  margin: 4px 0 0 0;
   line-height: 1.4;
+}
+
+.runners-toggle-btn {
+  background: rgba(255, 171, 0, 0.1);
+  border: 1px solid rgba(255, 171, 0, 0.3);
+  color: #ffab00;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.runners-header-clickable:hover .runners-toggle-btn {
+  background: rgba(255, 171, 0, 0.2);
+  border-color: rgba(255, 171, 0, 0.6);
+  color: #fff;
+}
+
+.runners-panel-body {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .runners-empty {
   text-align: center;
-  padding: 32px 16px;
+  padding: 24px 16px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px dashed rgba(255, 255, 255, 0.12);
   border-radius: 8px;
 }
 
 .runners-empty-icon {
-  font-size: 2rem;
-  margin-bottom: 8px;
+  font-size: 1.8rem;
+  margin-bottom: 6px;
 }
 
 .runners-grid {
