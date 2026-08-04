@@ -100,6 +100,7 @@ export interface Outcome {
     realized_pl?: number;
     mae?: number;
     strategy_id?: string;
+    was_runner?: number;
     notes?: string;
     created_at: string;
 }
