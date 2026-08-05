@@ -56,10 +56,10 @@ router.post('/telemetry', (req: Request, res: Response) => {
       telemetryLogs.shift(); // Keep last 10,000 events
     }
 
-    const email = payload.userEmail;
-    if (!userSessions[email]) {
-      userSessions[email] = {
-        email,
+    const emailKey = payload.userEmail.toLowerCase().trim();
+    if (!userSessions[emailKey]) {
+      userSessions[emailKey] = {
+        email: emailKey,
         role: payload.userRole || 'trader',
         tier: payload.userTier || 'free',
         currentPath: payload.path || '/',
@@ -72,7 +72,7 @@ router.post('/telemetry', (req: Request, res: Response) => {
       };
     }
 
-    const sess = userSessions[email];
+    const sess = userSessions[emailKey];
     sess.currentPath = payload.path || sess.currentPath;
     sess.lastActive = payload.timestamp || new Date().toISOString();
     sess.role = payload.userRole || sess.role;
@@ -98,17 +98,74 @@ router.post('/telemetry', (req: Request, res: Response) => {
 });
 
 // 2. SUPER ADMIN DASHBOARD INTELLIGENCE DATA ENDPOINT
-router.get('/dashboard', async (_req: Request, res: Response) => {
+router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const now = Date.now();
     const allUsers = getAllUsers();
     
+    // Auto-touch requestor session if headers provided
+    const reqEmail = (req.headers['x-user-email'] || req.headers['x-email'] || req.query.email || 'chadwinsolomon@gmail.com').toString().toLowerCase().trim();
+    if (reqEmail) {
+      if (!userSessions[reqEmail]) {
+        userSessions[reqEmail] = {
+          email: reqEmail,
+          role: reqEmail.includes('super') || reqEmail === 'chadwinsolomon@gmail.com' ? 'super_admin' : 'admin',
+          tier: 'futures_forex',
+          currentPath: '/dashboard',
+          lastActive: new Date().toISOString(),
+          totalDurationSec: 60,
+          timePerPageSec: { '/dashboard': 60 },
+          actionsCount: 1
+        };
+      } else {
+        userSessions[reqEmail].lastActive = new Date().toISOString();
+      }
+    }
+
     // Process Active Roster (User & Admin activity)
     const roster = allUsers.map(u => {
-      const sess = userSessions[u.email.toLowerCase()] || userSessions[u.email];
-      const lastActiveMs = sess ? new Date(sess.lastActive).getTime() : 0;
-      const diffMin = lastActiveMs > 0 ? Math.round((now - lastActiveMs) / (1000 * 60)) : 9999;
-      const isOnline = diffMin <= 5;
+      const emailKey = u.email.toLowerCase().trim();
+      const sess = userSessions[emailKey];
+      
+      let lastActiveMs = 0;
+      if (sess?.lastActive) {
+        lastActiveMs = new Date(sess.lastActive).getTime();
+      } else if (u.lastActive && !u.lastActive.includes('Pending First Login')) {
+        lastActiveMs = new Date(u.lastActive).getTime();
+      } else if (u.createdAt) {
+        lastActiveMs = new Date(u.createdAt).getTime();
+      }
+
+      const isValidDate = lastActiveMs > 0 && !isNaN(lastActiveMs);
+      const diffMin = isValidDate ? Math.max(0, Math.round((now - lastActiveMs) / (1000 * 60))) : null;
+      const isOnline = sess ? (diffMin !== null && diffMin <= 5) : false;
+
+      let lastActiveAgo = 'Offline (Pending First Login)';
+      if (isOnline) {
+        lastActiveAgo = '🟢 Live Now';
+      } else if (sess && diffMin !== null) {
+        if (diffMin < 1) {
+          lastActiveAgo = 'Just now';
+        } else if (diffMin < 60) {
+          lastActiveAgo = `${diffMin} mins ago`;
+        } else if (diffMin < 1440) {
+          const hours = Math.floor(diffMin / 60);
+          lastActiveAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        } else {
+          const days = Math.floor(diffMin / 1440);
+          lastActiveAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+        }
+      } else if (u.lastActive && !u.lastActive.includes('Pending First Login') && isValidDate && diffMin !== null) {
+        if (diffMin < 60) {
+          lastActiveAgo = `${diffMin} mins ago`;
+        } else if (diffMin < 1440) {
+          const hours = Math.floor(diffMin / 60);
+          lastActiveAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        } else {
+          const days = Math.floor(diffMin / 1440);
+          lastActiveAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+        }
+      }
 
       return {
         id: u.id,
@@ -118,9 +175,9 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
         tier: u.tier,
         status: u.status || 'active',
         currentPath: sess?.currentPath || '/dashboard',
-        lastActive: sess?.lastActive || u.createdAt,
+        lastActive: sess?.lastActive || u.lastActive || u.createdAt,
         isOnline,
-        lastActiveAgo: isOnline ? '🟢 Live Now' : diffMin < 1440 ? `${diffMin} mins ago` : `${Math.floor(diffMin / 1440)} days ago`,
+        lastActiveAgo,
         totalDurationFormatted: sess ? `${Math.floor(sess.totalDurationSec / 60)}m ${sess.totalDurationSec % 60}s` : '0m 0s',
         timePerPageFormatted: sess ? Object.entries(sess.timePerPageSec).reduce((acc, [path, sec]) => {
           acc[path] = `${Math.floor(sec / 60)}m ${sec % 60}s`;
