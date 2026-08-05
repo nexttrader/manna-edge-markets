@@ -1556,49 +1556,67 @@ export const AdminPanel: React.FC = () => {
         <MetricsPanel />
 
         {/* Strategy Performance Matrix Comparison Cards */}
-        <div className="strategy-matrix-container">
-          <h2 className="section-title font-mono">⚡ STRATEGY PERFORMANCE MATRIX</h2>
+        <div className="strategy-matrix-container font-mono">
+          <div className="matrix-section-header">
+            <h2 className="section-title">⚡ STRATEGY PERFORMANCE MATRIX</h2>
+            <span className="matrix-subtitle">Real-time institutional performance metrics & strategy breakdown</span>
+          </div>
+
           <div className="strategy-cards-grid font-mono">
             {analytics?.collective && (
-              <div className="strategy-card glass-card strat-border-collective" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
+              <div className="strategy-card glass-card strat-border-collective" style={{ borderColor: 'rgba(0, 229, 255, 0.4)', background: 'rgba(0, 229, 255, 0.03)' }}>
                 <div className="strat-card-header">
-                  <span className="strat-badge" style={{ background: '#00e5ff', color: '#090314', fontWeight: 800 }}>🌐 COLLECTIVE (ALL STRATEGIES)</span>
-                  <span className="strat-tier-tag" style={{ borderColor: '#00e5ff', color: '#00e5ff' }}>PORTFOLIO WIDE</span>
+                  <div className="strat-title-group">
+                    <span className="strat-icon">🌐</span>
+                    <span className="strat-badge" style={{ color: '#00e5ff', fontWeight: 800 }}>COLLECTIVE (ALL STRATEGIES)</span>
+                  </div>
+                  <span className="strat-tier-tag" style={{ borderColor: 'rgba(0, 229, 255, 0.6)', color: '#00e5ff', background: 'rgba(0, 229, 255, 0.1)' }}>PORTFOLIO WIDE</span>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Total Signals Generated:</span>
-                  <span className="stat-val">{analytics.collective.totalSignals}</span>
+                <div className="strat-counters-grid">
+                  <div className="strat-counter-box">
+                    <span className="counter-label">TOTAL SIGNALS</span>
+                    <span className="counter-value">{analytics.collective.totalSignals}</span>
+                  </div>
+                  <div className="strat-counter-box active-box">
+                    <span className="counter-label">ACTIVE</span>
+                    <span className="counter-value text-gold">{analytics.collective.activeSignals}</span>
+                  </div>
+                  <div className="strat-counter-box">
+                    <span className="counter-label">RESOLVED</span>
+                    <span className="counter-value">{analytics.collective.resolvedSignals}</span>
+                  </div>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Active Positions:</span>
-                  <span className="stat-val text-gold">{analytics.collective.activeSignals}</span>
+                <div className="strat-details-list">
+                  <div className="strat-metric-row">
+                    <span className="row-label">Win Rate:</span>
+                    <div className="row-value-group">
+                      <span className="stat-pill win-rate-pill">{analytics.collective.winRate}%</span>
+                      <span className="stat-subtext">({analytics.collective.wins}W • {analytics.collective.losses}L • {analytics.collective.breakevens || 0}BE)</span>
+                    </div>
+                  </div>
+
+                  <div className="strat-metric-row">
+                    <span className="row-label">Runner Positions:</span>
+                    <div className="row-value-group">
+                      <span className="stat-pill runner-pill">{analytics.collective.runnerCount || 0} Runners</span>
+                      <span className="stat-subtext">({analytics.collective.runnerRealizedR && analytics.collective.runnerRealizedR > 0 ? '+' : ''}{analytics.collective.runnerRealizedR || 0}R)</span>
+                    </div>
+                  </div>
+
+                  <div className="strat-metric-row">
+                    <span className="row-label">Target Hits:</span>
+                    <div className="row-value-group targets-group">
+                      <span className="target-pill tp1-pill">TP1: <strong>{analytics.collective.tp1Hits || 0}</strong></span>
+                      <span className="target-pill tp2-pill">TP2: <strong>{analytics.collective.tp2Hits || 0}</strong></span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Resolved Trades:</span>
-                  <span className="stat-val">{analytics.collective.resolvedSignals}</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Win Rate (%):</span>
-                  <span className="stat-val text-green">{analytics.collective.winRate}% ({analytics.collective.wins}W / {analytics.collective.losses}L / {analytics.collective.breakevens || 0}BE)</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Runner Positions:</span>
-                  <span className="stat-val text-gold">{analytics.collective.runnerCount || 0} Runners ({analytics.collective.runnerRealizedR && analytics.collective.runnerRealizedR > 0 ? '+' : ''}{analytics.collective.runnerRealizedR || 0}R)</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Target Hits:</span>
-                  <span className="stat-val">TP1: {analytics.collective.tp1Hits || 0} | TP2: {analytics.collective.tp2Hits || 0}</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Net Realized Return:</span>
-                  <span className={`stat-val ${analytics.collective.totalRealizedR >= 0 ? 'text-green' : 'text-red'}`}>
+                <div className="strat-hero-return-box">
+                  <span className="hero-return-label">NET REALIZED RETURN</span>
+                  <span className={`hero-return-value ${analytics.collective.totalRealizedR > 0 ? 'text-green' : analytics.collective.totalRealizedR < 0 ? 'text-red' : 'text-cyan'}`}>
                     {analytics.collective.totalRealizedR > 0 ? '+' : ''}{analytics.collective.totalRealizedR}R
                   </span>
                 </div>
@@ -1608,43 +1626,57 @@ export const AdminPanel: React.FC = () => {
             {strategies.map((strat) => (
               <div key={strat.id} className={`strategy-card glass-card strat-border-${strat.id}`}>
                 <div className="strat-card-header">
-                  <span className={`strat-badge badge-${strat.id}`}>{strat.name}</span>
+                  <div className="strat-title-group">
+                    <span className="strat-icon">{strat.id === 'sentinel_v2' ? '🎯' : '📊'}</span>
+                    <span className={`strat-badge badge-${strat.id}`}>{strat.name}</span>
+                  </div>
                   <span className="strat-tier-tag">{strat.tier.toUpperCase()} TIER</span>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Total Signals Generated:</span>
-                  <span className="stat-val">{strat.totalSignals}</span>
+                <div className="strat-counters-grid">
+                  <div className="strat-counter-box">
+                    <span className="counter-label">TOTAL SIGNALS</span>
+                    <span className="counter-value">{strat.totalSignals}</span>
+                  </div>
+                  <div className="strat-counter-box active-box">
+                    <span className="counter-label">ACTIVE</span>
+                    <span className="counter-value text-gold">{strat.activeSignals}</span>
+                  </div>
+                  <div className="strat-counter-box">
+                    <span className="counter-label">RESOLVED</span>
+                    <span className="counter-value">{strat.resolvedSignals}</span>
+                  </div>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Active Positions:</span>
-                  <span className="stat-val text-gold">{strat.activeSignals}</span>
+                <div className="strat-details-list">
+                  <div className="strat-metric-row">
+                    <span className="row-label">Win Rate:</span>
+                    <div className="row-value-group">
+                      <span className="stat-pill win-rate-pill">{strat.winRate}%</span>
+                      <span className="stat-subtext">({strat.wins}W • {strat.losses}L • {strat.breakevens || 0}BE)</span>
+                    </div>
+                  </div>
+
+                  <div className="strat-metric-row">
+                    <span className="row-label">Runner Positions:</span>
+                    <div className="row-value-group">
+                      <span className="stat-pill runner-pill">{strat.runnerCount || 0} Runners</span>
+                      <span className="stat-subtext">({strat.runnerRealizedR && strat.runnerRealizedR > 0 ? '+' : ''}{strat.runnerRealizedR || 0}R)</span>
+                    </div>
+                  </div>
+
+                  <div className="strat-metric-row">
+                    <span className="row-label">Target Hits:</span>
+                    <div className="row-value-group targets-group">
+                      <span className="target-pill tp1-pill">TP1: <strong>{strat.tp1Hits || 0}</strong></span>
+                      <span className="target-pill tp2-pill">TP2: <strong>{strat.tp2Hits || 0}</strong></span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="strat-metric-row">
-                  <span>Resolved Trades:</span>
-                  <span className="stat-val">{strat.resolvedSignals}</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Win Rate (%):</span>
-                  <span className="stat-val text-green">{strat.winRate}% ({strat.wins}W / {strat.losses}L / {strat.breakevens || 0}BE)</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Runner Positions:</span>
-                  <span className="stat-val text-gold">{strat.runnerCount || 0} Runners ({strat.runnerRealizedR && strat.runnerRealizedR > 0 ? '+' : ''}{strat.runnerRealizedR || 0}R)</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Target Hits:</span>
-                  <span className="stat-val">TP1: {strat.tp1Hits || 0} | TP2: {strat.tp2Hits || 0}</span>
-                </div>
-
-                <div className="strat-metric-row">
-                  <span>Net Realized Return:</span>
-                  <span className={`stat-val ${strat.totalRealizedR >= 0 ? 'text-green' : 'text-red'}`}>
+                <div className="strat-hero-return-box">
+                  <span className="hero-return-label">NET REALIZED RETURN</span>
+                  <span className={`hero-return-value ${strat.totalRealizedR > 0 ? 'text-green' : strat.totalRealizedR < 0 ? 'text-red' : 'text-cyan'}`}>
                     {strat.totalRealizedR > 0 ? '+' : ''}{strat.totalRealizedR}R
                   </span>
                 </div>
