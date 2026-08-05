@@ -70,6 +70,10 @@
   overflow: hidden;
 }
 
+.strategy-card.strat-border-manna_basic {
+  border: 1.5px solid rgba(0, 229, 255, 0.6) !important;
+  box-shadow: 0 4px 18px rgba(0, 229, 255, 0.1);
+}
 .strategy-card.strat-border-manna_basic::before {
   content: '';
   position: absolute;
@@ -80,6 +84,10 @@
   background: #00e5ff;
 }
 
+.strategy-card.strat-border-manna_snd {
+  border: 1.5px solid rgba(255, 171, 0, 0.65) !important;
+  box-shadow: 0 4px 18px rgba(255, 171, 0, 0.12);
+}
 .strategy-card.strat-border-manna_snd::before {
   content: '';
   position: absolute;
@@ -88,6 +96,54 @@
   right: 0;
   height: 3px;
   background: #ffab00;
+}
+
+.strategy-card.strat-border-sentinel_v2,
+.strategy-card.strat-border-manna_elite_v1 {
+  border: 1.5px solid rgba(186, 104, 200, 0.7) !important;
+  box-shadow: 0 4px 18px rgba(156, 39, 176, 0.15);
+}
+.strategy-card.strat-border-sentinel_v2::before,
+.strategy-card.strat-border-manna_elite_v1::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ce93d8, #ab47bc);
+}
+
+.strategy-card.strat-border-manna_scalper,
+.strategy-card.strat-border-scalper {
+  border: 1.5px solid rgba(0, 230, 118, 0.65) !important;
+  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.12);
+}
+.strategy-card.strat-border-manna_scalper::before,
+.strategy-card.strat-border-scalper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #00e676;
+}
+
+.strategy-card.strat-border-manna_trend,
+.strategy-card.strat-border-swing {
+  border: 1.5px solid rgba(255, 82, 82, 0.65) !important;
+  box-shadow: 0 4px 18px rgba(255, 82, 82, 0.12);
+}
+.strategy-card.strat-border-manna_trend::before,
+.strategy-card.strat-border-swing::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #ff5252;
 }
 
 .strat-card-header {
@@ -110,6 +166,21 @@
 
 .strat-badge.badge-manna_snd {
   color: #ffab00;
+}
+
+.strat-badge.badge-sentinel_v2,
+.strat-badge.badge-manna_elite_v1 {
+  color: #ce93d8;
+}
+
+.strat-badge.badge-manna_scalper,
+.strat-badge.badge-scalper {
+  color: #00e676;
+}
+
+.strat-badge.badge-manna_trend,
+.strat-badge.badge-swing {
+  color: #ff5252;
 }
 
 .strat-tier-tag {

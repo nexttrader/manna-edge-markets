@@ -24,21 +24,59 @@
 
 /* Strategy-specific Distinct Border Colors */
 .setup-card.strat-border-manna_basic {
-  border: 1.5px solid rgba(0, 229, 255, 0.45) !important;
-  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.08);
+  border: 1.5px solid rgba(0, 229, 255, 0.65) !important;
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.12), inset 0 0 10px rgba(0, 229, 255, 0.04);
 }
 
 .setup-card.strat-border-manna_basic::before {
   background: linear-gradient(90deg, #00e5ff 0%, transparent 85%);
+  opacity: 0.9;
 }
 
 .setup-card.strat-border-manna_snd {
-  border: 1.5px solid rgba(255, 171, 0, 0.55) !important;
-  box-shadow: 0 4px 20px rgba(255, 171, 0, 0.12);
+  border: 1.5px solid rgba(255, 171, 0, 0.7) !important;
+  box-shadow: 0 4px 20px rgba(255, 171, 0, 0.15), inset 0 0 10px rgba(255, 171, 0, 0.05);
 }
 
 .setup-card.strat-border-manna_snd::before {
   background: linear-gradient(90deg, #ffab00 0%, transparent 85%);
+  opacity: 0.9;
+}
+
+.setup-card.strat-border-sentinel_v2,
+.setup-card.strat-border-manna_elite_v1 {
+  border: 1.5px solid rgba(186, 104, 200, 0.75) !important;
+  box-shadow: 0 4px 20px rgba(156, 39, 176, 0.2), inset 0 0 12px rgba(156, 39, 176, 0.08);
+}
+
+.setup-card.strat-border-sentinel_v2::before,
+.setup-card.strat-border-manna_elite_v1::before {
+  background: linear-gradient(90deg, #ce93d8 0%, #ab47bc 50%, transparent 90%);
+  opacity: 0.95;
+}
+
+.setup-card.strat-border-manna_scalper,
+.setup-card.strat-border-scalper {
+  border: 1.5px solid rgba(0, 230, 118, 0.7) !important;
+  box-shadow: 0 4px 20px rgba(0, 230, 118, 0.15), inset 0 0 10px rgba(0, 230, 118, 0.04);
+}
+
+.setup-card.strat-border-manna_scalper::before,
+.setup-card.strat-border-scalper::before {
+  background: linear-gradient(90deg, #00e676 0%, transparent 85%);
+  opacity: 0.9;
+}
+
+.setup-card.strat-border-manna_trend,
+.setup-card.strat-border-swing {
+  border: 1.5px solid rgba(255, 82, 82, 0.7) !important;
+  box-shadow: 0 4px 20px rgba(255, 82, 82, 0.15), inset 0 0 10px rgba(255, 82, 82, 0.04);
+}
+
+.setup-card.strat-border-manna_trend::before,
+.setup-card.strat-border-swing::before {
+  background: linear-gradient(90deg, #ff5252 0%, transparent 85%);
+  opacity: 0.9;
 }
 
 .setup-card:hover {
@@ -90,15 +128,36 @@
 }
 
 .strategy-badge.strat-manna_basic {
-  background: rgba(0, 229, 255, 0.12);
+  background: rgba(0, 229, 255, 0.14);
   color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  border: 1px solid rgba(0, 229, 255, 0.4);
 }
 
 .strategy-badge.strat-manna_snd {
-  background: rgba(255, 171, 0, 0.15);
+  background: rgba(255, 171, 0, 0.16);
   color: #ffab00;
-  border: 1px solid rgba(255, 171, 0, 0.4);
+  border: 1px solid rgba(255, 171, 0, 0.45);
+}
+
+.strategy-badge.strat-sentinel_v2,
+.strategy-badge.strat-manna_elite_v1 {
+  background: rgba(156, 39, 176, 0.2);
+  color: #ce93d8;
+  border: 1px solid rgba(186, 104, 200, 0.5);
+}
+
+.strategy-badge.strat-manna_scalper,
+.strategy-badge.strat-scalper {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.4);
+}
+
+.strategy-badge.strat-manna_trend,
+.strategy-badge.strat-swing {
+  background: rgba(255, 82, 82, 0.15);
+  color: #ff5252;
+  border: 1px solid rgba(255, 82, 82, 0.4);
 }
 
 .sc-instrument {
