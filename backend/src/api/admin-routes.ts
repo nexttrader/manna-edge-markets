@@ -1827,11 +1827,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
     };
 
     for (const setup of allSetups) {
-      const stratId = setup.strategy_id || 'manna_basic';
+      const rawStratId = setup.strategy_id || 'manna_basic';
+      // Sentinel V2 merges into Manna Elite V1
+      const stratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
           tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'basic'),
           totalSignals: 0,
           activeSignals: 0,
@@ -1854,13 +1856,17 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       let parentSetup = allSetups.find(s => String(s.id) === String(outcome.setup_id));
       if (!parentSetup) {
         parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market || 'futures');
+        // Retry opposite market
+        if (!parentSetup) parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market === 'forex' ? 'futures' : 'forex');
       }
-      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
+      const rawStratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
+      // Sentinel V2 merges into Manna Elite V1 for analytics
+      const stratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
       
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
           tier: stratId === 'manna_snd' ? 'pro' : 'basic',
           totalSignals: 0,
           activeSignals: 0,
@@ -1872,6 +1878,7 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         };
       }
 
+      // Hard-cap R values: SL = -1R, TP1 = +r1, TP2 = +r2, BE = 0R
       let tradeR = 0;
       if (outcome.outcome_type === 'tp1_hit') {
         tradeR = parentSetup?.r_multiple_1 || 2.0;
@@ -1880,12 +1887,12 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         tradeR = parentSetup?.r_multiple_2 || 3.0;
         strategyStats[stratId].wins += 1;
       } else if (outcome.outcome_type === 'sl_hit') {
-        tradeR = -1.0;
+        tradeR = -1.0; // always capped
         strategyStats[stratId].losses += 1;
       } else if (outcome.outcome_type === 'be_hit' || outcome.outcome_type === 'breakeven') {
         tradeR = 0.0;
       } else if (outcome.realized_pl) {
-        tradeR = outcome.realized_pl;
+        tradeR = Math.max(-1.0, outcome.realized_pl); // never worse than -1R
         if (tradeR > 0) strategyStats[stratId].wins += 1;
         else if (tradeR < 0) strategyStats[stratId].losses += 1;
       }

@@ -303,7 +303,7 @@ export const AdminPanel: React.FC = () => {
 
   const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history' | 'support'>('users');
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
-  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2'>('all');
+  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
 
   const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
@@ -488,7 +488,7 @@ export const AdminPanel: React.FC = () => {
     fetchArchives();
   }, []);
 
-  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2'>('all');
+  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
 
   const handleTrigger = async () => {
     setIsTriggering(true);
@@ -1436,7 +1436,7 @@ export const AdminPanel: React.FC = () => {
                 </thead>
                 <tbody>
                   {activeSetupsList.map((setup: any) => {
-                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Sentinel V2' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1');
+                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Manna Elite V1' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1');
                     const isDisabling = disablingId === setup.id;
                     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -1550,17 +1550,6 @@ export const AdminPanel: React.FC = () => {
             onClick={() => setStrategyFilter('manna_snd')}
           >
             🟡 Manna SnD
-          </button>
-          <button 
-            className={`strat-tab ${strategyFilter === 'sentinel_v2' ? 'active' : ''}`}
-            onClick={() => setStrategyFilter('sentinel_v2')}
-            style={{
-              borderColor: strategyFilter === 'sentinel_v2' ? '#ce93d8' : undefined,
-              color: strategyFilter === 'sentinel_v2' ? '#ce93d8' : undefined,
-              background: strategyFilter === 'sentinel_v2' ? 'rgba(156, 39, 176, 0.2)' : undefined
-            }}
-          >
-            🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}
           </button>
         </div>
 
@@ -2396,7 +2385,6 @@ export const AdminPanel: React.FC = () => {
                 <option value="all">⚡ All Strategies</option>
                 <option value="manna_basic">🔵 Manna Elite V1 Strategy</option>
                 <option value="manna_snd">🟡 Manna SnD Strategy</option>
-                <option value="sentinel_v2">🟣 Sentinel V2 Strategy</option>
               </select>
             </div>
             
