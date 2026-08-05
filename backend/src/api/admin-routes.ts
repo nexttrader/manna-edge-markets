@@ -1825,8 +1825,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       resolvedSignals: number;
       wins: number;
       losses: number;
+      breakevens: number;
       winRate: number;
       totalRealizedR: number;
+      runnerCount: number;
+      runnerRealizedR: number;
+      tp1Hits: number;
+      tp2Hits: number;
     }> = {
       manna_basic: {
         id: 'manna_basic',
@@ -1837,8 +1842,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         resolvedSignals: 0,
         wins: 0,
         losses: 0,
+        breakevens: 0,
         winRate: 0,
-        totalRealizedR: 0
+        totalRealizedR: 0,
+        runnerCount: 0,
+        runnerRealizedR: 0,
+        tp1Hits: 0,
+        tp2Hits: 0
       },
       manna_snd: {
         id: 'manna_snd',
@@ -1849,8 +1859,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         resolvedSignals: 0,
         wins: 0,
         losses: 0,
+        breakevens: 0,
         winRate: 0,
-        totalRealizedR: 0
+        totalRealizedR: 0,
+        runnerCount: 0,
+        runnerRealizedR: 0,
+        tp1Hits: 0,
+        tp2Hits: 0
       }
     };
 
@@ -1868,8 +1883,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
           resolvedSignals: 0,
           wins: 0,
           losses: 0,
+          breakevens: 0,
           winRate: 0,
-          totalRealizedR: 0
+          totalRealizedR: 0,
+          runnerCount: 0,
+          runnerRealizedR: 0,
+          tp1Hits: 0,
+          tp2Hits: 0
         };
       }
       strategyStats[stratId].totalSignals += 1;
@@ -1901,8 +1921,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
           resolvedSignals: 0,
           wins: 0,
           losses: 0,
+          breakevens: 0,
           winRate: 0,
-          totalRealizedR: 0
+          totalRealizedR: 0,
+          runnerCount: 0,
+          runnerRealizedR: 0,
+          tp1Hits: 0,
+          tp2Hits: 0
         };
       }
 
@@ -1911,18 +1936,27 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       if (outcome.outcome_type === 'tp1_hit') {
         tradeR = parentSetup?.r_multiple_1 || 2.0;
         strategyStats[stratId].wins += 1;
+        strategyStats[stratId].tp1Hits += 1;
       } else if (outcome.outcome_type === 'tp2_hit') {
         tradeR = parentSetup?.r_multiple_2 || 3.0;
         strategyStats[stratId].wins += 1;
+        strategyStats[stratId].tp2Hits += 1;
       } else if (outcome.outcome_type === 'sl_hit') {
         tradeR = -1.0; // always capped
         strategyStats[stratId].losses += 1;
       } else if (outcome.outcome_type === 'be_hit' || outcome.outcome_type === 'breakeven') {
         tradeR = 0.0;
-      } else if (outcome.realized_pl) {
+        strategyStats[stratId].breakevens += 1;
+      } else if (outcome.realized_pl !== undefined && outcome.realized_pl !== null) {
         tradeR = Math.max(-1.0, outcome.realized_pl); // never worse than -1R
         if (tradeR > 0) strategyStats[stratId].wins += 1;
         else if (tradeR < 0) strategyStats[stratId].losses += 1;
+        else strategyStats[stratId].breakevens += 1;
+      }
+
+      if (outcome.was_runner === 1 || parentSetup?.signal_state === 'runner') {
+        strategyStats[stratId].runnerCount += 1;
+        strategyStats[stratId].runnerRealizedR += (outcome.runner_realized_r || tradeR || 0);
       }
 
       strategyStats[stratId].totalRealizedR += tradeR;
@@ -1933,12 +1967,18 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       const totalDecided = s.wins + s.losses;
       s.winRate = totalDecided > 0 ? Number(((s.wins / totalDecided) * 100).toFixed(1)) : 0;
       s.totalRealizedR = Number(s.totalRealizedR.toFixed(2));
+      s.runnerRealizedR = Number(s.runnerRealizedR.toFixed(2));
     }
 
     const stratsArray = Object.values(strategyStats).filter(s => !hiddenIds.includes(s.id));
 
     const collectiveWins = stratsArray.reduce((acc, s) => acc + s.wins, 0);
     const collectiveLosses = stratsArray.reduce((acc, s) => acc + s.losses, 0);
+    const collectiveBreakevens = stratsArray.reduce((acc, s) => acc + s.breakevens, 0);
+    const collectiveRunnerCount = stratsArray.reduce((acc, s) => acc + s.runnerCount, 0);
+    const collectiveRunnerRealizedR = Number(stratsArray.reduce((acc, s) => acc + s.runnerRealizedR, 0).toFixed(2));
+    const collectiveTp1Hits = stratsArray.reduce((acc, s) => acc + s.tp1Hits, 0);
+    const collectiveTp2Hits = stratsArray.reduce((acc, s) => acc + s.tp2Hits, 0);
     const collectiveResolvedCount = collectiveWins + collectiveLosses;
     const collectiveWinRate = collectiveResolvedCount > 0 ? Number(((collectiveWins / collectiveResolvedCount) * 100).toFixed(1)) : 0;
     const collectiveRealizedR = Number(stratsArray.reduce((acc, s) => acc + s.totalRealizedR, 0).toFixed(2));
@@ -1952,8 +1992,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       resolvedSignals: stratsArray.reduce((acc, s) => acc + s.resolvedSignals, 0),
       wins: collectiveWins,
       losses: collectiveLosses,
+      breakevens: collectiveBreakevens,
       winRate: collectiveWinRate,
-      totalRealizedR: collectiveRealizedR
+      totalRealizedR: collectiveRealizedR,
+      runnerCount: collectiveRunnerCount,
+      runnerRealizedR: collectiveRunnerRealizedR,
+      tp1Hits: collectiveTp1Hits,
+      tp2Hits: collectiveTp2Hits
     };
 
     res.json({

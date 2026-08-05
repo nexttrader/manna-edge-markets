@@ -1583,7 +1583,17 @@ export const AdminPanel: React.FC = () => {
 
                 <div className="strat-metric-row">
                   <span>Win Rate (%):</span>
-                  <span className="stat-val text-green">{analytics.collective.winRate}% ({analytics.collective.wins}W / {analytics.collective.losses}L)</span>
+                  <span className="stat-val text-green">{analytics.collective.winRate}% ({analytics.collective.wins}W / {analytics.collective.losses}L / {analytics.collective.breakevens || 0}BE)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Runner Positions:</span>
+                  <span className="stat-val text-gold">{analytics.collective.runnerCount || 0} Runners ({analytics.collective.runnerRealizedR && analytics.collective.runnerRealizedR > 0 ? '+' : ''}{analytics.collective.runnerRealizedR || 0}R)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Target Hits:</span>
+                  <span className="stat-val">TP1: {analytics.collective.tp1Hits || 0} | TP2: {analytics.collective.tp2Hits || 0}</span>
                 </div>
 
                 <div className="strat-metric-row">
@@ -1619,7 +1629,17 @@ export const AdminPanel: React.FC = () => {
 
                 <div className="strat-metric-row">
                   <span>Win Rate (%):</span>
-                  <span className="stat-val text-green">{strat.winRate}% ({strat.wins}W / {strat.losses}L)</span>
+                  <span className="stat-val text-green">{strat.winRate}% ({strat.wins}W / {strat.losses}L / {strat.breakevens || 0}BE)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Runner Positions:</span>
+                  <span className="stat-val text-gold">{strat.runnerCount || 0} Runners ({strat.runnerRealizedR && strat.runnerRealizedR > 0 ? '+' : ''}{strat.runnerRealizedR || 0}R)</span>
+                </div>
+
+                <div className="strat-metric-row">
+                  <span>Target Hits:</span>
+                  <span className="stat-val">TP1: {strat.tp1Hits || 0} | TP2: {strat.tp2Hits || 0}</span>
                 </div>
 
                 <div className="strat-metric-row">

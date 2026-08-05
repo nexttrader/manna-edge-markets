@@ -11,8 +11,13 @@ export interface StrategyStat {
   resolvedSignals: number;
   wins: number;
   losses: number;
+  breakevens?: number;
   winRate: number;
   totalRealizedR: number;
+  runnerCount?: number;
+  runnerRealizedR?: number;
+  tp1Hits?: number;
+  tp2Hits?: number;
 }
 
 export interface AnalyticsData {
