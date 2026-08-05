@@ -578,10 +578,10 @@ router.post('/retroactive-clean', async (_req: Request, res: Response) => {
     await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
     await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
     
-    // 2. Merge sentinel_v2 to manna_basic
-    await queryDb(`UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
-    await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
-    await queryDb(`UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
+    // 2. Restore sentinel_v2 strategy_id for Sentinel V2 setups based on metadata signature
+    await queryDb(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
+    await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
+    await queryDb(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE setup_id IN (SELECT id FROM edge_setups WHERE strategy_id = 'sentinel_v2' UNION SELECT id FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2')`);
 
     // 3. Fix any out-of-bounds realized_pl values in outcomes
     await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);

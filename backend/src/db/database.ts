@@ -306,31 +306,16 @@ export async function initializeDatabase(): Promise<void> {
                     ('sentinel_v2', 'Manna Elite V1', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna Elite V1' WHERE id = 'sentinel_v2';
 
-                    UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2' AND visible_to_admins IS NULL;
+                    UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2';
 
-                    UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%';
-                    UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%';
-
-                    UPDATE outcomes SET strategy_id = 'manna_snd' WHERE setup_id IN (
-                        SELECT id FROM edge_setups WHERE strategy_id = 'manna_snd' 
+                    -- Restore sentinel_v2 strategy_id for Sentinel V2 setups based on metadata signature
+                    UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%';
+                    UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%';
+                    UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE setup_id IN (
+                        SELECT id FROM edge_setups WHERE strategy_id = 'sentinel_v2' 
                         UNION 
-                        SELECT id FROM forex_edge_setups WHERE strategy_id = 'manna_snd'
+                        SELECT id FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2'
                     );
-
-                    UPDATE edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
-                    UPDATE forex_edge_setups SET entry_triggered_at = created_at WHERE signal_state IN ('active', 'resolved', 'invalidated') AND entry_triggered_at IS NULL;
-
-                    UPDATE edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
-                    UPDATE forex_edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
-
-                    -- Auto-resolve any open setups in Supabase that already have an outcome logged
-                    UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes);
-                    UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes);
-
-                    -- Merge sentinel_v2 setups & outcomes into manna_basic (Manna Elite V1)
-                    UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
-                    UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
-                    UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
@@ -393,67 +378,9 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
-    try { db.exec(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`); } catch {}
-    try { db.exec(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`); } catch {}
-    try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
-    try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
-    try { db.exec(`UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
-
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS analytics_archives (
-            id TEXT PRIMARY KEY,
-            archive_name TEXT NOT NULL,
-            captured_from TEXT NOT NULL,
-            captured_until TEXT NOT NULL,
-            total_setups INTEGER NOT NULL,
-            total_resolved INTEGER NOT NULL,
-            win_rate REAL NOT NULL,
-            total_realized_r REAL NOT NULL,
-            avg_fill_time_min REAL NOT NULL,
-            avg_hold_duration_min REAL NOT NULL,
-            csv_content TEXT NOT NULL,
-            summary_json TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS performance_reports (
-            id TEXT PRIMARY KEY,
-            period_type TEXT NOT NULL,
-            period_start TEXT NOT NULL,
-            period_end TEXT NOT NULL,
-            summary_json TEXT NOT NULL,
-            admin_notes TEXT,
-            status TEXT NOT NULL DEFAULT 'draft_pending_approval',
-            created_at TEXT NOT NULL,
-            published_at TEXT,
-            published_by TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS strategy_settings (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            enabled INTEGER DEFAULT 1,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS admin_strategy_access (
-            user_email TEXT NOT NULL,
-            strategy_id TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_email, strategy_id)
-        );
-
-        INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-        ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
-        ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
-
-        INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-        ('sentinel_v2', 'Manna Elite V1', 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
-    `);
-
-    try { db.exec(`UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2'`); } catch {}
+    try { db.exec(`UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2'`); } catch {}
+    try { db.exec(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
+    try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
 
     console.log('Database initialized successfully.');
 }
