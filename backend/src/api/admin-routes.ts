@@ -659,7 +659,10 @@ router.get('/analytics', async (req: Request, res: Response) => {
         const isLong = setup.bias === 'long';
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
-        if (risk > 0) tradeR = Number((diff / risk).toFixed(2));
+        if (risk > 0) {
+          tradeR = Number((diff / risk).toFixed(2));
+          if (tradeR < -1.0) tradeR = -1.0;
+        }
       }
 
       const signalTime = setup?.created_at;
@@ -736,7 +739,10 @@ router.get('/analytics', async (req: Request, res: Response) => {
         const isLong = setup.bias === 'long';
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
-        if (risk > 0) tradeR = Number((diff / risk).toFixed(2));
+        if (risk > 0) {
+          tradeR = Number((diff / risk).toFixed(2));
+          if (tradeR < -1.0) tradeR = -1.0;
+        }
       }
 
       if (isWin) {
@@ -1119,7 +1125,7 @@ function buildAnalyticsCSV(
   for (const o of outcomes) {
     const setup = o.setup || {};
     const stratId = o.strategy_id || setup.strategy_id || 'manna_basic';
-    const stratName = stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Basic';
+    const stratName = stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1';
     const mkt = o.market || setup.market || 'futures';
     const isForex = mkt === 'forex';
     const isLong = (setup.bias || o.bias || 'long').toLowerCase() === 'long';
@@ -1791,7 +1797,7 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
     }> = {
       manna_basic: {
         id: 'manna_basic',
-        name: 'Manna Basic',
+        name: 'Manna Elite V1',
         tier: 'basic',
         totalSignals: 0,
         activeSignals: 0,
@@ -1820,7 +1826,7 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1',
           tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'basic'),
           totalSignals: 0,
           activeSignals: 0,
@@ -1849,7 +1855,7 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Basic',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1',
           tier: stratId === 'manna_snd' ? 'pro' : 'basic',
           totalSignals: 0,
           activeSignals: 0,

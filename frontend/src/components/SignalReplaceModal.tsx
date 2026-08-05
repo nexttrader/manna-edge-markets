@@ -77,7 +77,7 @@ export const SignalReplaceModal: React.FC<SignalReplaceModalProps> = ({
     }
   };
 
-  const stratName = (currentSetup.strategy_id === 'sentinel_v2' ? 'Manna Elite V1' : (currentSetup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic')).toUpperCase();
+  const stratName = (currentSetup.strategy_id === 'sentinel_v2' ? 'Sentinel V2' : (currentSetup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1')).toUpperCase();
 
   return createPortal(
     <div className="replace-modal-backdrop font-sans">

@@ -597,9 +597,28 @@ export const AdminPanel: React.FC = () => {
             <h1 className="admin-title">Manna Edge Markets — Strategy & Performance Admin Desk</h1>
           </div>
           <div className="admin-user-profile font-mono" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span className="user-badge" style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
-              ⚙️ ADMIN: {user?.name || 'System Admin'}
+            <span className="user-badge" style={{ background: isSuperAdmin ? 'rgba(179, 136, 255, 0.2)' : 'rgba(255, 171, 0, 0.2)', border: isSuperAdmin ? '1px solid #b388ff' : '1px solid #ffab00', color: isSuperAdmin ? '#b388ff' : '#ffab00', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
+              {isSuperAdmin ? '👑 SUPER ADMIN' : `⚙️ ADMIN: ${user?.name || 'System Admin'}`}
             </span>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: 'rgba(179, 136, 255, 0.2)',
+                  border: '1px solid #b388ff',
+                  color: '#b388ff',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  fontSize: '0.82rem'
+                }}
+                onClick={() => navigate('/vault-5287')}
+              >
+                👁️ Switch to Super Admin View
+              </button>
+            )}
             <button 
               className="btn-logout font-mono" 
               style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
@@ -1417,7 +1436,7 @@ export const AdminPanel: React.FC = () => {
                 </thead>
                 <tbody>
                   {activeSetupsList.map((setup: any) => {
-                    const stratName = setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic';
+                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Sentinel V2' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1');
                     const isDisabling = disablingId === setup.id;
                     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -1524,7 +1543,7 @@ export const AdminPanel: React.FC = () => {
             className={`strat-tab strat-basic ${strategyFilter === 'manna_basic' ? 'active' : ''}`}
             onClick={() => setStrategyFilter('manna_basic')}
           >
-            🔵 Manna Basic
+            🔵 Manna Elite V1
           </button>
           <button 
             className={`strat-tab strat-snd ${strategyFilter === 'manna_snd' ? 'active' : ''}`}
@@ -1630,7 +1649,7 @@ export const AdminPanel: React.FC = () => {
           <div className="action-bar-left">
             <span className="bar-title">📊 ANALYTICS TRACKING ENGINE</span>
             <span className="bar-desc">
-              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Basic Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
+              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Elite V1 Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
             </span>
           </div>
           <div className="action-bar-btns">
@@ -2375,7 +2394,7 @@ export const AdminPanel: React.FC = () => {
               <label>Strategy Scope</label>
               <select value={triggerStrategy} onChange={e => setTriggerStrategy(e.target.value as any)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="manna_basic">🔵 Manna Basic Strategy</option>
+                <option value="manna_basic">🔵 Manna Elite V1 Strategy</option>
                 <option value="manna_snd">🟡 Manna SnD Strategy</option>
                 <option value="sentinel_v2">🟣 Sentinel V2 Strategy</option>
               </select>

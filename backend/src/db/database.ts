@@ -282,7 +282,7 @@ export async function initializeDatabase(): Promise<void> {
                     );
 
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-                    ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
+                    ('manna_basic', 'Manna Elite V1', 1, CURRENT_TIMESTAMP),
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING;
 
@@ -412,7 +412,7 @@ export async function initializeDatabase(): Promise<void> {
         );
 
         INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-        ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
+        ('manna_basic', 'Manna Elite V1', 1, CURRENT_TIMESTAMP),
         ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
         ON CONFLICT (id) DO NOTHING;
 

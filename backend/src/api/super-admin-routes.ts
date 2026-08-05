@@ -4,6 +4,7 @@ import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
+import { outcomeDetector } from '../outcomes/outcome-detector';
 
 const router = express.Router();
 
@@ -329,6 +330,8 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
 
 router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
     try {
+        await outcomeDetector.evaluateAllSetups(true);
+
         // Query all setups with strategy_id = 'sentinel_v2' across both tables
         const futuresSetups = await queryDb(`SELECT * FROM edge_setups WHERE strategy_id = 'sentinel_v2'`);
         const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2'`);
@@ -344,7 +347,15 @@ router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
         const wins = outcomes.filter((o: any) => o.outcome_type === 'tp1_hit' || o.outcome_type === 'tp2_hit');
         const losses = outcomes.filter((o: any) => o.outcome_type === 'sl_hit');
         const winRate = (wins.length + losses.length) > 0 ? ((wins.length / (wins.length + losses.length)) * 100).toFixed(1) : '0.0';
-        const totalRealizedR = outcomes.reduce((sum: number, o: any) => sum + (o.realized_pl || 0), 0);
+        
+        // Cap losses strictly at -1.0R (a stop loss is 1R loss, not more than 1R)
+        const totalRealizedR = outcomes.reduce((sum: number, o: any) => {
+          let r = o.realized_pl || 0;
+          if (o.outcome_type === 'sl_hit' || r < 0) {
+            r = -1.0;
+          }
+          return sum + r;
+        }, 0);
         
         // POI type distribution from metadata
         const poiTypes: Record<string, number> = { FVG: 0, OC: 0, REVERSAL: 0, CONSOLIDATION: 0 };
@@ -375,8 +386,10 @@ router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
 
 router.get('/sentinel/setups', async (_req: Request, res: Response) => {
     try {
-        const futuresSetups = await queryDb(`SELECT * FROM edge_setups WHERE strategy_id = 'sentinel_v2' ORDER BY created_at DESC`);
-        const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2' ORDER BY created_at DESC`);
+        await outcomeDetector.evaluateAllSetups(true);
+
+        const futuresSetups = await queryDb(`SELECT * FROM edge_setups WHERE strategy_id = 'sentinel_v2' AND signal_state IN ('awaiting_entry', 'active', 'runner') ORDER BY created_at DESC`);
+        const forexSetups = await queryDb(`SELECT * FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2' AND signal_state IN ('awaiting_entry', 'active', 'runner') ORDER BY created_at DESC`);
         const allSetups = [...futuresSetups, ...forexSetups];
 
         // Fetch live market prices

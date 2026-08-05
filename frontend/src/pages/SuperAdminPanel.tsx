@@ -5,11 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 
 export const SuperAdminPanel: React.FC = () => {
-  const { logout, impersonateUser, login } = useAuth();
+  const { logout, impersonateUser } = useAuth();
   const navigate = useNavigate();
 
   const handleReturnToAdmin = () => {
-    login('admin@mannaedge.com', 'admin', 'System Administrator', 'futures_forex');
     navigate('/admin');
   };
 
@@ -352,7 +351,7 @@ export const SuperAdminPanel: React.FC = () => {
               }}
               onClick={handleReturnToAdmin}
             >
-              ⚙️ Switch to Admin Mode
+              ⚙️ Switch to Admin View
             </button>
             <button 
               className="btn-logout font-mono" 

@@ -279,7 +279,7 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_basic', name: 'Manna Basic', enabled: true, visibleToAdmins: true, visibleToTraders: true },
+            { id: 'manna_basic', name: 'Manna Elite V1', enabled: true, visibleToAdmins: true, visibleToTraders: true },
             { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true }
         ];
     }
