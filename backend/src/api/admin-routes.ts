@@ -806,11 +806,13 @@ router.get('/analytics', async (req: Request, res: Response) => {
       if (isWin) assetPerformance[key].wins++;
       else if (isLoss) assetPerformance[key].losses++;
 
-      if (setup && setup.killzone_origin && killzonePerformance[setup.killzone_origin]) {
-        killzonePerformance[setup.killzone_origin].total++;
-        killzonePerformance[setup.killzone_origin].plR += tradeR;
-        if (isWin) killzonePerformance[setup.killzone_origin].wins++;
-        else if (isLoss) killzonePerformance[setup.killzone_origin].losses++;
+      const kzRaw = setup?.killzone_origin || o?.killzone_origin || 'ny_am';
+      const kzKey = String(kzRaw).toLowerCase().replace(/^kz_/, '');
+      if (killzonePerformance[kzKey]) {
+        killzonePerformance[kzKey].total++;
+        killzonePerformance[kzKey].plR += tradeR;
+        if (isWin) killzonePerformance[kzKey].wins++;
+        else if (isLoss) killzonePerformance[kzKey].losses++;
       }
 
       const conviction = setup?.conviction_score || o.conviction_score || 85;
