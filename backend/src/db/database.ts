@@ -88,6 +88,8 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_admins INTEGER DEFAULT 1`,
                     `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_traders INTEGER DEFAULT 1`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS was_runner INTEGER DEFAULT 0`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS runner_realized_r DOUBLE PRECISION DEFAULT 0.0`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
                     // ── Backfill: sync outcome strategy_ids from their parent setup rows ──
@@ -365,6 +367,8 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN was_runner INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN runner_realized_r REAL DEFAULT 0.0`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN mfe REAL`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN highest_price REAL`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN lowest_price REAL`); } catch {}

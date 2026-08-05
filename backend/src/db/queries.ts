@@ -214,15 +214,18 @@ export async function getSetupsByRun(runId: string): Promise<EdgeSetup[]> {
 // ── Outcomes ──
 
 export async function insertOutcome(outcome: Outcome): Promise<void> {
-    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, mfe, highest_price, lowest_price, bars_held, duration_min, exit_reason, strategy_id, was_runner, notes, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, mfe, highest_price, lowest_price, bars_held, duration_min, exit_reason, strategy_id, was_runner, runner_realized_r, is_breakeven, notes, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         outcome.id, outcome.setup_id, outcome.setup_market, outcome.run_id || null,
         outcome.outcome_type, outcome.execution_price || null, outcome.execution_time || null,
         outcome.realized_pl || null, outcome.mae || null, outcome.mfe || null,
         outcome.highest_price || null, outcome.lowest_price || null,
         outcome.bars_held || null, outcome.duration_min || null, outcome.exit_reason || null,
         outcome.strategy_id || 'manna_basic',
-        (outcome as any).was_runner || 0, outcome.notes || null, outcome.created_at
+        (outcome as any).was_runner || 0,
+        (outcome as any).runner_realized_r || 0.0,
+        (outcome as any).is_breakeven || 0,
+        outcome.notes || null, outcome.created_at
     ]);
 }
 
@@ -250,6 +253,8 @@ export const createOutcome = async (outcome: any): Promise<void> => {
         created_at: outcome.created_at || new Date().toISOString()
     };
     (o as any).was_runner = outcome.was_runner || 0;
+    (o as any).runner_realized_r = outcome.runner_realized_r || 0.0;
+    (o as any).is_breakeven = outcome.is_breakeven || 0;
     await insertOutcome(o);
 };
 
