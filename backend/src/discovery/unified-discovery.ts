@@ -60,8 +60,8 @@ export async function discoverUnifiedSetups(
   // Final strategy guard: if a target was requested, strip any candidates that
   // don't carry the correct strategy_id (defence-in-depth against edge cases).
   if (targetStrategyId && targetStrategyId !== 'all') {
-    futures = futures.filter(c => (c.strategy_id || 'manna_basic') === targetStrategyId);
-    forex   = forex.filter(c => (c.strategy_id || 'manna_basic') === targetStrategyId);
+    futures = futures.filter(c => (c.strategy_id || 'sentinel_v2') === targetStrategyId);
+    forex   = forex.filter(c => (c.strategy_id || 'sentinel_v2') === targetStrategyId);
   }
 
   return { futures, forex };

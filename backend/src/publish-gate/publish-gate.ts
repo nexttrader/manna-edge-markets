@@ -63,11 +63,11 @@ export async function executePublishRun(
       // Build list of unique (instrument, strategy_id) keys
       const keysSet = new Set<string>();
       for (const c of market.candidates) {
-        const strat = c.strategy_id || 'manna_basic';
+        const strat = c.strategy_id || 'sentinel_v2';
         keysSet.add(`${c.instrument}::${strat}`);
       }
       for (const s of activeSetups) {
-        const strat = s.strategy_id || 'manna_basic';
+        const strat = s.strategy_id || 'sentinel_v2';
         keysSet.add(`${s.instrument}::${strat}`);
       }
 
@@ -75,10 +75,10 @@ export async function executePublishRun(
         const [instrument, strategyId] = key.split('::');
 
         const instCandidates = market.candidates.filter(
-          c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === strategyId
+          c => c.instrument === instrument && (c.strategy_id || 'sentinel_v2') === strategyId
         );
         const existingSetup = activeSetups.find(
-          s => s.instrument === instrument && (s.strategy_id || 'manna_basic') === strategyId
+          s => s.instrument === instrument && (s.strategy_id || 'sentinel_v2') === strategyId
         ) || null;
         
         const currentPrice = await getLiveCurrentPrice(instrument);
@@ -173,7 +173,7 @@ export async function executePublishRun(
             tradable: 1,
             conviction_score: dedupeResult.selectedCandidate.conviction_score,
             liquidity_score: dedupeResult.selectedCandidate.liquidity_score,
-            strategy_id: dedupeResult.selectedCandidate.strategy_id || 'manna_basic',
+            strategy_id: dedupeResult.selectedCandidate.strategy_id || 'sentinel_v2',
             strategy_tier: dedupeResult.selectedCandidate.strategy_tier || 'basic',
             metadata: dedupeResult.selectedCandidate.metadata
           };
@@ -189,7 +189,7 @@ export async function executePublishRun(
       const checkActive = await queries.getActiveSetups(market.name);
       const groups: Record<string, typeof checkActive> = {};
       for (const s of checkActive) {
-        const key = `${s.instrument}_${s.strategy_id || 'manna_basic'}`;
+        const key = `${s.instrument}_${s.strategy_id || 'sentinel_v2'}`;
         if (!groups[key]) groups[key] = [];
         groups[key].push(s);
       }

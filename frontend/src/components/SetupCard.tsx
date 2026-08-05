@@ -61,7 +61,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           setupId: setup.id,
           instrument: setup.instrument,
           market: setup.market || 'futures',
-          strategy_id: setup.strategy_id || 'manna_basic'
+          strategy_id: setup.strategy_id || 'sentinel_v2'
         })
       });
       const data = await res.json();
@@ -143,10 +143,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     (stateStr === 'active' || stateStr === 'awaiting_entry')
   );
 
-  const strategyId = setup.strategy_id || 'manna_basic';
-  const displayStrategyName = strategyId === 'sentinel_v2'
-    ? (isSuperAdmin ? 'CHADWIN SENTINEL V2 ELITE FRAMEWORK (MANNA ELITE V1)' : 'MANNA ELITE V1')
-    : (strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC');
+  const strategyId = setup.strategy_id || 'sentinel_v2';
+  const displayStrategyName = strategyId === 'manna_snd'
+    ? 'MANNA SND'
+    : (isSuperAdmin ? 'CHADWIN SENTINEL V2 ELITE FRAMEWORK (MANNA ELITE V1)' : 'MANNA ELITE V1');
     
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }

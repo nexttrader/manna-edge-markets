@@ -61,7 +61,7 @@ export async function generateReportMetrics(
   let holdCount = 0;
 
   const stratStats: Record<string, { trades: number; wins: number; tp1Hits?: number; tp2Hits?: number; winRate: number; totalR: number }> = {
-    manna_basic: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 },
+    sentinel_v2: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 },
     manna_snd: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 }
   };
 
@@ -83,8 +83,8 @@ export async function generateReportMetrics(
     }
 
     processedTrades++;
-    const rawKey = (o.strategy_id || setup?.strategy_id || 'manna_basic').toLowerCase();
-    const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : 'manna_basic'; // sentinel_v2 merged into manna_basic (Manna Elite V1)
+    const rawKey = (o.strategy_id || setup?.strategy_id || 'sentinel_v2').toLowerCase();
+    const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : 'sentinel_v2';
 
     if (!stratStats[stratKey]) {
       stratStats[stratKey] = { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 };

@@ -325,20 +325,7 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     let targetStrategy = existingSetup.strategy_id;
     const dbStrategyId = existingSetup.strategy_id; // capture raw DB value for debug
 
-    // If DB value is absent or defaulted to manna_basic, check metadata for evidence of Manna SnD
-    if (!targetStrategy || targetStrategy === 'manna_basic') {
-      try {
-        const meta = typeof existingSetup.metadata === 'string'
-          ? JSON.parse(existingSetup.metadata || '{}')
-          : (existingSetup.metadata || {});
-        const rationale: string = meta.selection_rationale || meta.strategy_name || '';
-        if (rationale.toUpperCase().includes('MANNA SND') || meta.strategy_name === 'Manna SnD') {
-          targetStrategy = 'manna_snd';
-        }
-      } catch { /* ignore parse errors */ }
-    }
-
-    if (!targetStrategy) targetStrategy = 'manna_basic';
+    if (!targetStrategy) targetStrategy = 'sentinel_v2';
 
     // Always keep existingSetup in sync so the response reflects truth
     existingSetup.strategy_id = targetStrategy;
@@ -368,7 +355,7 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
 
     const candidates = targetMarket === 'futures' ? futures : forex;
     // Find candidate matching instrument AND correct strategy
-    const matchingCandidate = candidates.find(c => c.instrument === instrument && (c.strategy_id || 'manna_basic') === targetStrategy);
+    const matchingCandidate = candidates.find(c => c.instrument === instrument && (c.strategy_id || 'sentinel_v2') === targetStrategy);
 
     isSingleRescanActive = false;
 
@@ -471,7 +458,7 @@ router.post('/confirm-replace-signal', async (req: Request, res: Response) => {
       tradable: 1,
       conviction_score: candidate.conviction_score,
       liquidity_score: candidate.liquidity_score,
-      strategy_id: candidate.strategy_id || 'manna_basic',
+      strategy_id: candidate.strategy_id || 'sentinel_v2',
       strategy_tier: candidate.strategy_tier || 'basic',
       metadata: typeof candidate.metadata === 'string' ? candidate.metadata : JSON.stringify(candidate.metadata || {})
     };
@@ -620,17 +607,17 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let allForex = await queryDb(forexQuery);
     let allOutcomes = await queryDb(outcomesQuery);
 
-    allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
-    allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
+    allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2'));
+    allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2'));
     allOutcomes = allOutcomes.filter((o: any) => {
-      const sId = o.strategy_id || 'manna_basic'; // It's selected by COALESCE logic implicitly via table join if we wanted to replicate the raw query perfectly, but we can rely on o.strategy_id mostly, or just filter it when processing. Let's do it below safely.
+      const sId = o.strategy_id || 'sentinel_v2';
       return !hiddenStrategyIds.includes(sId);
     });
 
     if (selectedStrategy && selectedStrategy !== 'all') {
-      allFutures = allFutures.filter((s: any) => (s.strategy_id || 'manna_basic') === selectedStrategy);
-      allForex = allForex.filter((s: any) => (s.strategy_id || 'manna_basic') === selectedStrategy);
-      allOutcomes = allOutcomes.filter((o: any) => (o.strategy_id || 'manna_basic') === selectedStrategy);
+      allFutures = allFutures.filter((s: any) => (s.strategy_id || 'sentinel_v2') === selectedStrategy);
+      allForex = allForex.filter((s: any) => (s.strategy_id || 'sentinel_v2') === selectedStrategy);
+      allOutcomes = allOutcomes.filter((o: any) => (o.strategy_id || 'sentinel_v2') === selectedStrategy);
     }
 
     const futuresTotal = allFutures.length;
@@ -640,15 +627,15 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let forexActiveSetups = await queries.getActiveSetups('forex');
 
     const resolvedSetupIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
-    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic') && !resolvedSetupIds.has(String(s.id)));
-    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic') && !resolvedSetupIds.has(String(s.id)));
+    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)));
+    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)));
 
     let futuresActive = futuresActiveSetups.length;
     let forexActive = forexActiveSetups.length;
 
     if (selectedStrategy && selectedStrategy !== 'all') {
-      futuresActive = futuresActiveSetups.filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
-      forexActive = forexActiveSetups.filter(s => (s.strategy_id || 'manna_basic') === selectedStrategy).length;
+      futuresActive = futuresActiveSetups.filter(s => (s.strategy_id || 'sentinel_v2') === selectedStrategy).length;
+      forexActive = forexActiveSetups.filter(s => (s.strategy_id || 'sentinel_v2') === selectedStrategy).length;
     }
     
     let outcomes = allOutcomes;
@@ -757,8 +744,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       // Retry with opposite market if first lookup returned nothing
       if (!setup) setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
       let tradeR = 0;
-      // Sentinel V2 merges into Manna Elite V1 for analytics
-      const effectiveStratId = (o.strategy_id === 'sentinel_v2' || setup?.strategy_id === 'sentinel_v2') ? 'manna_basic' : (o.strategy_id || setup?.strategy_id || 'manna_basic');
+      const effectiveStratId = o.strategy_id || setup?.strategy_id || 'sentinel_v2';
       const isWin = o.outcome_type.includes('tp');
       const isLoss = o.outcome_type.includes('sl');
 
@@ -1036,7 +1022,7 @@ function buildAnalyticsCSV(
     const kz = o.killzone_origin || 'ny_am';
     kzPerf[kz] = (kzPerf[kz] || 0) + r;
 
-    const st = o.strategy_id || 'manna_basic';
+    const st = o.strategy_id || 'sentinel_v2';
     stratPerf[st] = (stratPerf[st] || 0) + r;
 
     const entryD = o.time_entered || o.created_at || new Date().toISOString();
@@ -1069,7 +1055,7 @@ function buildAnalyticsCSV(
   const worstKz = Object.entries(kzPerf).sort((a, b) => a[1] - b[1])[0] || ['asia', 0];
 
   const bestStrat = Object.entries(stratPerf).sort((a, b) => b[1] - a[1])[0] || ['manna_snd', 0];
-  const worstStrat = Object.entries(stratPerf).sort((a, b) => a[1] - b[1])[0] || ['manna_basic', 0];
+  const worstStrat = Object.entries(stratPerf).sort((a, b) => a[1] - b[1])[0] || ['sentinel_v2', 0];
 
   const bestDay = Object.entries(dayPerf).sort((a, b) => b[1] - a[1])[0] || ['Wednesday', 0];
   const worstDay = Object.entries(dayPerf).sort((a, b) => a[1] - b[1])[0] || ['Monday', 0];
@@ -1157,7 +1143,7 @@ function buildAnalyticsCSV(
 
   for (const o of outcomes) {
     const setup = o.setup || {};
-    const stratId = o.strategy_id || setup.strategy_id || 'manna_basic';
+    const stratId = o.strategy_id || setup.strategy_id || 'sentinel_v2';
     const stratName = stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic';
     const mkt = o.market || setup.market || 'futures';
     const isForex = mkt === 'forex';
@@ -1833,10 +1819,10 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
       tp1Hits: number;
       tp2Hits: number;
     }> = {
-      manna_basic: {
-        id: 'manna_basic',
+      sentinel_v2: {
+        id: 'sentinel_v2',
         name: 'Manna Elite V1',
-        tier: 'basic',
+        tier: 'elite',
         totalSignals: 0,
         activeSignals: 0,
         resolvedSignals: 0,
@@ -1870,12 +1856,12 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
     };
 
     for (const setup of allSetups) {
-      const stratId = setup.strategy_id || 'manna_basic';
+      const stratId = setup.strategy_id || 'sentinel_v2';
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : (stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic'),
-          tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'basic'),
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
+          tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'elite'),
           totalSignals: 0,
           activeSignals: 0,
           resolvedSignals: 0,
@@ -1905,13 +1891,13 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         // Retry opposite market
         if (!parentSetup) parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market === 'forex' ? 'futures' : 'forex');
       }
-      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
+      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'sentinel_v2';
       
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : (stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic'),
-          tier: stratId === 'manna_snd' ? 'pro' : 'basic',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
+          tier: stratId === 'manna_snd' ? 'pro' : 'elite',
           totalSignals: 0,
           activeSignals: 0,
           resolvedSignals: 0,

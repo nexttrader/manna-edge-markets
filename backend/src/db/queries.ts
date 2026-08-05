@@ -221,7 +221,7 @@ export async function insertOutcome(outcome: Outcome): Promise<void> {
         outcome.realized_pl || null, outcome.mae || null, outcome.mfe || null,
         outcome.highest_price || null, outcome.lowest_price || null,
         outcome.bars_held || null, outcome.duration_min || null, outcome.exit_reason || null,
-        outcome.strategy_id || 'manna_basic',
+        outcome.strategy_id || 'sentinel_v2',
         (outcome as any).was_runner || 0,
         (outcome as any).runner_realized_r || 0.0,
         (outcome as any).is_breakeven || 0,
@@ -230,9 +230,8 @@ export async function insertOutcome(outcome: Outcome): Promise<void> {
 }
 
 export const createOutcome = async (outcome: any): Promise<void> => {
-    // Sentinel V2 outcomes are merged into Manna Elite V1 (manna_basic) for analytics.
-    const rawStratId = outcome.strategy_id || 'manna_basic';
-    const analyticsStratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
+    const rawStratId = outcome.strategy_id || 'sentinel_v2';
+    const analyticsStratId = rawStratId;
     const o: Outcome = {
         id: outcome.id,
         setup_id: outcome.setup_id,
@@ -277,16 +276,15 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
     try {
-        let rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+        let rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
         
         if (!rows || rows.length === 0) {
             try {
                 await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES
-                    ('manna_basic', 'Manna Basic', 1, 1, 1, CURRENT_TIMESTAMP),
                     ('manna_snd', 'Manna SnD', 1, 1, 1, CURRENT_TIMESTAMP),
                     ('sentinel_v2', 'Manna Elite V1', 1, 1, 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING`);
-                rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+                rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
             } catch {}
         }
 
@@ -306,7 +304,6 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_basic', name: 'Manna Basic', enabled: true, visibleToAdmins: true, visibleToTraders: true },
             { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true },
             { id: 'sentinel_v2', name: 'Manna Elite V1', enabled: true, visibleToAdmins: true, visibleToTraders: true }
         ];
@@ -320,9 +317,7 @@ export async function updateStrategyEnabled(id: string, enabled: boolean): Promi
 
 export async function updateStrategyVisibility(id: string, visibleToAdmins: boolean): Promise<void> {
     const val = visibleToAdmins ? 1 : 0;
-    try {
-        await queryDb(`UPDATE strategy_settings SET visible_to_admins = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
-    } catch {}
+    await queryDb(`UPDATE strategy_settings SET visible_to_admins = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
 }
 
 export async function deleteStrategy(id: string): Promise<void> {
@@ -363,7 +358,11 @@ export async function revokeAdminStrategyAccess(userEmail: string, strategyId: s
 
 export async function getHiddenStrategyIdsForRole(role: string, userEmail?: string): Promise<string[]> {
     try {
-        const rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings`);
+        let rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
+        if (!rows || rows.length === 0) {
+            await getStrategySettings('super_admin');
+            rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
+        }
         const emailLower = userEmail ? userEmail.trim().toLowerCase() : '';
         
         let grantedAccessMap: Record<string, string[]> = {};
@@ -436,6 +435,8 @@ export async function updateStrategyTuning(
 export async function updateStrategyTraderVisibility(id: string, visibleToTraders: boolean): Promise<void> {
     const val = visibleToTraders ? 1 : 0;
     try {
+        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_traders, updated_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET visible_to_traders = EXCLUDED.visible_to_traders, updated_at = EXCLUDED.updated_at`, [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, new Date().toISOString()]);
+    } catch {
         await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
-    } catch {}
+    }
 }

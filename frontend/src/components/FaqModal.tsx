@@ -14,7 +14,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
 
   // User profile active strategies & tier (defaults to all active for admin/pro, dynamic for profile)
   const activeStrategies = useMemo(() => {
-    return (user as any)?.active_strategies || ['manna_basic', 'manna_snd'];
+    return (user as any)?.active_strategies || ['sentinel_v2', 'manna_snd'];
   }, [user]);
 
   const userTier: 'free' | 'forex_only' | 'futures_forex' = (user as any)?.tier || (isAdmin ? 'futures_forex' : 'futures_forex');

@@ -4,7 +4,7 @@ export interface FaqItem {
   question: string;
   answer: string;
   roleRequired: 'all' | 'admin';
-  strategyRequired?: 'manna_basic' | 'manna_snd' | 'all';
+  strategyRequired?: 'sentinel_v2' | 'manna_snd' | 'all';
   tierRequired?: 'free' | 'forex_only' | 'futures_forex';
   tags: string[];
   updatedAt: string;
@@ -111,17 +111,6 @@ export const FAQ_DATA: FaqItem[] = [
     strategyRequired: 'manna_snd',
     tierRequired: 'forex_only',
     tags: ['manna_snd', 'htf_curve', 'demand', 'supply'],
-    updatedAt: '2026-07-31'
-  },
-  {
-    id: 'basic-specific-1',
-    category: '🔵 Manna Basic Strategy Guide',
-    question: 'How does Manna Basic Liquidity Sweep & Displacement work?',
-    answer: 'Manna Basic targets high-frequency intraday setups:\n1. Liquidity Sweep: Identifies stop hunts above/below key session highs & lows.\n2. FVG & Order Block: Detects 15M Fair Value Gap displacement entering the target zone.\n3. Fast Fill Confirmation: Optimized for quick 2R to 3R target execution.',
-    roleRequired: 'all',
-    strategyRequired: 'manna_basic',
-    tierRequired: 'free',
-    tags: ['manna_basic', 'fvg', 'liquidity_sweep'],
     updatedAt: '2026-07-31'
   },
   {

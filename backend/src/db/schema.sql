@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS edge_setups (
     tradable INTEGER DEFAULT 1,
     conviction_score REAL,
     liquidity_score REAL,
-    strategy_id TEXT DEFAULT 'manna_basic',
+    strategy_id TEXT DEFAULT 'sentinel_v2',
     strategy_tier TEXT DEFAULT 'basic',
     metadata TEXT,
     resolved_at TEXT,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS forex_edge_setups (
     tradable INTEGER DEFAULT 1,
     conviction_score REAL,
     liquidity_score REAL,
-    strategy_id TEXT DEFAULT 'manna_basic',
+    strategy_id TEXT DEFAULT 'sentinel_v2',
     strategy_tier TEXT DEFAULT 'basic',
     metadata TEXT,
     resolved_at TEXT,
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS outcomes (
     bars_held INTEGER,
     duration_min REAL,
     exit_reason TEXT,
-    strategy_id TEXT DEFAULT 'manna_basic',
+    strategy_id TEXT DEFAULT 'sentinel_v2',
     was_runner INTEGER DEFAULT 0,
     notes TEXT,
     created_at TEXT NOT NULL
@@ -170,6 +170,12 @@ CREATE TABLE IF NOT EXISTS strategy_settings (
     super_admin_max_signals INTEGER DEFAULT 6,
     super_admin_min_conviction REAL DEFAULT 70.0,
     public_max_signals INTEGER DEFAULT 6,
-    public_min_conviction REAL DEFAULT 70.0,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_strategy_access (
+    user_email TEXT NOT NULL,
+    strategy_id TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_email, strategy_id)
 );

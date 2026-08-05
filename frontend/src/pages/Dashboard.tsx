@@ -18,7 +18,7 @@ type MarketFilter = 'all' | 'futures' | 'forex' | 'watchlist';
 type StateFilter = 'all' | 'active' | 'awaiting_entry' | 'in_zone' | 'runner' | 'resolved' | 'invalidated';
 type BiasFilter = 'all' | 'long' | 'short';
 type OrderTypeFilter = 'all' | 'market' | 'limit';
-type StrategyFilter = 'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2';
+type StrategyFilter = 'all' | 'sentinel_v2' | 'manna_snd';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 import { useAuth } from '../context/AuthContext';
@@ -48,7 +48,7 @@ export const Dashboard: React.FC = () => {
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
     const biasStr = (setup.bias || 'long').toLowerCase();
-    const stratId = (setup.strategy_id || 'manna_basic').toLowerCase();
+    const stratId = (setup.strategy_id || 'sentinel_v2').toLowerCase();
     const currentPrice = setup.current_price;
     const entryLow = setup.entry_zone_low ?? setup.levels?.entryMin ?? 0;
     const entryHigh = setup.entry_zone_high ?? setup.levels?.entryMax ?? 0;
@@ -191,9 +191,8 @@ export const Dashboard: React.FC = () => {
               <label>Strategy Tier:</label>
               <select value={strategyFilter} onChange={(e) => setStrategyFilter(e.target.value as StrategyFilter)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="manna_basic">🔵 Manna Basic</option>
+                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}</option>
                 <option value="manna_snd">🟡 Manna SnD</option>
-                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework(Manna Elite V1)' : 'Manna Elite V1'}</option>
               </select>
             </div>
 

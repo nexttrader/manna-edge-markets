@@ -303,7 +303,7 @@ export const AdminPanel: React.FC = () => {
 
   const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history' | 'support'>('users');
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
-  const [strategyFilter, setStrategyFilter] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+  const [strategyFilter, setStrategyFilter] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
 
   const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
@@ -488,7 +488,7 @@ export const AdminPanel: React.FC = () => {
     fetchArchives();
   }, []);
 
-  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'manna_basic' | 'manna_snd'>('all');
+  const [triggerStrategy, setTriggerStrategy] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
 
   const handleTrigger = async () => {
     setIsTriggering(true);
@@ -1540,10 +1540,10 @@ export const AdminPanel: React.FC = () => {
             ⚡ All Strategies
           </button>
           <button 
-            className={`strat-tab strat-basic ${strategyFilter === 'manna_basic' ? 'active' : ''}`}
-            onClick={() => setStrategyFilter('manna_basic')}
+            className={`strat-tab strat-basic ${strategyFilter === 'sentinel_v2' ? 'active' : ''}`}
+            onClick={() => setStrategyFilter('sentinel_v2')}
           >
-            🔵 Manna Basic
+            🟣 Manna Elite V1
           </button>
           <button 
             className={`strat-tab strat-snd ${strategyFilter === 'manna_snd' ? 'active' : ''}`}
@@ -1658,7 +1658,7 @@ export const AdminPanel: React.FC = () => {
           <div className="action-bar-left">
             <span className="bar-title">📊 ANALYTICS TRACKING ENGINE</span>
             <span className="bar-desc">
-              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Basic Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
+              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'sentinel_v2' ? 'Manna Elite V1 Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
             </span>
           </div>
           <div className="action-bar-btns">
@@ -2404,7 +2404,7 @@ export const AdminPanel: React.FC = () => {
               <label>Strategy Scope</label>
               <select value={triggerStrategy} onChange={e => setTriggerStrategy(e.target.value as any)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="manna_basic">🔵 Manna Basic Strategy</option>
+                <option value="sentinel_v2">🟣 Manna Elite V1 Strategy</option>
                 <option value="manna_snd">🟡 Manna SnD Strategy</option>
               </select>
             </div>

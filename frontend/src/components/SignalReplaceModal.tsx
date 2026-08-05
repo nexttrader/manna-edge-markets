@@ -48,7 +48,7 @@ export const SignalReplaceModal: React.FC<SignalReplaceModalProps> = ({
     signal_state: 'awaiting_entry',
     killzone_origin: currentSetup.killzone_origin || 'ny_am',
     killzone_origin_at: currentSetup.killzone_origin_at,
-    strategy_id: candidate.strategy_id || currentSetup.strategy_id || 'manna_basic',
+    strategy_id: candidate.strategy_id || currentSetup.strategy_id || 'sentinel_v2',
     strategy_tier: candidate.strategy_tier || currentSetup.strategy_tier || 'basic',
     created_at: new Date().toISOString(),
     metadata: typeof candidate.metadata === 'string' ? candidate.metadata : JSON.stringify(candidate.metadata || {})

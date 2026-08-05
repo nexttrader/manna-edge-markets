@@ -25,7 +25,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
     const resolvedIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
 
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic') && !resolvedIds.has(String(s.id)));
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedIds.has(String(s.id)));
 
 
 
@@ -117,14 +117,14 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
         );
         if (!sameInst && !sameGroup) return false;
 
-        const otherStrat = other.strategy_id || 'manna_basic';
-        const myStrat = setup.strategy_id || 'manna_basic';
+        const otherStrat = other.strategy_id || 'sentinel_v2';
+        const myStrat = setup.strategy_id || 'sentinel_v2';
         return other.bias !== setup.bias && otherStrat !== myStrat;
       });
 
       let opposingStrategyWarning: string | null = null;
       if (oppSetup) {
-        const oppStratName = oppSetup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC';
+        const oppStratName = oppSetup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1';
         opposingStrategyWarning = `⚠️ STRATEGY DIVERGENCE: ${oppStratName} currently has an opposing ${oppSetup.bias.toUpperCase()} setup on ${oppSetup.instrument}.`;
       }
 
@@ -176,7 +176,7 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
     
     let rawSetups = await queries.getSetupsByState('runner');
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
 
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
@@ -224,7 +224,7 @@ router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
     }
     
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+    setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
     
     res.json({ setups, count: setups.length });
   } catch (error) {
@@ -278,7 +278,7 @@ router.get('/accelerate/decision-matrix', async (req: Request, res: Response) =>
     }
 
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
 
     const priceMap: Record<string, number> = {};
     const enrichedSetups = await Promise.all(
