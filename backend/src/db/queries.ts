@@ -423,13 +423,25 @@ export async function updateStrategyTuning(
     publicMaxSignals: number,
     publicMinConviction: number
 ) {
-    await queryDb(`UPDATE strategy_settings SET 
-        super_admin_max_signals = ?,
-        super_admin_min_conviction = ?,
-        public_max_signals = ?,
-        public_min_conviction = ?,
-        updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`, [superAdminMaxSignals, superAdminMinConviction, publicMaxSignals, publicMinConviction, strategyId]);
+    const rows = await queryDb<{ id: string }>(`SELECT id FROM strategy_settings WHERE id = ?`, [strategyId]);
+    if (!rows || rows.length === 0) {
+        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, super_admin_max_signals, super_admin_min_conviction, public_max_signals, public_min_conviction, updated_at) VALUES (?, ?, 1, 1, 1, ?, ?, ?, ?, CURRENT_TIMESTAMP)`, [
+            strategyId,
+            strategyId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD',
+            superAdminMaxSignals,
+            superAdminMinConviction,
+            publicMaxSignals,
+            publicMinConviction
+        ]);
+    } else {
+        await queryDb(`UPDATE strategy_settings SET 
+            super_admin_max_signals = ?,
+            super_admin_min_conviction = ?,
+            public_max_signals = ?,
+            public_min_conviction = ?,
+            updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`, [superAdminMaxSignals, superAdminMinConviction, publicMaxSignals, publicMinConviction, strategyId]);
+    }
 }
 
 export async function updateStrategyTraderVisibility(id: string, visibleToTraders: boolean): Promise<void> {

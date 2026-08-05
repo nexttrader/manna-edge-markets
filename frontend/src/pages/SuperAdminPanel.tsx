@@ -73,7 +73,8 @@ export const SuperAdminPanel: React.FC = () => {
       if (res.ok) {
         alert('✅ Engine tuning parameters saved successfully!');
       } else {
-        alert('⚠️ Failed to save tuning parameters.');
+        const errJson = await res.json().catch(() => ({}));
+        alert(`⚠️ Failed to save tuning parameters: ${errJson.error || errJson.details || res.statusText || 'Server Error'}`);
       }
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
