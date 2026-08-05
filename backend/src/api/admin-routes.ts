@@ -572,6 +572,7 @@ router.get('/publish-runs', async (req: Request, res: Response) => {
 
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
+    await outcomeDetector.evaluateAllSetups(true);
     const now = new Date();
     const selectedStrategy = req.query.strategy_id as string | undefined;
     const role = (req.query.role as string) || 'admin';

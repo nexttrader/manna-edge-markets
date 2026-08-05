@@ -13,6 +13,9 @@ export class OutcomeDetector {
   start(intervalMs: number = 15000): void {
     if (this.interval) return;
     this.interval = setInterval(() => this.tick(), intervalMs);
+    this.evaluateAllSetups(true).catch(err => {
+      logger.error({ err }, 'Startup OutcomeDetector evaluation failed');
+    });
     logger.info(`OutcomeDetector started with interval ${intervalMs}ms`);
   }
   

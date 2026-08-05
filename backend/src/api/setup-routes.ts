@@ -4,11 +4,13 @@ import { queryDb } from '../db/database';
 import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
+import { outcomeDetector } from '../outcomes/outcome-detector';
 
 const router = express.Router();
 
 router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   try {
+    await outcomeDetector.evaluateAllSetups(true);
     const market = (req.query.market as string) || 'all';
     const role = (req.query.role as string) || 'trader';
     const email = (req.query.email as string) || (req.query.userEmail as string) || '';
