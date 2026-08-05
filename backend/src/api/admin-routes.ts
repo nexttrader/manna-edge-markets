@@ -9,6 +9,7 @@ import { queryDb } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { generateReportMetrics } from '../analytics/report-generator';
 import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/health-checker';
+import { outcomeDetector } from '../outcomes/outcome-detector';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
