@@ -277,7 +277,19 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
     try {
-        const rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+        let rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+        
+        if (!rows || rows.length === 0) {
+            try {
+                await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES
+                    ('manna_basic', 'Manna Basic', 1, 1, 1, CURRENT_TIMESTAMP),
+                    ('manna_snd', 'Manna SnD', 1, 1, 1, CURRENT_TIMESTAMP),
+                    ('sentinel_v2', 'Manna Elite V1', 1, 1, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO NOTHING`);
+                rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings ORDER BY id ASC`);
+            } catch {}
+        }
+
         const mapped = rows.map(r => ({
             id: r.id,
             name: r.name,

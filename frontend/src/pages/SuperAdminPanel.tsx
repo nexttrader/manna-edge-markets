@@ -186,6 +186,22 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const handleToggleStrategyEngine = async (strategyId: string, currentEnabled: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/visibility`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !currentEnabled })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to toggle strategy engine');
+      if (resData.strategies) setStrategiesList(resData.strategies);
+      alert(`⚡ Strategy "${strategyId}" engine ${!currentEnabled ? 'ENABLED (ON)' : 'DISABLED (OFF)'} successfully!`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const handleToggleStrategyVisibility = async (strategyId: string, target: 'admins' | 'traders', currentVisible: boolean) => {
     try {
       const body = target === 'admins' ? { visibleToAdmins: !currentVisible } : { visibleToTraders: !currentVisible };
@@ -816,6 +832,7 @@ export const SuperAdminPanel: React.FC = () => {
                 <thead>
                   <tr>
                     <th>Strategy ID &amp; Name</th>
+                    <th>Engine Status</th>
                     <th>Admin Visibility</th>
                     <th>Client / Trader Visibility</th>
                     <th>Governance Actions</th>
@@ -824,11 +841,17 @@ export const SuperAdminPanel: React.FC = () => {
                 <tbody>
                   {strategiesList.map((s: any) => {
                     const stratId = s.id || s.strategyId;
-                    const stratName = stratId === 'sentinel_v2' ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : s.name;
+                    const stratName = stratId === 'sentinel_v2' ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : (stratId === 'manna_basic' ? 'Manna Basic' : s.name);
+                    const isEnabled = s.enabled !== undefined ? Boolean(s.enabled) : true;
                     return (
                       <tr key={stratId}>
                         <td>
                           <strong style={{ color: '#fff' }}>{stratName}</strong> ({stratId})
+                        </td>
+                        <td>
+                          <span style={{ color: isEnabled ? '#00e676' : '#ff1744', fontWeight: 800 }}>
+                            {isEnabled ? '⚡ ENGINE ON' : '🛑 ENGINE OFF'}
+                          </span>
                         </td>
                         <td>
                           <span style={{ color: s.visibleToAdmins ? '#00e676' : '#ff1744', fontWeight: 800 }}>
@@ -842,6 +865,22 @@ export const SuperAdminPanel: React.FC = () => {
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="font-mono"
+                              style={{
+                                background: isEnabled ? 'rgba(255, 23, 68, 0.15)' : 'rgba(0, 230, 118, 0.15)',
+                                border: isEnabled ? '1px solid #ff1744' : '1px solid #00e676',
+                                color: isEnabled ? '#ff1744' : '#00e676',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => handleToggleStrategyEngine(stratId, isEnabled)}
+                            >
+                              {isEnabled ? '🛑 Turn Engine OFF' : '⚡ Turn Engine ON'}
+                            </button>
+
                             <button
                               type="button"
                               className="font-mono"
@@ -891,11 +930,11 @@ export const SuperAdminPanel: React.FC = () => {
               </table>
             </div>
 
-            {/* Twin-Profile Engine Tuning Controls */}
+            {/* Twin-Profile Engine Tuning Controls for Sentinel V2 */}
             <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-              <h3 style={{ margin: '0 0 12px 0', color: '#b388ff' }}>🎛️ Twin Independent Strategy Engine Tuning Profiles</h3>
+              <h3 style={{ margin: '0 0 12px 0', color: '#b388ff' }}>🎛️ MANNA ELITE V1 (SENTINEL V2) SPECIALIZED ENGINE TUNING PROFILES</h3>
               <p style={{ fontSize: '0.85rem', color: '#aaa', marginBottom: '16px' }}>
-                Independently dial signal volume limits and conviction/aggressiveness cutoffs for Super Admin vs Public (Admins &amp; Clients).
+                Specialized tuning tool strictly for Manna Elite V1 (Sentinel V2). Independently dial signal volume limits (1-10) and conviction cutoffs for Super Admin vs Public (Admins &amp; Clients).
               </p>
 
               <form onSubmit={handleSaveTuning} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>

@@ -312,8 +312,16 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
   try {
     const rawId = req.params.id;
     const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
-    const { visibleToAdmins, visibleToTraders } = req.body || {};
+    const { enabled, visibleToAdmins, visibleToTraders } = req.body || {};
 
+    if (enabled !== undefined) {
+      await queries.updateStrategyEnabled(strategyId, Boolean(enabled));
+      // If a strategy is disabled, retroactively invalidate open setups for that strategy
+      if (!enabled) {
+        await queryDb(`UPDATE edge_setups SET signal_state = 'invalidated', tradable = 0, invalidation_reason = 'strategy_disabled', resolved_at = CURRENT_TIMESTAMP WHERE strategy_id = ? AND signal_state IN ('active', 'awaiting_entry')`, [strategyId]);
+        await queryDb(`UPDATE forex_edge_setups SET signal_state = 'invalidated', tradable = 0, invalidation_reason = 'strategy_disabled', resolved_at = CURRENT_TIMESTAMP WHERE strategy_id = ? AND signal_state IN ('active', 'awaiting_entry')`, [strategyId]);
+      }
+    }
     if (visibleToAdmins !== undefined) {
       await queries.updateStrategyVisibility(strategyId, Boolean(visibleToAdmins));
     }
@@ -324,7 +332,27 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
     const updated = await queries.getStrategySettings('super_admin');
     res.json({ success: true, strategies: updated });
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to update strategy visibility', details: err.message });
+    res.status(500).json({ error: 'Failed to update strategy settings', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/toggle', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { enabled } = req.body || {};
+
+    await queries.updateStrategyEnabled(strategyId, Boolean(enabled));
+
+    if (!enabled) {
+      await queryDb(`UPDATE edge_setups SET signal_state = 'invalidated', tradable = 0, invalidation_reason = 'strategy_disabled', resolved_at = CURRENT_TIMESTAMP WHERE strategy_id = ? AND signal_state IN ('active', 'awaiting_entry')`, [strategyId]);
+      await queryDb(`UPDATE forex_edge_setups SET signal_state = 'invalidated', tradable = 0, invalidation_reason = 'strategy_disabled', resolved_at = CURRENT_TIMESTAMP WHERE strategy_id = ? AND signal_state IN ('active', 'awaiting_entry')`, [strategyId]);
+    }
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to toggle strategy engine', details: err.message });
   }
 });
 
@@ -459,10 +487,10 @@ router.post('/sentinel/tuning', async (req: Request, res: Response) => {
         const { superAdminMaxSignals, superAdminMinConviction, publicMaxSignals, publicMinConviction } = req.body || {};
         await queries.updateStrategyTuning(
             'sentinel_v2',
-            Number(superAdminMaxSignals || 6),
-            Number(superAdminMinConviction || 75.0),
-            Number(publicMaxSignals || 3),
-            Number(publicMinConviction || 85.0)
+            Number(superAdminMaxSignals !== undefined ? superAdminMaxSignals : 6),
+            Number(superAdminMinConviction !== undefined ? superAdminMinConviction : 70.0),
+            Number(publicMaxSignals !== undefined ? publicMaxSignals : 6),
+            Number(publicMinConviction !== undefined ? publicMinConviction : 70.0)
         );
         const updated = await queries.getStrategyTuning('sentinel_v2');
         res.json({ success: true, tuning: updated });
