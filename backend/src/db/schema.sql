@@ -165,5 +165,11 @@ CREATE TABLE IF NOT EXISTS strategy_settings (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     enabled INTEGER DEFAULT 1,
+    visible_to_admins INTEGER DEFAULT 1,
+    visible_to_traders INTEGER DEFAULT 1,
+    super_admin_max_signals INTEGER DEFAULT 6,
+    super_admin_min_conviction REAL DEFAULT 75.0,
+    public_max_signals INTEGER DEFAULT 3,
+    public_min_conviction REAL DEFAULT 85.0,
     updated_at TEXT NOT NULL
 );

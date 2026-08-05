@@ -426,6 +426,32 @@ router.post('/sentinel/rollout', async (req: Request, res: Response) => {
     }
 });
 
+router.get('/sentinel/tuning', async (_req: Request, res: Response) => {
+    try {
+        const tuning = await queries.getStrategyTuning('sentinel_v2');
+        res.json({ success: true, tuning });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to fetch Sentinel tuning settings', details: err.message });
+    }
+});
+
+router.post('/sentinel/tuning', async (req: Request, res: Response) => {
+    try {
+        const { superAdminMaxSignals, superAdminMinConviction, publicMaxSignals, publicMinConviction } = req.body || {};
+        await queries.updateStrategyTuning(
+            'sentinel_v2',
+            Number(superAdminMaxSignals || 6),
+            Number(superAdminMinConviction || 75.0),
+            Number(publicMaxSignals || 3),
+            Number(publicMinConviction || 85.0)
+        );
+        const updated = await queries.getStrategyTuning('sentinel_v2');
+        res.json({ success: true, tuning: updated });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to update Sentinel tuning settings', details: err.message });
+    }
+});
+
 router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     try {
         const { getCurrentKillzone } = await import('../scheduler/killzone-mapper');

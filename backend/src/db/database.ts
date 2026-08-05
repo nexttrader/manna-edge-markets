@@ -345,6 +345,10 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN exit_reason TEXT`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_admins INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_traders INTEGER DEFAULT 1`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_max_signals INTEGER DEFAULT 6`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_min_conviction REAL DEFAULT 75.0`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_max_signals INTEGER DEFAULT 3`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_min_conviction REAL DEFAULT 85.0`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}

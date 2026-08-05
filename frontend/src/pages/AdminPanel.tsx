@@ -523,18 +523,26 @@ export const AdminPanel: React.FC = () => {
 
   const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
 
+  const [showCsvExportModal, setShowCsvExportModal] = useState(false);
+
   const handleExportLiveCSV = () => {
     if (!isSuperAdmin) {
       alert('🔒 Access Restricted: Trade Analytics CSV Exports are available to Super Admins only.');
       return;
     }
+    setShowCsvExportModal(true);
+  };
+
+  const executeCsvExport = (audience: 'public' | 'super_admin' | 'all') => {
     const params = new URLSearchParams();
     if (strategyFilter && strategyFilter !== 'all') params.append('strategy_id', strategyFilter);
     params.append('user_role', 'super_admin');
     if (user?.email) params.append('user_email', user.email);
+    params.append('audience', audience);
 
     const url = `${API_BASE}/api/admin/analytics/export-csv?${params.toString()}`;
     window.open(url, '_blank');
+    setShowCsvExportModal(false);
   };
 
   const handleResetAnalytics = async (e: React.FormEvent) => {
@@ -1634,6 +1642,54 @@ export const AdminPanel: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* CSV Export Target Audience Modal (Super Admin Only) */}
+        {showCsvExportModal && (
+          <div className="reset-modal-backdrop font-mono">
+            <div className="reset-modal-card glass-card animate-scale-up" style={{ maxWidth: '520px' }}>
+              <div className="modal-header">
+                <h2 style={{ color: '#00e5ff', fontSize: '1.1rem' }}>📥 Select Target Export Audience Dataset</h2>
+                <button className="close-btn" onClick={() => setShowCsvExportModal(false)}>✕</button>
+              </div>
+              <div className="modal-body" style={{ padding: '16px 0' }}>
+                <p style={{ fontSize: '0.85rem', color: '#aaa', marginBottom: '16px' }}>
+                  Choose which institutional dataset to generate and export. All datasets contain 134 structured machine-readable columns and calculated summary statistics headers.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '12px 16px', borderRadius: '6px', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => executeCsvExport('public')}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>👥 Client & Admin Delivered Signals Dataset</div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports trades delivered to clients/admins under the Manna Elite V1 public profile.</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(179, 136, 255, 0.15)', border: '1px solid #b388ff', color: '#b388ff', padding: '12px 16px', borderRadius: '6px', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => executeCsvExport('super_admin')}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>👑 Super Admin Master Signals Dataset</div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports signals generated under Chadwin Sentinel V2 Elite Framework master profile.</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', color: '#ffab00', padding: '12px 16px', borderRadius: '6px', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => executeCsvExport('all')}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>⚡ Unified System Complete Dataset</div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Combines all signals across both feeds into a single institutional CSV file.</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Reset Confirmation Modal */}
         {showResetModal && (

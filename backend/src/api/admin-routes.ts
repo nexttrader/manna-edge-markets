@@ -1290,12 +1290,13 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied. Trade analytics CSV exports are restricted exclusively to Super Admins.' });
     }
 
+    const audience = (req.query.audience || req.query.scope || 'all').toString().toLowerCase();
     const outcomesRaw = await queryDb(`SELECT * FROM outcomes ORDER BY created_at DESC`);
     
     let earliestTime = new Date().toISOString();
     let latestTime = new Date().toISOString();
 
-    const outcomes = await Promise.all(outcomesRaw.map(async o => {
+    const outcomesEnriched = await Promise.all(outcomesRaw.map(async o => {
       const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       const sigTime = setup?.created_at || o.created_at;
       if (sigTime < earliestTime) earliestTime = sigTime;
@@ -1314,9 +1315,16 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
         ? Number(((new Date(setup.resolved_at || o.execution_time).getTime() - new Date(setup.entry_triggered_at).getTime()) / 60000).toFixed(1))
         : undefined;
 
+      const meta = typeof setup?.metadata === 'string'
+        ? (() => { try { return JSON.parse(setup.metadata); } catch { return {}; } })()
+        : (setup?.metadata || {});
+
+      const targetAudience = meta.target_audience || 'public';
+
       return {
         ...o,
         setup,
+        target_audience: targetAudience,
         instrument: setup?.instrument || o.instrument || 'NQ=F',
         market: setup?.market || o.setup_market || 'futures',
         killzone_origin: setup?.killzone_origin || 'ny_am',
@@ -1331,10 +1339,21 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
       };
     }));
 
-    const csvContent = buildAnalyticsCSV('Current Live Session', earliestTime, latestTime, {}, outcomes);
+    const outcomes = outcomesEnriched.filter(o => {
+      if (audience === 'public' || audience === 'client') {
+        return o.target_audience === 'public' || o.target_audience === 'both' || !o.target_audience;
+      }
+      if (audience === 'super_admin' || audience === 'master') {
+        return o.target_audience === 'super_admin' || o.target_audience === 'both';
+      }
+      return true;
+    });
+
+    const audienceLabel = audience === 'public' ? 'Client_Delivered' : audience === 'super_admin' ? 'SuperAdmin_Master' : 'Unified_All';
+    const csvContent = buildAnalyticsCSV(`Live Session (${audienceLabel})`, earliestTime, latestTime, {}, outcomes);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="manna_institutional_analytics_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="manna_${audienceLabel.toLowerCase()}_analytics_${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(csvContent);
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate CSV export', details: String(error) });

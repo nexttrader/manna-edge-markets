@@ -364,6 +364,43 @@ export async function getHiddenStrategyIdsForRole(role: string, userEmail?: stri
     }
 }
 
+export async function getStrategyTuning(strategyId: string = 'sentinel_v2') {
+    try {
+        const rows = await queryDb<{
+            super_admin_max_signals?: number,
+            super_admin_min_conviction?: number,
+            public_max_signals?: number,
+            public_min_conviction?: number
+        }>(`SELECT super_admin_max_signals, super_admin_min_conviction, public_max_signals, public_min_conviction FROM strategy_settings WHERE id = ?`, [strategyId]);
+        
+        const row = rows[0] || {};
+        return {
+            superAdminMaxSignals: row.super_admin_max_signals ?? 6,
+            superAdminMinConviction: row.super_admin_min_conviction ?? 75.0,
+            publicMaxSignals: row.public_max_signals ?? 3,
+            publicMinConviction: row.public_min_conviction ?? 85.0
+        };
+    } catch {
+        return { superAdminMaxSignals: 6, superAdminMinConviction: 75.0, publicMaxSignals: 3, publicMinConviction: 85.0 };
+    }
+}
+
+export async function updateStrategyTuning(
+    strategyId: string = 'sentinel_v2',
+    superAdminMaxSignals: number,
+    superAdminMinConviction: number,
+    publicMaxSignals: number,
+    publicMinConviction: number
+) {
+    await queryDb(`UPDATE strategy_settings SET 
+        super_admin_max_signals = ?,
+        super_admin_min_conviction = ?,
+        public_max_signals = ?,
+        public_min_conviction = ?,
+        updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`, [superAdminMaxSignals, superAdminMinConviction, publicMaxSignals, publicMinConviction, strategyId]);
+}
+
 export async function updateStrategyTraderVisibility(id: string, visibleToTraders: boolean): Promise<void> {
     const val = visibleToTraders ? 1 : 0;
     try {

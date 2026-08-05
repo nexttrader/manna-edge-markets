@@ -21,7 +21,12 @@ type OrderTypeFilter = 'all' | 'market' | 'limit';
 type StrategyFilter = 'all' | 'manna_basic' | 'manna_snd' | 'sentinel_v2';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
+import { useAuth } from '../context/AuthContext';
+
 export const Dashboard: React.FC = () => {
+  const { user, originalAdmin } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+
   const { setups, runnerSetups, loading } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
 
@@ -188,7 +193,7 @@ export const Dashboard: React.FC = () => {
                 <option value="all">⚡ All Strategies</option>
                 <option value="manna_basic">🔵 Manna Basic</option>
                 <option value="manna_snd">🟡 Manna SnD</option>
-                <option value="sentinel_v2">🟣 Sentinel V2 (Elite)</option>
+                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework(Manna Elite V1)' : 'Manna Elite V1'}</option>
               </select>
             </div>
 

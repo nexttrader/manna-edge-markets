@@ -37,8 +37,9 @@ interface SetupCardProps {
 }
 
 export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist }) => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { user, originalAdmin } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+  const isAdmin = user?.role === 'admin' || isSuperAdmin;
 
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -142,14 +143,17 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     (stateStr === 'active' || stateStr === 'awaiting_entry')
   );
 
-  const stratId = (setup.strategy_id || 'manna_basic').toLowerCase();
   const strategyId = setup.strategy_id || 'manna_basic';
+  const displayStrategyName = strategyId === 'sentinel_v2'
+    ? (isSuperAdmin ? 'CHADWIN SENTINEL V2 ELITE FRAMEWORK (MANNA ELITE V1)' : 'MANNA ELITE V1')
+    : (strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC');
+    
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }
   })();
 
   return (
-    <div className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${stratId}`}>
+    <div className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${(strategyId).toLowerCase()}`}>
       <div className="sc-header">
         <div className="sc-title-group">
           <div className="sc-symbol-row">
@@ -157,10 +161,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
           </div>
           <div className="sc-badges-row">
-            <span className={`strategy-badge strat-${(setup.strategy_id || 'manna_basic').toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
-              {strategyId === 'sentinel_v2' ? 'SENTINEL V2' : (strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA BASIC')}
+            <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
+              {displayStrategyName}
             </span>
-            {strategyId === 'sentinel_v2' ? (
+            {strategyId === 'sentinel_v2' && isSuperAdmin ? (
               <>
                 {meta?.context_tf && (
                   <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700 }}>{meta.context_tf}</span>
@@ -175,7 +179,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                   <span className="cycle-priority-badge font-mono">🔥 CYCLE PRIORITY</span>
                 )}
               </>
-            ) : (
+            ) : strategyId !== 'sentinel_v2' && (
               <>
                 <span className="tf-badge htf">1H Context</span>
                 <span className="tf-badge ltf">15M Entry</span>
@@ -187,7 +191,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               </span>
             )}
           </div>
-          {strategyId === 'sentinel_v2' && (
+          {strategyId === 'sentinel_v2' && isSuperAdmin && (
             <div className="sentinel-pipeline font-mono">
               {['HTF Expansion', 'POI Detected', 'POI Mitigated', '15M Confirmed', '1M Entry'].map((phase, i) => {
                 const phaseMap = ['HTF_EXPANSION_ACTIVE', 'POI_DETECTED', 'POI_MITIGATED', 'MTF_SWING_CONFIRMED', 'LTF_ENTRY_ACTIVE'];

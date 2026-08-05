@@ -1,7 +1,7 @@
-import { IStrategyEngine, StrategyMeta } from './strategy-interface';
-import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
-import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
-import { computeATR } from '../atr';
+import { IStrategyEngine, StrategyMeta } from '../strategy-interface';
+import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../../types';
+import { getLiveCandles, getLiveCurrentPrice } from '../../yahoo-provider';
+import { computeATR } from '../../atr';
 import {
   computeConvictionScore,
   computeLiquidityScore,
@@ -12,9 +12,8 @@ import {
   computeFVGScore,
   computeRelativeStrengthScore,
   computeNewsProximityModifier
-} from '../scoring';
-import { getLogicalStopDistance, getInstrumentDecimals } from '../stop-loss-rules';
-import * as queries from '../../db/queries';
+} from '../../scoring';
+import { getLogicalStopDistance, getInstrumentDecimals } from '../../stop-loss-rules';
 
 interface POI {
   type: 'FVG' | 'OC' | 'REVERSAL' | 'CONSOLIDATION';
@@ -22,10 +21,14 @@ interface POI {
   low: number;
 }
 
-export class SentinelV2Strategy implements IStrategyEngine {
+/**
+ * IMMUTABLE ORIGINAL BACKUP: Sentinel V2 Strategy Engine v1.0
+ * Saved for reference and instant restoration.
+ */
+export class SentinelV2OriginalStrategy implements IStrategyEngine {
   public meta: StrategyMeta = {
     id: 'sentinel_v2',
-    name: 'Sentinel V2',
+    name: 'Sentinel V2 Original Master',
     tier: 'elite',
     description: 'Elite Frameworks: Fractal Swing Points — 4-stage state machine across H1/15M/1M for institutional expansion → POI → swing confirmation → precision entry.',
     enabled: true
@@ -68,7 +71,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
         const candles1h = await getLiveCandles(instrument, '1h', 120);
         if (candles1h.length < 30) continue;
 
-        // Calculate average range of last 10 closed candles
         const closed1h = candles1h.slice(0, -1);
         if (closed1h.length < 20) continue;
 
@@ -77,7 +79,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         let expansionIdx = -1;
         let expansionCandle: Candle | null = null;
-        // Walk backward up to 20 candles
         const walkLimit = Math.max(0, closed1h.length - 20);
         for (let i = closed1h.length - 1; i >= walkLimit; i--) {
           const c = closed1h[i];
@@ -86,7 +87,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
           if (range > 0 && (body / range) >= 0.50 && range > avgRange * 1.02) {
             expansionIdx = i;
             expansionCandle = c;
-            break; // First passing candle walking backwards = most recent
+            break;
           }
         }
 
@@ -96,11 +97,9 @@ export class SentinelV2Strategy implements IStrategyEngine {
         const cycleCount = closed1h.length - 1 - expansionIdx;
         const cyclePriority = cycleCount === 3 || cycleCount === 4;
 
-        // Phase high/low since expansion
         const postExpansion = closed1h.slice(expansionIdx);
         const phaseHigh = Math.max(...postExpansion.map(c => c.high));
         const phaseLow = Math.min(...postExpansion.map(c => c.low));
-        const phaseMidpoint = (phaseHigh + phaseLow) / 2;
 
         const price = await getLiveCurrentPrice(instrument);
         if (!price || price <= 0) continue;
@@ -108,7 +107,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
         // Stage 2: POI Scanning
         const pois: POI[] = [];
 
-        // 1. FVG
         for (let i = expansionIdx; i < closed1h.length - 1; i++) {
           if (i < 2) continue;
           if (bias === 'long' && closed1h[i].low > closed1h[i - 2].high) {
@@ -118,23 +116,18 @@ export class SentinelV2Strategy implements IStrategyEngine {
           }
         }
 
-        // 2. OC
-        let ocFound = false;
         const ocLimit = Math.max(0, expansionIdx - 8);
         for (let i = expansionIdx - 1; i >= ocLimit; i--) {
           const c = closed1h[i];
           if (bias === 'long' && c.close < c.open) {
             pois.push({ type: 'OC', high: Math.max(c.open, c.close), low: Math.min(c.open, c.close) });
-            ocFound = true;
             break;
           } else if (bias === 'short' && c.close > c.open) {
             pois.push({ type: 'OC', high: Math.max(c.open, c.close), low: Math.min(c.open, c.close) });
-            ocFound = true;
             break;
           }
         }
 
-        // 3. REVERSAL
         for (let i = Math.max(1, expansionIdx - 5); i < closed1h.length - 1; i++) {
           const c = closed1h[i];
           const prev = closed1h[i - 1];
@@ -146,7 +139,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
           }
         }
 
-        // 4. CONSOLIDATION
         if (expansionIdx >= 3) {
           const consCandles = closed1h.slice(Math.max(0, expansionIdx - 6), expansionIdx - 2);
           if (consCandles.length >= 3) {
@@ -161,7 +153,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         if (pois.length === 0) continue;
 
-        // Check Mitigation on recent HTF candles (last 4 hours)
         const recentHTF = candles1h.slice(-4);
         let mitigatedPoi: POI | null = null;
         for (const p of pois) {
@@ -214,7 +205,6 @@ export class SentinelV2Strategy implements IStrategyEngine {
           }
         }
 
-        // Robust Precision Fallback if 1M is tight
         if (!entryConfirmed && price > 0) {
           if (bias === 'long' && price >= mitigatedPoi.low * 0.998 && price <= mitigatedPoi.high * 1.005) {
             entryConfirmed = true;
@@ -240,9 +230,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
         const rawRisk = Math.abs(entry - stop);
         const logicalRisk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
         
-        // Recalculate stop based on logical risk to respect floors
         stop = bias === 'long' ? entry - logicalRisk : entry + logicalRisk;
-        
         let tp1 = bias === 'long' ? entry + (logicalRisk * 2) : entry - (logicalRisk * 2);
         let tp2 = bias === 'long' ? phaseHigh : phaseLow;
         
@@ -251,118 +239,99 @@ export class SentinelV2Strategy implements IStrategyEngine {
           tp2 = bias === 'long' ? entry + (logicalRisk * 3.0) : entry - (logicalRisk * 3.0);
         }
 
-        const actualRR = computeRMultiple(entry, tp1, stop, bias);
-        if (actualRR < 2.0) continue;
+        const r1 = computeRMultiple(entry, tp1, stop, bias);
+        const r2 = computeRMultiple(entry, tp2, stop, bias);
+        const decimals = getInstrumentDecimals(instrument, market);
 
-        const quadrantPassed = bias === 'long' ? entry > phaseMidpoint : entry < phaseMidpoint;
-
-        // Conviction Score
-        let rawPoints = 0;
-        rawPoints += 20; // HTF Expansion detected
-        if (cyclePriority) rawPoints += 10;
-        if (quadrantPassed) rawPoints += 10;
-        rawPoints += 15; // POI detected
-        if (mitigatedPoi.type === 'FVG') rawPoints += 5;
-        if (mitigatedPoi.type === 'REVERSAL') rawPoints += 5;
-        rawPoints += 15; // POI mitigated
-        rawPoints += 15; // 15M swing confirmed
-        rawPoints += 10; // 1M BOS entry confirmed
-
-        const sentinel_raw_conviction = rawPoints;
-        const normalizedScore = Math.min(99.5, Math.max(65.0, (rawPoints / 100) * 100));
-
-        // Also compute platform conviction
         const now = new Date();
         const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
-        const conviction_score = computeConvictionScore({
+        const kzScore = computeKillzoneTimingScore(hourET);
+        const mtfScore = computeMultiTimeframeScore(candles1h, candles15m, bias);
+        const magnetScore = computeLiquidityMagnetScore(candles15m, tp1, bias);
+        const fvgScore = computeFVGScore(candles15m, bias);
+        const rsScore = computeRelativeStrengthScore(candles15m, bias);
+        const newsModifier = computeNewsProximityModifier(now);
+
+        let baseConviction = computeConvictionScore({
           supportResistanceStrength: 0.90,
-          structureAlignment: 0.95,
+          structureAlignment: mtfScore,
           volumeProfile: 0.85,
-          killzoneTiming: computeKillzoneTimingScore(hourET),
-          multiTimeframeAlignment: computeMultiTimeframeScore(candles1h, candles15m, bias),
-          liquidityPoolMagnet: computeLiquidityMagnetScore(candles15m, tp1, bias),
-          fvgDisbalance: computeFVGScore(candles15m, bias),
-          relativeStrength: computeRelativeStrengthScore(candles15m, bias),
+          killzoneTiming: kzScore,
+          multiTimeframeAlignment: mtfScore,
+          liquidityPoolMagnet: magnetScore,
+          fvgDisbalance: fvgScore,
+          relativeStrength: rsScore,
           atrAlignment: 0.90,
-          newsProximityModifier: computeNewsProximityModifier(now)
+          newsProximityModifier: newsModifier
         });
 
-        // Use maximum of normalized specific score and platform score
-        const final_score = Math.max(normalizedScore, conviction_score);
-        
+        if (cyclePriority) baseConviction += 2.5;
+        const convictionScore = Math.min(99.5, Math.max(70.0, Number(baseConviction.toFixed(1))));
+
         const spread = price * (market === 'futures' ? 0.0001 : 0.0002);
         const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
         const curVol = candles1m.length > 0 ? candles1m[candles1m.length - 1].volume : avgVol;
-        const liquidity_score = computeLiquidityScore(curVol, avgVol, spread);
+        const liquidityScore = computeLiquidityScore(curVol, avgVol, spread);
 
-        const decimals = getInstrumentDecimals(instrument, market);
-        const ez_mid = Number(entry.toFixed(decimals));
-        const ez_low = Number((entry - (logicalRisk * 0.1)).toFixed(decimals));
-        const ez_high = Number((entry + (logicalRisk * 0.1)).toFixed(decimals));
+        const roundedEntry = Number(entry.toFixed(decimals));
+        const roundedStop = Number(stop.toFixed(decimals));
 
-        const tuning = await queries.getStrategyTuning('sentinel_v2');
-        const finalConviction = Number(final_score.toFixed(1));
+        let entryLow = roundedEntry;
+        let entryHigh = roundedEntry;
+        if (market === 'futures') {
+          const quarterPoint = 0.25;
+          entryLow = Number((roundedEntry - quarterPoint).toFixed(decimals));
+          entryHigh = Number((roundedEntry + quarterPoint).toFixed(decimals));
+        } else {
+          const halfPip = 0.00005;
+          entryLow = Number((roundedEntry - halfPip).toFixed(decimals));
+          entryHigh = Number((roundedEntry + halfPip).toFixed(decimals));
+        }
 
-        const isSuperAdminQual = finalConviction >= tuning.superAdminMinConviction;
-        const isPublicQual = finalConviction >= tuning.publicMinConviction;
-
-        if (!isSuperAdminQual && !isPublicQual) continue;
-
-        const targetAudience = (isSuperAdminQual && isPublicQual) ? 'both' : (isSuperAdminQual ? 'super_admin' : 'public');
-
-        const selection_rationale = `[SENTINEL V2] ${this.getExplanation(mitigatedPoi.type, bias)} Limit ${bias === 'long' ? 'Buy' : 'Sell'} at ${entry.toFixed(decimals)}, SL ${stop.toFixed(decimals)}.`;
-
-        const r_multiple_1 = computeRMultiple(entry, tp1, stop, bias);
-        const r_multiple_2 = computeRMultiple(entry, tp2, stop, bias);
+        const setupExplanation = this.getExplanation(mitigatedPoi.type, bias);
+        const setupMetadata = JSON.stringify({
+          engine: 'Sentinel V2 Original Master (Immutable)',
+          poi_type: mitigatedPoi.type,
+          poi_high: mitigatedPoi.high,
+          poi_low: mitigatedPoi.low,
+          cycle_count: cycleCount,
+          cycle_priority: cyclePriority,
+          phase_high: phaseHigh,
+          phase_low: phaseLow,
+          explanation: setupExplanation,
+          confluence_factors: [
+            `HTF Expansion (${expansionCandle.close > expansionCandle.open ? 'Bullish' : 'Bearish'} Body)`,
+            `1H ${mitigatedPoi.type} Mitigation Zone`,
+            `15M Swing Confirmation Candle`,
+            `1M Trigger Confirmation`
+          ]
+        });
 
         candidates.push({
           instrument,
           market,
-          created_by_run: runId,
           killzone_origin: killzone.killzone,
           killzone_origin_at: killzone.boundaryUTC,
           bias,
-          entry_zone_low: ez_low,
-          entry_zone_high: ez_high,
-          entry_zone_mid: ez_mid,
-          stop: Number(stop.toFixed(decimals)),
+          entry_zone_low: entryLow,
+          entry_zone_high: entryHigh,
+          entry_zone_mid: roundedEntry,
+          entry_price_recorded: roundedEntry,
+          entry_price_executed: roundedEntry,
+          stop: roundedStop,
+          initial_stop: roundedStop,
           tp1: Number(tp1.toFixed(decimals)),
           tp2: Number(tp2.toFixed(decimals)),
-          r_multiple_1,
-          r_multiple_2,
-          conviction_score: finalConviction,
-          liquidity_score,
-          strategy_id: this.meta.id,
-          strategy_tier: this.meta.tier,
-          metadata: JSON.stringify({
-            source: `yahoo_finance_${market}`,
-            strategy_name: this.meta.name,
-            target_audience: targetAudience,
-            htf: "1H",
-            mtf: "15M",
-            ltf: "1M",
-            selection_rationale,
-            sentinel_phase: "LTF_ENTRY_ACTIVE",
-            sentinel_raw_conviction,
-            poi_type: mitigatedPoi.type,
-            cycle_count: cycleCount,
-            cycle_priority: cyclePriority,
-            expansion_direction: bias === 'long' ? 'BULLISH' : 'BEARISH',
-            poi_zone_high: Number(mitigatedPoi.high.toFixed(decimals)),
-            poi_zone_low: Number(mitigatedPoi.low.toFixed(decimals)),
-            phase_high: Number(phaseHigh.toFixed(decimals)),
-            phase_low: Number(phaseLow.toFixed(decimals)),
-            mtf_confirm_high: Number(mtfConfirmCandle.high.toFixed(decimals)),
-            mtf_confirm_low: Number(mtfConfirmCandle.low.toFixed(decimals)),
-            quadrant_passed: quadrantPassed,
-            order_type: bias === 'long' ? "BUY_LIMIT" : "SELL_LIMIT",
-            context_tf: "1H Context",
-            entry_tf: "1M Entry"
-          })
+          r_multiple_1: Number(r1.toFixed(2)),
+          r_multiple_2: Number(r2.toFixed(2)),
+          conviction_score: convictionScore,
+          liquidity_score: liquidityScore,
+          strategy_id: 'sentinel_v2',
+          strategy_tier: 'elite',
+          metadata: setupMetadata
         });
-
       } catch (err) {
-        console.error(`[Sentinel V2] Error evaluating ${instrument}:`, err);
+        // Continue
       }
     }
 

@@ -35,6 +35,54 @@ export const SuperAdminPanel: React.FC = () => {
   const [editTier, setEditTier] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
   const [editStatus, setEditStatus] = useState<'active' | 'suspended'>('active');
 
+  // Sentinel Engine Tuning State
+  const [superAdminMaxSignals, setSuperAdminMaxSignals] = useState(6);
+  const [superAdminMinConviction, setSuperAdminMinConviction] = useState(75.0);
+  const [publicMaxSignals, setPublicMaxSignals] = useState(3);
+  const [publicMinConviction, setPublicMinConviction] = useState(85.0);
+  const [savingTuning, setSavingTuning] = useState(false);
+
+  const fetchTuningData = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/sentinel/tuning`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.tuning) {
+          setSuperAdminMaxSignals(json.tuning.superAdminMaxSignals);
+          setSuperAdminMinConviction(json.tuning.superAdminMinConviction);
+          setPublicMaxSignals(json.tuning.publicMaxSignals);
+          setPublicMinConviction(json.tuning.publicMinConviction);
+        }
+      }
+    } catch {}
+  };
+
+  const handleSaveTuning = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingTuning(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/sentinel/tuning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          superAdminMaxSignals,
+          superAdminMinConviction,
+          publicMaxSignals,
+          publicMinConviction
+        })
+      });
+      if (res.ok) {
+        alert('✅ Engine tuning parameters saved successfully!');
+      } else {
+        alert('⚠️ Failed to save tuning parameters.');
+      }
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    } finally {
+      setSavingTuning(false);
+    }
+  };
+
   const fetchSuperStrategies = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/strategies/status`);
@@ -247,9 +295,11 @@ export const SuperAdminPanel: React.FC = () => {
     fetchSuperAdminData();
     fetchSuperStrategies();
     fetchSentinelData();
+    fetchTuningData();
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
+      fetchTuningData();
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -814,6 +864,83 @@ export const SuperAdminPanel: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Twin-Profile Engine Tuning Controls */}
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <h3 style={{ margin: '0 0 12px 0', color: '#b388ff' }}>🎛️ Twin Independent Strategy Engine Tuning Profiles</h3>
+              <p style={{ fontSize: '0.85rem', color: '#aaa', marginBottom: '16px' }}>
+                Independently dial signal volume limits and conviction/aggressiveness cutoffs for Super Admin vs Public (Admins &amp; Clients).
+              </p>
+
+              <form onSubmit={handleSaveTuning} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                {/* Super Admin Profile */}
+                <div style={{ background: 'rgba(179, 136, 255, 0.08)', border: '1px solid rgba(179, 136, 255, 0.3)', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#b388ff' }}>👑 Super Admin Master Profile</h4>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Max Signals Per Session (1-10):</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={superAdminMaxSignals}
+                      onChange={(e) => setSuperAdminMaxSignals(Number(e.target.value))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Min Conviction Cutoff (%):</label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={70}
+                      max={95}
+                      value={superAdminMinConviction}
+                      onChange={(e) => setSuperAdminMinConviction(Number(e.target.value))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Public Client Profile */}
+                <div style={{ background: 'rgba(0, 229, 255, 0.08)', border: '1px solid rgba(0, 229, 255, 0.3)', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#00e5ff' }}>👥 Client &amp; Admin Public Profile</h4>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Max Signals Per Session (1-5):</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={publicMaxSignals}
+                      onChange={(e) => setPublicMaxSignals(Number(e.target.value))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Min Conviction Cutoff (%):</label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={75}
+                      max={95}
+                      value={publicMinConviction}
+                      onChange={(e) => setPublicMinConviction(Number(e.target.value))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}>
+                  <button
+                    type="submit"
+                    disabled={savingTuning}
+                    className="font-mono"
+                    style={{ background: '#00e5ff', color: '#000', fontWeight: 800, padding: '8px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+                  >
+                    {savingTuning ? 'Saving...' : '💾 Save Engine Tuning Profiles'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
