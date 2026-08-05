@@ -583,7 +583,13 @@ router.post('/retroactive-clean', async (_req: Request, res: Response) => {
     await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
     await queryDb(`UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
 
-    // 3. Force outcome-detector eval
+    // 3. Fix any out-of-bounds realized_pl values in outcomes
+    await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);
+    await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`);
+    await queryDb(`UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
+    await queryDb(`UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
+
+    // 4. Force outcome-detector eval
     await outcomeDetector.evaluateAllSetups(true);
 
     res.json({ success: true, message: 'Database retroactive cleanup & outcome sync completed successfully!' });
