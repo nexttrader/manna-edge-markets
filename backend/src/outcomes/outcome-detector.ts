@@ -44,8 +44,27 @@ export class OutcomeDetector {
       // 1. PROCESS AWAITING_ENTRY SETUPS
       const pendingSetups = await queries.getSetupsByState('awaiting_entry');
       for (const setup of pendingSetups) {
-        const currentPrice = await getLiveCurrentPrice(setup.instrument);
-        if (!currentPrice || currentPrice <= 0) continue;
+        // Pre-check: Sync state if an outcome already exists for this setup
+        const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
+        if (existingOutcomes.length > 0) {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: existingOutcomes[0].created_at || new Date().toISOString(),
+            invalidation_reason: existingOutcomes[0].outcome_type
+          });
+          continue;
+        }
+
+        let currentPrice = await getLiveCurrentPrice(setup.instrument);
+        if (!currentPrice || currentPrice <= 0) {
+          const createdTimeMs = setup.created_at ? new Date(setup.created_at).getTime() : 0;
+          const ageHours = createdTimeMs > 0 ? (Date.now() - createdTimeMs) / 3600000 : 0;
+          if (ageHours > 12) {
+            currentPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+          } else {
+            continue;
+          }
+        }
 
         let maxHigh = currentPrice;
         let minLow = currentPrice;
@@ -156,8 +175,27 @@ export class OutcomeDetector {
       const activeSetups = await queries.getSetupsByState('active');
       
       for (const setup of activeSetups) {
-        const currentPrice = await getLiveCurrentPrice(setup.instrument);
-        if (!currentPrice || currentPrice <= 0) continue;
+        // Pre-check: Sync state if an outcome already exists for this setup
+        const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
+        if (existingOutcomes.length > 0) {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: existingOutcomes[0].created_at || new Date().toISOString(),
+            invalidation_reason: existingOutcomes[0].outcome_type
+          });
+          continue;
+        }
+
+        let currentPrice = await getLiveCurrentPrice(setup.instrument);
+        if (!currentPrice || currentPrice <= 0) {
+          const createdTimeMs = setup.created_at ? new Date(setup.created_at).getTime() : 0;
+          const ageHours = createdTimeMs > 0 ? (Date.now() - createdTimeMs) / 3600000 : 0;
+          if (ageHours > 12) {
+            currentPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+          } else {
+            continue;
+          }
+        }
         
         let maxHigh = currentPrice;
         let minLow = currentPrice;

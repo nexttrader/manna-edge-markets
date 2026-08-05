@@ -571,6 +571,27 @@ router.get('/publish-runs', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/retroactive-clean', async (_req: Request, res: Response) => {
+  try {
+    const now = new Date().toISOString();
+    // 1. Sync setup states if outcome already exists
+    await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
+    await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
+    
+    // 2. Merge sentinel_v2 to manna_basic
+    await queryDb(`UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
+    await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
+    await queryDb(`UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`);
+
+    // 3. Force outcome-detector eval
+    await outcomeDetector.evaluateAllSetups(true);
+
+    res.json({ success: true, message: 'Database retroactive cleanup & outcome sync completed successfully!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Retroactive cleanup failed', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
     await outcomeDetector.evaluateAllSetups(true);
@@ -612,8 +633,9 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let futuresActiveSetups = await queries.getActiveSetups('futures');
     let forexActiveSetups = await queries.getActiveSetups('forex');
 
-    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
-    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic'));
+    const resolvedSetupIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
+    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic') && !resolvedSetupIds.has(String(s.id)));
+    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'manna_basic') && !resolvedSetupIds.has(String(s.id)));
 
     let futuresActive = futuresActiveSetups.length;
     let forexActive = forexActiveSetups.length;

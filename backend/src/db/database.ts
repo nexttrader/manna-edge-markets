@@ -312,6 +312,15 @@ export async function initializeDatabase(): Promise<void> {
 
                     UPDATE edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
                     UPDATE forex_edge_setups SET conviction_score = ROUND(CAST(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5) AS NUMERIC), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5;
+
+                    -- Auto-resolve any open setups in Supabase that already have an outcome logged
+                    UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes);
+                    UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes);
+
+                    -- Merge sentinel_v2 setups & outcomes into manna_basic (Manna Elite V1)
+                    UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
+                    UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
+                    UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2';
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
@@ -372,6 +381,11 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
+    try { db.exec(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`); } catch {}
+    try { db.exec(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, created_at) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`); } catch {}
+    try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
+    try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
+    try { db.exec(`UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`); } catch {}
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS analytics_archives (

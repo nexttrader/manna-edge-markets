@@ -21,8 +21,11 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       rawSetups = await queries.getActiveSetups(market);
     }
 
+    const allOutcomes = await queryDb(`SELECT setup_id FROM outcomes`);
+    const resolvedIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
+
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic'));
+    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'manna_basic') && !resolvedIds.has(String(s.id)));
 
 
 

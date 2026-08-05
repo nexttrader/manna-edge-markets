@@ -58,19 +58,21 @@ export async function generateReportMetrics(
 
   const stratStats: Record<string, { trades: number; wins: number; winRate: number; totalR: number }> = {
     manna_basic: { trades: 0, wins: 0, winRate: 0, totalR: 0 },
-    manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 },
-    sentinel_v2: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
+    manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
   };
 
   let processedTrades = 0;
 
   for (const o of outcomesRaw) {
-    const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+    let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+    if (!setup) {
+      setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
+    }
 
     // Filter by session if periodType === 'session' and sessionName is provided and not 'all'
     if (periodType === 'session' && sessionName && sessionName !== 'all') {
-      const setupKz = (setup?.killzone_origin || o.killzone_origin || '').toLowerCase();
-      const targetKz = sessionName.toLowerCase();
+      const setupKz = (setup?.killzone_origin || (o as any).killzone_origin || '').toLowerCase().replace(/^kz_/, '');
+      const targetKz = sessionName.toLowerCase().replace(/^kz_/, '');
       if (setupKz !== targetKz) {
         continue;
       }
@@ -78,7 +80,11 @@ export async function generateReportMetrics(
 
     processedTrades++;
     const rawKey = (o.strategy_id || setup?.strategy_id || 'manna_basic').toLowerCase();
-    const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : rawKey === 'sentinel_v2' ? 'sentinel_v2' : 'manna_basic';
+    const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : 'manna_basic'; // sentinel_v2 merged into manna_basic (Manna Elite V1)
+
+    if (!stratStats[stratKey]) {
+      stratStats[stratKey] = { trades: 0, wins: 0, winRate: 0, totalR: 0 };
+    }
 
     let rVal = 0;
     const typeStr = String(o.outcome_type || '').toLowerCase();
@@ -97,6 +103,11 @@ export async function generateReportMetrics(
     } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
       breakevens++;
       rVal = 0.0;
+    } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
+      rVal = Math.max(-1.0, o.realized_pl);
+      if (rVal > 0) { wins++; stratStats[stratKey].wins++; }
+      else if (rVal < 0) { losses++; }
+      else { breakevens++; }
     }
 
     totalRealizedR += rVal;
