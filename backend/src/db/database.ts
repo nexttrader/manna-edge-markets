@@ -229,6 +229,9 @@ export async function initializeDatabase(): Promise<void> {
                         duration_min DOUBLE PRECISION,
                         exit_reason TEXT,
                         strategy_id TEXT DEFAULT 'manna_basic',
+                        was_runner INTEGER DEFAULT 0,
+                        runner_realized_r DOUBLE PRECISION DEFAULT 0.0,
+                        is_breakeven INTEGER DEFAULT 0,
                         notes TEXT,
                         created_at TEXT NOT NULL
                     );
