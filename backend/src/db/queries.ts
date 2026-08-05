@@ -67,12 +67,14 @@ export const createSetup = async (setup: EdgeSetup, market?: string): Promise<vo
 };
 
 export async function updateSetupState(id: string, market: string, state: string, fields?: Partial<EdgeSetup>): Promise<void> {
-    const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    const primaryTable = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    const fallbackTable = market === 'forex' ? 'edge_setups' : 'forex_edge_setups';
     const updates: Record<string, any> = { signal_state: state, ...fields };
     const keys = Object.keys(updates);
     const values = Object.values(updates);
     const setClause = keys.map(k => `${k} = ?`).join(', ');
-    await queryDb(`UPDATE ${table} SET ${setClause} WHERE id = ?`, [...values, id]);
+    await queryDb(`UPDATE ${primaryTable} SET ${setClause} WHERE id = ?`, [...values, id]);
+    await queryDb(`UPDATE ${fallbackTable} SET ${setClause} WHERE id = ?`, [...values, id]);
 }
 
 export async function updateSetup(setup: EdgeSetup): Promise<void> {

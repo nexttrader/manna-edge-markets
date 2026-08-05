@@ -123,11 +123,31 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       };
     });
 
+    const filteredActiveSetups = finalSetups.filter((setup: any) => {
+      if (setup.signal_state !== 'active' || !setup.current_price || !setup.stop) return true;
+      const isLong = (setup.bias || 'long').toLowerCase() === 'long';
+      const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
+      const initialStop = setup.initial_stop || setup.stop;
+      const risk = Math.abs(entryPrice - initialStop);
+      const tp2 = setup.tp2 || (isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0));
+
+      if (isLong) {
+        if (setup.current_price >= tp2) return false;
+        if (setup.is_breakeven && setup.current_price <= setup.stop) return false;
+        if (setup.current_price <= initialStop) return false;
+      } else {
+        if (setup.current_price <= tp2) return false;
+        if (setup.is_breakeven && setup.current_price >= setup.stop) return false;
+        if (setup.current_price >= initialStop) return false;
+      }
+      return true;
+    });
+
     const kz = getCurrentKillzone(new Date());
     
     res.json({
-      setups: finalSetups.sort((a: any, b: any) => (b.conviction_score || 0) - (a.conviction_score || 0)),
-      count: finalSetups.length,
+      setups: filteredActiveSetups.sort((a: any, b: any) => (b.conviction_score || 0) - (a.conviction_score || 0)),
+      count: filteredActiveSetups.length,
       killzone: kz?.killzone || 'unknown',
       timestamp: new Date().toISOString()
     });
