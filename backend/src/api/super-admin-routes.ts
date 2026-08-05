@@ -311,9 +311,15 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
   try {
     const rawId = req.params.id;
     const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
-    const { visibleToAdmins } = req.body || {};
+    const { visibleToAdmins, visibleToTraders } = req.body || {};
 
-    await queries.updateStrategyVisibility(strategyId, Boolean(visibleToAdmins));
+    if (visibleToAdmins !== undefined) {
+      await queries.updateStrategyVisibility(strategyId, Boolean(visibleToAdmins));
+    }
+    if (visibleToTraders !== undefined) {
+      await queries.updateStrategyTraderVisibility(strategyId, Boolean(visibleToTraders));
+    }
+
     const updated = await queries.getStrategySettings('super_admin');
     res.json({ success: true, strategies: updated });
   } catch (err: any) {

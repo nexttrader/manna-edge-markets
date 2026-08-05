@@ -1541,7 +1541,7 @@ export const AdminPanel: React.FC = () => {
               background: strategyFilter === 'sentinel_v2' ? 'rgba(156, 39, 176, 0.2)' : undefined
             }}
           >
-            🟣 Sentinel V2
+            🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}
           </button>
         </div>
 

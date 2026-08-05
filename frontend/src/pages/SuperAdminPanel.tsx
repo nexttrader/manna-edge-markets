@@ -187,17 +187,18 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
-  const handleToggleStrategyVisibility = async (strategyId: string, currentVisible: boolean) => {
+  const handleToggleStrategyVisibility = async (strategyId: string, target: 'admins' | 'traders', currentVisible: boolean) => {
     try {
+      const body = target === 'admins' ? { visibleToAdmins: !currentVisible } : { visibleToTraders: !currentVisible };
       const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/visibility`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visibleToAdmins: !currentVisible })
+        body: JSON.stringify(body)
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to update visibility');
       if (resData.strategies) setStrategiesList(resData.strategies);
-      alert(`👁️ Strategy "${strategyId}" visibility updated!`);
+      alert(`👁️ Strategy "${strategyId}" visibility for ${target.toUpperCase()} updated successfully!`);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     }
@@ -817,50 +818,76 @@ export const SuperAdminPanel: React.FC = () => {
                   <tr>
                     <th>Strategy ID &amp; Name</th>
                     <th>Admin Visibility</th>
-                    <th>Actions</th>
+                    <th>Client / Trader Visibility</th>
+                    <th>Governance Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {strategiesList.map((s: any) => (
-                    <tr key={s.strategyId}>
-                      <td>
-                        <strong style={{ color: '#fff' }}>{s.name}</strong> ({s.strategyId})
-                      </td>
-                      <td>
-                        <span style={{ color: s.visibleToAdmins ? '#00e676' : '#ff1744', fontWeight: 800 }}>
-                          {s.visibleToAdmins ? '👁️ VISIBLE TO ADMINS' : '🔒 SUPER ADMIN ONLY'}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{
-                              background: s.visibleToAdmins ? 'rgba(255, 23, 68, 0.15)' : 'rgba(0, 230, 118, 0.15)',
-                              border: s.visibleToAdmins ? '1px solid #ff1744' : '1px solid #00e676',
-                              color: s.visibleToAdmins ? '#ff1744' : '#00e676',
-                              padding: '4px 10px',
-                              borderRadius: '4px',
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => handleToggleStrategyVisibility(s.strategyId, s.visibleToAdmins)}
-                          >
-                            {s.visibleToAdmins ? '🔒 Hide from Admins' : '👁️ Show to Admins'}
-                          </button>
+                  {strategiesList.map((s: any) => {
+                    const stratId = s.id || s.strategyId;
+                    const stratName = stratId === 'sentinel_v2' ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : s.name;
+                    return (
+                      <tr key={stratId}>
+                        <td>
+                          <strong style={{ color: '#fff' }}>{stratName}</strong> ({stratId})
+                        </td>
+                        <td>
+                          <span style={{ color: s.visibleToAdmins ? '#00e676' : '#ff1744', fontWeight: 800 }}>
+                            {s.visibleToAdmins ? '👁️ VISIBLE TO ADMINS' : '🔒 HIDDEN FROM ADMINS'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ color: s.visibleToTraders ? '#00e5ff' : '#ff1744', fontWeight: 800 }}>
+                            {s.visibleToTraders ? '🌐 VISIBLE TO CLIENTS' : '🔒 HIDDEN FROM CLIENTS'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="font-mono"
+                              style={{
+                                background: s.visibleToAdmins ? 'rgba(255, 23, 68, 0.15)' : 'rgba(0, 230, 118, 0.15)',
+                                border: s.visibleToAdmins ? '1px solid #ff1744' : '1px solid #00e676',
+                                color: s.visibleToAdmins ? '#ff1744' : '#00e676',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => handleToggleStrategyVisibility(stratId, 'admins', s.visibleToAdmins)}
+                            >
+                              {s.visibleToAdmins ? '🔒 Hide from Admins' : '👁️ Show to Admins'}
+                            </button>
 
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}
-                            onClick={() => handleDeleteStrategy(s.strategyId, s.name)}
-                          >
-                            🗑️ Delete Strategy
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <button
+                              type="button"
+                              className="font-mono"
+                              style={{
+                                background: s.visibleToTraders ? 'rgba(255, 23, 68, 0.15)' : 'rgba(0, 229, 255, 0.15)',
+                                border: s.visibleToTraders ? '1px solid #ff1744' : '1px solid #00e5ff',
+                                color: s.visibleToTraders ? '#ff1744' : '#00e5ff',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => handleToggleStrategyVisibility(stratId, 'traders', s.visibleToTraders)}
+                            >
+                              {s.visibleToTraders ? '🔒 Hide from Clients' : '🌐 Show to Clients'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="font-mono"
+                              style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                              onClick={() => handleDeleteStrategy(stratId, stratName)}
+                            >
+                              🗑️ Delete Strategy
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
