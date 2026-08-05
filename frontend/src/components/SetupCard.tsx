@@ -179,7 +179,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                   <span className="cycle-priority-badge font-mono">🔥 CYCLE PRIORITY</span>
                 )}
               </>
-            ) : strategyId !== 'sentinel_v2' && (
+            ) : (
               <>
                 <span className="tf-badge htf">1H Context</span>
                 <span className="tf-badge ltf">15M Entry</span>

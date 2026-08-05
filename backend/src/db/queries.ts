@@ -351,7 +351,7 @@ export async function revokeAdminStrategyAccess(userEmail: string, strategyId: s
 
 export async function getHiddenStrategyIdsForRole(role: string, userEmail?: string): Promise<string[]> {
     try {
-        const rows = await queryDb<{ id: string, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings`);
+        const rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings`);
         const emailLower = userEmail ? userEmail.trim().toLowerCase() : '';
         
         let grantedAccessMap: Record<string, string[]> = {};
@@ -363,8 +363,10 @@ export async function getHiddenStrategyIdsForRole(role: string, userEmail?: stri
             }
         }
 
-        return rows.filter(r => {
-            if (role === 'super_admin') return false; // super admin sees everything
+        const hiddenRows = rows.filter(r => {
+            // Disabled strategies are hidden for all non-super-admin users
+            if (r.enabled === 0 || (r.enabled as any) === false) return true;
+            if (role === 'super_admin') return false; // super admin sees all enabled strategies
             if (role === 'admin') {
                 const isGloballyVisibleToAdmins = r.visible_to_admins === undefined ? true : Boolean(r.visible_to_admins);
                 if (isGloballyVisibleToAdmins) return false;
@@ -374,7 +376,9 @@ export async function getHiddenStrategyIdsForRole(role: string, userEmail?: stri
             }
             // trader or default
             return !(r.visible_to_traders === undefined ? true : Boolean(r.visible_to_traders));
-        }).map(r => r.id);
+        });
+
+        return hiddenRows.map(r => r.id);
     } catch {
         return [];
     }
