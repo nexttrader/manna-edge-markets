@@ -14,10 +14,7 @@ export interface ReportSummary {
   totalRealizedR: number;
   avgFillTimeMin: number;
   avgHoldDurationMin: number;
-  strategyBreakdown: {
-    manna_basic: { trades: number; wins: number; winRate: number; totalR: number };
-    manna_snd: { trades: number; wins: number; winRate: number; totalR: number };
-  };
+  strategyBreakdown: Record<string, { trades: number; wins: number; winRate: number; totalR: number }>;
   plainEnglishSummary: string;
 }
 
@@ -59,9 +56,10 @@ export async function generateReportMetrics(
   let totalHoldMs = 0;
   let holdCount = 0;
 
-  const stratStats = {
+  const stratStats: Record<string, { trades: number; wins: number; winRate: number; totalR: number }> = {
     manna_basic: { trades: 0, wins: 0, winRate: 0, totalR: 0 },
-    manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
+    manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 },
+    sentinel_v2: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
   };
 
   let processedTrades = 0;
@@ -79,7 +77,8 @@ export async function generateReportMetrics(
     }
 
     processedTrades++;
-    const stratKey = (o.strategy_id || setup?.strategy_id || 'manna_basic').toLowerCase() === 'manna_snd' ? 'manna_snd' : 'manna_basic';
+    const rawKey = (o.strategy_id || setup?.strategy_id || 'manna_basic').toLowerCase();
+    const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : rawKey === 'sentinel_v2' ? 'sentinel_v2' : 'manna_basic';
 
     let rVal = 0;
     const typeStr = String(o.outcome_type || '').toLowerCase();
@@ -126,14 +125,12 @@ export async function generateReportMetrics(
   const avgFillTimeMin = fillCount > 0 ? Number((totalFillMs / fillCount / 60000).toFixed(1)) : 0;
   const avgHoldDurationMin = holdCount > 0 ? Number((totalHoldMs / holdCount / 60000).toFixed(1)) : 0;
 
-  if (stratStats.manna_basic.trades > 0) {
-    stratStats.manna_basic.winRate = Number(((stratStats.manna_basic.wins / stratStats.manna_basic.trades) * 100).toFixed(1));
-    stratStats.manna_basic.totalR = Number(stratStats.manna_basic.totalR.toFixed(2));
-  }
-  if (stratStats.manna_snd.trades > 0) {
-    stratStats.manna_snd.winRate = Number(((stratStats.manna_snd.wins / stratStats.manna_snd.trades) * 100).toFixed(1));
-    stratStats.manna_snd.totalR = Number(stratStats.manna_snd.totalR.toFixed(2));
-  }
+  Object.keys(stratStats).forEach(k => {
+    if (stratStats[k].trades > 0) {
+      stratStats[k].winRate = Number(((stratStats[k].wins / stratStats[k].trades) * 100).toFixed(1));
+      stratStats[k].totalR = Number(stratStats[k].totalR.toFixed(2));
+    }
+  });
 
   let periodLabel = periodType === 'daily' ? 'Daily' : periodType === 'weekly' ? 'Weekly' : periodType === 'monthly' ? 'Monthly' : 'Session';
   if (periodType === 'session' && sessionName && sessionName !== 'all') {
