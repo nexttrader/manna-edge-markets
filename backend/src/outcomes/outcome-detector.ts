@@ -88,6 +88,11 @@ export class OutcomeDetector {
         const tp1 = setup.tp1 || (isLong ? (entryPrice + risk * 2.0) : (entryPrice - risk * 2.0));
         const tp2 = setup.tp2 || (isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0));
 
+        const maxProfitPending = isLong ? (maxHigh - entryPrice) : (entryPrice - minLow);
+        const pendingR = risk > 0 ? (maxProfitPending / risk) : 0;
+        const targetR1Pending = setup.r_multiple_1 || 2.0;
+        const targetR2Pending = setup.r_multiple_2 || 3.0;
+
         let hitDetected = false;
         let outcomeType = '';
         let executionPrice = currentPrice;
@@ -95,9 +100,9 @@ export class OutcomeDetector {
         // Determine if stop is effectively at break-even (stop ≈ entry within 0.01%)
         const isEffectivelyBE = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
         if (isLong) {
-          if (currentPrice >= tp2 || maxHigh >= tp2) {
+          if (currentPrice >= tp2 || maxHigh >= tp2 || pendingR >= targetR2Pending) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
-          } else if (currentPrice >= tp1 || maxHigh >= tp1) {
+          } else if (currentPrice >= tp1 || maxHigh >= tp1 || pendingR >= targetR1Pending) {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
           } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
             hitDetected = true;
@@ -105,9 +110,9 @@ export class OutcomeDetector {
             executionPrice = isEffectivelyBE ? entryPrice : Math.min(currentPrice, setup.stop);
           }
         } else {
-          if (currentPrice <= tp2 || minLow <= tp2) {
+          if (currentPrice <= tp2 || minLow <= tp2 || pendingR >= targetR2Pending) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, tp2);
-          } else if (currentPrice <= tp1 || minLow <= tp1) {
+          } else if (currentPrice <= tp1 || minLow <= tp1 || pendingR >= targetR1Pending) {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
           } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
             hitDetected = true;
@@ -250,10 +255,13 @@ export class OutcomeDetector {
         
         // Determine if stop is effectively at break-even
         const isEffectivelyBEActive = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
+        const targetR1Active = setup.r_multiple_1 || 2.0;
+        const targetR2Active = setup.r_multiple_2 || 3.0;
+
         if (isLong) {
-          if (currentPrice >= tp2 || maxHigh >= tp2) {
+          if (currentPrice >= tp2 || maxHigh >= tp2 || maxR >= targetR2Active) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
-          } else if (currentPrice >= tp1 || maxHigh >= tp1) {
+          } else if (currentPrice >= tp1 || maxHigh >= tp1 || maxR >= targetR1Active) {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
           } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
             hitDetected = true;
@@ -261,9 +269,9 @@ export class OutcomeDetector {
             executionPrice = isEffectivelyBEActive ? entryPrice : Math.min(currentPrice, setup.stop);
           }
         } else {
-          if (currentPrice <= tp2 || minLow <= tp2) {
+          if (currentPrice <= tp2 || minLow <= tp2 || maxR >= targetR2Active) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, tp2);
-          } else if (currentPrice <= tp1 || minLow <= tp1) {
+          } else if (currentPrice <= tp1 || minLow <= tp1 || maxR >= targetR1Active) {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
           } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
             hitDetected = true;

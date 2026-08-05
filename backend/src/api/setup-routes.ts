@@ -94,9 +94,19 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       })
     );
 
-    const finalSetups = enrichedSetups.map((setup: any) => {
-      let metaObj: any = {};
-      try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
+    const finalSetups = enrichedSetups
+      .filter((s: any) => {
+        const targetR1 = s.r_multiple_1 || 2.0;
+        if (s.unrealizedR !== undefined) {
+          if (s.unrealizedR >= targetR1 || s.unrealizedR <= -1.0) {
+            return false; // Exclude cards that reached 2R (TP1) or -1R (SL)
+          }
+        }
+        return true;
+      })
+      .map((setup: any) => {
+        let metaObj: any = {};
+        try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
 
       const oppSetup = enrichedSetups.find((other: any) => {
         if (other.id === setup.id) return false;
