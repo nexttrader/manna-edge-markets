@@ -299,7 +299,6 @@ export const SuperAdminPanel: React.FC = () => {
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
-      fetchTuningData();
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -906,11 +905,11 @@ export const SuperAdminPanel: React.FC = () => {
                 <div style={{ background: 'rgba(0, 229, 255, 0.08)', border: '1px solid rgba(0, 229, 255, 0.3)', borderRadius: '8px', padding: '16px' }}>
                   <h4 style={{ margin: '0 0 12px 0', color: '#00e5ff' }}>👥 Client &amp; Admin Public Profile</h4>
                   <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Max Signals Per Session (1-5):</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#ccc', marginBottom: '4px' }}>Max Signals Per Session (1-10):</label>
                     <input
                       type="number"
                       min={1}
-                      max={5}
+                      max={10}
                       value={publicMaxSignals}
                       onChange={(e) => setPublicMaxSignals(Number(e.target.value))}
                       style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
@@ -921,13 +920,40 @@ export const SuperAdminPanel: React.FC = () => {
                     <input
                       type="number"
                       step={0.5}
-                      min={75}
+                      min={70}
                       max={95}
                       value={publicMinConviction}
                       onChange={(e) => setPublicMinConviction(Number(e.target.value))}
                       style={{ width: '100%', background: '#111', border: '1px solid #444', color: '#fff', padding: '6px 10px', borderRadius: '4px' }}
                     />
                   </div>
+                </div>
+
+                {/* Original Working Baseline Reference Card */}
+                <div style={{ background: 'rgba(255, 171, 0, 0.08)', border: '1px solid rgba(255, 171, 0, 0.3)', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#ffab00' }}>📌 Original Baseline Reference</h4>
+                  <div style={{ fontSize: '0.8rem', color: '#ccc', marginBottom: '6px' }}>
+                    <strong>Max Signals / Session:</strong> <span style={{ color: '#00e676', fontWeight: 800 }}>6</span> (3 Futures + 3 Forex)
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#ccc', marginBottom: '10px' }}>
+                    <strong>Min Conviction Cutoff:</strong> <span style={{ color: '#00e676', fontWeight: 800 }}>70.0%</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#aaa', marginBottom: '12px' }}>
+                    Original active Sentinel V2 performance baseline.
+                  </div>
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '5px 10px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSuperAdminMaxSignals(6);
+                      setSuperAdminMinConviction(70.0);
+                      setPublicMaxSignals(6);
+                      setPublicMinConviction(70.0);
+                    }}
+                  >
+                    ↺ Reset Both Profiles to Baseline
+                  </button>
                 </div>
 
                 <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}>

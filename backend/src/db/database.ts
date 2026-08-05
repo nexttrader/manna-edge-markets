@@ -258,8 +258,21 @@ export async function initializeDatabase(): Promise<void> {
                         id TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
                         enabled INTEGER DEFAULT 1,
+                        visible_to_admins INTEGER DEFAULT 1,
+                        visible_to_traders INTEGER DEFAULT 1,
+                        super_admin_max_signals INTEGER DEFAULT 6,
+                        super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0,
+                        public_max_signals INTEGER DEFAULT 6,
+                        public_min_conviction DOUBLE PRECISION DEFAULT 70.0,
                         updated_at TEXT NOT NULL
                     );
+
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_admins INTEGER DEFAULT 1;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS visible_to_traders INTEGER DEFAULT 1;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS super_admin_max_signals INTEGER DEFAULT 6;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_max_signals INTEGER DEFAULT 6;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_min_conviction DOUBLE PRECISION DEFAULT 70.0;
 
                     CREATE TABLE IF NOT EXISTS admin_strategy_access (
                         user_email TEXT NOT NULL,
@@ -346,9 +359,9 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_admins INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_traders INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_max_signals INTEGER DEFAULT 6`); } catch {}
-    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_min_conviction REAL DEFAULT 75.0`); } catch {}
-    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_max_signals INTEGER DEFAULT 3`); } catch {}
-    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_min_conviction REAL DEFAULT 85.0`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_min_conviction REAL DEFAULT 70.0`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_max_signals INTEGER DEFAULT 6`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_min_conviction REAL DEFAULT 70.0`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}

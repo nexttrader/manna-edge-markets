@@ -376,12 +376,12 @@ export async function getStrategyTuning(strategyId: string = 'sentinel_v2') {
         const row = rows[0] || {};
         return {
             superAdminMaxSignals: row.super_admin_max_signals ?? 6,
-            superAdminMinConviction: row.super_admin_min_conviction ?? 75.0,
-            publicMaxSignals: row.public_max_signals ?? 3,
-            publicMinConviction: row.public_min_conviction ?? 85.0
+            superAdminMinConviction: row.super_admin_min_conviction ?? 70.0,
+            publicMaxSignals: row.public_max_signals ?? 6,
+            publicMinConviction: row.public_min_conviction ?? 70.0
         };
     } catch {
-        return { superAdminMaxSignals: 6, superAdminMinConviction: 75.0, publicMaxSignals: 3, publicMinConviction: 85.0 };
+        return { superAdminMaxSignals: 6, superAdminMinConviction: 70.0, publicMaxSignals: 6, publicMinConviction: 70.0 };
     }
 }
 
