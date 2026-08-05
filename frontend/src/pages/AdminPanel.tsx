@@ -1913,9 +1913,10 @@ export const AdminPanel: React.FC = () => {
                       </div>
 
                       {/* Metrics Bar */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px', marginBottom: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px' }}>
                         <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Total Trades:</span> <strong style={{ color: '#fff' }}>{summary.totalTrades ?? 0}</strong></div>
                         <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Wins / Losses / BE:</span> <strong style={{ color: '#00e676' }}>{summary.wins ?? 0}W</strong> / <strong style={{ color: '#ff1744' }}>{summary.losses ?? 0}L</strong> / <strong style={{ color: '#ffd700' }}>{summary.breakevens ?? 0}BE</strong></div>
+                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Target Hits:</span> <strong style={{ color: '#00e676' }}>TP1: {summary.tp1Hits ?? 0}</strong> | <strong style={{ color: '#00e676' }}>TP2: {summary.tp2Hits ?? 0}</strong></div>
                         <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Win Rate:</span> <strong style={{ color: '#00e676' }}>{summary.winRate ?? 0}%</strong></div>
                         <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Net Realized R:</span> <strong className={(summary.totalRealizedR ?? 0) >= 0 ? 'text-green' : 'text-red'}>{(summary.totalRealizedR ?? 0) >= 0 ? '+' : ''}{summary.totalRealizedR ?? 0}R</strong></div>
                       </div>

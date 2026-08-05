@@ -10,11 +10,13 @@ export interface ReportSummary {
   wins: number;
   losses: number;
   breakevens: number;
+  tp1Hits?: number;
+  tp2Hits?: number;
   winRate: number;
   totalRealizedR: number;
   avgFillTimeMin: number;
   avgHoldDurationMin: number;
-  strategyBreakdown: Record<string, { trades: number; wins: number; winRate: number; totalR: number }>;
+  strategyBreakdown: Record<string, { trades: number; wins: number; tp1Hits?: number; tp2Hits?: number; winRate: number; totalR: number }>;
   plainEnglishSummary: string;
 }
 
@@ -50,15 +52,17 @@ export async function generateReportMetrics(
   let wins = 0;
   let losses = 0;
   let breakevens = 0;
+  let tp1Hits = 0;
+  let tp2Hits = 0;
   let totalRealizedR = 0;
   let totalFillMs = 0;
   let fillCount = 0;
   let totalHoldMs = 0;
   let holdCount = 0;
 
-  const stratStats: Record<string, { trades: number; wins: number; winRate: number; totalR: number }> = {
-    manna_basic: { trades: 0, wins: 0, winRate: 0, totalR: 0 },
-    manna_snd: { trades: 0, wins: 0, winRate: 0, totalR: 0 }
+  const stratStats: Record<string, { trades: number; wins: number; tp1Hits?: number; tp2Hits?: number; winRate: number; totalR: number }> = {
+    manna_basic: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 },
+    manna_snd: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 }
   };
 
   let processedTrades = 0;
@@ -83,7 +87,7 @@ export async function generateReportMetrics(
     const stratKey = rawKey === 'manna_snd' ? 'manna_snd' : 'manna_basic'; // sentinel_v2 merged into manna_basic (Manna Elite V1)
 
     if (!stratStats[stratKey]) {
-      stratStats[stratKey] = { trades: 0, wins: 0, winRate: 0, totalR: 0 };
+      stratStats[stratKey] = { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 };
     }
 
     let rVal = 0;
@@ -91,12 +95,16 @@ export async function generateReportMetrics(
 
     if (typeStr.includes('tp2')) {
       wins++;
+      tp2Hits++;
       rVal = setup?.r_multiple_2 || 3.0;
       stratStats[stratKey].wins++;
+      stratStats[stratKey].tp2Hits = (stratStats[stratKey].tp2Hits || 0) + 1;
     } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
       wins++;
+      tp1Hits++;
       rVal = setup?.r_multiple_1 || 2.0;
       stratStats[stratKey].wins++;
+      stratStats[stratKey].tp1Hits = (stratStats[stratKey].tp1Hits || 0) + 1;
     } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
       losses++;
       rVal = -1.0;
@@ -151,7 +159,7 @@ export async function generateReportMetrics(
   }
 
   const plainEnglishSummary = totalTrades > 0
-    ? `During this ${periodLabel.toLowerCase()} period, we had ${totalTrades} finished trades (${wins} Wins, ${losses} Losses, ${breakevens} Risk-Free Breakevens). Overall win rate was ${winRate}% with a total profit of ${totalRealizedR >= 0 ? '+' : ''}${totalRealizedR.toFixed(2)}R!`
+    ? `During this ${periodLabel.toLowerCase()} period, we had ${totalTrades} finished trades (${wins} Wins [${tp1Hits}x TP1 (+2R), ${tp2Hits}x TP2 (+3R)], ${losses} Losses [-1R each], ${breakevens} Risk-Free Breakevens). Overall win rate was ${winRate}% with a total profit of ${totalRealizedR >= 0 ? '+' : ''}${totalRealizedR.toFixed(2)}R!`
     : `No trades were completed during this ${periodLabel.toLowerCase()} tracking period.`;
 
   return {
@@ -163,6 +171,8 @@ export async function generateReportMetrics(
     wins,
     losses,
     breakevens,
+    tp1Hits,
+    tp2Hits,
     winRate,
     totalRealizedR: Number(totalRealizedR.toFixed(2)),
     avgFillTimeMin,

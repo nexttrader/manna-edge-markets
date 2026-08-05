@@ -98,6 +98,11 @@ export async function initializeDatabase(): Promise<void> {
                     // Fix outcomes whose strategy_id is NULL or the old default but setup is manna_snd
                     `UPDATE outcomes SET strategy_id = e.strategy_id FROM edge_setups e WHERE outcomes.setup_id = e.id AND e.strategy_id = 'manna_snd' AND (outcomes.strategy_id IS NULL OR outcomes.strategy_id = 'manna_basic')`,
                     `UPDATE outcomes SET strategy_id = f.strategy_id FROM forex_edge_setups f WHERE outcomes.setup_id = f.id AND f.strategy_id = 'manna_snd' AND (outcomes.strategy_id IS NULL OR outcomes.strategy_id = 'manna_basic')`,
+                    // Hard-cap PnL values in outcomes table to exact R multiples
+                    `UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`,
+                    `UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`,
+                    `UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`,
+                    `UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`
                 ];
                 for (const sql of safeAlters) {
                     try { await client.query(sql); } catch (_) { /* column/index already exists — safe to ignore */ }
