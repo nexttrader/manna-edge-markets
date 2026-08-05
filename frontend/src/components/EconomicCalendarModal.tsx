@@ -21,6 +21,8 @@ interface EconomicCalendarModalProps {
 export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ onClose }) => {
   const [events, setEvents] = useState<EconomicEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLive, setIsLive] = useState<boolean>(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const [currencyFilter, setCurrencyFilter] = useState('ALL');
   const [impactFilter, setImpactFilter] = useState('all');
 
@@ -31,7 +33,11 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
       if (!res.ok) return;
       const data = await res.json();
       setEvents(data.events || []);
-    } catch {} finally {
+      setIsLive(data.isLive ?? true);
+      setNotice(data.notice || null);
+    } catch {
+      setIsLive(false);
+    } finally {
       setLoading(false);
     }
   };
@@ -77,12 +83,49 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
           </button>
         </div>
 
+        {!isLive && (
+          <div style={{
+            background: 'rgba(255, 171, 0, 0.12)',
+            border: '1px solid rgba(255, 183, 77, 0.4)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            margin: '12px 0 16px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div style={{ fontSize: '0.9rem', color: '#ffb74d' }}>
+              <strong>⚠️ Live Feed Offline:</strong> {notice || "Calendar stream is currently unreachable. Simulated fallbacks are disabled."}
+            </div>
+            <a
+              href="https://www.forexfactory.com/calendar"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: '#ffb74d',
+                color: '#0a0b10',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                fontSize: '0.85rem',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🔗 Open ForexFactory ↗
+            </a>
+          </div>
+        )}
+
         {/* Calendar Events List */}
         <div className="econ-events-body">
           {loading ? (
             <div className="econ-loading font-headline">Syncing live economic events...</div>
           ) : events.length === 0 ? (
-            <div className="econ-empty font-headline">No economic releases match selected filter.</div>
+            <div className="econ-empty font-headline">
+              {isLive ? "No economic releases match selected filter." : "Live economic calendar feed is offline. Please use ForexFactory.com link above."}
+            </div>
           ) : (
             <div className="econ-events-list">
               {events.map(ev => {
@@ -137,3 +180,4 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
     </div>
   );
 };
+

@@ -1,6 +1,7 @@
 import { queryDb } from '../db/database';
 import { getLiveCurrentPrice } from '../discovery/yahoo-provider';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
+import { newsEngine } from '../news/news-engine';
 
 export interface SubsystemHealth {
   id: string;
@@ -157,6 +158,24 @@ export async function runSystemHealthCheck(): Promise<SystemHealthOverview> {
     plainEnglishStatus: ticketMsg,
     technicalDetails: 'Ticket store & performance report delivery queue ready.'
   });
+
+  // 6. Economic News & Calendar Feed
+  const newsStart = Date.now();
+  const newsStatus = newsEngine.getCalendarStatus();
+  subsystems.push({
+    id: 'news_calendar',
+    name: 'Economic Calendar Feed',
+    icon: '📅',
+    status: newsStatus.isLive ? 'healthy' : 'warning',
+    latencyMs: Date.now() - newsStart,
+    plainEnglishStatus: newsStatus.isLive
+      ? `Live economic calendar feed is online and synced (${newsStatus.eventCount} events from ${newsStatus.activeSource}).`
+      : `Economic calendar feed is offline/unreachable. Simulated fallbacks are disabled. Users are prompted to check ForexFactory directly.`,
+    technicalDetails: newsStatus.isLive
+      ? `Active source: ${newsStatus.activeSource}, synced at ${new Date(newsStatus.lastFetchedAt).toISOString()}`
+      : `Last error: ${newsStatus.lastError || 'Feeds unreachable'}`
+  });
+
 
   // Determine overall Hero Status
   const hasCritical = subsystems.some(s => s.status === 'critical');

@@ -13,92 +13,100 @@ export interface EconomicEvent {
 
 export class NewsEngine {
   private events: EconomicEvent[] = [];
+  private isLive: boolean = false;
   private lastFetchedAt: number = 0;
   private isFetching: boolean = false;
+  private lastError: string | null = null;
+  private activeSource: string | null = null;
 
   constructor() {
     this.refreshLiveEvents();
-    // Refresh live news every 5 minutes
-    setInterval(() => this.refreshLiveEvents(), 5 * 60 * 1000);
+    // Refresh live news twice a day (every 12 hours)
+    setInterval(() => this.refreshLiveEvents(), 12 * 60 * 60 * 1000);
   }
 
   /**
-   * Fetch live economic calendar events from official live financial JSON feeds
+   * Cycles through a priority list of real financial calendar feeds twice daily or on demand.
+   * If all feeds fail, simulated fallbacks are NOT generated — isLive is set to false.
    */
   public async refreshLiveEvents(): Promise<void> {
     if (this.isFetching) return;
     this.isFetching = true;
 
-    try {
-      // Primary Live Source: Official ForexFactory Public Calendar Feed
-      // Hostname constructed dynamically for clean network routing
-      const ffDomain = ['nfp.ourfocus.net', 'com'].join('.');
-      const ffUrl = `https://${ffDomain}/ff_calendar_thisweek.json`;
-
-      const response = await fetch(ffUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*'
-        }
-      });
-
-      if (response.ok) {
-        const rawEvents = await response.json();
-        if (Array.isArray(rawEvents) && rawEvents.length > 0) {
-          this.events = this.parseForexFactoryEvents(rawEvents);
-          this.lastFetchedAt = Date.now();
-          console.log(`[NewsEngine] 🟢 Successfully synced ${this.events.length} live economic events from ForexFactory.`);
-          this.isFetching = false;
-          return;
-        }
+    const candidateFeeds = [
+      {
+        name: 'ForexFactory Primary JSON',
+        url: 'https://nfp.ourfocus.net/ff_calendar_thisweek.json',
+        type: 'ff'
+      },
+      {
+        name: 'ForexFactory CDN Mirror',
+        url: 'https://cdn-nfp.forexfactory.net/ff_calendar_thisweek.json',
+        type: 'ff'
+      },
+      {
+        name: 'FXStreet Public API',
+        url: 'https://calendar-api.fxstreet.com/en/economic-calendar/events',
+        type: 'fx'
+      },
+      {
+        name: 'FXStreet Mirror API',
+        url: 'https://nfp.ourfocus.net/en/economic-calendar/events',
+        type: 'fx'
       }
-    } catch (err) {
-      console.warn('[NewsEngine] ⚠️ Live ForexFactory fetch error, attempting secondary live source:', String(err));
+    ];
+
+    for (const feed of candidateFeeds) {
+      try {
+        const response = await fetch(feed.url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*'
+          }
+        });
+
+        if (response.ok) {
+          const rawData = (await response.json()) as any;
+          const parsed = feed.type === 'ff' 
+            ? this.parseForexFactoryEvents(rawData)
+            : this.parseFXStreetEvents(Array.isArray(rawData) ? rawData : (rawData?.events || []));
+
+          if (parsed.length > 0) {
+            this.events = parsed;
+            this.isLive = true;
+            this.activeSource = feed.name;
+            this.lastError = null;
+            this.lastFetchedAt = Date.now();
+            console.log(`[NewsEngine] 🟢 Successfully synced ${this.events.length} live economic events from ${feed.name}.`);
+            this.isFetching = false;
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn(`[NewsEngine] ⚠️ Feed fetch failed for ${feed.name}:`, String(err));
+      }
     }
 
-    try {
-      // Secondary Live Source: Live Financial Calendar Feed
-      const fxDomain = ['nfp.ourfocus.net', 'com'].join('.');
-      const fxUrl = `https://${fxDomain}/en/economic-calendar/events`;
-
-      const response = await fetch(fxUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-          'Accept': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const rawData = (await response.json()) as any;
-        const list = Array.isArray(rawData) ? rawData : rawData.events || [];
-        if (list.length > 0) {
-          this.events = this.parseFXStreetEvents(list);
-          this.lastFetchedAt = Date.now();
-          console.log(`[NewsEngine] 🟢 Successfully synced ${this.events.length} live economic events from FXStreet.`);
-          this.isFetching = false;
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[NewsEngine] ⚠️ Secondary live feed fallback:', String(err));
-    }
-
-    // Dynamic Live Fallback: Compute real-world official central bank & economic release calendar for current week
-    this.events = this.generateCurrentWeekLiveSchedule();
+    // All real feeds failed — DO NOT generate simulated mock events. Mark feed as broken/offline.
+    this.events = [];
+    this.isLive = false;
+    this.activeSource = null;
+    this.lastError = 'All live economic calendar feeds are currently unreachable or policy-blocked. Please check ForexFactory (forexfactory.com/calendar) for live releases.';
     this.lastFetchedAt = Date.now();
     this.isFetching = false;
+    console.warn('[NewsEngine] 🔴 All live calendar feeds unreachable. Calendar feed offline notice enabled.');
   }
 
   private parseForexFactoryEvents(rawEvents: any[]): EconomicEvent[] {
+    if (!Array.isArray(rawEvents)) return [];
     return rawEvents
-      .filter((e: any) => e.title && e.date)
+      .filter((e: any) => e && e.title && e.date)
       .map((e: any, index: number) => {
         let impact: 'high' | 'medium' | 'low' = 'low';
         const impStr = (e.impact || '').toLowerCase();
         if (impStr.includes('high') || impStr === 'red') impact = 'high';
         else if (impStr.includes('med') || impStr === 'orange') impact = 'medium';
 
-        // Parse dateISO or date + time
         const eventTime = e.dateISO || new Date(e.date).toISOString();
 
         return {
@@ -117,8 +125,9 @@ export class NewsEngine {
   }
 
   private parseFXStreetEvents(rawEvents: any[]): EconomicEvent[] {
+    if (!Array.isArray(rawEvents)) return [];
     return rawEvents
-      .filter((e: any) => e.name || e.title)
+      .filter((e: any) => e && (e.name || e.title))
       .map((e: any, index: number) => {
         let impact: 'high' | 'medium' | 'low' = 'low';
         if (e.volatility === 'HIGH' || e.impact === 'HIGH' || e.volatility === 3) impact = 'high';
@@ -141,95 +150,22 @@ export class NewsEngine {
       .sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
   }
 
-  /**
-   * Generates official real-world scheduled economic releases for current active week
-   */
-  private generateCurrentWeekLiveSchedule(): EconomicEvent[] {
-    const now = new Date();
-    const dayOfWeek = now.getUTCDay(); // 0 = Sun, 1 = Mon ...
-    const startOfWeek = new Date(now);
-    startOfWeek.setUTCDate(now.getUTCDate() - dayOfWeek + 1); // Monday
-    startOfWeek.setUTCHours(0, 0, 0, 0);
-
-    const getTimeOnDay = (dayOffset: number, hourET: number, minET: number = 0) => {
-      const d = new Date(startOfWeek);
-      d.setUTCDate(startOfWeek.getUTCDate() + dayOffset);
-      // Convert ET to UTC (+4h in EDT)
-      d.setUTCHours(hourET + 4, minET, 0, 0);
-      return d.toISOString();
-    };
-
-    const list: EconomicEvent[] = [
-      {
-        id: `live_cpi_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'US CPI (Consumer Price Index) MoM / YoY',
-        country: 'US',
-        currency: 'USD',
-        impact: 'high',
-        eventTime: getTimeOnDay(2, 8, 30), // Wednesday 08:30 ET
-        forecast: '0.3%',
-        previous: '0.2%'
-      },
-      {
-        id: `live_fomc_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'FOMC Interest Rate Decision & Monetary Statement',
-        country: 'US',
-        currency: 'USD',
-        impact: 'high',
-        eventTime: getTimeOnDay(2, 14, 0), // Wednesday 14:00 ET
-        forecast: '5.25%',
-        previous: '5.25%'
-      },
-      {
-        id: `live_ppi_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'US Producer Price Index (PPI) MoM',
-        country: 'US',
-        currency: 'USD',
-        impact: 'medium',
-        eventTime: getTimeOnDay(3, 8, 30), // Thursday 08:30 ET
-        forecast: '0.2%',
-        previous: '0.1%'
-      },
-      {
-        id: `live_nfp_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'US Non-Farm Payrolls (NFP) & Unemployment Rate',
-        country: 'US',
-        currency: 'USD',
-        impact: 'high',
-        eventTime: getTimeOnDay(4, 8, 30), // Friday 08:30 ET
-        forecast: '185K',
-        previous: '206K'
-      },
-      {
-        id: `live_ecb_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'ECB Monetary Policy Statement & Rate Decision',
-        country: 'EU',
-        currency: 'EUR',
-        impact: 'high',
-        eventTime: getTimeOnDay(3, 8, 15), // Thursday 08:15 ET
-        forecast: '4.25%',
-        previous: '4.25%'
-      },
-      {
-        id: `live_gdp_uk_${now.getFullYear()}_${now.getMonth()}`,
-        title: 'UK GDP (Gross Domestic Product) QoQ',
-        country: 'GB',
-        currency: 'GBP',
-        impact: 'high',
-        eventTime: getTimeOnDay(1, 2, 0), // Tuesday 02:00 ET
-        forecast: '0.6%',
-        previous: '0.7%'
-      }
-    ];
-
-    return list.sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
-  }
-
   public getAllEvents(): EconomicEvent[] {
     return this.events;
   }
 
+  public getCalendarStatus(): { isLive: boolean; lastFetchedAt: number; lastError: string | null; eventCount: number; activeSource: string | null } {
+    return {
+      isLive: this.isLive,
+      lastFetchedAt: this.lastFetchedAt,
+      lastError: this.lastError,
+      eventCount: this.events.length,
+      activeSource: this.activeSource
+    };
+  }
+
   public getUpcomingHighImpactEvents(windowMinutes: number = 1440): EconomicEvent[] {
+    if (!this.isLive) return [];
     const now = Date.now();
     const futureLimit = now + windowMinutes * 60000;
 
@@ -243,6 +179,7 @@ export class NewsEngine {
    * Evaluates if a given timestamp or current moment is within a 30-min window of high-impact news
    */
   public isNearHighImpactNews(timeIso: string = new Date().toISOString(), bufferMinutes: number = 30): { isNear: boolean; event?: EconomicEvent; minutesUntil?: number } {
+    if (!this.isLive) return { isNear: false };
     const timeMs = new Date(timeIso).getTime();
     const bufferMs = bufferMinutes * 60000;
 
@@ -265,3 +202,4 @@ export class NewsEngine {
 }
 
 export const newsEngine = new NewsEngine();
+
