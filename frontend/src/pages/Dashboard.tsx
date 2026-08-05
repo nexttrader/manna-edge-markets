@@ -191,7 +191,7 @@ export const Dashboard: React.FC = () => {
               <label>Strategy Tier:</label>
               <select value={strategyFilter} onChange={(e) => setStrategyFilter(e.target.value as StrategyFilter)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="manna_basic">🔵 Manna Elite V1</option>
+                <option value="manna_basic">🔵 Manna Basic</option>
                 <option value="manna_snd">🟡 Manna SnD</option>
                 <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework(Manna Elite V1)' : 'Manna Elite V1'}</option>
               </select>

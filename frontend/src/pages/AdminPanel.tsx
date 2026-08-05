@@ -1436,7 +1436,7 @@ export const AdminPanel: React.FC = () => {
                 </thead>
                 <tbody>
                   {activeSetupsList.map((setup: any) => {
-                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Manna Elite V1' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1');
+                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Manna Elite V1' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic');
                     const isDisabling = disablingId === setup.id;
                     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -1543,7 +1543,7 @@ export const AdminPanel: React.FC = () => {
             className={`strat-tab strat-basic ${strategyFilter === 'manna_basic' ? 'active' : ''}`}
             onClick={() => setStrategyFilter('manna_basic')}
           >
-            🔵 Manna Elite V1
+            🔵 Manna Basic
           </button>
           <button 
             className={`strat-tab strat-snd ${strategyFilter === 'manna_snd' ? 'active' : ''}`}
@@ -1658,7 +1658,7 @@ export const AdminPanel: React.FC = () => {
           <div className="action-bar-left">
             <span className="bar-title">📊 ANALYTICS TRACKING ENGINE</span>
             <span className="bar-desc">
-              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Elite V1 Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
+              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'manna_basic' ? 'Manna Basic Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
             </span>
           </div>
           <div className="action-bar-btns">
@@ -2404,7 +2404,7 @@ export const AdminPanel: React.FC = () => {
               <label>Strategy Scope</label>
               <select value={triggerStrategy} onChange={e => setTriggerStrategy(e.target.value as any)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="manna_basic">🔵 Manna Elite V1 Strategy</option>
+                <option value="manna_basic">🔵 Manna Basic Strategy</option>
                 <option value="manna_snd">🟡 Manna SnD Strategy</option>
               </select>
             </div>

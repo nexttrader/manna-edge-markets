@@ -1158,7 +1158,7 @@ function buildAnalyticsCSV(
   for (const o of outcomes) {
     const setup = o.setup || {};
     const stratId = o.strategy_id || setup.strategy_id || 'manna_basic';
-    const stratName = stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Sentinel V2' : 'Manna Elite V1';
+    const stratName = stratId === 'manna_snd' ? 'Manna SnD' : stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic';
     const mkt = o.market || setup.market || 'futures';
     const isForex = mkt === 'forex';
     const isLong = (setup.bias || o.bias || 'long').toLowerCase() === 'long';
@@ -1870,13 +1870,11 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
     };
 
     for (const setup of allSetups) {
-      const rawStratId = setup.strategy_id || 'manna_basic';
-      // Sentinel V2 merges into Manna Elite V1
-      const stratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
+      const stratId = setup.strategy_id || 'manna_basic';
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : (stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic'),
           tier: setup.strategy_tier || (stratId === 'manna_snd' ? 'pro' : 'basic'),
           totalSignals: 0,
           activeSignals: 0,
@@ -1907,14 +1905,12 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         // Retry opposite market
         if (!parentSetup) parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market === 'forex' ? 'futures' : 'forex');
       }
-      const rawStratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
-      // Sentinel V2 merges into Manna Elite V1 for analytics
-      const stratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
+      const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'manna_basic';
       
       if (!strategyStats[stratId]) {
         strategyStats[stratId] = {
           id: stratId,
-          name: stratId === 'manna_snd' ? 'Manna SnD' : 'Manna Elite V1',
+          name: stratId === 'manna_snd' ? 'Manna SnD' : (stratId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna Basic'),
           tier: stratId === 'manna_snd' ? 'pro' : 'basic',
           totalSignals: 0,
           activeSignals: 0,

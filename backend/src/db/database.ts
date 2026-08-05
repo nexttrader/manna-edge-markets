@@ -298,13 +298,13 @@ export async function initializeDatabase(): Promise<void> {
                     );
 
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-                    ('manna_basic', 'Manna Elite V1', 1, CURRENT_TIMESTAMP),
+                    ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
-                    ON CONFLICT (id) DO NOTHING;
+                    ON CONFLICT (id) DO UPDATE SET name = 'Manna Basic' WHERE id = 'manna_basic';
 
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-                    ('sentinel_v2', 'Sentinel V2', 1, CURRENT_TIMESTAMP)
-                    ON CONFLICT (id) DO NOTHING;
+                    ('sentinel_v2', 'Manna Elite V1', 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO UPDATE SET name = 'Manna Elite V1' WHERE id = 'sentinel_v2';
 
                     UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2' AND visible_to_admins IS NULL;
 
@@ -444,13 +444,13 @@ export async function initializeDatabase(): Promise<void> {
         );
 
         INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-        ('manna_basic', 'Manna Elite V1', 1, CURRENT_TIMESTAMP),
+        ('manna_basic', 'Manna Basic', 1, CURRENT_TIMESTAMP),
         ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (id) DO NOTHING;
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 
         INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
-        ('sentinel_v2', 'Sentinel V2', 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (id) DO NOTHING;
+        ('sentinel_v2', 'Manna Elite V1', 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
     `);
 
     try { db.exec(`UPDATE strategy_settings SET visible_to_admins = 0, visible_to_traders = 0 WHERE id = 'sentinel_v2'`); } catch {}
