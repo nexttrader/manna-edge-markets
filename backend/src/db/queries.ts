@@ -207,11 +207,14 @@ export async function getSetupsByRun(runId: string): Promise<EdgeSetup[]> {
 // ── Outcomes ──
 
 export async function insertOutcome(outcome: Outcome): Promise<void> {
-    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, strategy_id, was_runner, notes, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await queryDb(`INSERT INTO outcomes (id, setup_id, setup_market, run_id, outcome_type, execution_price, execution_time, realized_pl, mae, mfe, highest_price, lowest_price, bars_held, duration_min, exit_reason, strategy_id, was_runner, notes, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         outcome.id, outcome.setup_id, outcome.setup_market, outcome.run_id || null,
         outcome.outcome_type, outcome.execution_price || null, outcome.execution_time || null,
-        outcome.realized_pl || null, outcome.mae || null, outcome.strategy_id || 'manna_basic',
+        outcome.realized_pl || null, outcome.mae || null, outcome.mfe || null,
+        outcome.highest_price || null, outcome.lowest_price || null,
+        outcome.bars_held || null, outcome.duration_min || null, outcome.exit_reason || null,
+        outcome.strategy_id || 'manna_basic',
         (outcome as any).was_runner || 0, outcome.notes || null, outcome.created_at
     ]);
 }
@@ -227,6 +230,12 @@ export const createOutcome = async (outcome: any): Promise<void> => {
         execution_time: outcome.execution_time || outcome.resolved_at || new Date().toISOString(),
         realized_pl: outcome.realized_pl,
         mae: outcome.mae,
+        mfe: outcome.mfe,
+        highest_price: outcome.highest_price,
+        lowest_price: outcome.lowest_price,
+        bars_held: outcome.bars_held,
+        duration_min: outcome.duration_min,
+        exit_reason: outcome.exit_reason,
         notes: outcome.notes,
         created_at: outcome.created_at || new Date().toISOString()
     };

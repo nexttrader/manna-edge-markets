@@ -214,6 +214,12 @@ export async function initializeDatabase(): Promise<void> {
                         execution_time TEXT,
                         realized_pl DOUBLE PRECISION,
                         mae DOUBLE PRECISION,
+                        mfe DOUBLE PRECISION,
+                        highest_price DOUBLE PRECISION,
+                        lowest_price DOUBLE PRECISION,
+                        bars_held INTEGER,
+                        duration_min DOUBLE PRECISION,
+                        exit_reason TEXT,
                         strategy_id TEXT DEFAULT 'manna_basic',
                         notes TEXT,
                         created_at TEXT NOT NULL
@@ -331,6 +337,12 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE forex_edge_setups ADD COLUMN strategy_tier TEXT DEFAULT 'basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN strategy_id TEXT DEFAULT 'manna_basic'`); } catch {}
     try { db.exec(`ALTER TABLE outcomes ADD COLUMN was_runner INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN mfe REAL`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN highest_price REAL`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN lowest_price REAL`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN bars_held INTEGER`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN duration_min REAL`); } catch {}
+    try { db.exec(`ALTER TABLE outcomes ADD COLUMN exit_reason TEXT`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_admins INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN visible_to_traders INTEGER DEFAULT 1`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}

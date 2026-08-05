@@ -119,7 +119,13 @@ export class OutcomeDetector {
           
           const risk = Math.abs(entryPrice - origStop);
           let mae = outcomeType === 'sl_hit' ? risk : risk * (0.2 + Math.random() * 0.4);
-          
+          let mfe = outcomeType === 'tp1_hit' ? (isLong ? (setup.tp1 - entryPrice) : (entryPrice - setup.tp1)) : (maxHigh - entryPrice);
+          const entryTime = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : new Date().getTime();
+          const exitTime = new Date().getTime();
+          const durationMin = Number(Math.max(0.1, (exitTime - entryTime) / 60000).toFixed(1));
+          const barsHeld = Math.max(1, Math.round(durationMin));
+          const exitReason = outcomeType === 'tp1_hit' ? 'TP1' : outcomeType === 'tp2_hit' ? 'TP2' : outcomeType === 'sl_hit' ? 'Stop Loss' : outcomeType === 'be_hit' ? 'Break Even' : 'Manual Exit';
+
           const outcome = {
             id: `out_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             setup_id: setup.id,
@@ -127,7 +133,13 @@ export class OutcomeDetector {
             strategy_id: setup.strategy_id || 'manna_basic',
             outcome_type: outcomeType,
             realized_pl: realizedPL,
-            mae: mae,
+            mae: Number(mae.toFixed(4)),
+            mfe: Number(mfe.toFixed(4)),
+            highest_price: maxHigh,
+            lowest_price: minLow,
+            bars_held: barsHeld,
+            duration_min: durationMin,
+            exit_reason: exitReason,
             execution_price: executionPrice,
             execution_time: new Date().toISOString(),
             created_at: new Date().toISOString()

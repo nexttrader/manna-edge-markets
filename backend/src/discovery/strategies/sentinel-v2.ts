@@ -246,8 +246,8 @@ export class SentinelV2Strategy implements IStrategyEngine {
         let tp2 = bias === 'long' ? phaseHigh : phaseLow;
         
         const tp2_rr = computeRMultiple(entry, tp2, stop, bias);
-        if (tp2_rr < 2.0) {
-          tp2 = bias === 'long' ? entry + (logicalRisk * 2.0) : entry - (logicalRisk * 2.0);
+        if (tp2_rr < 3.0) {
+          tp2 = bias === 'long' ? entry + (logicalRisk * 3.0) : entry - (logicalRisk * 3.0);
         }
 
         const actualRR = computeRMultiple(entry, tp1, stop, bias);

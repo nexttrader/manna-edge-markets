@@ -12,7 +12,7 @@ import { SignalReplaceModal } from '../components/SignalReplaceModal';
 import { AdminSupportInbox } from '../components/AdminSupportInbox';
 
 export const AdminPanel: React.FC = () => {
-  const { user, logout, impersonateUser, isImpersonating, stopImpersonating } = useAuth();
+  const { user, originalAdmin, logout, impersonateUser, isImpersonating, stopImpersonating } = useAuth();
   const navigate = useNavigate();
   const { triggerRun, disableSignal } = useAdmin();
   const { runs } = usePublishRuns(15);
@@ -521,25 +521,42 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+
   const handleExportLiveCSV = () => {
-    const url = strategyFilter && strategyFilter !== 'all'
-      ? `${API_BASE}/api/admin/analytics/export-csv?strategy_id=${strategyFilter}`
-      : `${API_BASE}/api/admin/analytics/export-csv`;
+    if (!isSuperAdmin) {
+      alert('🔒 Access Restricted: Trade Analytics CSV Exports are available to Super Admins only.');
+      return;
+    }
+    const params = new URLSearchParams();
+    if (strategyFilter && strategyFilter !== 'all') params.append('strategy_id', strategyFilter);
+    params.append('user_role', 'super_admin');
+    if (user?.email) params.append('user_email', user.email);
+
+    const url = `${API_BASE}/api/admin/analytics/export-csv?${params.toString()}`;
     window.open(url, '_blank');
   };
 
   const handleResetAnalytics = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      alert('🔒 Access Restricted: Resetting analytics and generating CSV archives is restricted to Super Admins.');
+      return;
+    }
     setIsResetting(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/analytics/reset`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-User-Role': 'super_admin',
+          'X-User-Email': user?.email || ''
+        },
         body: JSON.stringify({ archiveName: archiveName || `Archive Epoch (${new Date().toLocaleDateString()})` })
       });
       if (res.ok) {
         const data = await res.json();
-        window.open(`${API_BASE}/api/admin/analytics/archives/${data.archiveId}/download`, '_blank');
+        window.open(`${API_BASE}/api/admin/analytics/archives/${data.archiveId}/download?user_role=super_admin&user_email=${encodeURIComponent(user?.email || '')}`, '_blank');
         setShowResetModal(false);
         setArchiveName('');
         await refetchAnalytics();
@@ -1923,12 +1940,18 @@ export const AdminPanel: React.FC = () => {
                       <td>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                           <a 
-                            href={`${API_BASE}/api/admin/analytics/archives/${arch.id}/download`}
+                            href={`${API_BASE}/api/admin/analytics/archives/${arch.id}/download?user_role=super_admin&user_email=${encodeURIComponent(user?.email || '')}`}
                             target="_blank" 
                             rel="noreferrer"
-                            style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: 700 }}
+                            style={{ color: isSuperAdmin ? '#00e5ff' : '#888', textDecoration: 'none', fontWeight: 700, pointerEvents: isSuperAdmin ? 'auto' : 'none' }}
+                            onClick={(e) => {
+                              if (!isSuperAdmin) {
+                                e.preventDefault();
+                                alert('🔒 Access Restricted: Downloading CSV dataset archives is available to Super Admins only.');
+                              }
+                            }}
                           >
-                            📥 Download CSV
+                            {isSuperAdmin ? '📥 Download CSV' : '🔒 Super Admin Only'}
                           </a>
                           <button
                             type="button"

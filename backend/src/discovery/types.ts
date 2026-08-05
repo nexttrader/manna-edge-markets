@@ -99,6 +99,12 @@ export interface Outcome {
     execution_time?: string;
     realized_pl?: number;
     mae?: number;
+    mfe?: number;
+    highest_price?: number;
+    lowest_price?: number;
+    bars_held?: number;
+    duration_min?: number;
+    exit_reason?: string;
     strategy_id?: string;
     was_runner?: number;
     notes?: string;
