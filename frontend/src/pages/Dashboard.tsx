@@ -24,8 +24,8 @@ type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 import { useAuth } from '../context/AuthContext';
 
 export const Dashboard: React.FC = () => {
-  const { user, originalAdmin } = useAuth();
-  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+  const { user, isImpersonating } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
 
   const { setups, runnerSetups, loading } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();

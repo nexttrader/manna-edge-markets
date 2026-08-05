@@ -37,9 +37,9 @@ interface SetupCardProps {
 }
 
 export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist }) => {
-  const { user, originalAdmin } = useAuth();
-  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
-  const isAdmin = user?.role === 'admin' || isSuperAdmin;
+  const { user, originalAdmin, isImpersonating } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
 
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
