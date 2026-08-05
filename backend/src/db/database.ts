@@ -306,7 +306,7 @@ export async function initializeDatabase(): Promise<void> {
                     DELETE FROM strategy_settings WHERE id = 'manna_basic';
                     DELETE FROM edge_setups WHERE strategy_id = 'manna_basic';
                     DELETE FROM forex_edge_setups WHERE strategy_id = 'manna_basic';
-                    DELETE FROM outcomes WHERE strategy_id = 'manna_basic';
+                    UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL;
 
                     UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2';
 
@@ -379,7 +379,7 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`DELETE FROM strategy_settings WHERE id = 'manna_basic'`); } catch {}
     try { db.exec(`DELETE FROM edge_setups WHERE strategy_id = 'manna_basic'`); } catch {}
     try { db.exec(`DELETE FROM forex_edge_setups WHERE strategy_id = 'manna_basic'`); } catch {}
-    try { db.exec(`DELETE FROM outcomes WHERE strategy_id = 'manna_basic'`); } catch {}
+    try { db.exec(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
