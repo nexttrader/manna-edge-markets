@@ -15,8 +15,12 @@ export async function getAllActiveSetups(): Promise<EdgeSetup[]> {
 }
 
 export async function getSetupById(id: string, market: string): Promise<EdgeSetup | undefined> {
-    const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
-    const rows = await queryDb<EdgeSetup>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+    const primaryTable = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    const fallbackTable = market === 'forex' ? 'edge_setups' : 'forex_edge_setups';
+    let rows = await queryDb<EdgeSetup>(`SELECT * FROM ${primaryTable} WHERE id = ?`, [id]);
+    if (!rows.length) {
+        rows = await queryDb<EdgeSetup>(`SELECT * FROM ${fallbackTable} WHERE id = ?`, [id]);
+    }
     return rows.length > 0 ? rows[0] : undefined;
 }
 
@@ -26,8 +30,9 @@ export async function getSetupsByInstrument(instrument: string, market: string):
 }
 
 export async function getSetupsByState(state: string): Promise<EdgeSetup[]> {
-    const futures = await queryDb<EdgeSetup>(`SELECT *, 'futures' as market FROM edge_setups WHERE signal_state = ?`, [state]);
-    const forex = await queryDb<EdgeSetup>(`SELECT *, 'forex' as market FROM forex_edge_setups WHERE signal_state = ?`, [state]);
+    // Use COALESCE so the stored market column takes priority; only fall back to the literal if the column is NULL.
+    const futures = await queryDb<EdgeSetup>(`SELECT *, COALESCE(market, 'futures') AS market FROM edge_setups WHERE signal_state = ?`, [state]);
+    const forex = await queryDb<EdgeSetup>(`SELECT *, COALESCE(market, 'forex') AS market FROM forex_edge_setups WHERE signal_state = ?`, [state]);
     return [...futures, ...forex];
 }
 
@@ -222,11 +227,14 @@ export async function insertOutcome(outcome: Outcome): Promise<void> {
 }
 
 export const createOutcome = async (outcome: any): Promise<void> => {
+    // Sentinel V2 outcomes are merged into Manna Elite V1 (manna_basic) for analytics.
+    const rawStratId = outcome.strategy_id || 'manna_basic';
+    const analyticsStratId = rawStratId === 'sentinel_v2' ? 'manna_basic' : rawStratId;
     const o: Outcome = {
         id: outcome.id,
         setup_id: outcome.setup_id,
         setup_market: outcome.setup_market || 'futures',
-        strategy_id: outcome.strategy_id || 'manna_basic',
+        strategy_id: analyticsStratId,
         outcome_type: outcome.outcome_type,
         execution_price: outcome.execution_price,
         execution_time: outcome.execution_time || outcome.resolved_at || new Date().toISOString(),

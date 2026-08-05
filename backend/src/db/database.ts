@@ -90,6 +90,12 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS was_runner INTEGER DEFAULT 0`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
+                    // ── Backfill: sync outcome strategy_ids from their parent setup rows ──
+                    // Sentinel V2 outcomes → merge into manna_basic for analytics
+                    `UPDATE outcomes SET strategy_id = 'manna_basic' WHERE strategy_id = 'sentinel_v2'`,
+                    // Fix outcomes whose strategy_id is NULL or the old default but setup is manna_snd
+                    `UPDATE outcomes SET strategy_id = e.strategy_id FROM edge_setups e WHERE outcomes.setup_id = e.id AND e.strategy_id = 'manna_snd' AND (outcomes.strategy_id IS NULL OR outcomes.strategy_id = 'manna_basic')`,
+                    `UPDATE outcomes SET strategy_id = f.strategy_id FROM forex_edge_setups f WHERE outcomes.setup_id = f.id AND f.strategy_id = 'manna_snd' AND (outcomes.strategy_id IS NULL OR outcomes.strategy_id = 'manna_basic')`,
                 ];
                 for (const sql of safeAlters) {
                     try { await client.query(sql); } catch (_) { /* column/index already exists — safe to ignore */ }

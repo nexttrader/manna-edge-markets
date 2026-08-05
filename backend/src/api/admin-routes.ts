@@ -643,21 +643,20 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let holdingTimeCount = 0;
 
     const enrichedOutcomes = await Promise.all(outcomes.slice(0, 100).map(async (o: any) => {
-      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+      let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+      // Retry with opposite market if first lookup returned nothing (misclassified rows)
+      if (!setup) setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
       let tradeR = 0;
-      
-      if (o.outcome_type === 'tp1_hit') {
-        tradeR = setup?.r_multiple_1 || 2.0;
-      } else if (o.outcome_type === 'tp2_hit') {
-        tradeR = setup?.r_multiple_2 || 3.0;
-      } else if (o.outcome_type === 'sl_hit') {
-        tradeR = -1.0;
-      } else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') {
-        tradeR = 0.0;
-      } else if (setup) {
+      // Hard-cap: losses are always -1R
+      if (o.outcome_type === 'tp1_hit') tradeR = setup?.r_multiple_1 || 2.0;
+      else if (o.outcome_type === 'tp2_hit') tradeR = setup?.r_multiple_2 || 3.0;
+      else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
+      else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
+      else if (setup) {
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         const initialStop = setup.initial_stop || setup.stop;
-        const risk = Math.abs(entryPrice - initialStop);
+        let risk = Math.abs(entryPrice - initialStop);
+        if (risk < 0.00001 && setup.tp1) risk = Math.abs(setup.tp1 - entryPrice) / (setup.r_multiple_1 || 2.0);
         const isLong = setup.bias === 'long';
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
@@ -726,8 +725,12 @@ router.get('/analytics', async (req: Request, res: Response) => {
     };
 
     for (const o of outcomes) {
-      const setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+      let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
+      // Retry with opposite market if first lookup returned nothing
+      if (!setup) setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
       let tradeR = 0;
+      // Sentinel V2 merges into Manna Elite V1 for analytics
+      const effectiveStratId = (o.strategy_id === 'sentinel_v2' || setup?.strategy_id === 'sentinel_v2') ? 'manna_basic' : (o.strategy_id || setup?.strategy_id || 'manna_basic');
       const isWin = o.outcome_type.includes('tp');
       const isLoss = o.outcome_type.includes('sl');
 
@@ -771,7 +774,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       else futuresR += tradeR;
 
       const inst = setup?.instrument || 'OTHER';
-      const stratId = o.strategy_id || setup?.strategy_id || 'manna_basic';
+      const stratId = effectiveStratId;
       const key = `${inst}__${stratId}`;
       if (!assetPerformance[key]) {
         assetPerformance[key] = { 

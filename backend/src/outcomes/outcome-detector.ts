@@ -60,7 +60,12 @@ export class OutcomeDetector {
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         const origStop = setup.initial_stop || setup.stop;
-        const risk = Math.abs(entryPrice - origStop);
+        let risk = Math.abs(entryPrice - origStop);
+        // If risk is 0 (stop moved to BE) or unreliably small, infer from TP1 distance
+        if (risk < 0.00001 && setup.tp1) {
+          risk = Math.abs(setup.tp1 - entryPrice) / (setup.r_multiple_1 || 2.0);
+        }
+        if (risk < 0.00001) risk = Math.abs(entryPrice * 0.005); // last resort: 0.5% of price
         const tp1 = setup.tp1 || (isLong ? (entryPrice + risk * 2.0) : (entryPrice - risk * 2.0));
         const tp2 = setup.tp2 || (isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0));
 
@@ -68,6 +73,8 @@ export class OutcomeDetector {
         let outcomeType = '';
         let executionPrice = currentPrice;
 
+        // Determine if stop is effectively at break-even (stop ≈ entry within 0.01%)
+        const isEffectivelyBE = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
         if (isLong) {
           if (currentPrice >= tp2 || maxHigh >= tp2) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
@@ -75,8 +82,8 @@ export class OutcomeDetector {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
           } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
             hitDetected = true;
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
-            executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop);
+            outcomeType = isEffectivelyBE ? 'be_hit' : 'sl_hit';
+            executionPrice = isEffectivelyBE ? entryPrice : Math.min(currentPrice, setup.stop);
           }
         } else {
           if (currentPrice <= tp2 || minLow <= tp2) {
@@ -85,19 +92,20 @@ export class OutcomeDetector {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
           } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
             hitDetected = true;
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
-            executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop);
+            outcomeType = isEffectivelyBE ? 'be_hit' : 'sl_hit';
+            executionPrice = isEffectivelyBE ? entryPrice : Math.max(currentPrice, setup.stop);
           }
         }
 
         if (hitDetected) {
+          // Hard-cap: SL always -1R, BE always 0R, TP1 = +2R, TP2 = +3R — no exceptions
           const realizedPL = outcomeType === 'tp2_hit'
             ? (setup.r_multiple_2 || 3.0)
             : outcomeType === 'tp1_hit'
               ? (setup.r_multiple_1 || 2.0)
               : outcomeType === 'be_hit'
                 ? 0.0
-                : -1.0;
+                : -1.0; // sl_hit hard-capped at -1.0R
 
           let mae = outcomeType === 'sl_hit' ? risk : risk * 0.3;
           let mfe = outcomeType === 'tp2_hit' ? (isLong ? (tp2 - entryPrice) : (entryPrice - tp2)) : outcomeType === 'tp1_hit' ? (isLong ? (tp1 - entryPrice) : (entryPrice - tp1)) : (maxHigh - entryPrice);
@@ -170,7 +178,12 @@ export class OutcomeDetector {
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         const origStop = setup.initial_stop || setup.stop;
-        const initialRisk = Math.abs(entryPrice - origStop);
+        let initialRisk = Math.abs(entryPrice - origStop);
+        // Infer risk from TP1 if stop moved to BE or initial_stop is missing
+        if (initialRisk < 0.00001 && setup.tp1) {
+          initialRisk = Math.abs(setup.tp1 - entryPrice) / (setup.r_multiple_1 || 2.0);
+        }
+        if (initialRisk < 0.00001) initialRisk = Math.abs(entryPrice * 0.005);
         const tp1 = setup.tp1 || (isLong ? (entryPrice + initialRisk * 2.0) : (entryPrice - initialRisk * 2.0));
         const tp2 = setup.tp2 || (isLong ? (entryPrice + initialRisk * 3.0) : (entryPrice - initialRisk * 3.0));
         
@@ -197,6 +210,8 @@ export class OutcomeDetector {
         let outcomeType = '';
         let executionPrice = currentPrice;
         
+        // Determine if stop is effectively at break-even
+        const isEffectivelyBEActive = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
         if (isLong) {
           if (currentPrice >= tp2 || maxHigh >= tp2) {
             hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
@@ -204,8 +219,8 @@ export class OutcomeDetector {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
           } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
             hitDetected = true;
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
-            executionPrice = setup.is_breakeven ? entryPrice : Math.min(currentPrice, setup.stop);
+            outcomeType = isEffectivelyBEActive ? 'be_hit' : 'sl_hit';
+            executionPrice = isEffectivelyBEActive ? entryPrice : Math.min(currentPrice, setup.stop);
           }
         } else {
           if (currentPrice <= tp2 || minLow <= tp2) {
@@ -214,19 +229,20 @@ export class OutcomeDetector {
             hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
           } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
             hitDetected = true;
-            outcomeType = setup.is_breakeven ? 'be_hit' : 'sl_hit';
-            executionPrice = setup.is_breakeven ? entryPrice : Math.max(currentPrice, setup.stop);
+            outcomeType = isEffectivelyBEActive ? 'be_hit' : 'sl_hit';
+            executionPrice = isEffectivelyBEActive ? entryPrice : Math.max(currentPrice, setup.stop);
           }
         }
         
         if (hitDetected) {
+          // Hard-cap: SL always -1R, BE always 0R, never more or less
           const realizedPL = outcomeType === 'tp2_hit'
             ? (setup.r_multiple_2 || 3.0)
             : outcomeType === 'tp1_hit'
               ? (setup.r_multiple_1 || 2.0)
               : outcomeType === 'be_hit'
                 ? 0.0
-                : -1.0;
+                : -1.0; // sl_hit hard-capped at -1.0R
           
           const risk = Math.abs(entryPrice - origStop);
           let mae = outcomeType === 'sl_hit' ? risk : risk * 0.3;
