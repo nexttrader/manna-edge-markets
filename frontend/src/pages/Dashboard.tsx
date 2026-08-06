@@ -23,6 +23,8 @@ type StrategyFilter = 'all' | 'sentinel_v2' | 'manna_snd';
 type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 import { useAuth } from '../context/AuthContext';
+import { useMaintenance } from '../context/MaintenanceContext';
+import { ClientMaintenanceBanner } from '../components/ClientMaintenanceBanner';
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
@@ -42,7 +44,10 @@ function saveFilters(filters: object) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, isImpersonating } = useAuth();
+  const { user, isImpersonating, originalAdmin } = useAuth();
+  const { maintenance } = useMaintenance();
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin'));
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -165,11 +170,15 @@ export const Dashboard: React.FC = () => {
         <TrialWelcomeBanner />
         <MarketClosedBanner />
 
-        {/* Real-Time Asset Decision Matrix */}
-        <AssetDecisionMatrix 
-          rawSetups={safeSetups}
-          onOpenCalculator={(s) => setCalcSetup(s)}
-        />
+        {maintenance.enabled && !isAdmin ? (
+          <ClientMaintenanceBanner />
+        ) : (
+          <>
+            {/* Real-Time Asset Decision Matrix */}
+            <AssetDecisionMatrix 
+              rawSetups={safeSetups}
+              onOpenCalculator={(s) => setCalcSetup(s)}
+            />
 
         {/* Active Runners Desk */}
         <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
@@ -322,6 +331,8 @@ export const Dashboard: React.FC = () => {
               />
             ))}
           </div>
+        )}
+        </>
         )}
       </main>
 

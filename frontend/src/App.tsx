@@ -7,6 +7,8 @@ import { AdminPanel } from './pages/AdminPanel';
 import { SuperAdminPanel } from './pages/SuperAdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
 import { useAuth } from './context/AuthContext';
+import { MaintenanceProvider } from './context/MaintenanceContext';
+import { AdminMaintenanceBanner } from './components/AdminMaintenanceBanner';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { MasterPasscodeModal } from './components/MasterPasscodeModal';
 import { FirstLoginPasswordModal } from './components/FirstLoginPasswordModal';
@@ -105,7 +107,8 @@ function App() {
   }, [elevateToSuperAdmin, navigate]);
 
   return (
-    <>
+    <MaintenanceProvider>
+      <AdminMaintenanceBanner />
       <ImpersonationBanner />
       <FirstLoginPasswordModal />
       <TrialExpiredModal />
@@ -156,7 +159,7 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+    </MaintenanceProvider>
   );
 }
 

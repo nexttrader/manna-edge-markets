@@ -8,6 +8,15 @@ import { outcomeDetector } from '../outcomes/outcome-detector';
 
 const router = express.Router();
 
+router.get('/system/maintenance', async (_req: Request, res: Response) => {
+  try {
+    const maintenance = await queries.getMaintenanceState();
+    res.json(maintenance);
+  } catch (error: any) {
+    res.status(500).json({ enabled: false, message: 'Maintenance check failed', estimatedReturnTime: 'Asia Session Today' });
+  }
+});
+
 router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   try {
     const role = (req.query.role as string) || 'trader';
@@ -15,6 +24,17 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
 
     if (!email) {
       return res.status(401).json({ success: false, error: 'Authentication required. Please sign in to view live signals.', setups: [] });
+    }
+
+    const maintenance = await queries.getMaintenanceState();
+    if (maintenance.enabled && role !== 'admin' && role !== 'super_admin') {
+      return res.json({
+        success: true,
+        maintenanceMode: true,
+        maintenanceMessage: maintenance.message,
+        estimatedReturnTime: maintenance.estimatedReturnTime,
+        setups: []
+      });
     }
 
     await outcomeDetector.evaluateAllSetups(true);

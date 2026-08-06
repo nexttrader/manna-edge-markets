@@ -452,3 +452,66 @@ export async function updateStrategyTraderVisibility(id: string, visibleToTrader
         await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
     }
 }
+
+export interface MaintenanceState {
+  enabled: boolean;
+  message: string;
+  estimatedReturnTime: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export async function getMaintenanceState(): Promise<MaintenanceState> {
+  try {
+    const rows = await queryDb<any>(`SELECT * FROM system_maintenance WHERE id = 'current'`);
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      return {
+        enabled: Boolean(r.enabled === 1 || r.enabled === true),
+        message: r.message || 'Manna is currently undergoing scheduled system maintenance.',
+        estimatedReturnTime: r.estimated_return_time || 'Asia Session Today',
+        updatedAt: r.updated_at || new Date().toISOString(),
+        updatedBy: r.updated_by || 'admin'
+      };
+    }
+  } catch {}
+  return {
+    enabled: false,
+    message: 'Manna is currently undergoing scheduled system maintenance.',
+    estimatedReturnTime: 'Asia Session Today',
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'admin'
+  };
+}
+
+export async function setMaintenanceState(enabled: boolean, message: string, estimatedReturnTime: string, updatedBy: string = 'admin'): Promise<MaintenanceState> {
+  const val = enabled ? 1 : 0;
+  const now = new Date().toISOString();
+  const msg = message || 'Manna is currently undergoing scheduled system maintenance.';
+  const est = estimatedReturnTime || 'Asia Session Today';
+
+  try {
+    const rows = await queryDb<any>(`SELECT id FROM system_maintenance WHERE id = 'current'`);
+    if (!rows || rows.length === 0) {
+      await queryDb(
+        `INSERT INTO system_maintenance (id, enabled, message, estimated_return_time, updated_at, updated_by) VALUES ('current', ?, ?, ?, ?, ?)`,
+        [val, msg, est, now, updatedBy]
+      );
+    } else {
+      await queryDb(
+        `UPDATE system_maintenance SET enabled = ?, message = ?, estimated_return_time = ?, updated_at = ?, updated_by = ? WHERE id = 'current'`,
+        [val, msg, est, now, updatedBy]
+      );
+    }
+  } catch (err) {
+    console.error('Error updating system maintenance:', err);
+  }
+
+  return {
+    enabled,
+    message: msg,
+    estimatedReturnTime: est,
+    updatedAt: now,
+    updatedBy
+  };
+}

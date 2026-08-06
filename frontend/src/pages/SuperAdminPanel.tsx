@@ -4,6 +4,7 @@ import './SuperAdminPanel.css';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
+import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout } = useAuth();
@@ -348,6 +349,9 @@ export const SuperAdminPanel: React.FC = () => {
             <div className="stat-box-value" style={{ color: '#ffab00' }}>{metrics.onlineCount || 0}</div>
           </div>
         </div>
+
+        {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
+        <MaintenanceControlCard />
 
         {/* Super Admin Navigation Tabs */}
         <div className="super-nav-tabs font-mono">

@@ -11,6 +11,7 @@ import { API_BASE } from '../config';
 import { SignalReplaceModal } from '../components/SignalReplaceModal';
 import { AdminSupportInbox } from '../components/AdminSupportInbox';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
+import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
@@ -586,6 +587,9 @@ export const AdminPanel: React.FC = () => {
             )}
           </button>
         </div>
+
+        {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
+        <MaintenanceControlCard />
 
         {/* AUTOMATED SYSTEM HEALTH DIAGNOSTICS CARD (MINIMIZED BY DEFAULT) */}
         <div className="glass-card font-mono" style={{ padding: '14px 18px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 230, 118, 0.04)', border: '1px solid rgba(0, 230, 118, 0.3)' }}>

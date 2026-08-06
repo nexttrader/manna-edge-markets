@@ -541,6 +541,30 @@ router.post('/circuit-breaker/reset', (_req: Request, res: Response) => {
   res.json({ success: true, message: 'Circuit breaker reset' });
 });
 
+router.get('/system/maintenance', async (_req: Request, res: Response) => {
+  try {
+    const maintenance = await queries.getMaintenanceState();
+    res.json(maintenance);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to fetch maintenance status' });
+  }
+});
+
+router.post('/system/maintenance', async (req: Request, res: Response) => {
+  try {
+    const { enabled, message, estimatedReturnTime, updatedBy = 'admin' } = req.body || {};
+    const updated = await queries.setMaintenanceState(
+      Boolean(enabled),
+      message || 'Manna is currently undergoing scheduled system maintenance.',
+      estimatedReturnTime || 'Asia Session Today',
+      updatedBy
+    );
+    res.json({ success: true, maintenance: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to update maintenance status' });
+  }
+});
+
 router.post('/force-dedupe/:instrument', (req: Request, res: Response) => {
   try {
     const { instrument } = req.params;
