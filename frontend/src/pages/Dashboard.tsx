@@ -25,6 +25,7 @@ type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 import { useAuth } from '../context/AuthContext';
 import { useMaintenance } from '../context/MaintenanceContext';
 import { ClientMaintenanceBanner } from '../components/ClientMaintenanceBanner';
+import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCard';
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
@@ -170,18 +171,20 @@ export const Dashboard: React.FC = () => {
         <TrialWelcomeBanner />
         <MarketClosedBanner />
 
-        {maintenance.enabled && !isAdmin ? (
-          <ClientMaintenanceBanner />
-        ) : (
-          <>
-            {/* Real-Time Asset Decision Matrix */}
-            <AssetDecisionMatrix 
-              rawSetups={safeSetups}
-              onOpenCalculator={(s) => setCalcSetup(s)}
-            />
+        {maintenance.enabled && !isAdmin && <ClientMaintenanceBanner />}
+
+        {/* Real-Time Asset Decision Matrix */}
+        {(!maintenance.enabled || isAdmin) && (
+          <AssetDecisionMatrix 
+            rawSetups={safeSetups}
+            onOpenCalculator={(s) => setCalcSetup(s)}
+          />
+        )}
 
         {/* Active Runners Desk */}
-        <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
+        {(!maintenance.enabled || isAdmin) && (
+          <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
+        )}
 
         {/* Main Filter & Control Panel */}
         <div className="filter-bar glass-card font-mono">
@@ -295,7 +298,9 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Setups Display */}
-        {loading && setups.length === 0 ? (
+        {maintenance.enabled && !isAdmin ? (
+          <MockMaintenanceSignalCard />
+        ) : loading && setups.length === 0 ? (
           <div className="dashboard-loading glass-card font-mono">
             <span className="radar-icon animate-pulse">📡</span> Scanning killzone models & active setups...
           </div>
@@ -331,8 +336,6 @@ export const Dashboard: React.FC = () => {
               />
             ))}
           </div>
-        )}
-        </>
         )}
       </main>
 
