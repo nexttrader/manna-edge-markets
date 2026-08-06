@@ -103,12 +103,15 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
 }
 
 .sc-title-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 .sc-symbol-row {
@@ -240,8 +243,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 .tf-badge {
@@ -283,38 +285,36 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .sc-eye-btn {
   background: rgba(201, 168, 76, 0.12);
   color: var(--kdt-gold);
   border: 1px solid rgba(201, 168, 76, 0.4);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-family: var(--font-headline);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .sc-eye-btn:hover {
   background: rgba(201, 168, 76, 0.25);
   border-color: var(--kdt-gold);
-  transform: translateY(-1px);
+  transform: scale(1.1);
 }
 
 .sc-eye-btn.is-starred {
-  background: var(--kdt-gold);
-  border-color: var(--kdt-gold-light);
-  color: var(--kdt-purple-deep);
-  font-weight: 800;
-  box-shadow: 0 2px 10px rgba(201, 168, 76, 0.35);
+  background: rgba(201, 168, 76, 0.28);
+  border-color: var(--kdt-gold);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.4);
 }
 
 /* Bias & Conviction Row */

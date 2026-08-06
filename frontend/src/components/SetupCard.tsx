@@ -159,9 +159,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   );
 
   const strategyId = setup.strategy_id || 'sentinel_v2';
-  const displayStrategyName = strategyId === 'manna_snd'
-    ? 'MANNA SND'
-    : (isSuperAdmin ? 'CHADWIN SENTINEL V2 ELITE FRAMEWORK (MANNA ELITE V1)' : 'MANNA ELITE V1');
+  const displayStrategyName = strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1';
     
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }
@@ -227,8 +225,9 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               className={`sc-eye-btn ${isWatchlisted ? 'is-starred' : ''}`}
               onClick={(e) => { e.stopPropagation(); onToggleWatchlist(setup.id); }}
               title={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              aria-label={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
             >
-              {isWatchlisted ? '👁️ Saved' : '👁️ Watch'}
+              <span className="eye-icon">{isWatchlisted ? '👁️' : '👁️‍🗨️'}</span>
             </button>
           )}
           <StatusBadge status={stateStr} />
