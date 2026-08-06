@@ -96,10 +96,6 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
-                    `DELETE FROM strategy_settings WHERE id = 'manna_basic'`,
-                    `DELETE FROM edge_setups WHERE strategy_id = 'manna_basic'`,
-                    `DELETE FROM forex_edge_setups WHERE strategy_id = 'manna_basic'`,
-                    `DELETE FROM outcomes WHERE strategy_id = 'manna_basic'`,
                     // Hard-cap PnL values in outcomes table to exact R multiples
                     `UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`,
                     `UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`,
@@ -307,9 +303,6 @@ export async function initializeDatabase(): Promise<void> {
                     ('sentinel_v2', 'Manna Elite V1', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna Elite V1' WHERE id = 'sentinel_v2';
 
-                    DELETE FROM strategy_settings WHERE id = 'manna_basic';
-                    DELETE FROM edge_setups WHERE strategy_id = 'manna_basic';
-                    DELETE FROM forex_edge_setups WHERE strategy_id = 'manna_basic';
                     UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL;
 
                     UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2';
@@ -381,9 +374,6 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_max_signals INTEGER DEFAULT 6`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_min_conviction REAL DEFAULT 70.0`); } catch {}
     try { db.exec(`CREATE TABLE IF NOT EXISTS admin_strategy_access (user_email TEXT NOT NULL, strategy_id TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_email, strategy_id))`); } catch {}
-    try { db.exec(`DELETE FROM strategy_settings WHERE id = 'manna_basic'`); } catch {}
-    try { db.exec(`DELETE FROM edge_setups WHERE strategy_id = 'manna_basic'`); } catch {}
-    try { db.exec(`DELETE FROM forex_edge_setups WHERE strategy_id = 'manna_basic'`); } catch {}
     try { db.exec(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}

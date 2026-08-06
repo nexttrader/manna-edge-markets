@@ -90,29 +90,6 @@ app.use((err: any, req: any, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: 'Internal server error', reqId: req.id });
 });
 
-async function runStartupDiscoveryIfEmpty() {
-    try {
-        const activeSetups = await queries.getAllActiveSetups();
-        const activeCount = activeSetups.length;
-
-        const hasSnd = activeSetups.some((s: any) => s.strategy_id === 'manna_snd');
-
-        if (activeCount === 0 || !hasSnd) {
-            logger.info({ activeCount, hasSnd }, '⚡ Running startup discovery scan to ensure all active strategies (including Manna SnD) are populated...');
-            const now = new Date();
-            const kzInfo = getCurrentKillzone(now);
-            const runId = `startup_run_${Date.now()}`;
-            const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
-            const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
-            logger.info({ result }, '🚀 Initial startup discovery run completed successfully.');
-        } else {
-            logger.info({ activeCount }, `🟢 ${activeCount} active setup(s) already exist in database — skipping startup scan.`);
-        }
-    } catch (err) {
-        logger.error({ err }, '⚠️ Startup discovery run failed');
-    }
-}
-
 async function startServer() {
     try {
         logger.info('Initializing database...');
@@ -152,9 +129,7 @@ async function startServer() {
             }
         );
 
-        // Run automatic initial discovery scan on boot if DB is empty
-        await runStartupDiscoveryIfEmpty();
-
+        // Server boot starts cleanly. Automatic startup scan removed to ensure active setups are preserved.
         app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();
             const currentKz = getCurrentKillzone(now);
