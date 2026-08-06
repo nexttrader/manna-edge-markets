@@ -93,7 +93,7 @@ export async function getLiveCandles(
                 throw new Error(`Yahoo HTTP ${response.status} ${response.statusText}`);
             }
 
-            const chartResult = await response.json();
+            const chartResult: any = await response.json();
             const result = chartResult?.chart?.result?.[0];
 
             if (result && result.indicators && result.indicators.quote && result.indicators.quote.length > 0) {
