@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './UserManagementSystem.css';
+import { API_BASE } from '../../config';
 
 export interface UserManagementProps {
   isSuperAdmin?: boolean;
@@ -164,12 +165,12 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
     setErrorMsg('');
     try {
       const [uRes, cRes, tRes, gRes, aRes, nRes] = await Promise.all([
-        fetch('/api/admin/system/users', { headers: apiHeaders }),
-        fetch('/api/admin/system/coupons', { headers: apiHeaders }),
-        fetch('/api/admin/system/tags', { headers: apiHeaders }),
-        fetch('/api/admin/system/groups', { headers: apiHeaders }),
-        fetch('/api/admin/system/audit-logs', { headers: apiHeaders }),
-        fetch('/api/admin/system/notifications/logs', { headers: apiHeaders })
+        fetch(`${API_BASE}/api/admin/system/users`, { headers: apiHeaders }),
+        fetch(`${API_BASE}/api/admin/system/coupons`, { headers: apiHeaders }),
+        fetch(`${API_BASE}/api/admin/system/tags`, { headers: apiHeaders }),
+        fetch(`${API_BASE}/api/admin/system/groups`, { headers: apiHeaders }),
+        fetch(`${API_BASE}/api/admin/system/audit-logs`, { headers: apiHeaders }),
+        fetch(`${API_BASE}/api/admin/system/notifications/logs`, { headers: apiHeaders })
       ]);
 
       const uData = await uRes.json();
@@ -212,7 +213,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/system/users', {
+      const res = await fetch(`${API_BASE}/api/admin/system/users`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify(newUserForm)
@@ -233,7 +234,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
 
   const handlePauseUser = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/system/users/${userId}/pause`, {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}/pause`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ autoResumeDate: autoResumeDate || undefined })
@@ -253,7 +254,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
 
   const handleResumeUser = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/system/users/${userId}/resume`, {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}/resume`, {
         method: 'POST',
         headers: apiHeaders
       });
@@ -276,7 +277,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
       return;
     }
     try {
-      const res = await fetch(`/api/admin/system/users/${userId}/custom-dates`, {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}/custom-dates`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ startDate: customStartDate, endDate: customEndDate, billingCycle: 'custom' })
@@ -296,7 +297,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
 
   const handleExtendTrial = async (userId: string, days = 7) => {
     try {
-      const res = await fetch(`/api/admin/system/users/${userId}/extend-trial`, {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}/extend-trial`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ days })
@@ -317,7 +318,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleApplyCoupon = async (userEmail: string) => {
     if (!applyCouponCode) return;
     try {
-      const res = await fetch('/api/admin/system/coupons/apply', {
+      const res = await fetch(`${API_BASE}/api/admin/system/coupons/apply`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ code: applyCouponCode, userEmail })
@@ -339,7 +340,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
     e.preventDefault();
     try {
       const validUntil = new Date(Date.now() + newCouponForm.validDays * 86400000).toISOString();
-      const res = await fetch('/api/admin/system/coupons', {
+      const res = await fetch(`${API_BASE}/api/admin/system/coupons`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ ...newCouponForm, validUntil })
@@ -360,7 +361,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleCreateTag = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/system/tags', {
+      const res = await fetch(`${API_BASE}/api/admin/system/tags`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify(newTagForm)
@@ -380,7 +381,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/system/groups', {
+      const res = await fetch(`${API_BASE}/api/admin/system/groups`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify(newGroupForm)
@@ -400,7 +401,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleBroadcastNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/system/notifications/broadcast', {
+      const res = await fetch(`${API_BASE}/api/admin/system/notifications/broadcast`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify(broadcastForm)
@@ -420,7 +421,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const handleBulkAction = async (action: 'extend_trial_7d' | 'extend_sub_30d' | 'pause' | 'resume') => {
     if (selectedUserIds.length === 0) return;
     try {
-      const res = await fetch('/api/admin/system/users/bulk', {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/bulk`, {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ userIds: selectedUserIds, action })
