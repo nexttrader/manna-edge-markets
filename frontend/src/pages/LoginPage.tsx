@@ -127,16 +127,41 @@ export const LoginPage: React.FC = () => {
     navigate(role === 'admin' || role === 'super_admin' ? '/admin' : '/dashboard');
   };
 
-  // Step 2C: Register New Member
-  const handleRegister = (e: React.FormEvent) => {
+  // Step 2C: Register New Member (Self-Signup: Free Tier - 14-Day Trial Pass ONLY)
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !password) {
       setError('Please fill in your name and password.');
       return;
     }
-    setError(null);
-    login(email.trim(), role, name, tier);
-    navigate(role === 'admin' || role === 'super_admin' ? '/admin' : '/dashboard');
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch(`${API_BASE}/api/admin/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          password
+        })
+      });
+
+      const data = await res.json();
+      setLoading(false);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      const registeredUser = data.user;
+      login(registeredUser.email, 'trader', registeredUser.name, 'free');
+      navigate('/dashboard');
+    } catch (err: any) {
+      setLoading(false);
+      setError(err.message || 'Registration failed. Please try again.');
+    }
   };
 
   const handleResetStep = () => {
@@ -318,20 +343,21 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="font-mono">Subscription Access Tier</label>
-              <select 
-                value={tier} 
-                onChange={e => setTier(e.target.value as any)}
-                className="font-mono"
-              >
-                <option value="free">🆓 Free Tier (Max 2 Futures + 2 Forex setups/session)</option>
-                <option value="forex_only">⚡ Forex Only Tier (All Forex pairs & Manna SnD)</option>
-                <option value="futures_forex">🏛️ Futures & Forex Tier (All Access - Futures & Forex)</option>
-              </select>
+              <label className="font-mono">Subscription Tier</label>
+              <input 
+                type="text" 
+                value="🆓 Free Tier (14-Day VIP Trial Pass)" 
+                disabled 
+                className="font-mono disabled-input" 
+                style={{ color: '#38bdf8', fontWeight: 700 }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
+                Includes 14 days of signal access. Upgrade to paid tiers anytime from your dashboard or via admin coupon.
+              </span>
             </div>
 
-            <button type="submit" className="btn-submit font-mono">
-              ✨ Create Account & Launch
+            <button type="submit" className="btn-submit font-mono" disabled={loading}>
+              {loading ? 'Activating Account...' : '✨ Activate 14-Day Trial & Launch'}
             </button>
 
             <button type="button" onClick={handleResetStep} className="btn-back-step font-mono">

@@ -10,10 +10,15 @@ const router = express.Router();
 
 router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
   try {
-    await outcomeDetector.evaluateAllSetups(true);
-    const market = (req.query.market as string) || 'all';
     const role = (req.query.role as string) || 'trader';
     const email = (req.query.email as string) || (req.query.userEmail as string) || '';
+
+    if (!email) {
+      return res.status(401).json({ success: false, error: 'Authentication required. Please sign in to view live signals.', setups: [] });
+    }
+
+    await outcomeDetector.evaluateAllSetups(true);
+    const market = (req.query.market as string) || 'all';
     let rawSetups;
     if (market === 'all') {
       rawSetups = await queries.getAllActiveSetups();
@@ -174,6 +179,10 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
     const role = (req.query.role as string) || 'trader';
     const email = (req.query.email as string) || (req.query.userEmail as string) || '';
     
+    if (!email) {
+      return res.status(401).json({ success: false, error: 'Authentication required. Please sign in to view live signals.', setups: [] });
+    }
+
     let rawSetups = await queries.getSetupsByState('runner');
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
     rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));

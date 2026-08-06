@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import './SuperAdminPanel.css';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
+import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout, impersonateUser } = useAuth();
@@ -713,115 +714,7 @@ export const SuperAdminPanel: React.FC = () => {
 
         {/* TAB 4: User Governance & Roster */}
         {activeTab === 'roster' && (
-          <div className="super-card font-mono">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#b388ff' }}>👥 All Users &amp; Admins Real-Time Governance Roster</h2>
-                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Updates live every 5s • Full User Management &amp; Activity Timelines</span>
-              </div>
-
-              <button
-                type="button"
-                className="font-mono"
-                style={{
-                  background: 'rgba(179, 136, 255, 0.15)',
-                  border: '1px solid #b388ff',
-                  color: '#b388ff',
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  fontSize: '0.85rem'
-                }}
-                onClick={() => setShowAddAccountModal(!showAddAccountModal)}
-              >
-                {showAddAccountModal ? '✖️ Close Form' : '➕ Create Account (User or Admin)'}
-              </button>
-            </div>
-
-            <div className="table-responsive">
-              <table className="runs-table">
-                <thead>
-                  <tr>
-                    <th>Account &amp; Name</th>
-                    <th>Role &amp; Tier</th>
-                    <th>Status / Last Active</th>
-                    <th>Current Page</th>
-                    <th>Session Duration</th>
-                    <th>Actions &amp; Governance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((u: any) => (
-                    <tr key={u.email}>
-                      <td>
-                        <strong>{u.name || u.email}</strong>
-                        <div style={{ fontSize: '0.75rem', color: '#888' }}>{u.email}</div>
-                      </td>
-                      <td>
-                        <span className="market-tag font-mono" style={{ background: u.role === 'admin' ? 'rgba(255, 171, 0, 0.2)' : 'rgba(0, 229, 255, 0.2)', color: u.role === 'admin' ? '#ffab00' : '#00e5ff', marginRight: '6px' }}>
-                          {u.role.toUpperCase()}
-                        </span>
-                        <span style={{ fontSize: '0.78rem', color: '#b388ff' }}>{u.tier}</span>
-                      </td>
-                      <td style={{ color: u.isOnline ? '#00e676' : u.status === 'suspended' ? '#ff1744' : '#888' }}>
-                        {u.status === 'suspended' ? '🚫 SUSPENDED' : u.lastActiveAgo}
-                      </td>
-                      <td className="font-mono text-gold">
-                        {u.currentPath}
-                      </td>
-                      <td className="font-mono">
-                        {u.totalDurationFormatted}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{ background: 'rgba(179, 136, 255, 0.2)', border: '1px solid #b388ff', color: '#b388ff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
-                            onClick={() => handleSuperImpersonate(u)}
-                            title="Log in as this user to view their screen"
-                          >
-                            👁️ View As
-                          </button>
-
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{ background: 'rgba(0, 229, 255, 0.2)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
-                            onClick={() => fetchUserActivity(u.email)}
-                            title="Inspect complete activity timeline"
-                          >
-                            📜 Activity
-                          </button>
-
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{ background: 'rgba(255, 171, 0, 0.2)', border: '1px solid #ffab00', color: '#ffab00', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
-                            onClick={() => handleOpenEditModal(u)}
-                            title="Edit role, tier, and status"
-                          >
-                            ⚙️ Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="font-mono"
-                            style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
-                            onClick={() => handleSuperChangePassword(u.id || u.email, u.email)}
-                            title="Reset password"
-                          >
-                            🔑 Pass
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <UserManagementSystem isSuperAdmin={true} adminEmail="chadwinsolomon@gmail.com" />
         )}
 
         {/* TAB 5: Strategy Governance */}

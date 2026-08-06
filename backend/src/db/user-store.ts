@@ -5,9 +5,17 @@ export interface UserProfile {
   password?: string;
   mustChangePassword?: boolean;
   role: 'trader' | 'admin' | 'super_admin';
-  tier: 'free' | 'forex_only' | 'futures_forex';
+  tier: 'free' | 'forex_only' | 'futures_forex' | string;
   marketAccess: string;
-  status: 'active' | 'suspended' | 'pending_deletion';
+  status: 'active' | 'suspended' | 'paused' | 'pending_deletion' | 'expired';
+  subscriptionStatus?: 'active' | 'trialing' | 'paused' | 'expired' | 'canceled';
+  subscriptionStart?: string;
+  subscriptionEnd?: string;
+  billingCycle?: 'monthly' | 'yearly' | 'custom' | 'lifetime';
+  autoRenew?: boolean;
+  pauseStartDate?: string;
+  pauseResumeDate?: string;
+  pausedRemainingDays?: number;
   createdAt: string;
   lastActive?: string;
   preferredMarket?: 'Futures' | 'Forex' | 'Both';
@@ -18,9 +26,13 @@ export interface UserProfile {
   purgeAt?: string;
   daysRemaining?: number;
   isTrial?: boolean;
+  trialStartedAt?: string;
   trialExpiresAt?: string;
   trialDaysRemaining?: number;
   trialExpired?: boolean;
+  trialExtendedCount?: number;
+  tags?: string[];
+  groups?: string[];
 }
 
 const initialUserProfiles: UserProfile[] = [
@@ -117,33 +129,37 @@ export const addUser = (profile: {
   password?: string;
   mustChangePassword?: boolean;
   role?: 'trader' | 'admin' | 'super_admin'; 
-  tier?: 'free' | 'forex_only' | 'futures_forex';
+  tier?: 'free' | 'forex_only' | 'futures_forex' | string;
   preferredMarket?: 'Futures' | 'Forex' | 'Both';
   riskLimit?: '1%' | '2%' | '5%';
   isTrial?: boolean;
+  trialDays?: number;
 }): UserProfile => {
   const now = new Date();
-  const trialExpiresDate = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000); // 21 days from now
+  const trialDays = profile.trialDays !== undefined ? profile.trialDays : 14; // Default 14-day trial
+  const trialExpiresDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
   const newUser: UserProfile = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     name: profile.name,
     email: profile.email,
     password: profile.password || 'temp123',
-    mustChangePassword: profile.mustChangePassword !== undefined ? profile.mustChangePassword : true,
+    mustChangePassword: profile.mustChangePassword !== undefined ? profile.mustChangePassword : false,
     role: profile.role || 'trader',
-    tier: profile.tier || 'futures_forex',
-    marketAccess: 'all',
+    tier: profile.tier || 'free',
+    marketAccess: profile.tier === 'forex_only' ? 'forex' : profile.tier === 'futures_forex' ? 'all' : '2 Futures + 2 Forex',
     status: 'active',
+    subscriptionStatus: profile.isTrial || profile.tier === 'free' ? 'trialing' : 'active',
     createdAt: now.toISOString(),
-    lastActive: profile.isTrial ? 'Preloaded 21-Day VIP Trial' : 'Preloaded - Pending First Login',
+    lastActive: profile.isTrial || profile.tier === 'free' ? 'Registered 14-Day Free Trial' : 'Preloaded Account',
     preferredMarket: profile.preferredMarket || 'Both',
     riskLimit: profile.riskLimit || '1%',
     signalsViewed: 0,
     watchlistCount: 0,
-    isTrial: profile.isTrial || false,
-    trialExpiresAt: profile.isTrial ? trialExpiresDate.toISOString() : undefined,
-    trialDaysRemaining: profile.isTrial ? 21 : undefined,
+    isTrial: profile.isTrial !== undefined ? profile.isTrial : true,
+    trialStartedAt: now.toISOString(),
+    trialExpiresAt: trialExpiresDate.toISOString(),
+    trialDaysRemaining: trialDays,
     trialExpired: false
   };
 
@@ -301,4 +317,113 @@ export const updateUserFull = (
   if (updates.riskLimit) user.riskLimit = updates.riskLimit;
   return user;
 };
+
+export const pauseUserSubscription = (
+  userId: string,
+  autoResumeDate?: string
+): { success: boolean; user?: UserProfile; error?: string } => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return { success: false, error: 'User account not found' };
+
+  const now = new Date();
+  const currentEnd = user.subscriptionEnd ? new Date(user.subscriptionEnd).getTime() : Date.now() + 30 * 86400000;
+  const remainingMs = Math.max(0, currentEnd - now.getTime());
+  const pausedRemainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+
+  user.status = 'paused';
+  user.subscriptionStatus = 'paused';
+  user.pauseStartDate = now.toISOString();
+  user.pauseResumeDate = autoResumeDate || undefined;
+  user.pausedRemainingDays = pausedRemainingDays;
+
+  return { success: true, user };
+};
+
+export const resumeUserSubscription = (
+  userId: string
+): { success: boolean; user?: UserProfile; error?: string } => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return { success: false, error: 'User account not found' };
+
+  const now = new Date();
+  const daysToAdd = user.pausedRemainingDays || 30;
+  const newEnd = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+
+  user.status = 'active';
+  user.subscriptionStatus = user.isTrial ? 'trialing' : 'active';
+  user.subscriptionEnd = newEnd.toISOString();
+  delete user.pauseStartDate;
+  delete user.pauseResumeDate;
+  delete user.pausedRemainingDays;
+
+  return { success: true, user };
+};
+
+export const setCustomSubscriptionDates = (
+  userId: string,
+  startDate: string,
+  endDate: string,
+  billingCycle: 'monthly' | 'yearly' | 'custom' | 'lifetime' = 'custom'
+): { success: boolean; user?: UserProfile; error?: string } => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return { success: false, error: 'User account not found' };
+
+  user.subscriptionStart = startDate;
+  user.subscriptionEnd = endDate;
+  user.billingCycle = billingCycle;
+  user.status = 'active';
+  user.subscriptionStatus = 'active';
+
+  return { success: true, user };
+};
+
+export const extendUserTrial = (
+  userId: string,
+  daysToExtend: number
+): { success: boolean; user?: UserProfile; error?: string } => {
+  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+  if (!user) return { success: false, error: 'User account not found' };
+
+  const currentExpiry = user.trialExpiresAt ? new Date(user.trialExpiresAt).getTime() : Date.now();
+  const baseTime = Math.max(Date.now(), currentExpiry);
+  const newExpiry = new Date(baseTime + daysToExtend * 24 * 60 * 60 * 1000);
+
+  user.isTrial = true;
+  user.trialExpiresAt = newExpiry.toISOString();
+  user.trialExtendedCount = (user.trialExtendedCount || 0) + 1;
+  user.trialExpired = false;
+  user.status = 'active';
+  user.subscriptionStatus = 'trialing';
+
+  return { success: true, user };
+};
+
+export const bulkUpdateUsers = (
+  userIds: string[],
+  action: 'extend_trial_7d' | 'extend_sub_30d' | 'pause' | 'resume' | 'change_tier',
+  payload?: any
+): { updatedCount: number } => {
+  let count = 0;
+  for (const id of userIds) {
+    if (action === 'extend_trial_7d') {
+      if (extendUserTrial(id, 7).success) count++;
+    } else if (action === 'extend_sub_30d') {
+      const user = userStore.find(u => u.id === id || u.email.toLowerCase() === id.toLowerCase());
+      if (user) {
+        const curEnd = user.subscriptionEnd ? new Date(user.subscriptionEnd).getTime() : Date.now();
+        user.subscriptionEnd = new Date(curEnd + 30 * 86400000).toISOString();
+        user.status = 'active';
+        count++;
+      }
+    } else if (action === 'pause') {
+      if (pauseUserSubscription(id).success) count++;
+    } else if (action === 'resume') {
+      if (resumeUserSubscription(id).success) count++;
+    } else if (action === 'change_tier' && payload?.tier) {
+      if (updateUserTier(id, payload.tier)) count++;
+    }
+  }
+  return { updatedCount: count };
+};
+
 

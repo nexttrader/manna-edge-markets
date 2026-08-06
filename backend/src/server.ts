@@ -23,6 +23,8 @@ import runRoutes from './api/run-routes';
 import eventsRouter from './api/events';
 import newsRoutes from './api/news-routes';
 import supportRoutes from './api/support-routes';
+import userManagementRoutes from './api/user-management-routes';
+import { startSubscriptionScheduler } from './scheduler/subscription-cron';
 
 const logger = createLogger('server');
 const app = express();
@@ -40,6 +42,7 @@ app.use((req: any, _res: Response, next: NextFunction) => {
 app.use('/api', setupRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+app.use('/api/admin/system', userManagementRoutes);
 app.use('/api/admin', runRoutes);
 app.use('/api/hawkeye', hawkeyeRoutes);
 app.use('/api/news', newsRoutes);
@@ -103,6 +106,9 @@ async function startServer() {
 
         logger.info('Starting automated 15-minute system health diagnostic checker...');
         startAutomatedHealthDiagnostics();
+
+        logger.info('Starting automated user subscription & trial expiry scheduler...');
+        startSubscriptionScheduler();
 
         logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
         startScheduler(

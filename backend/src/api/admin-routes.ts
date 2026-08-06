@@ -76,6 +76,32 @@ router.post('/auth/setup-first-password', (req: Request, res: Response) => {
   return res.json({ success: true, user: result.user });
 });
 
+// Self-Registration Endpoint (Traders register themselves — Free Tier, 14-Day Trial ONLY)
+router.post('/auth/register', (req: Request, res: Response) => {
+  const { name, email, password } = req.body || {};
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+
+  const existing = findUserByEmail(email);
+  if (existing) {
+    return res.status(400).json({ error: 'An account with this email address already exists.' });
+  }
+
+  const newUser = addUser({
+    name: name.trim(),
+    email: email.trim(),
+    password,
+    mustChangePassword: false,
+    role: 'trader',
+    tier: 'free',
+    isTrial: true,
+    trialDays: 14 // Enforce 14-day trial ONLY for self signup
+  });
+
+  return res.json({ success: true, user: newUser });
+});
+
 // User Accounts Management Endpoints
 router.get('/users', (_req: Request, res: Response) => {
   const users = getAllUsers();

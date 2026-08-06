@@ -13,6 +13,14 @@ import { FirstLoginPasswordModal } from './components/FirstLoginPasswordModal';
 import { TrialExpiredModal } from './components/TrialExpiredModal';
 import { telemetryTracker } from './services/telemetryTracker';
 
+function ProtectedTraderRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   const { user, isImpersonating, originalAdmin } = useAuth();
   if (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin')) {
@@ -110,7 +118,14 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/client" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedTraderRoute>
+              <Dashboard />
+            </ProtectedTraderRoute>
+          } 
+        />
         <Route path="/login" element={<LoginPage />} />
         <Route 
           path="/admin" 
@@ -131,7 +146,14 @@ function App() {
         />
         <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="/vault-7729" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/setup/:id" element={<SetupDetail />} />
+        <Route 
+          path="/setup/:id" 
+          element={
+            <ProtectedTraderRoute>
+              <SetupDetail />
+            </ProtectedTraderRoute>
+          } 
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

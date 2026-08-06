@@ -75,7 +75,7 @@ const MOCK_SETUPS: EdgeSetup[] = [
 ];
 
 export function useSetups() {
-  const [setups, setSetups] = useState<EdgeSetup[]>(MOCK_SETUPS);
+  const [setups, setSetups] = useState<EdgeSetup[]>([]);
   const [runnerSetups, setRunnerSetups] = useState<EdgeSetup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,13 +86,21 @@ export function useSetups() {
   const isInitialFetchRef = useRef<boolean>(true);
 
   const fetchSetups = useCallback(async () => {
+    if (!user || !user.email) {
+      setSetups([]);
+      setRunnerSetups([]);
+      setLoading(false);
+      setError('Authentication required');
+      return;
+    }
+
     try {
-      const role = user?.role || 'trader';
-      const email = encodeURIComponent(user?.email || '');
+      const role = user.role || 'trader';
+      const email = encodeURIComponent(user.email);
       const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`);
-      if (!res.ok) throw new Error('Failed to fetch');
+      if (!res.ok) throw new Error('Failed to fetch setups');
       const data = await res.json();
-      const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : MOCK_SETUPS;
+      const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : [];
 
       // Fetch active runners
       try {
@@ -125,9 +133,8 @@ export function useSetups() {
       setSetups(currentList);
       setError(null);
     } catch (err) {
-      console.warn('Backend unavailable, using mock setups.');
       setError(err instanceof Error ? err.message : 'Unknown error');
-      setSetups(MOCK_SETUPS);
+      setSetups([]);
     } finally {
       setLoading(false);
     }
@@ -139,5 +146,5 @@ export function useSetups() {
     return () => clearInterval(interval);
   }, [fetchSetups]);
 
-  return { setups: Array.isArray(setups) ? setups : MOCK_SETUPS, runnerSetups, loading, error, refetch: fetchSetups };
+  return { setups: Array.isArray(setups) ? setups : [], runnerSetups, loading, error, refetch: fetchSetups };
 }
