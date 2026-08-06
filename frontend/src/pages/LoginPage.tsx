@@ -213,11 +213,19 @@ export const LoginPage: React.FC = () => {
         {step === 'create_password' && (
           <form onSubmit={handleSetupFirstPassword} className="login-form">
             <div className="welcome-banner glass-card font-mono">
-              <div className="welcome-icon">🎟️</div>
+              <div className="welcome-icon">
+                {userInfo?.role === 'admin' || userInfo?.role === 'super_admin' ? '🛡️' : userInfo?.isTrial ? '🎟️' : '⚡'}
+              </div>
               <div>
                 <h4>Welcome, {userInfo?.name}!</h4>
                 <p>
-                  Your account is preloaded with <strong>21-Day VIP Access</strong>! Create your private password below to activate your account.
+                  {userInfo?.role === 'admin' || userInfo?.role === 'super_admin' ? (
+                    <>Set up your private password below to activate your <strong>Administrative Access</strong>.</>
+                  ) : userInfo?.isTrial ? (
+                    <>Your account is preloaded with <strong>{userInfo?.trialDaysRemaining || 14}-Day VIP Trial Access</strong>! Create your private password below to activate your account.</>
+                  ) : (
+                    <>Your account has been provisioned with <strong>Full Membership Access</strong>! Create your private password below to activate your account.</>
+                  )}
                 </p>
               </div>
             </div>

@@ -61,7 +61,7 @@ export const FirstLoginPasswordModal: React.FC = () => {
         </div>
 
         <p style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: '1.5', background: 'rgba(0, 229, 255, 0.08)', border: '1px solid rgba(0, 229, 255, 0.2)', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>
-          Welcome, <strong>{user.name}</strong> ({user.email})! Your account was preloaded by an administrator. Please set a secure password for your account to complete activation and access your trading dashboard.
+          Welcome, <strong>{user.name}</strong> ({user.email})! {user.role === 'admin' || user.role === 'super_admin' ? 'Your administrative account was preloaded.' : user.isTrial ? 'Your trial account was preloaded.' : 'Your membership account was preloaded.'} Please set a secure password for your account to complete activation.
         </p>
 
         {errorMsg && (
