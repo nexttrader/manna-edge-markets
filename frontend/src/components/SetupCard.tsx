@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './SetupCard.css';
 import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -47,6 +47,22 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [rescanning, setRescanning] = useState(false);
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
   const [rescanMessage, setRescanMessage] = useState<string | null>(null);
+
+  // Live Price Tick Flash Tracking
+  const prevPriceRef = useRef<number | null>(null);
+  const [priceTick, setPriceTick] = useState<'up' | 'down' | 'neutral'>('neutral');
+
+  useEffect(() => {
+    if (setup.current_price !== undefined) {
+      if (prevPriceRef.current !== null && prevPriceRef.current !== setup.current_price) {
+        const dir = setup.current_price > prevPriceRef.current ? 'up' : 'down';
+        setPriceTick(dir);
+        const timer = setTimeout(() => setPriceTick('neutral'), 1200);
+        return () => clearTimeout(timer);
+      }
+      prevPriceRef.current = setup.current_price;
+    }
+  }, [setup.current_price]);
 
   if (!setup) return null;
 
@@ -159,6 +175,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           <div className="sc-symbol-row">
             <span className="sc-instrument">{setup.instrument}</span>
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
+            {currentPrice !== undefined && currentPrice > 0 && (
+              <span className={`sc-live-price-chip font-mono tick-${priceTick}`} title="Real-time live market price feed">
+                <span className="pulse-dot-green">●</span>
+                <span className="chip-label">LIVE:</span>
+                <span className="chip-val">{currentPrice}</span>
+                {priceTick === 'up' && <span className="chip-arrow text-green">▲</span>}
+                {priceTick === 'down' && <span className="chip-arrow text-red">▼</span>}
+              </span>
+            )}
           </div>
           <div className="sc-badges-row">
             <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>

@@ -115,6 +115,60 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sc-live-price-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: #00e5ff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  margin-left: 4px;
+}
+
+.pulse-dot-green {
+  color: #00e676;
+  font-size: 0.5rem;
+  animation: pulse 1.5s infinite;
+}
+
+.sc-live-price-chip.tick-up {
+  background: rgba(0, 230, 118, 0.25) !important;
+  border-color: #00e676 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
+  transform: translateY(-1px);
+}
+
+.sc-live-price-chip.tick-down {
+  background: rgba(255, 82, 82, 0.25) !important;
+  border-color: #ff5252 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(255, 82, 82, 0.4);
+  transform: translateY(1px);
+}
+
+.chip-label {
+  font-size: 0.65rem;
+  color: #aaa;
+  letter-spacing: 0.05em;
+}
+
+.chip-val {
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.chip-arrow {
+  font-size: 0.7rem;
+  font-weight: 900;
 }
 
 .strategy-badge {

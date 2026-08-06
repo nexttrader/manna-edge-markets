@@ -135,7 +135,7 @@ export function useSetups() {
 
   useEffect(() => {
     fetchSetups();
-    const interval = setInterval(fetchSetups, 5000);
+    const interval = setInterval(fetchSetups, 3000);
     return () => clearInterval(interval);
   }, [fetchSetups]);
 

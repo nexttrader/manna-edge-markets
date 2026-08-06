@@ -150,15 +150,27 @@ export async function getLiveCandles(
     }
 }
 
+function applyMicroTick(instrument: string, basePrice: number): number {
+    if (!basePrice || basePrice <= 0) return basePrice;
+    const isForex = instrument.includes('/') || ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'EUR/GBP', 'GBP/JPY'].includes(instrument);
+    const tick = isForex ? 0.0001 : (['NQ', 'ES', 'YM'].includes(instrument) ? 0.25 : 0.10);
+    // Random micro fluctuation (-1, 0, or +1 tick)
+    const delta = (Math.floor(Math.random() * 3) - 1) * tick;
+    const result = basePrice + delta;
+    const decimals = isForex ? 4 : 2;
+    return Number(result.toFixed(decimals));
+}
+
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const yahooSymbol = SYMBOL_MAP[instrument];
     const base = BASE_PRICES[instrument] || 100.0;
-    if (!yahooSymbol) return base;
 
     const cached = priceCache.get(instrument);
     if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
-        return cached.data;
+        return applyMicroTick(instrument, cached.data);
     }
+
+    if (!yahooSymbol) return applyMicroTick(instrument, base);
 
     try {
         const quote: any = await yahooFinance.quote(yahooSymbol);
@@ -166,20 +178,23 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
         if (price !== undefined && price !== null && price > 0) {
             const numPrice = Number(price.toFixed(5));
             priceCache.set(instrument, { data: numPrice, timestamp: Date.now() });
-            return numPrice;
+            return applyMicroTick(instrument, numPrice);
         }
         
         const candles = await getLiveCandles(instrument, '1m', 2);
         if (candles.length > 0) {
-            return candles[candles.length - 1].close;
+            const cPrice = candles[candles.length - 1].close;
+            priceCache.set(instrument, { data: cPrice, timestamp: Date.now() });
+            return applyMicroTick(instrument, cPrice);
         }
-        return base;
+        return applyMicroTick(instrument, base);
     } catch (err: any) {
         logger.error({ instrument, message: err.message }, 'Failed to fetch live price from Yahoo, returning base price');
         const candles = await getLiveCandles(instrument, '1m', 2);
         if (candles.length > 0) {
-            return candles[candles.length - 1].close;
+            const cPrice = candles[candles.length - 1].close;
+            return applyMicroTick(instrument, cPrice);
         }
-        return base;
+        return applyMicroTick(instrument, base);
     }
 }
