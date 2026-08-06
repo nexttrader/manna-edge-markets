@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './UserManagementSystem.css';
 import { API_BASE } from '../../config';
+import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export interface UserManagementProps {
   isSuperAdmin?: boolean;
@@ -90,6 +92,24 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   adminEmail = 'admin@mannaedge.com',
   adminRole = 'admin'
 }) => {
+  const { impersonateUser } = useAuth();
+  const navigate = useNavigate();
+
+  const handleImpersonateUser = (targetUser: UserProfile) => {
+    impersonateUser({
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+      role: targetUser.role as any,
+      tier: targetUser.tier as any,
+      marketAccess: (targetUser.tier === 'forex_only' ? 'forex' : 'all') as any,
+      isTrial: Boolean(targetUser.isTrial),
+      trialExpiresAt: targetUser.trialExpiresAt,
+      lastActive: targetUser.lastActive
+    });
+    navigate('/dashboard');
+  };
+
   const [activeTab, setActiveTab] = useState<
     'users' | 'subscriptions' | 'coupons' | 'tags_groups' | 'notifications' | 'audit_logs'
   >('users');
@@ -776,9 +796,18 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                         {user.groups && user.groups.map(g => <span key={g} className="group-badge">{g}</span>)}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="ums-btn-secondary" onClick={() => setSelectedUser(user)}>
-                          ⚙️ Manage User
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          <button
+                            className="ums-btn-secondary"
+                            onClick={() => handleImpersonateUser(user)}
+                            style={{ border: '1px solid #38bdf8', color: '#38bdf8' }}
+                          >
+                            🕵️ Impersonate
+                          </button>
+                          <button className="ums-btn-secondary" onClick={() => setSelectedUser(user)}>
+                            ⚙️ Manage User
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1264,6 +1293,26 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
               <button className="ums-modal-close" onClick={() => setSelectedUser(null)}>✕</button>
             </div>
             <div className="ums-modal-body">
+              <button
+                type="button"
+                className="ums-btn-primary"
+                onClick={() => {
+                  handleImpersonateUser(selectedUser);
+                  setSelectedUser(null);
+                }}
+                style={{
+                  background: 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#fff',
+                  fontWeight: 900,
+                  width: '100%',
+                  marginBottom: '1rem',
+                  padding: '10px',
+                  boxShadow: '0 0 15px rgba(2, 132, 199, 0.4)',
+                  cursor: 'pointer'
+                }}
+              >
+                🕵️ IMPERSONATE THIS USER ACCOUNT NOW
+              </button>
               <div className="ums-form-group">
                 <label>Email Address</label>
                 <input type="text" value={selectedUser.email} disabled />

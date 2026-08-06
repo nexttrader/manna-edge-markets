@@ -312,6 +312,13 @@ export async function initializeDatabase(): Promise<void> {
                     VALUES ('current', 0, 'Manna is currently undergoing scheduled system maintenance.', 'Asia Session Today', CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING;
 
+                    CREATE TABLE IF NOT EXISTS system_signal_snapshots (
+                        id TEXT PRIMARY KEY DEFAULT 'current',
+                        snapshot_json TEXT NOT NULL,
+                        count INTEGER DEFAULT 0,
+                        updated_at TEXT NOT NULL
+                    );
+
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna SnD' WHERE id = 'manna_snd';
@@ -394,6 +401,7 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`CREATE TABLE IF NOT EXISTS admin_strategy_access (user_email TEXT NOT NULL, strategy_id TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_email, strategy_id))`); } catch {}
     try { db.exec(`CREATE TABLE IF NOT EXISTS system_maintenance (id TEXT PRIMARY KEY DEFAULT 'current', enabled INTEGER DEFAULT 0, message TEXT DEFAULT 'Manna is currently undergoing scheduled system maintenance.', estimated_return_time TEXT DEFAULT 'Asia Session Today', updated_at TEXT, updated_by TEXT)`); } catch {}
     try { db.exec(`INSERT OR IGNORE INTO system_maintenance (id, enabled, message, estimated_return_time, updated_at) VALUES ('current', 0, 'Manna is currently undergoing scheduled system maintenance.', 'Asia Session Today', CURRENT_TIMESTAMP)`); } catch {}
+    try { db.exec(`CREATE TABLE IF NOT EXISTS system_signal_snapshots (id TEXT PRIMARY KEY DEFAULT 'current', snapshot_json TEXT NOT NULL, count INTEGER DEFAULT 0, updated_at TEXT NOT NULL)`); } catch {}
     try { db.exec(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL`); } catch {}
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}

@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { queryDb } from './database';
 import { EdgeSetup, InvalidationAudit, PublishRun, Outcome } from '../discovery/types';
 
@@ -461,20 +463,40 @@ export interface MaintenanceState {
   updatedBy?: string;
 }
 
+const MAINTENANCE_FILE_PATH = path.resolve(process.cwd(), 'src/db/system_maintenance_state.json');
+const MAINTENANCE_FILE_TMP = '/tmp/system_maintenance_state.json';
+
 export async function getMaintenanceState(): Promise<MaintenanceState> {
   try {
     const rows = await queryDb<any>(`SELECT * FROM system_maintenance WHERE id = 'current'`);
     if (rows && rows.length > 0) {
       const r = rows[0];
-      return {
+      const state = {
         enabled: Boolean(r.enabled === 1 || r.enabled === true),
         message: r.message || 'Manna is currently undergoing scheduled system maintenance.',
         estimatedReturnTime: r.estimated_return_time || 'Asia Session Today',
         updatedAt: r.updated_at || new Date().toISOString(),
         updatedBy: r.updated_by || 'admin'
       };
+      try {
+        fs.writeFileSync(MAINTENANCE_FILE_PATH, JSON.stringify(state, null, 2), 'utf8');
+        fs.writeFileSync(MAINTENANCE_FILE_TMP, JSON.stringify(state, null, 2), 'utf8');
+      } catch {}
+      return state;
     }
   } catch {}
+
+  for (const fpath of [MAINTENANCE_FILE_PATH, MAINTENANCE_FILE_TMP]) {
+    try {
+      if (fs.existsSync(fpath)) {
+        const parsed = JSON.parse(fs.readFileSync(fpath, 'utf8'));
+        if (parsed && typeof parsed.enabled === 'boolean') {
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+
   return {
     enabled: false,
     message: 'Manna is currently undergoing scheduled system maintenance.',
@@ -489,6 +511,7 @@ export async function setMaintenanceState(enabled: boolean, message: string, est
   const now = new Date().toISOString();
   const msg = message || 'Manna is currently undergoing scheduled system maintenance.';
   const est = estimatedReturnTime || 'Asia Session Today';
+  const state = { enabled, message: msg, estimatedReturnTime: est, updatedAt: now, updatedBy };
 
   try {
     const rows = await queryDb<any>(`SELECT id FROM system_maintenance WHERE id = 'current'`);
@@ -507,11 +530,10 @@ export async function setMaintenanceState(enabled: boolean, message: string, est
     console.error('Error updating system maintenance:', err);
   }
 
-  return {
-    enabled,
-    message: msg,
-    estimatedReturnTime: est,
-    updatedAt: now,
-    updatedBy
-  };
+  try {
+    fs.writeFileSync(MAINTENANCE_FILE_PATH, JSON.stringify(state, null, 2), 'utf8');
+    fs.writeFileSync(MAINTENANCE_FILE_TMP, JSON.stringify(state, null, 2), 'utf8');
+  } catch {}
+
+  return state;
 }
