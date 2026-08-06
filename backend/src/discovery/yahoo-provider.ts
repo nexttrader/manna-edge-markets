@@ -78,24 +78,41 @@ export async function getLiveCandles(
             const now = new Date();
             const lookbackDays = timeframe === '1m' ? 1 : (timeframe === '5m' || timeframe === '15m') ? 30 : timeframe === '1h' ? 120 : timeframe === '4h' ? 365 : 1825;
             const period1 = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-            const interval = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe) as any;
+            const intervalStr = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe);
+            const rangeStr = lookbackDays <= 1 ? '1d' : lookbackDays <= 5 ? '5d' : lookbackDays <= 30 ? '1mo' : lookbackDays <= 90 ? '3mo' : '1y';
 
-            const chartResult: any = await yahooFinance.chart(yahooSymbol, {
-                period1,
-                interval
+            const url = `https://query2.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=${intervalStr}&range=${rangeStr}`;
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json'
+                }
             });
 
-            if (chartResult && chartResult.quotes && chartResult.quotes.length > 0) {
-                const candles: Candle[] = chartResult.quotes
-                    .filter((q: any) => q.open !== null && q.close !== null && q.high !== null && q.low !== null)
-                    .map((q: any) => ({
-                        open: Number(q.open.toFixed(5)),
-                        high: Number(q.high.toFixed(5)),
-                        low: Number(q.low.toFixed(5)),
-                        close: Number(q.close.toFixed(5)),
-                        volume: Number(q.volume || 10000),
-                        timestamp: new Date(q.date).toISOString()
-                    }));
+            if (!response.ok) {
+                throw new Error(`Yahoo HTTP ${response.status} ${response.statusText}`);
+            }
+
+            const chartResult = await response.json();
+            const result = chartResult?.chart?.result?.[0];
+
+            if (result && result.indicators && result.indicators.quote && result.indicators.quote.length > 0) {
+                const quoteObj = result.indicators.quote[0];
+                const timestamps = result.timestamp || [];
+                
+                const candles: Candle[] = [];
+                for (let i = 0; i < timestamps.length; i++) {
+                    if (quoteObj.open[i] !== null && quoteObj.close[i] !== null) {
+                        candles.push({
+                            open: Number(quoteObj.open[i].toFixed(5)),
+                            high: Number(quoteObj.high[i].toFixed(5)),
+                            low: Number(quoteObj.low[i].toFixed(5)),
+                            close: Number(quoteObj.close[i].toFixed(5)),
+                            volume: Number(quoteObj.volume?.[i] || 10000),
+                            timestamp: new Date(timestamps[i] * 1000).toISOString()
+                        });
+                    }
+                }
 
                 if (candles.length > 0) {
                     candleCache.set(cacheKey, { data: candles, timestamp: Date.now() });
@@ -144,7 +161,7 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const fetchPromise = (async () => {
         try {
             await acquireYahooRateLimit();
-            const quote: any = await yahooFinance.quote(yahooSymbol);
+            const quote: any = await yahooFinance.quote(yahooSymbol).catch(() => null);
             const price = quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.bid ?? quote?.ask;
             if (price !== undefined && price !== null && price > 0) {
                 const numPrice = Number(price.toFixed(5));
