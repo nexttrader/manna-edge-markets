@@ -25,7 +25,6 @@ export const DashboardHeader: React.FC = () => {
   const [showFaq, setShowFaq] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
-  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
@@ -38,7 +37,6 @@ export const DashboardHeader: React.FC = () => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.dropdown-wrapper')) {
-        setShowToolsMenu(false);
         setShowUserMenu(false);
       }
     };
@@ -121,7 +119,7 @@ export const DashboardHeader: React.FC = () => {
       <header className="dashboard-header glass-card">
         <div className="container header-container">
           <div className="header-left">
-            <Link to="/" className="header-logo font-mono">
+            <Link to="/" className="header-logo font-mono" title="Manna Edge Markets — Click for Home">
               <span className="logo-emblem">⚡</span>
               <span className="logo-title-text">MANNA EDGE</span>
             </Link>
@@ -162,40 +160,33 @@ export const DashboardHeader: React.FC = () => {
                   </span>
                 )}
               </button>
+              <button 
+                className="nav-link font-mono" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={() => setShowCalendar(true)}
+                title="View Economic News Calendar"
+              >
+                📅 Calendar
+              </button>
+              <button 
+                className="nav-link font-mono" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e056fd' }}
+                onClick={() => setShowFaq(true)}
+                title="View Platform Guides & Knowledge Base"
+              >
+                ❓ FAQ
+              </button>
 
-              {/* Tools & Guides Dropdown */}
-              <div className="dropdown-wrapper">
-                <button 
-                  className={`nav-link font-mono dropdown-trigger-btn ${showToolsMenu ? 'active' : ''}`}
-                  onClick={() => { setShowToolsMenu(!showToolsMenu); setShowUserMenu(false); }}
-                >
-                  🛠️ Tools {showToolsMenu ? '▲' : '▼'}
-                </button>
-
-                {showToolsMenu && (
-                  <div className="header-dropdown-menu font-mono animate-slide-up">
-                    <Link to="/" className="dropdown-item" onClick={() => setShowToolsMenu(false)}>
-                      🏠 Home Page
-                    </Link>
-                    <button className="dropdown-item" onClick={() => { setShowCalendar(true); setShowToolsMenu(false); }}>
-                      📅 Economic Calendar
-                    </button>
-                    <button className="dropdown-item" onClick={() => { setShowFaq(true); setShowToolsMenu(false); }}>
-                      ❓ FAQ & Guides
-                    </button>
-                    {isAdmin && (
-                      <Link to="/admin" className="dropdown-item" onClick={() => setShowToolsMenu(false)}>
-                        ⚙️ Admin Panel
-                      </Link>
-                    )}
-                    {isSuperAdmin && (
-                      <Link to="/vault-5287" className="dropdown-item" style={{ color: '#b388ff' }} onClick={() => setShowToolsMenu(false)}>
-                        👁️ Master Desk
-                      </Link>
-                    )}
-                  </div>
-                )}
-              </div>
+              {isAdmin && (
+                <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
+                  ⚙️ Admin
+                </Link>
+              )}
+              {isSuperAdmin && (
+                <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
+                  👁️ Master Desk
+                </Link>
+              )}
             </nav>
           </div>
           
@@ -231,12 +222,12 @@ export const DashboardHeader: React.FC = () => {
 
             <CircuitBreakerIndicator />
 
-            {/* Consolidated Account Dropdown Menu */}
+            {/* Account Dropdown Menu */}
             {user ? (
               <div className="dropdown-wrapper font-mono">
                 <button 
                   className={`header-user-btn font-mono ${showUserMenu ? 'active' : ''}`}
-                  onClick={() => { setShowUserMenu(!showUserMenu); setShowToolsMenu(false); }}
+                  onClick={() => setShowUserMenu(!showUserMenu)}
                   title={`Account: ${user.name || user.email}`}
                 >
                   <span className="user-icon-chip">👤</span>
