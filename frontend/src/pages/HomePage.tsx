@@ -106,9 +106,6 @@ export const HomePage: React.FC = () => {
           <Link to="/dashboard" className="btn-hero-main">
             🚀 VIEW LIVE SIGNALS
           </Link>
-          <Link to="/admin" className="btn-hero-secondary">
-            ⚙️ ADMIN PANEL
-          </Link>
           {!user && (
             <Link to="/login" className="btn-hero-outline">
               🔑 SIGN IN / REGISTER
