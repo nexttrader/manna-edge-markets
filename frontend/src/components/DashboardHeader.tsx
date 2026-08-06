@@ -25,11 +25,26 @@ export const DashboardHeader: React.FC = () => {
   const [showFaq, setShowFaq] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
 
   const isTrader = user?.role === 'trader';
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.dropdown-wrapper')) {
+        setShowToolsMenu(false);
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     if (window.confirm('Sign out of Manna Edge Markets?')) {
@@ -108,13 +123,10 @@ export const DashboardHeader: React.FC = () => {
           <div className="header-left">
             <Link to="/" className="header-logo font-mono">
               <span className="logo-emblem">⚡</span>
-              MANNA EDGE MARKETS
+              <span className="logo-title-text">MANNA EDGE</span>
             </Link>
             
             <nav className="header-nav font-mono">
-              <Link to="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}>
-                🏠 Home
-              </Link>
               <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
                 📊 Dashboard
               </Link>
@@ -150,58 +162,66 @@ export const DashboardHeader: React.FC = () => {
                   </span>
                 )}
               </button>
-              <button 
-                className="nav-link font-mono" 
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                onClick={() => setShowCalendar(true)}
-              >
-                📅 Calendar
-              </button>
-              <button 
-                className="nav-link font-mono" 
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e056fd' }}
-                onClick={() => setShowFaq(true)}
-              >
-                ❓ FAQ
-              </button>
 
-              {isAdmin && (
-                <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
-                  ⚙️ Admin
-                </Link>
-              )}
-              {isSuperAdmin && (
-                <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
-                  👁️ Master Desk
-                </Link>
-              )}
+              {/* Tools & Guides Dropdown */}
+              <div className="dropdown-wrapper">
+                <button 
+                  className={`nav-link font-mono dropdown-trigger-btn ${showToolsMenu ? 'active' : ''}`}
+                  onClick={() => { setShowToolsMenu(!showToolsMenu); setShowUserMenu(false); }}
+                >
+                  🛠️ Tools {showToolsMenu ? '▲' : '▼'}
+                </button>
+
+                {showToolsMenu && (
+                  <div className="header-dropdown-menu font-mono animate-slide-up">
+                    <Link to="/" className="dropdown-item" onClick={() => setShowToolsMenu(false)}>
+                      🏠 Home Page
+                    </Link>
+                    <button className="dropdown-item" onClick={() => { setShowCalendar(true); setShowToolsMenu(false); }}>
+                      📅 Economic Calendar
+                    </button>
+                    <button className="dropdown-item" onClick={() => { setShowFaq(true); setShowToolsMenu(false); }}>
+                      ❓ FAQ & Guides
+                    </button>
+                    {isAdmin && (
+                      <Link to="/admin" className="dropdown-item" onClick={() => setShowToolsMenu(false)}>
+                        ⚙️ Admin Panel
+                      </Link>
+                    )}
+                    {isSuperAdmin && (
+                      <Link to="/vault-5287" className="dropdown-item" style={{ color: '#b388ff' }} onClick={() => setShowToolsMenu(false)}>
+                        👁️ Master Desk
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
             </nav>
           </div>
           
           <div className="header-actions">
-            {/* Voice Announcements Toggle Button & Settings */}
-            <div className="voice-control-box font-mono" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {/* Voice Announcements Toggle & Settings */}
+            <div className="voice-control-box font-mono">
               <button 
                 className={`voice-toggle-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
                 onClick={toggleVoice}
                 title={voiceEnabled ? 'Click to Mute Voice Announcements' : 'Click to Enable Voice Announcements'}
               >
-                {voiceEnabled ? '🔊 VOICE ON' : '🔇 VOICE OFF'}
+                {voiceEnabled ? '🔊 Voice' : '🔇 Muted'}
               </button>
               {voiceEnabled && (
                 <>
                   <button 
-                    className="voice-test-btn" 
+                    className="voice-settings-btn" 
                     onClick={() => testVoice()}
                     title="Test Audio Voice Alert"
                   >
-                    ▶ Test
+                    ▶
                   </button>
                   <button
-                    className="voice-test-btn"
+                    className="voice-settings-btn"
                     onClick={() => setShowVoiceSettings(true)}
-                    title="Configure Voice Persona, Pitch, Speed, & Chime"
-                    style={{ padding: '3px 6px', background: 'rgba(0, 229, 255, 0.1)', border: '1px solid rgba(0, 229, 255, 0.3)', color: '#00e5ff', cursor: 'pointer', borderRadius: '4px' }}
+                    title="Configure Voice Settings"
                   >
                     ⚙️
                   </button>
@@ -211,34 +231,67 @@ export const DashboardHeader: React.FC = () => {
 
             <CircuitBreakerIndicator />
 
+            {/* Consolidated Account Dropdown Menu */}
             {user ? (
-              <div className="header-user-menu font-mono">
-                <span 
-                  className="user-email-chip"
-                  onClick={handleAdminNameClick}
-                  style={{ cursor: 'pointer', userSelect: 'none', border: isSuperAdmin ? '1px solid #b388ff' : undefined }}
-                  title={`Logged in as ${user.name || user.email}`}
+              <div className="dropdown-wrapper font-mono">
+                <button 
+                  className={`header-user-btn font-mono ${showUserMenu ? 'active' : ''}`}
+                  onClick={() => { setShowUserMenu(!showUserMenu); setShowToolsMenu(false); }}
+                  title={`Account: ${user.name || user.email}`}
                 >
-                  👤 {user.name || user.email.split('@')[0]} {isSuperAdmin ? '👁️' : ''}
-                </span>
-                <span 
-                  className="last-login-badge font-mono"
-                  title="Last Login Timestamp"
-                >
-                  🕒 {user.lastActive || 'Just now'}
-                </span>
-                <button
-                  type="button"
-                  className="voice-toggle-btn pass-btn"
-                  style={{ padding: '3px 8px', fontSize: '0.75rem', border: '1px solid #00e5ff', color: '#00e5ff', background: 'rgba(0,229,255,0.1)' }}
-                  onClick={() => setShowPasswordModal(true)}
-                  title="Change My Password"
-                >
-                  🔑 Pass
+                  <span className="user-icon-chip">👤</span>
+                  <span className="user-name-short">{user.name || user.email.split('@')[0]}</span>
+                  <span className="user-dropdown-arrow">{showUserMenu ? '▲' : '▼'}</span>
                 </button>
-                <button onClick={handleLogout} className="logout-btn" title="Sign Out">
-                  🚪
-                </button>
+
+                {showUserMenu && (
+                  <div className="header-dropdown-menu user-dropdown-menu font-mono animate-slide-up">
+                    <div className="user-info-card font-mono">
+                      <div 
+                        className="user-email-full"
+                        onClick={handleAdminNameClick}
+                        title="Click 7 times to unlock Master Desk"
+                      >
+                        {user.email} {isSuperAdmin ? '👁️' : ''}
+                      </div>
+                      <div className="user-role-badge">
+                        Role: <strong>{user.role.toUpperCase()}</strong>
+                      </div>
+                      <div className="user-last-active">
+                        🕒 Active: {user.lastActive || 'Just now'}
+                      </div>
+                    </div>
+
+                    <div className="dropdown-divider" />
+
+                    {isAdmin && (
+                      <Link to="/admin" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
+                        ⚙️ Admin Panel
+                      </Link>
+                    )}
+                    {isSuperAdmin && (
+                      <Link to="/vault-5287" className="dropdown-item" style={{ color: '#b388ff' }} onClick={() => setShowUserMenu(false)}>
+                        👁️ Master Desk
+                      </Link>
+                    )}
+
+                    <button 
+                      className="dropdown-item" 
+                      onClick={() => { setShowPasswordModal(true); setShowUserMenu(false); }}
+                    >
+                      🔑 Change Password
+                    </button>
+
+                    <div className="dropdown-divider" />
+
+                    <button 
+                      className="dropdown-item item-logout" 
+                      onClick={() => { setShowUserMenu(false); handleLogout(); }}
+                    >
+                      🚪 Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <Link to="/login" className="login-nav-btn">
