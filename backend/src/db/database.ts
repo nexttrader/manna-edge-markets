@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import { Pool } from 'pg';
+import { ensureActiveSignalsRestored } from './signal-snapshot-restore';
 
 let sqliteDb: Database.Database | null = null;
 let pgPool: Pool | null = null;
@@ -322,6 +323,7 @@ export async function initializeDatabase(): Promise<void> {
                 `);
                 isPgAvailable = true;
                 console.log('PostgreSQL (Supabase) tables initialized successfully.');
+                await ensureActiveSignalsRestored();
                 return;
             } finally {
                 client.release();
@@ -392,4 +394,5 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
 
     console.log('Database initialized successfully.');
+    await ensureActiveSignalsRestored();
 }
