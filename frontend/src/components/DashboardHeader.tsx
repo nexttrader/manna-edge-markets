@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useVoice } from '../context/VoiceContext';
 import { useSignalNotifications } from '../context/SignalNotificationContext';
 import { LiveActivityFeed } from './LiveActivityFeed';
+import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { UserInbox } from './UserInbox';
 import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
@@ -23,6 +24,7 @@ export const DashboardHeader: React.FC = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
@@ -171,8 +173,8 @@ export const DashboardHeader: React.FC = () => {
           </div>
           
           <div className="header-actions">
-            {/* Voice Announcements Toggle Button */}
-            <div className="voice-control-box font-mono">
+            {/* Voice Announcements Toggle Button & Settings */}
+            <div className="voice-control-box font-mono" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button 
                 className={`voice-toggle-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
                 onClick={toggleVoice}
@@ -181,13 +183,23 @@ export const DashboardHeader: React.FC = () => {
                 {voiceEnabled ? '🔊 VOICE ON' : '🔇 VOICE OFF'}
               </button>
               {voiceEnabled && (
-                <button 
-                  className="voice-test-btn" 
-                  onClick={testVoice}
-                  title="Test Audio Voice Alert"
-                >
-                  ▶ Test
-                </button>
+                <>
+                  <button 
+                    className="voice-test-btn" 
+                    onClick={() => testVoice()}
+                    title="Test Audio Voice Alert"
+                  >
+                    ▶ Test
+                  </button>
+                  <button
+                    className="voice-test-btn"
+                    onClick={() => setShowVoiceSettings(true)}
+                    title="Configure Voice Persona, Pitch, Speed, & Chime"
+                    style={{ padding: '3px 6px', background: 'rgba(0, 229, 255, 0.1)', border: '1px solid rgba(0, 229, 255, 0.3)', color: '#00e5ff', cursor: 'pointer', borderRadius: '4px' }}
+                  >
+                    ⚙️
+                  </button>
+                </>
               )}
             </div>
 
@@ -342,6 +354,11 @@ export const DashboardHeader: React.FC = () => {
 
       {/* Slide-in banner when admin sends new reply */}
       {isTrader && <UserInboxBanner onOpenInbox={() => setShowInbox(true)} />}
+
+      {/* Voice Engine Settings Modal */}
+      {showVoiceSettings && (
+        <VoiceSettingsModal onClose={() => setShowVoiceSettings(false)} />
+      )}
 
       {/* User-Facing Live Signal Activity Feed Side Drawer */}
       <LiveActivityFeed />
