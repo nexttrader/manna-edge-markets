@@ -23,6 +23,23 @@ type SortOption = 'conviction' | 'newest' | 'live_rr' | 'closest_entry';
 
 import { useAuth } from '../context/AuthContext';
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+const LS_KEY = 'manna_dashboard_filters';
+
+function loadFilters() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveFilters(filters: object) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(filters)); } catch { /* ignore */ }
+}
+
 export const Dashboard: React.FC = () => {
   const { user, isImpersonating } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
@@ -30,14 +47,25 @@ export const Dashboard: React.FC = () => {
   const { setups, runnerSetups, loading } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
 
-  const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
-  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
-  const [biasFilter, setBiasFilter] = useState<BiasFilter>('all');
-  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('all');
-  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('conviction');
+  // ── Load persisted filter preferences from localStorage ──────────────────
+  const saved = loadFilters();
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>(saved?.marketFilter ?? 'all');
+  const [stateFilter, setStateFilter] = useState<StateFilter>(saved?.stateFilter ?? 'all');
+  const [biasFilter, setBiasFilter] = useState<BiasFilter>(saved?.biasFilter ?? 'all');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>(saved?.orderTypeFilter ?? 'all');
+  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>(saved?.strategyFilter ?? 'all');
+  const [sortBy, setSortBy] = useState<SortOption>(saved?.sortBy ?? 'conviction');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
   const [calcSetup, setCalcSetup] = useState<EdgeSetup | null>(null);
+
+  // ── Persist filter changes to localStorage ───────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateFilter = (setter: React.Dispatch<React.SetStateAction<any>>, key: string, value: unknown) => {
+    setter(value as any);
+    const current = loadFilters() || {};
+    saveFilters({ ...current, [key]: value });
+  };
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
@@ -118,6 +146,7 @@ export const Dashboard: React.FC = () => {
     setOrderTypeFilter('all');
     setStrategyFilter('all');
     setSortBy('conviction');
+    saveFilters({});
   };
 
   const hasActiveFilter = marketFilter !== 'all' || stateFilter !== 'all' || biasFilter !== 'all' || orderTypeFilter !== 'all' || strategyFilter !== 'all' || sortBy !== 'conviction';
@@ -147,58 +176,36 @@ export const Dashboard: React.FC = () => {
             <div className="tabs">
               <button 
                 className={`tab ${marketFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setMarketFilter('all')}
+                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'all')}
               >
                 🌐 All Markets ({setups.length})
               </button>
               <button 
                 className={`tab ${marketFilter === 'futures' ? 'active' : ''}`}
-                onClick={() => setMarketFilter('futures')}
+                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'futures')}
               >
                 📊 Futures ({futuresCount})
               </button>
               <button 
                 className={`tab ${marketFilter === 'forex' ? 'active' : ''}`}
-                onClick={() => setMarketFilter('forex')}
+                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'forex')}
               >
                 💱 Forex ({forexCount})
               </button>
               <button 
                 className={`tab tab-watchlist ${marketFilter === 'watchlist' ? 'active' : ''}`}
-                onClick={() => setMarketFilter('watchlist')}
+                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'watchlist')}
               >
                 ⭐ Watchlist ({watchlistCount})
-              </button>
-              <button 
-                className="tab tab-faq font-mono"
-                onClick={() => setShowFaq(true)}
-                style={{
-                  background: 'rgba(224, 86, 253, 0.15)',
-                  color: '#e056fd',
-                  border: '1px solid rgba(224, 86, 253, 0.45)',
-                  fontWeight: 800
-                }}
-                title="Open Platform FAQ & Knowledge Base Guide"
-              >
-                ❓ FAQ
               </button>
             </div>
           </div>
 
-          {/* Secondary Controls: Dropdown Filters & Sort Options */}
+          {/* Secondary Controls: Core Filters */}
           <div className="filter-controls-row">
             <div className="filter-group">
-              <label>Strategy Tier:</label>
-              <select value={strategyFilter} onChange={(e) => setStrategyFilter(e.target.value as StrategyFilter)}>
-                <option value="all">⚡ All Strategies</option>
-                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}</option>
-                <option value="manna_snd">🟡 Manna SnD</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
               <label>State:</label>
-              <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value as StateFilter)}>
+              <select value={stateFilter} onChange={(e) => updateFilter(setStateFilter, 'stateFilter', e.target.value as StateFilter)}>
                 <option value="all">All States</option>
                 <option value="active">🟢 Active Positions</option>
                 <option value="runner">🏃 Active Runners (TP1 Logged)</option>
@@ -211,7 +218,7 @@ export const Dashboard: React.FC = () => {
 
             <div className="filter-group">
               <label>Direction:</label>
-              <select value={biasFilter} onChange={(e) => setBiasFilter(e.target.value as BiasFilter)}>
+              <select value={biasFilter} onChange={(e) => updateFilter(setBiasFilter, 'biasFilter', e.target.value as BiasFilter)}>
                 <option value="all">All Directions</option>
                 <option value="long">⬆ Long Only</option>
                 <option value="short">⬇ Short Only</option>
@@ -219,17 +226,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="filter-group">
-              <label>Order Type:</label>
-              <select value={orderTypeFilter} onChange={(e) => setOrderTypeFilter(e.target.value as OrderTypeFilter)}>
-                <option value="all">All Orders</option>
-                <option value="market">📌 Market Orders</option>
-                <option value="limit">📌 Limit Orders</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
               <label>Sort By:</label>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)}>
+              <select value={sortBy} onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}>
                 <option value="conviction">🔥 Highest Conviction</option>
                 <option value="newest">⏱️ Newest Discovered</option>
                 <option value="live_rr">📈 Highest Live RR</option>
@@ -242,12 +240,44 @@ export const Dashboard: React.FC = () => {
               Live (5s poll)
             </div>
 
+            {/* Advanced Filters Toggle */}
+            <button
+              className="advanced-filters-toggle font-mono"
+              onClick={() => setShowAdvancedFilters(prev => !prev)}
+              title="Toggle advanced filter options"
+            >
+              ⚙️ Advanced {showAdvancedFilters ? '▲' : '▼'}
+            </button>
+
             {hasActiveFilter && (
               <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">
                 ↺ Reset Filters
               </button>
             )}
           </div>
+
+          {/* Advanced Filters: Strategy Tier + Order Type (hidden by default) */}
+          {showAdvancedFilters && (
+            <div className="filter-controls-row filter-advanced-row">
+              <div className="filter-group">
+                <label>Strategy Tier:</label>
+                <select value={strategyFilter} onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}>
+                  <option value="all">⚡ All Strategies</option>
+                  <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}</option>
+                  <option value="manna_snd">🟡 Manna SnD</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Order Type:</label>
+                <select value={orderTypeFilter} onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}>
+                  <option value="all">All Orders</option>
+                  <option value="market">📌 Market Orders</option>
+                  <option value="limit">📌 Limit Orders</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Setups Display */}

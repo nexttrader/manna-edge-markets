@@ -1,8 +1,48 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KillzoneClock } from '../components/KillzoneClock';
 import './HomePage.css';
+
+const LiveTickerWidget: React.FC = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    // Clear any previously injected widget
+    containerRef.current.innerHTML = '';
+
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbols: [
+        { proName: 'CME_MINI:NQ1!', title: 'NQ Futures' },
+        { proName: 'CME_MINI:ES1!', title: 'ES Futures' },
+        { proName: 'COMEX:GC1!',    title: 'Gold' },
+        { proName: 'COMEX:SI1!',    title: 'Silver' },
+        { proName: 'FX:EURUSD',     title: 'EUR/USD' },
+        { proName: 'FX:GBPUSD',     title: 'GBP/USD' },
+        { proName: 'NYMEX:CL1!',    title: 'Crude Oil' },
+      ],
+      showSymbolLogo: false,
+      colorTheme: 'dark',
+      isTransparent: true,
+      displayMode: 'adaptive',
+      locale: 'en',
+    });
+
+    containerRef.current.appendChild(script);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="tradingview-widget-container animate-slide-up"
+      style={{ width: '100%', marginBottom: '44px' }}
+    />
+  );
+};
 
 export const HomePage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -31,7 +71,7 @@ export const HomePage: React.FC = () => {
                 <Link to="/dashboard" className="btn-nav-primary">
                   📊 Live Signals
                 </Link>
-                <button onClick={logout} className="btn-nav-logout">
+                <button onClick={() => { if (window.confirm('Sign out of Manna Edge Markets?')) logout(); }} className="btn-nav-logout">
                   Logout
                 </button>
               </div>
@@ -59,15 +99,8 @@ export const HomePage: React.FC = () => {
           Smart, automated trade signals for Futures & Forex. Spot high-probability setups, clear profit targets, and live market updates — all in one simple dashboard.
         </p>
 
-        {/* Live Market Quote Ticker Preview */}
-        <div className="market-ticker-bar animate-slide-up">
-          <div className="ticker-item"><span className="t-name">NQ (Nasdaq)</span> <span className="t-price">18,992.50</span> <span className="t-change text-green">+1.45%</span></div>
-          <div className="ticker-item"><span className="t-name">ES (S&P 500)</span> <span className="t-price">5,509.25</span> <span className="t-change text-green">+0.82%</span></div>
-          <div className="ticker-item"><span className="t-name">GC (Gold)</span> <span className="t-price">$2,385.40</span> <span className="t-change text-green">+0.65%</span></div>
-          <div className="ticker-item"><span className="t-name">SI (Silver)</span> <span className="t-price">$28.45</span> <span className="t-change text-red">-0.24%</span></div>
-          <div className="ticker-item"><span className="t-name">EUR/USD</span> <span className="t-price">1.0854</span> <span className="t-change text-green">+0.12%</span></div>
-          <div className="ticker-item"><span className="t-name">GBP/USD</span> <span className="t-price">1.2682</span> <span className="t-change text-green">+0.28%</span></div>
-        </div>
+        {/* Live Market Quote Ticker — TradingView real-time feed */}
+        <LiveTickerWidget />
 
         <div className="hero-cta-group animate-slide-up">
           <Link to="/dashboard" className="btn-hero-main">

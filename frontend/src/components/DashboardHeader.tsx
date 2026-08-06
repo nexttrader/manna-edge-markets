@@ -31,6 +31,12 @@ export const DashboardHeader: React.FC = () => {
 
   const isTrader = user?.role === 'trader';
 
+  const handleLogout = () => {
+    if (window.confirm('Sign out of Manna Edge Markets?')) {
+      logout();
+    }
+  };
+
   // Poll for unread messages every 20s (traders only)
   const fetchUnread = useCallback(async () => {
     if (!user?.email || !isTrader) return;
@@ -230,7 +236,7 @@ export const DashboardHeader: React.FC = () => {
                 >
                   🔑 Pass
                 </button>
-                <button onClick={logout} className="logout-btn" title="Sign Out">
+                <button onClick={handleLogout} className="logout-btn" title="Sign Out">
                   🚪
                 </button>
               </div>

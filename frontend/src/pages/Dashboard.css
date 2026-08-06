@@ -158,6 +158,31 @@
   transform: translateY(-1px);
 }
 
+.advanced-filters-toggle {
+  padding: 6px 14px;
+  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  color: var(--kdt-gold);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.advanced-filters-toggle:hover {
+  background: rgba(201, 168, 76, 0.18);
+  border-color: var(--kdt-gold);
+}
+
+.filter-advanced-row {
+  padding-top: 12px;
+  border-top: 1px dashed rgba(201, 168, 76, 0.2);
+  animation: fadeIn 0.2s ease;
+}
+
 .setups-grid {
   display: grid;
   grid-template-columns: 1fr;
