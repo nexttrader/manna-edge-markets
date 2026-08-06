@@ -80,13 +80,8 @@ export class OutcomeDetector {
 
         let currentPrice = await getLiveCurrentPrice(setup.instrument);
         if (!currentPrice || currentPrice <= 0) {
-          const createdTimeMs = setup.created_at ? new Date(setup.created_at).getTime() : 0;
-          const ageHours = createdTimeMs > 0 ? (Date.now() - createdTimeMs) / 3600000 : 0;
-          if (ageHours > 12) {
-            currentPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-          } else {
-            continue;
-          }
+          // If live price is not available (market closed or API offline), leave active setup untouched
+          continue;
         }
         
         let maxHigh = currentPrice;

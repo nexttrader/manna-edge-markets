@@ -50,17 +50,7 @@ export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: n
       }
     }
 
-    // Rule 3: entry_expired (> 12 hours = ~2 killzone cycles)
-    const now = new Date();
-    const createdTime = new Date(setup.created_at);
-    const diffHours = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
-    if (diffHours > 12) {
-      return { 
-        isValid: false, 
-        reason: InvalidationReason.entry_expired, 
-        detail: `Setup older than 12 hours (2 killzone cycles)` 
-      };
-    }
+    // NOTE: Rule 3 (12-hour expiration) removed to ensure active signals are NEVER automatically cleared or expired from the trader dashboard.
   }
 
   return { isValid: true };
