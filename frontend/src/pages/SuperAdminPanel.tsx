@@ -6,7 +6,7 @@ import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 
 export const SuperAdminPanel: React.FC = () => {
-  const { logout, impersonateUser } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleReturnToAdmin = () => {
@@ -25,8 +25,8 @@ export const SuperAdminPanel: React.FC = () => {
 
   // User Activity Audit Modal State
   const [activityModalEmail, setActivityModalEmail] = useState<string | null>(null);
-  const [userActivityData, setUserActivityData] = useState<any>(null);
-  const [loadingUserActivity, setLoadingUserActivity] = useState(false);
+  const [userActivityData] = useState<any>(null);
+  const [loadingUserActivity] = useState(false);
 
   // Edit User Governance Modal State
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -133,34 +133,9 @@ export const SuperAdminPanel: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update rollout');
       if (data.rollout) setSentinelRollout(data.rollout);
-      alert(`✅ Sentinel V2 rollout updated for ${target.toUpperCase()}!`);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     }
-  };
-
-  const fetchUserActivity = async (email: string) => {
-    try {
-      setLoadingUserActivity(true);
-      setActivityModalEmail(email);
-      const res = await fetch(`${API_BASE}/api/super-admin/users/${encodeURIComponent(email)}/activity`);
-      if (res.ok) {
-        const json = await res.json();
-        setUserActivityData(json);
-      }
-    } catch (err: any) {
-      alert(`⚠️ Failed to load user activity: ${err.message}`);
-    } finally {
-      setLoadingUserActivity(false);
-    }
-  };
-
-  const handleOpenEditModal = (u: any) => {
-    setEditingUser(u);
-    setEditName(u.name || '');
-    setEditRole(u.role || 'trader');
-    setEditTier(u.tier || 'futures_forex');
-    setEditStatus(u.status || 'active');
   };
 
   const handleSaveUserGovernance = async (e: React.FormEvent) => {
@@ -235,27 +210,6 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
-  const handleSuperChangePassword = async (userId: string, userEmail: string) => {
-    const newPass = window.prompt(`🔑 SUPER ADMIN OVERRIDE:\n\nEnter NEW password for ${userEmail}:`);
-    if (!newPass) return;
-    if (newPass.length < 4) {
-      alert('⚠️ Password must be at least 4 characters long.');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/api/super-admin/users/${userId}/password`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPassword: newPass })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update password');
-      alert(`✅ Password for "${userEmail}" updated successfully by Super Admin!`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
-
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccEmail, setNewAccEmail] = useState('');
@@ -320,17 +274,6 @@ export const SuperAdminPanel: React.FC = () => {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleSuperImpersonate = (u: any) => {
-    impersonateUser({
-      id: u.id || `usr_${Date.now()}`,
-      name: u.name || u.email.split('@')[0],
-      email: u.email,
-      role: u.role || 'trader',
-      tier: u.tier || 'futures_forex'
-    });
-    navigate('/dashboard');
-  };
 
   const roster = data?.roster || [];
   const adminLogs = data?.adminLogs || [];

@@ -1,78 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SignalState, Bias, Market, Killzone, type EdgeSetup } from '../types';
+import { type EdgeSetup } from '../types';
 import { useVoice } from '../context/VoiceContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
-
-const MOCK_SETUPS: EdgeSetup[] = [
-  {
-    id: 'setup-1',
-    instrument: 'EUR/USD',
-    market: Market.FOREX,
-    bias: Bias.LONG,
-    conviction: 82,
-    state: SignalState.ACTIVE,
-    killzone: Killzone.NY_AM,
-    strategy_id: 'sentinel_v2',
-    strategy_tier: 'elite',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    validatedAt: new Date(Date.now() - 3000000).toISOString(),
-    entryAt: new Date(Date.now() - 2800000).toISOString(),
-    unrealizedR: 1.2,
-    levels: {
-      entryMin: 1.0920,
-      entryMax: 1.0935,
-      stopLoss: 1.0885,
-      takeProfit1: 1.0970,
-      takeProfit2: 1.1020
-    },
-    pips: { stopLoss: -35, takeProfit1: 50, takeProfit2: 100 }
-  },
-  {
-    id: 'setup-2',
-    instrument: 'NQ',
-    market: Market.FUTURES,
-    bias: Bias.SHORT,
-    conviction: 95,
-    state: SignalState.AWAITING_ENTRY,
-    killzone: Killzone.LONDON,
-    strategy_id: 'manna_snd',
-    strategy_tier: 'pro',
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    validatedAt: new Date(Date.now() - 7000000).toISOString(),
-    unrealizedR: 0,
-    levels: {
-      entryMin: 18050,
-      entryMax: 18075,
-      stopLoss: 18120,
-      takeProfit1: 17950,
-      takeProfit2: 17800
-    },
-    pips: { stopLoss: -70, takeProfit1: 100, takeProfit2: 250 }
-  },
-  {
-    id: 'setup-3',
-    instrument: 'ES',
-    market: Market.FUTURES,
-    bias: Bias.SHORT,
-    conviction: 88,
-    state: SignalState.AWAITING_ENTRY,
-    killzone: Killzone.NY_AM,
-    strategy_id: 'manna_snd',
-    strategy_tier: 'pro',
-    createdAt: new Date(Date.now() - 1800000).toISOString(),
-    validatedAt: new Date(Date.now() - 1500000).toISOString(),
-    unrealizedR: 0,
-    levels: {
-      entryMin: 5520,
-      entryMax: 5525,
-      stopLoss: 5535,
-      takeProfit1: 5490,
-      takeProfit2: 5470
-    },
-    pips: { stopLoss: -15, takeProfit1: 30, takeProfit2: 50 }
-  }
-];
 
 export function useSetups() {
   const [setups, setSetups] = useState<EdgeSetup[]>([]);

@@ -1,11 +1,17 @@
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, Navigate } from 'react-router-dom';
 import './SetupDetail.css';
 import { useSetups } from '../hooks/useSetups';
 import { useSetupHistory } from '../hooks/useHawkeye';
 import { SetupCard } from '../components/SetupCard';
+import { useAuth } from '../context/AuthContext';
 
 export const SetupDetail: React.FC = () => {
+  const { user } = useAuth();
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   const { id } = useParams<{ id: string }>();
   const { setups, loading: setupsLoading } = useSetups();
   

@@ -13,7 +13,7 @@ import { AdminSupportInbox } from '../components/AdminSupportInbox';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 
 export const AdminPanel: React.FC = () => {
-  const { user, originalAdmin, logout, impersonateUser, isImpersonating, stopImpersonating } = useAuth();
+  const { user, originalAdmin, logout, impersonateUser } = useAuth();
   const navigate = useNavigate();
   const { triggerRun, disableSignal } = useAdmin();
   const { runs } = usePublishRuns(15);
@@ -22,8 +22,6 @@ export const AdminPanel: React.FC = () => {
   const { setups: activeSetupsList, refetch: refetchActiveSetups } = useSetups();
 
   const [usersList, setUsersList] = useState<any[]>([]);
-  const [holdingList, setHoldingList] = useState<any[]>([]);
-  const [userSubTab, setUserSubTab] = useState<'active' | 'holding'>('active');
   const [selectedUserProfile, setSelectedUserProfile] = useState<any | null>(null);
 
   const fetchUsers = async () => {
@@ -34,142 +32,9 @@ export const AdminPanel: React.FC = () => {
     } catch {}
   };
 
-  const fetchHoldingUsers = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/holding`);
-      const data = await res.json();
-      if (data.holding) setHoldingList(data.holding);
-    } catch {}
-  };
-
   useEffect(() => {
     fetchUsers();
-    fetchHoldingUsers();
   }, []);
-
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserTier, setNewUserTier] = useState<'free' | 'forex_only' | 'futures_forex'>('free');
-  const [newPrefMarket, setNewPrefMarket] = useState<'Futures' | 'Forex' | 'Both'>('Both');
-  const [newRiskLimit, setNewRiskLimit] = useState<'1%' | '2%' | '5%'>('1%');
-
-  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
-  const [bulkCsvText, setBulkCsvText] = useState('');
-  const [isTrialImport, setIsTrialImport] = useState(true);
-
-  const handleBulkImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bulkCsvText.trim()) {
-      alert('Please paste CSV or lines of users to import.');
-      return;
-    }
-
-    const lines = bulkCsvText.split('\n').map(l => l.trim()).filter(Boolean);
-    const rawUsers: Array<{ name: string; email: string; tier?: 'free' | 'forex_only' | 'futures_forex' }> = [];
-
-    for (const line of lines) {
-      if (line.toLowerCase().startsWith('name,') || line.toLowerCase().startsWith('email,')) continue;
-      const parts = line.split(',').map(p => p.trim());
-      if (parts.length >= 2) {
-        let name = parts[0];
-        let email = parts[1];
-        let tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex';
-
-        if (!name.includes('@') && email.includes('@')) {
-          // Name, Email, Tier
-        } else if (name.includes('@')) {
-          const temp = name;
-          name = email || temp.split('@')[0];
-          email = temp;
-        }
-
-        if (parts[2]) {
-          const t = parts[2].toLowerCase();
-          if (t.includes('free')) tier = 'free';
-          else if (t.includes('forex')) tier = 'forex_only';
-        }
-
-        rawUsers.push({ name, email, tier });
-      }
-    }
-
-    if (rawUsers.length === 0) {
-      alert('Could not parse any valid users. Format: Name, Email, Tier');
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/bulk-import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawUsers, isTrial: isTrialImport })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to bulk import users');
-
-      if (data.users) setUsersList(data.users);
-      setShowBulkImportModal(false);
-      setBulkCsvText('');
-      alert(`✅ Preloaded ${data.importedCount} user accounts ${isTrialImport ? 'with 21-Day VIP Trial Passes' : ''}! All users will be forced to set their password on first sign-in.`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUserName || !newUserEmail) {
-      alert('Please provide display name and email');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newUserName, email: newUserEmail, tier: newUserTier, preferredMarket: newPrefMarket, riskLimit: newRiskLimit })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create user');
-      
-      if (data.users) setUsersList(data.users);
-      setShowAddUserModal(false);
-      setNewUserName('');
-      setNewUserEmail('');
-      setNewUserTier('free');
-      alert(`✅ Account for "${newUserName}" created successfully!`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
-
-  const handleSoftDeleteUser = async (userId: string, userName: string) => {
-    const confirmed = window.confirm(`⚠️ SOFT-DELETE USER CONFIRMATION:\n\nAre you sure you want to delete ${userName}?\n\nThe user will be moved to the 30-Day Holding Zone / Recycle Bin before permanent deletion.\n\nNote: A new user with the SAME details can be created immediately in the meantime!`);
-    if (!confirmed) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to delete user');
-      if (data.users) setUsersList(data.users);
-      if (data.holding) setHoldingList(data.holding);
-      alert(`🗑️ Account for "${userName}" moved to 30-Day Holding Zone.`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
-
-  const handleRestoreUser = async (userId: string, userName: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/restore`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to restore user');
-      if (data.users) setUsersList(data.users);
-      if (data.holding) setHoldingList(data.holding);
-      alert(`♻️ Account for "${userName}" restored to Active Users!`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
 
   const handleAdminChangePassword = async (targetId: string, targetName: string, targetRole: string) => {
     if ((targetRole === 'admin' || targetRole === 'super_admin') && user?.role !== 'super_admin' && user?.email !== targetId) {
@@ -195,21 +60,6 @@ export const AdminPanel: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update password');
       alert(`✅ Password for "${targetName}" updated successfully!`);
-    } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-    }
-  };
-
-  const handleUpdateTier = async (userId: string, tier: 'free' | 'forex_only' | 'futures_forex') => {
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/${userId}/tier`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update tier');
-      if (data.users) setUsersList(data.users);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     }

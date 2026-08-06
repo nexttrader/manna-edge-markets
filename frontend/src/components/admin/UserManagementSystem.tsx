@@ -25,6 +25,7 @@ export interface UserProfile {
   trialExpiresAt?: string;
   trialDaysRemaining?: number;
   trialExtendedCount?: number;
+  trialExpired?: boolean;
   createdAt: string;
   lastActive?: string;
   preferredMarket?: string;

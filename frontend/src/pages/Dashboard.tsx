@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import './Dashboard.css';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { SetupCard } from '../components/SetupCard';
@@ -42,6 +43,10 @@ function saveFilters(filters: object) {
 
 export const Dashboard: React.FC = () => {
   const { user, isImpersonating } = useAuth();
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
 
   const { setups, runnerSetups, loading } = useSetups();

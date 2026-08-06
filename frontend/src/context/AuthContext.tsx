@@ -127,6 +127,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     setOriginalAdmin(null);
+    try {
+      localStorage.removeItem('manna_user');
+      localStorage.removeItem('manna_original_admin');
+      localStorage.removeItem('manna_passcode_unlocked');
+      sessionStorage.clear();
+    } catch {
+      /* ignore */
+    }
   };
 
   return (

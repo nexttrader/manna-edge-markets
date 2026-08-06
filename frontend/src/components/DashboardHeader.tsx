@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import './DashboardHeader.css';
 import { KillzoneClock } from './KillzoneClock';
 import { CircuitBreakerIndicator } from './CircuitBreakerIndicator';
@@ -15,6 +15,7 @@ import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
 
 export const DashboardHeader: React.FC = () => {
+  const navigate = useNavigate();
   const { user, logout, originalAdmin, elevateToSuperAdmin } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
   const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
@@ -47,6 +48,7 @@ export const DashboardHeader: React.FC = () => {
   const handleLogout = () => {
     if (window.confirm('Sign out of Manna Edge Markets?')) {
       logout();
+      navigate('/login');
     }
   };
 
