@@ -9,6 +9,7 @@ import { revalidateSetup } from './revalidation';
 import { dedupeAndSelect } from './dedupe';
 import { circuitBreaker } from './circuit-breaker';
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
+import { saveSignalsSnapshot } from '../db/signal-snapshot-restore';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = createLogger('PublishGate');
@@ -294,6 +295,12 @@ export async function executePublishRun(
     logger.info({ runId, stats }, 'Publish run committed successfully');
     publishEvents.emit('run_complete', { runId, stats, mode: actualMode });
     
+    try {
+      const activeFutures = await queries.getActiveSetups('futures');
+      const activeForex = await queries.getActiveSetups('forex');
+      await saveSignalsSnapshot([...activeFutures, ...activeForex]);
+    } catch {}
+
     return { success: true, runId, mode: actualMode, stats, errors };
     
   } catch (err: any) {
