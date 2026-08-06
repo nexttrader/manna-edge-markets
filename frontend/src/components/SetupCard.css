@@ -240,7 +240,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .tf-badge {
@@ -284,12 +285,12 @@
   flex-shrink: 0;
 }
 
-.sc-star-btn {
+.sc-eye-btn {
   background: rgba(201, 168, 76, 0.12);
   color: var(--kdt-gold);
   border: 1px solid rgba(201, 168, 76, 0.4);
-  border-radius: 4px;
-  padding: 5px 10px;
+  border-radius: 6px;
+  padding: 4px 10px;
   font-family: var(--font-headline);
   font-size: 0.8rem;
   font-weight: 700;
@@ -297,15 +298,18 @@
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.sc-star-btn:hover {
+.sc-eye-btn:hover {
   background: rgba(201, 168, 76, 0.25);
   border-color: var(--kdt-gold);
   transform: translateY(-1px);
 }
 
-.sc-star-btn.is-starred {
+.sc-eye-btn.is-starred {
   background: var(--kdt-gold);
   border-color: var(--kdt-gold-light);
   color: var(--kdt-purple-deep);
@@ -360,24 +364,19 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: var(--font-label);
-  font-size: 0.78rem;
-  color: var(--kdt-white-muted);
 }
 
-.conviction-bar {
-  width: 70px;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.conviction-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--kdt-gold-dark), var(--kdt-gold));
-  border-radius: 3px;
+.conviction-text-badge {
+  font-family: var(--font-headline);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--kdt-gold);
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 /* Still In Zone Banner */
@@ -446,6 +445,27 @@
 
 .level-row:hover {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.live-price-level-row {
+  border-top: 1px dashed rgba(0, 229, 255, 0.35) !important;
+  background: rgba(0, 229, 255, 0.08) !important;
+  padding: 6px 10px;
+  margin-top: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.live-price-level-row.tick-up {
+  background: rgba(0, 230, 118, 0.22) !important;
+  border-color: #00e676 !important;
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.35);
+}
+
+.live-price-level-row.tick-down {
+  background: rgba(255, 82, 82, 0.22) !important;
+  border-color: #ff5252 !important;
+  box-shadow: 0 0 12px rgba(255, 82, 82, 0.35);
 }
 
 .entry-fill-row {

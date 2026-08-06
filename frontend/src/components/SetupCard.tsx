@@ -4,7 +4,6 @@ import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { formatETTime, formatDuration } from '../utils/time';
 import { SetupChartModal } from './SetupChartModal';
-import { translateRationaleToPlainEnglish } from '../utils/plainLanguage';
 
 function getSelectionRationale(setup: EdgeSetup): string {
   if (setup.metadata) {
@@ -175,15 +174,6 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           <div className="sc-symbol-row">
             <span className="sc-instrument">{setup.instrument}</span>
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
-            {currentPrice !== undefined && currentPrice > 0 && (
-              <span className={`sc-live-price-chip font-mono tick-${priceTick}`} title="Real-time live market price feed">
-                <span className="pulse-dot-green">●</span>
-                <span className="chip-label">LIVE:</span>
-                <span className="chip-val">{currentPrice}</span>
-                {priceTick === 'up' && <span className="chip-arrow text-green">▲</span>}
-                {priceTick === 'down' && <span className="chip-arrow text-red">▼</span>}
-              </span>
-            )}
           </div>
           <div className="sc-badges-row">
             <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
@@ -234,11 +224,11 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <div className="sc-header-actions font-mono">
           {onToggleWatchlist && (
             <button 
-              className={`sc-star-btn ${isWatchlisted ? 'is-starred' : ''}`}
+              className={`sc-eye-btn ${isWatchlisted ? 'is-starred' : ''}`}
               onClick={(e) => { e.stopPropagation(); onToggleWatchlist(setup.id); }}
               title={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
             >
-              {isWatchlisted ? '★ Saved' : '☆ Watch'}
+              {isWatchlisted ? '👁️ Saved' : '👁️ Watch'}
             </button>
           )}
           <StatusBadge status={stateStr} />
@@ -252,11 +242,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <span className="order-type-badge font-mono" title={`Order Type: ${orderTypeStr}`}>
           📌 {orderTypeStr}
         </span>
-        <div className="sc-conviction">
-          <div className="conviction-bar">
-            <div className="conviction-fill" style={{ width: `${convictionVal}%` }} />
-          </div>
-          <span>{convictionVal}% conviction</span>
+        <div className="sc-conviction font-mono">
+          <span className="conviction-text-badge">{convictionVal}% Conviction</span>
         </div>
       </div>
 
@@ -312,6 +299,16 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="level-pips text-green">🟢 Target 2</span>
           </div>
         )}
+        {/* Live Price Bubble inside the black levels section below TP2 */}
+        {currentPrice !== undefined && currentPrice > 0 && (
+          <div className={`level-row live-price-level-row tick-${priceTick}`}>
+            <span className="level-label text-cyan font-bold">● LIVE PRICE</span>
+            <span className="level-val font-bold text-white">
+              {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
+            </span>
+            <span className="level-pips text-cyan font-bold">⚡ Live Feed</span>
+          </div>
+        )}
       </div>
 
       {stateStr === 'active' && (setup.unrealizedR !== undefined || setup.current_price) && (
@@ -364,23 +361,6 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           {rescanMessage}
         </div>
       )}
-
-      {/* 8th-Grade Simple Explanation Box */}
-      <div style={{
-        margin: '12px 0',
-        padding: '10px 12px',
-        background: 'rgba(0, 229, 255, 0.05)',
-        borderLeft: '3px solid #00e5ff',
-        borderRadius: '6px',
-        fontSize: '0.82rem',
-        color: '#e2e8f0',
-        lineHeight: 1.4
-      }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#00e5ff', textTransform: 'uppercase', marginBottom: '4px' }} className="font-mono">
-          💡 Simple Explanation
-        </div>
-        {translateRationaleToPlainEnglish(getSelectionRationale(setup), isLong ? 'long' : 'short', setup.instrument)}
-      </div>
 
       {setup.correlation_note && (
         <div style={{ margin: '8px 0 12px 0', padding: '10px 12px', background: 'rgba(255, 171, 0, 0.08)', borderLeft: '3px solid #ffab00', borderRadius: '6px', fontSize: '0.8rem', color: '#ffd700', lineHeight: 1.4 }} className="font-mono animate-fade-in">
