@@ -558,32 +558,95 @@ router.get('/publish-runs', async (req: Request, res: Response) => {
   }
 });
 
+async function performRetroactiveRestoration(): Promise<{ deletedOutcomesCount: number; restoredSetupsCount: number }> {
+  const now = new Date().toISOString();
+
+  // 1. Identify and delete all false premature outcomes that were created for setups that were NEVER filled (entry_triggered_at IS NULL)
+  const deletedRes = await queryDb(`
+    DELETE FROM outcomes 
+    WHERE setup_id IN (
+      SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL
+      UNION
+      SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL
+    )
+  `);
+
+  // 2. Restore prematurely resolved or runner setups back to 'awaiting_entry' if they were never filled and not superseded
+  await queryDb(`
+    UPDATE edge_setups 
+    SET signal_state = 'awaiting_entry',
+        tradable = 1,
+        resolved_at = NULL,
+        invalidation_reason = NULL,
+        is_breakeven = 0,
+        stop = COALESCE(initial_stop, stop)
+    WHERE entry_triggered_at IS NULL 
+      AND superseded = 0 
+      AND signal_state IN ('resolved', 'runner')
+  `);
+
+  await queryDb(`
+    UPDATE forex_edge_setups 
+    SET signal_state = 'awaiting_entry',
+        tradable = 1,
+        resolved_at = NULL,
+        invalidation_reason = NULL,
+        is_breakeven = 0,
+        stop = COALESCE(initial_stop, stop)
+    WHERE entry_triggered_at IS NULL 
+      AND superseded = 0 
+      AND signal_state IN ('resolved', 'runner')
+  `);
+
+  // 3. Re-align strategy IDs & normalize realized_pl for legitimate remaining outcomes
+  await queryDb(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
+  await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
+  await queryDb(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE setup_id IN (SELECT id FROM edge_setups WHERE strategy_id = 'sentinel_v2' UNION SELECT id FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2')`);
+
+  await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
+
+  // 4. Sync state ONLY for truly entered trades (entry_triggered_at IS NOT NULL) that have valid outcomes
+  await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
+  await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
+
+  // 5. Run outcome-detector evaluation on active/runner setups only
+  await outcomeDetector.evaluateAllSetups(true);
+
+  return {
+    deletedOutcomesCount: (deletedRes as any)?.changes || 0,
+    restoredSetupsCount: 0
+  };
+}
+
 router.post('/retroactive-clean', async (_req: Request, res: Response) => {
   try {
-    const now = new Date().toISOString();
-    // 1. Sync setup states if outcome already exists
-    await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
-    await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
-    
-    // 2. Restore sentinel_v2 strategy_id for Sentinel V2 setups based on metadata signature
-    await queryDb(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
-    await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
-    await queryDb(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE setup_id IN (SELECT id FROM edge_setups WHERE strategy_id = 'sentinel_v2' UNION SELECT id FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2')`);
-
-    // 3. Fix any out-of-bounds realized_pl values in outcomes
-    await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);
-    await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`);
-    await queryDb(`UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
-    await queryDb(`UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
-
-    // 4. Force outcome-detector eval
-    await outcomeDetector.evaluateAllSetups(true);
-
-    res.json({ success: true, message: 'Database retroactive cleanup & outcome sync completed successfully!' });
+    const stats = await performRetroactiveRestoration();
+    res.json({ 
+      success: true, 
+      message: 'Database retroactive cleanup & trade restoration completed successfully!',
+      stats
+    });
   } catch (error) {
     res.status(500).json({ error: 'Retroactive cleanup failed', details: error instanceof Error ? error.message : String(error) });
   }
 });
+
+router.post('/retroactive-restore', async (_req: Request, res: Response) => {
+  try {
+    const stats = await performRetroactiveRestoration();
+    res.json({ 
+      success: true, 
+      message: 'Retroactive restoration of trades completed successfully!',
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Retroactive restoration failed', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 
 router.get('/analytics', async (req: Request, res: Response) => {
   try {

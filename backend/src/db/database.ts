@@ -100,10 +100,14 @@ export async function initializeDatabase(): Promise<void> {
                     `UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`,
                     `UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`,
                     `UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`,
-                    `UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`
+                    `UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`,
+                    // Retroactive restoration of premature outcomes & setups where trade was never filled
+                    `DELETE FROM outcomes WHERE setup_id IN (SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL UNION SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL)`,
+                    `UPDATE edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`,
+                    `UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`
                 ];
                 for (const sql of safeAlters) {
-                    try { await client.query(sql); } catch (_) { /* column/index already exists — safe to ignore */ }
+                    try { await client.query(sql); } catch (_) { /* column/index/query safe execution */ }
                 }
 
                 await client.query(`
@@ -378,6 +382,9 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
+    try { db.exec(`DELETE FROM outcomes WHERE setup_id IN (SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL UNION SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL)`); } catch {}
+    try { db.exec(`UPDATE edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`); } catch {}
+    try { db.exec(`UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
     try { db.exec(`INSERT OR IGNORE INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES ('manna_snd', 'Manna SnD', 1, 1, 1, CURRENT_TIMESTAMP), ('sentinel_v2', 'Manna Elite V1', 1, 1, 1, CURRENT_TIMESTAMP)`); } catch {}
     try { db.exec(`UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2'`); } catch {}

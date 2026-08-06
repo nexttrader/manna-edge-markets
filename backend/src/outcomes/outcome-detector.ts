@@ -41,10 +41,16 @@ export class OutcomeDetector {
         return;
       }
 
-      // 1. PROCESS AWAITING_ENTRY SETUPS
+      // 1. PROCESS AWAITING_ENTRY SETUPS — STATE-SYNC ONLY
+      // OutcomeDetector must NOT evaluate TP/SL/BE for setups that have never been
+      // entered. Doing so caused trades to open and close in the same 15-second tick,
+      // appearing as "instantly resolved" or "closed at break even" with 0–1 bar held.
+      // Entry fills are the exclusive responsibility of LifecycleSync. Once a setup
+      // transitions to 'active', the block below (section 2) handles outcome detection.
       const pendingSetups = await queries.getSetupsByState('awaiting_entry');
       for (const setup of pendingSetups) {
-        // Pre-check: Sync state if an outcome already exists for this setup
+        // Pre-check only: if an outcome already exists (e.g. from a previous run or
+        // manual intervention), sync the setup state to 'resolved' so it doesn't linger.
         const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
         if (existingOutcomes.length > 0) {
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
@@ -52,128 +58,9 @@ export class OutcomeDetector {
             resolved_at: existingOutcomes[0].created_at || new Date().toISOString(),
             invalidation_reason: existingOutcomes[0].outcome_type
           });
-          continue;
+          logger.info({ setupId: setup.id }, 'awaiting_entry setup synced to resolved: outcome already existed');
         }
-
-        let currentPrice = await getLiveCurrentPrice(setup.instrument);
-        if (!currentPrice || currentPrice <= 0) {
-          const createdTimeMs = setup.created_at ? new Date(setup.created_at).getTime() : 0;
-          const ageHours = createdTimeMs > 0 ? (Date.now() - createdTimeMs) / 3600000 : 0;
-          if (ageHours > 12) {
-            currentPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-          } else {
-            continue;
-          }
-        }
-
-        let maxHigh = currentPrice;
-        let minLow = currentPrice;
-        try {
-          const candles = await getLiveCandles(setup.instrument, '1m', 5);
-          if (candles && candles.length > 0) {
-            maxHigh = Math.max(currentPrice, ...candles.map(c => c.high));
-            minLow = Math.min(currentPrice, ...candles.map(c => c.low));
-          }
-        } catch { /* ignore candle fetch error */ }
-
-        const isLong = (setup.bias || 'long').toLowerCase() === 'long';
-        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-        const origStop = setup.initial_stop || setup.stop;
-        let risk = Math.abs(entryPrice - origStop);
-        // If risk is 0 (stop moved to BE) or unreliably small, infer from TP1 distance
-        if (risk < 0.00001 && setup.tp1) {
-          risk = Math.abs(setup.tp1 - entryPrice) / (setup.r_multiple_1 || 2.0);
-        }
-        if (risk < 0.00001) risk = Math.abs(entryPrice * 0.005); // last resort: 0.5% of price
-        const tp1 = setup.tp1 || (isLong ? (entryPrice + risk * 2.0) : (entryPrice - risk * 2.0));
-        const tp2 = setup.tp2 || (isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0));
-
-        const maxProfitPending = isLong ? (maxHigh - entryPrice) : (entryPrice - minLow);
-        const pendingR = risk > 0 ? (maxProfitPending / risk) : 0;
-        const targetR1Pending = setup.r_multiple_1 || 2.0;
-        const targetR2Pending = setup.r_multiple_2 || 3.0;
-
-        let hitDetected = false;
-        let outcomeType = '';
-        let executionPrice = currentPrice;
-
-        // Determine if stop is effectively at break-even (stop ≈ entry within 0.01%)
-        const isEffectivelyBE = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
-        if (isLong) {
-          if (currentPrice >= tp2 || maxHigh >= tp2 || pendingR >= targetR2Pending) {
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
-          } else if (currentPrice >= tp1 || maxHigh >= tp1 || pendingR >= targetR1Pending) {
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
-          } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
-            hitDetected = true;
-            outcomeType = isEffectivelyBE ? 'be_hit' : 'sl_hit';
-            executionPrice = isEffectivelyBE ? entryPrice : Math.min(currentPrice, setup.stop);
-          }
-        } else {
-          if (currentPrice <= tp2 || minLow <= tp2 || pendingR >= targetR2Pending) {
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, tp2);
-          } else if (currentPrice <= tp1 || minLow <= tp1 || pendingR >= targetR1Pending) {
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
-          } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
-            hitDetected = true;
-            outcomeType = isEffectivelyBE ? 'be_hit' : 'sl_hit';
-            executionPrice = isEffectivelyBE ? entryPrice : Math.max(currentPrice, setup.stop);
-          }
-        }
-
-        if (hitDetected) {
-          // Hard-cap: SL always -1R, BE always 0R, TP1 = +2R, TP2 = +3R — no exceptions
-          const realizedPL = outcomeType === 'tp2_hit'
-            ? (setup.r_multiple_2 || 3.0)
-            : outcomeType === 'tp1_hit'
-              ? (setup.r_multiple_1 || 2.0)
-              : outcomeType === 'be_hit'
-                ? 0.0
-                : -1.0; // sl_hit hard-capped at -1.0R
-
-          let mae = outcomeType === 'sl_hit' ? risk : risk * 0.3;
-          let mfe = outcomeType === 'tp2_hit' ? (isLong ? (tp2 - entryPrice) : (entryPrice - tp2)) : outcomeType === 'tp1_hit' ? (isLong ? (tp1 - entryPrice) : (entryPrice - tp1)) : (maxHigh - entryPrice);
-
-          const outcome = {
-            id: `out_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-            setup_id: setup.id,
-            setup_market: setup.market || 'futures',
-            strategy_id: setup.strategy_id || 'sentinel_v2',
-            outcome_type: outcomeType,
-            realized_pl: realizedPL,
-            mae: Number(mae.toFixed(4)),
-            mfe: Number(mfe.toFixed(4)),
-            highest_price: maxHigh,
-            lowest_price: minLow,
-            bars_held: 1,
-            duration_min: 1.0,
-            exit_reason: outcomeType === 'tp2_hit' ? 'TP2' : outcomeType === 'tp1_hit' ? 'TP1' : outcomeType === 'be_hit' ? 'Break Even' : 'Stop Loss',
-            execution_price: executionPrice,
-            execution_time: new Date().toISOString(),
-            created_at: new Date().toISOString()
-          };
-
-          await queries.createOutcome(outcome);
-
-          if (outcomeType === 'tp1_hit') {
-            await queries.updateSetupState(setup.id, setup.market || 'futures', 'runner', {
-              stop: entryPrice,
-              initial_stop: origStop,
-              is_breakeven: 1,
-              invalidation_reason: 'tp1_hit'
-            });
-            logger.info({ setupId: setup.id, instrument: setup.instrument }, 'Pending setup reached TP1: Logged 2R, moved to RUNNERS');
-            publishEvents.emit('setup_runner_started', { setup: { ...setup, signal_state: 'runner', stop: entryPrice, is_breakeven: 1 }, outcome });
-          } else {
-            await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
-              tradable: 0,
-              resolved_at: outcome.execution_time,
-              invalidation_reason: outcomeType
-            });
-            logger.info({ setupId: setup.id, outcome: outcomeType, pl: realizedPL }, `Pending setup resolved with ${outcomeType}`);
-            publishEvents.emit('setup_resolved', { setup, outcome });
-          }
-        }
+        // Do NOT evaluate price against TP/SL/BE here. No outcome creation for pending setups.
       }
 
       // 2. PROCESS ACTIVE SETUPS
@@ -253,8 +140,12 @@ export class OutcomeDetector {
         let outcomeType = '';
         let executionPrice = currentPrice;
         
-        // Determine if stop is effectively at break-even
-        const isEffectivelyBEActive = Boolean(setup.is_breakeven) || Math.abs((setup.stop || 0) - entryPrice) < Math.abs(entryPrice * 0.0001);
+        // Determine if stop is effectively at break-even.
+        // Only use the explicit is_breakeven flag set by the BE-move logic above.
+        // The old proximity check (stop within 0.01% of entry) was incorrectly flagging
+        // new setups with tight stops as BE — causing SL hits to log as 0R (Break Even)
+        // instead of -1R (Stop Loss).
+        const isEffectivelyBEActive = Boolean(setup.is_breakeven);
         const targetR1Active = setup.r_multiple_1 || 2.0;
         const targetR2Active = setup.r_multiple_2 || 3.0;
 
