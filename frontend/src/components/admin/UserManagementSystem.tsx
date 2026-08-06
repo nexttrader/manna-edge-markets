@@ -143,6 +143,24 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
     validDays: 30
   });
 
+  // Custom Trial Builder State
+  const [ctName, setCtName] = useState<string>('14-Day VIP Cohort Trial');
+  const [ctDurationType, setCtDurationType] = useState<'days' | 'date'>('days');
+  const [ctDays, setCtDays] = useState<number>(14);
+  const [ctExpiryDate, setCtExpiryDate] = useState<string>('');
+  const [ctTier, setCtTier] = useState<'futures_forex' | 'forex_only' | 'free'>('futures_forex');
+  const [ctStrategyAccess, setCtStrategyAccess] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
+  const [ctMaxSignals, setCtMaxSignals] = useState<number>(6);
+  const [ctAllowCalculators, setCtAllowCalculators] = useState<boolean>(true);
+
+  const [ctTargetType, setCtTargetType] = useState<'individual' | 'group' | 'tag'>('individual');
+  const [ctSelectedUserIds, setCtSelectedUserIds] = useState<string[]>([]);
+  const [ctSelectedGroupId, setCtSelectedGroupId] = useState<string>('');
+  const [ctSelectedTagId, setCtSelectedTagId] = useState<string>('');
+
+  const [assigningTrial, setAssigningTrial] = useState<boolean>(false);
+  const [trialNotice, setTrialNotice] = useState<string | null>(null);
+
   const [newTagForm, setNewTagForm] = useState({ name: '', color: '#3b82f6', description: '' });
   const [newGroupForm, setNewGroupForm] = useState({ name: '', description: '', tierAssignment: 'futures_forex' });
   const [broadcastForm, setBroadcastForm] = useState({ targetType: 'all', targetId: '', title: '', message: '' });
@@ -449,6 +467,102 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
     return matchSearch && matchRole && matchStatus && matchTier;
   });
 
+  const handleAssignCustomTrial = async () => {
+    setAssigningTrial(true);
+    setTrialNotice(null);
+
+    let targetIds: string[] = [];
+    if (ctTargetType === 'individual') {
+      targetIds = ctSelectedUserIds;
+    } else if (ctTargetType === 'group') {
+      if (!ctSelectedGroupId) {
+        alert('Please select a Cohort Group');
+        setAssigningTrial(false);
+        return;
+      }
+      targetIds = [ctSelectedGroupId];
+    } else if (ctTargetType === 'tag') {
+      if (!ctSelectedTagId) {
+        alert('Please select a Tag');
+        setAssigningTrial(false);
+        return;
+      }
+      targetIds = [ctSelectedTagId];
+    }
+
+    if (targetIds.length === 0) {
+      alert('Please select at least one target user, group, or tag.');
+      setAssigningTrial(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/user-management/trials/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': adminEmail
+        },
+        body: JSON.stringify({
+          targetType: ctTargetType,
+          targetIds,
+          payload: {
+            trialName: ctName,
+            days: ctDurationType === 'days' ? Number(ctDays) : undefined,
+            expiryDate: ctDurationType === 'date' ? ctExpiryDate : undefined,
+            tier: ctTier,
+            strategyAccess: ctStrategyAccess,
+            maxSignals: Number(ctMaxSignals),
+            allowCalculators: ctAllowCalculators
+          }
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTrialNotice(`🎉 Custom Trial assigned successfully to ${data.affectedCount} user(s)!`);
+        setTimeout(() => setTrialNotice(null), 5000);
+        fetchAllData();
+      } else {
+        alert(`⚠️ ${data.error || 'Failed to assign custom trial'}`);
+      }
+    } catch (err: any) {
+      alert(`⚠️ Error: ${err.message}`);
+    } finally {
+      setAssigningTrial(false);
+    }
+  };
+
+  const handleCreateCouponFromTrial = async () => {
+    const defaultCode = `${ctName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 5).toUpperCase()}${ctDays || 14}`;
+    const code = prompt('Enter a new Coupon Code for this Custom Trial config:', defaultCode);
+    if (!code) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/user-management/coupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': adminEmail },
+        body: JSON.stringify({
+          code: code.trim().toUpperCase(),
+          discountType: 'trial_extension',
+          discountValue: ctDays || 14,
+          maxRedemptions: 1000,
+          applicableTiers: ctTier,
+          status: 'active'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`🎟️ Custom Coupon "${code.toUpperCase()}" created successfully! Users redeeming this coupon will receive this Custom Trial.`);
+        fetchAllData();
+      } else {
+        alert(`⚠️ ${data.error || 'Failed to create coupon'}`);
+      }
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   // Calculate Metrics
   const activeCount = users.filter(u => u.status === 'active').length;
   const trialistCount = users.filter(u => u.isTrial && !u.trialExpired).length;
@@ -679,6 +793,265 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
       {activeTab === 'subscriptions' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <h3>⚡ Subscription Pause, Resumption & Trial Control Center</h3>
+
+          {/* CUSTOM TRIAL & FEATURE PERMISSION BUILDER */}
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.8)',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 0 25px rgba(56, 189, 248, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#38bdf8', fontSize: '1.1rem', fontWeight: 900 }}>
+                  🎨 CREATE & ASSIGN CUSTOM TRIAL WITH FEATURE PERMISSIONS
+                </h4>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                  Configure custom trial durations, market access tiers, strategy limits, and assign directly to individual users, cohort groups, or tags.
+                </span>
+              </div>
+            </div>
+
+            {trialNotice && (
+              <div style={{ padding: '10px 14px', background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#4ade80', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 800, marginBottom: '16px' }}>
+                {trialNotice}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+              {/* Trial Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#e2e8f0', marginBottom: '6px' }}>
+                  TRIAL NAME / COHORT TITLE
+                </label>
+                <input
+                  type="text"
+                  value={ctName}
+                  onChange={e => setCtName(e.target.value)}
+                  placeholder="e.g. Asia Launch Cohort 14-Day VIP Trial"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Duration Type & Length */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#fbbf24', marginBottom: '6px' }}>
+                  TRIAL DURATION & EXPIRATION
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select
+                    value={ctDurationType}
+                    onChange={e => setCtDurationType(e.target.value as any)}
+                    style={{ padding: '8px 10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                  >
+                    <option value="days">Duration (Days)</option>
+                    <option value="date">Specific End Date</option>
+                  </select>
+                  {ctDurationType === 'days' ? (
+                    <select
+                      value={ctDays}
+                      onChange={e => setCtDays(Number(e.target.value))}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                    >
+                      <option value={7}>7 Days</option>
+                      <option value={14}>14 Days</option>
+                      <option value={21}>21 Days</option>
+                      <option value={30}>30 Days</option>
+                      <option value={60}>60 Days</option>
+                      <option value={90}>90 Days</option>
+                    </select>
+                  ) : (
+                    <input
+                      type="date"
+                      value={ctExpiryDate}
+                      onChange={e => setCtExpiryDate(e.target.value)}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Access Tier */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', marginBottom: '6px' }}>
+                  MARKET ACCESS TIER
+                </label>
+                <select
+                  value={ctTier}
+                  onChange={e => setCtTier(e.target.value as any)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                >
+                  <option value="futures_forex">Futures & Forex (Full Access)</option>
+                  <option value="forex_only">Forex Only</option>
+                  <option value="free">Free Tier (Restricted)</option>
+                </select>
+              </div>
+
+              {/* Strategy Access */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#c084fc', marginBottom: '6px' }}>
+                  STRATEGY PERMISSIONS
+                </label>
+                <select
+                  value={ctStrategyAccess}
+                  onChange={e => setCtStrategyAccess(e.target.value as any)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                >
+                  <option value="all">All Strategies (Sentinel V2 & Manna SnD)</option>
+                  <option value="sentinel_v2">Sentinel V2 / Manna Elite V1 Only</option>
+                  <option value="manna_snd">Manna SnD Only</option>
+                </select>
+              </div>
+
+              {/* Max Viewable Signals */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#34d399', marginBottom: '6px' }}>
+                  MAX SIGNALS VIEWABLE
+                </label>
+                <select
+                  value={ctMaxSignals}
+                  onChange={e => setCtMaxSignals(Number(e.target.value))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                >
+                  <option value={1}>1 Live Signal</option>
+                  <option value={3}>3 Live Signals</option>
+                  <option value={6}>6 Live Signals</option>
+                  <option value={999}>Unlimited Live Signals</option>
+                </select>
+              </div>
+
+              {/* Position Calculator Toggle */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#f472b6', marginBottom: '6px' }}>
+                  POSITION CALCULATOR ACCESS
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCtAllowCalculators(!ctAllowCalculators)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: ctAllowCalculators ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                    border: `1px solid ${ctAllowCalculators ? '#22c55e' : '#ef4444'}`,
+                    color: ctAllowCalculators ? '#4ade80' : '#f87171',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {ctAllowCalculators ? '✅ Calculators & Tools Enabled' : '🔒 Calculators Disabled'}
+                </button>
+              </div>
+            </div>
+
+            {/* TARGET ASSIGNMENT SELECTION */}
+            <div style={{ background: 'rgba(30, 41, 59, 0.6)', padding: '14px', borderRadius: '8px', border: '1px solid #334155', marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 900, color: '#fbbf24', marginBottom: '8px' }}>
+                🎯 TARGET ASSIGNMENT (INDIVIDUAL USER, COHORT GROUP, OR TAG)
+              </label>
+
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff' }}>
+                  <input type="radio" name="ctTarget" checked={ctTargetType === 'individual'} onChange={() => setCtTargetType('individual')} />
+                  👤 Specific Individual User(s)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff' }}>
+                  <input type="radio" name="ctTarget" checked={ctTargetType === 'group'} onChange={() => setCtTargetType('group')} />
+                  👥 Entire Cohort Group
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff' }}>
+                  <input type="radio" name="ctTarget" checked={ctTargetType === 'tag'} onChange={() => setCtTargetType('tag')} />
+                  🏷️ Tagged User Group
+                </label>
+              </div>
+
+              {ctTargetType === 'individual' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                    Select User(s) from directory (Hold Ctrl/Cmd to select multiple):
+                  </label>
+                  <select
+                    multiple
+                    value={ctSelectedUserIds}
+                    onChange={e => {
+                      const opts = Array.from(e.target.selectedOptions).map(o => o.value);
+                      setCtSelectedUserIds(opts);
+                    }}
+                    style={{ width: '100%', height: '90px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.82rem', padding: '6px' }}
+                  >
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email}) — Tier: {u.tier}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {ctTargetType === 'group' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                    Select Cohort Group:
+                  </label>
+                  <select
+                    value={ctSelectedGroupId}
+                    onChange={e => setCtSelectedGroupId(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                  >
+                    <option value="">Select a Group...</option>
+                    {groups.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.memberCount || 0} members)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {ctTargetType === 'tag' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                    Select Tagged Group:
+                  </label>
+                  <select
+                    value={ctSelectedTagId}
+                    onChange={e => setCtSelectedTagId(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                  >
+                    <option value="">Select a Tag...</option>
+                    {tags.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="ums-btn-secondary"
+                onClick={handleCreateCouponFromTrial}
+                style={{ border: '1px solid #fbbf24', color: '#fbbf24' }}
+              >
+                🎟️ Generate Custom Coupon from this Config
+              </button>
+              <button
+                type="button"
+                className="ums-btn-primary"
+                onClick={handleAssignCustomTrial}
+                disabled={assigningTrial}
+                style={{ background: 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)', color: '#fff', fontWeight: 900 }}
+              >
+                {assigningTrial ? '⏳ Assigning Trial...' : '⚡ ASSIGN CUSTOM TRIAL NOW'}
+              </button>
+            </div>
+          </div>
           <div className="ums-table-wrapper">
             <table className="ums-table">
               <thead>
@@ -776,6 +1149,17 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                     <span className="tag-badge" style={{ background: tag.color }}>{tag.name}</span>
                     <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginLeft: '0.5rem' }}>{tag.description}</span>
                   </div>
+                  <button
+                    className="ums-btn-secondary"
+                    onClick={() => {
+                      setCtTargetType('tag');
+                      setCtSelectedTagId(tag.id);
+                      setActiveTab('subscriptions');
+                    }}
+                    style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                  >
+                    ⚡ Assign Trial
+                  </button>
                 </div>
               ))}
             </div>
@@ -794,9 +1178,22 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                     <div style={{ fontWeight: 700, color: '#38bdf8' }}>{group.name}</div>
                     <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{group.description}</div>
                   </div>
-                  <span style={{ fontSize: '0.8rem', background: 'rgba(51,65,85,0.8)', padding: '0.2rem 0.6rem', borderRadius: '9999px' }}>
-                    {group.memberCount || 0} members
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', background: 'rgba(51,65,85,0.8)', padding: '0.2rem 0.6rem', borderRadius: '9999px' }}>
+                      {group.memberCount || 0} members
+                    </span>
+                    <button
+                      className="ums-btn-secondary"
+                      onClick={() => {
+                        setCtTargetType('group');
+                        setCtSelectedGroupId(group.id);
+                        setActiveTab('subscriptions');
+                      }}
+                      style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                    >
+                      ⚡ Assign Custom Trial
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -36,7 +36,10 @@ import {
   getNotificationLogs,
   broadcastNotification,
   getAuditLogs,
-  recordAuditLog
+  recordAuditLog,
+  getCustomTrialTemplates,
+  createCustomTrialTemplate,
+  assignCustomTrialToTargets
 } from '../db/user-management-store.js';
 import { checkSubscriptionAndTrialExpirations } from '../scheduler/subscription-cron.js';
 
@@ -397,6 +400,41 @@ router.get('/audit-logs', (_req: Request, res: Response) => {
 router.post('/scheduler/run-now', (_req: Request, res: Response) => {
   const stats = checkSubscriptionAndTrialExpirations();
   res.json({ success: true, stats });
+});
+
+// ==========================================
+// CUSTOM TRIAL & FEATURE PERMISSION ENDPOINTS
+// ==========================================
+router.get('/trials/templates', (_req: Request, res: Response) => {
+  res.json({ success: true, templates: getCustomTrialTemplates() });
+});
+
+router.post('/trials/templates', (req: Request, res: Response) => {
+  const { name, days, expiryDate, tier, strategyAccess, maxSignals, allowCalculators } = req.body;
+  if (!name) return res.status(400).json({ success: false, error: 'Trial template name is required.' });
+
+  const template = createCustomTrialTemplate({
+    name,
+    days: days ? Number(days) : undefined,
+    expiryDate: expiryDate || undefined,
+    tier: tier || 'futures_forex',
+    strategyAccess: strategyAccess || 'all',
+    maxSignals: maxSignals ? Number(maxSignals) : 6,
+    allowCalculators: allowCalculators !== false,
+    createdBy: req.body._adminEmail
+  });
+
+  res.json({ success: true, template });
+});
+
+router.post('/trials/assign', (req: Request, res: Response) => {
+  const { targetType, targetIds, payload } = req.body;
+  if (!targetType || !Array.isArray(targetIds) || targetIds.length === 0 || !payload) {
+    return res.status(400).json({ success: false, error: 'targetType, targetIds array, and trial payload are required.' });
+  }
+
+  const result = assignCustomTrialToTargets(targetType, targetIds, payload, req.body._adminEmail);
+  res.json(result);
 });
 
 export default router;

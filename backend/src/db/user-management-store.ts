@@ -401,3 +401,118 @@ export function getNotificationsForUser(userId: string): NotificationItem[] {
 export function getNotificationLogs(): NotificationItem[] {
   return localNotifications;
 }
+
+// ==========================================
+// CUSTOM TRIAL TEMPLATES & ASSIGNMENT
+// ==========================================
+export interface CustomTrialTemplate {
+  id: string;
+  name: string;
+  days?: number;
+  expiryDate?: string;
+  tier: 'futures_forex' | 'forex_only' | 'free';
+  strategyAccess: 'all' | 'sentinel_v2' | 'manna_snd';
+  maxSignals: number;
+  allowCalculators: boolean;
+  createdAt: string;
+  createdBy?: string;
+}
+
+let localTrialTemplates: CustomTrialTemplate[] = [
+  {
+    id: 'trial_preset_14d_vip',
+    name: '14-Day VIP Full Access Trial',
+    days: 14,
+    tier: 'futures_forex',
+    strategyAccess: 'all',
+    maxSignals: 6,
+    allowCalculators: true,
+    createdAt: new Date().toISOString(),
+    createdBy: 'system'
+  },
+  {
+    id: 'trial_preset_30d_pro',
+    name: '30-Day Pro Cohort Trial',
+    days: 30,
+    tier: 'futures_forex',
+    strategyAccess: 'all',
+    maxSignals: 999,
+    allowCalculators: true,
+    createdAt: new Date().toISOString(),
+    createdBy: 'system'
+  }
+];
+
+export function getCustomTrialTemplates(): CustomTrialTemplate[] {
+  return localTrialTemplates;
+}
+
+export function createCustomTrialTemplate(data: Omit<CustomTrialTemplate, 'id' | 'createdAt'>): CustomTrialTemplate {
+  const template: CustomTrialTemplate = {
+    id: `tmpl_${Date.now()}`,
+    ...data,
+    createdAt: new Date().toISOString()
+  };
+  localTrialTemplates.push(template);
+  return template;
+}
+
+export function assignCustomTrialToTargets(
+  targetType: 'individual' | 'group' | 'tag',
+  targetIds: string[],
+  payload: any,
+  adminEmail: string = 'admin@mannaedge.com'
+): { success: boolean; affectedCount: number; userEmails: string[] } {
+  const { applyCustomTrialToUser } = require('./user-store.js');
+  const allUsers = getAllUsers();
+  let targetUserIds: string[] = [];
+
+  if (targetType === 'individual') {
+    targetUserIds = targetIds;
+  } else if (targetType === 'group') {
+    for (const grpId of targetIds) {
+      const uIds = localGroupMappings.filter(m => m.groupId === grpId).map(m => m.userId);
+      targetUserIds.push(...uIds);
+    }
+  } else if (targetType === 'tag') {
+    for (const tagId of targetIds) {
+      const uIds = localTagMappings.filter(m => m.tagId === tagId).map(m => m.userId);
+      targetUserIds.push(...uIds);
+    }
+  }
+
+  // Deduplicate user IDs & resolve emails to user IDs if needed
+  const resolvedIds: string[] = [];
+  for (const item of targetUserIds) {
+    const matched = allUsers.find(u => u.id === item || u.email.toLowerCase() === item.toLowerCase());
+    if (matched) resolvedIds.push(matched.id);
+  }
+
+  const uniqueUserIds = Array.from(new Set(resolvedIds));
+
+  let affectedCount = 0;
+  const affectedEmails: string[] = [];
+
+  for (const uid of uniqueUserIds) {
+    const res = applyCustomTrialToUser(uid, payload);
+    if (res.success && res.user) {
+      affectedCount++;
+      affectedEmails.push(res.user.email);
+      sendNotificationToUser(
+        res.user.id,
+        `🎉 Custom Trial Assigned: ${payload.trialName || 'Special Access Pass'}`,
+        `Your account has been granted a custom trial (${payload.trialName}) active until ${res.user.trialExpiresAt ? new Date(res.user.trialExpiresAt).toLocaleDateString() : 'expiry'}. Enjoy full market access!`,
+        'announcement'
+      );
+    }
+  }
+
+  recordAuditLog({
+    adminEmail,
+    adminRole: 'admin',
+    action: 'CUSTOM_TRIAL_ASSIGNED_BULK',
+    detailsJson: JSON.stringify({ targetType, targetIds, affectedCount, affectedEmails, payload })
+  });
+
+  return { success: true, affectedCount, userEmails: affectedEmails };
+}

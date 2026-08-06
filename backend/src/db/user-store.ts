@@ -33,6 +33,12 @@ export interface UserProfile {
   trialExtendedCount?: number;
   tags?: string[];
   groups?: string[];
+  customFeatures?: {
+    maxSignals?: number;
+    strategyAccess?: string;
+    allowCalculators?: boolean;
+    trialName?: string;
+  };
 }
 
 const initialUserProfiles: UserProfile[] = [
@@ -424,6 +430,50 @@ export const bulkUpdateUsers = (
     }
   }
   return { updatedCount: count };
+};
+
+export interface CustomTrialPayload {
+  trialName: string;
+  days?: number;
+  expiryDate?: string;
+  tier: 'futures_forex' | 'forex_only' | 'free';
+  strategyAccess: 'all' | 'sentinel_v2' | 'manna_snd';
+  maxSignals: number;
+  allowCalculators: boolean;
+}
+
+export const applyCustomTrialToUser = (
+  userIdOrEmail: string,
+  payload: CustomTrialPayload
+): { success: boolean; user?: UserProfile; error?: string } => {
+  const user = userStore.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === userIdOrEmail.toLowerCase());
+  if (!user) return { success: false, error: 'User account not found' };
+
+  let expiryIso: string;
+  if (payload.expiryDate) {
+    expiryIso = new Date(payload.expiryDate).toISOString();
+  } else {
+    const days = payload.days || 14;
+    expiryIso = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  user.isTrial = true;
+  user.trialStartedAt = new Date().toISOString();
+  user.trialExpiresAt = expiryIso;
+  user.subscriptionStart = new Date().toISOString();
+  user.subscriptionEnd = expiryIso;
+  user.trialExpired = false;
+  user.status = 'active';
+  user.subscriptionStatus = 'trialing';
+  user.tier = payload.tier || 'futures_forex';
+  user.customFeatures = {
+    maxSignals: payload.maxSignals || 6,
+    strategyAccess: payload.strategyAccess || 'all',
+    allowCalculators: payload.allowCalculators !== false,
+    trialName: payload.trialName || 'Custom Trial'
+  };
+
+  return { success: true, user };
 };
 
 
