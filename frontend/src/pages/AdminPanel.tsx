@@ -213,6 +213,7 @@ export const AdminPanel: React.FC = () => {
 
   const [systemHealth, setSystemHealth] = useState<any | null>(null);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
+  const [isHealthPanelExpanded, setIsHealthPanelExpanded] = useState(false);
 
   const fetchSystemHealth = useCallback(async () => {
     try {
@@ -586,59 +587,87 @@ export const AdminPanel: React.FC = () => {
           </button>
         </div>
 
-        {/* AUTOMATED SYSTEM HEALTH DIAGNOSTICS CARD */}
-        <div className="glass-card font-mono" style={{ padding: '18px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 230, 118, 0.04)', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
+        {/* AUTOMATED SYSTEM HEALTH DIAGNOSTICS CARD (MINIMIZED BY DEFAULT) */}
+        <div className="glass-card font-mono" style={{ padding: '14px 18px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 230, 118, 0.04)', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '1.05rem', fontWeight: 900, color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676', margin: 0 }}>
                 🏥 AUTOMATED SYSTEM HEALTH OVERVIEW
               </h2>
-              <span style={{ fontSize: '0.78rem', color: '#aaa' }}>
-                Auto-diagnostics run every 15 minutes. Last checked: {systemHealth?.lastCheckedAt ? new Date(systemHealth.lastCheckedAt).toLocaleTimeString('en-US', { timeZone: 'America/New_York' }) + ' ET' : 'Just now'}
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: systemHealth?.heroStatus === 'critical' ? 'rgba(255, 23, 68, 0.2)' : systemHealth?.heroStatus === 'warning' ? 'rgba(255, 215, 0, 0.2)' : 'rgba(0, 230, 118, 0.2)',
+                color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676',
+                border: `1px solid ${systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676'}`
+              }}>
+                {systemHealth?.heroStatus === 'critical' ? '🔴 CRITICAL' : systemHealth?.heroStatus === 'warning' ? '🟡 STANDBY' : '🟢 ALL SYSTEMS GO'}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                Auto-diagnostics run every 15m (Last: {systemHealth?.lastCheckedAt ? new Date(systemHealth.lastCheckedAt).toLocaleTimeString('en-US', { timeZone: 'America/New_York' }) + ' ET' : 'Just now'})
               </span>
             </div>
-            <button
-              type="button"
-              className="font-mono"
-              onClick={handleRunManualHealthCheck}
-              disabled={isHealthChecking}
-              style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800 }}
-            >
-              {isHealthChecking ? '⏳ Checking...' : '⚡ Run Diagnostic Check Now'}
-            </button>
-          </div>
 
-          {/* Hero Status Banner */}
-          <div style={{ background: systemHealth?.heroStatus === 'critical' ? 'rgba(255, 23, 68, 0.15)' : systemHealth?.heroStatus === 'warning' ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 230, 118, 0.15)', borderLeft: `4px solid ${systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676'}`, padding: '10px 14px', borderRadius: '6px', marginBottom: '14px' }}>
-            <strong style={{ fontSize: '0.9rem', color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676' }}>
-              {systemHealth?.heroBadgeText || '🟢 ALL SYSTEMS GO! Everything is running smoothly and trade signals are active.'}
-            </strong>
-            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', marginTop: '4px' }}>
-              {systemHealth?.simpleSummary || 'All 5 core engine subsystems (Database, Live Prices, Session Scheduler, Live Feed Stream, and Support Inbox) are 100% healthy.'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="font-mono"
+                onClick={handleRunManualHealthCheck}
+                disabled={isHealthChecking}
+                style={{ background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00e5ff', color: '#00e5ff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800 }}
+              >
+                {isHealthChecking ? '⏳ Checking...' : '⚡ Run Check'}
+              </button>
+
+              <button
+                type="button"
+                className="font-mono"
+                onClick={() => setIsHealthPanelExpanded(!isHealthPanelExpanded)}
+                style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800 }}
+              >
+                {isHealthPanelExpanded ? '▲ Minimize Panel' : '▼ Expand Diagnostics'}
+              </button>
             </div>
           </div>
 
-          {/* Subsystem Health Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-            {(systemHealth?.subsystems || []).map((sub: any) => (
-              <div key={sub.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '10px 12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fff' }}>
-                    {sub.icon} {sub.name}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: sub.status === 'healthy' ? '#00e676' : sub.status === 'warning' ? '#ffd700' : '#ff1744' }}>
-                    {sub.status === 'healthy' ? 'OK' : sub.status.toUpperCase()}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#ccc', lineHeight: 1.3 }}>
-                  {sub.plainEnglishStatus}
-                </div>
-                <div style={{ fontSize: '0.68rem', color: '#666', marginTop: '4px' }}>
-                  Latency: {sub.latencyMs}ms
+          {/* Expanded Diagnostics Details */}
+          {isHealthPanelExpanded && (
+            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              {/* Hero Status Banner */}
+              <div style={{ background: systemHealth?.heroStatus === 'critical' ? 'rgba(255, 23, 68, 0.15)' : systemHealth?.heroStatus === 'warning' ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 230, 118, 0.15)', borderLeft: `4px solid ${systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676'}`, padding: '10px 14px', borderRadius: '6px', marginBottom: '14px' }}>
+                <strong style={{ fontSize: '0.9rem', color: systemHealth?.heroStatus === 'critical' ? '#ff1744' : systemHealth?.heroStatus === 'warning' ? '#ffd700' : '#00e676' }}>
+                  {systemHealth?.heroBadgeText || '🟢 ALL SYSTEMS GO! Everything is running smoothly and trade signals are active.'}
+                </strong>
+                <div style={{ fontSize: '0.82rem', color: '#e2e8f0', marginTop: '4px' }}>
+                  {systemHealth?.simpleSummary || 'All 5 core engine subsystems (Database, Live Prices, Session Scheduler, Live Feed Stream, and Support Inbox) are 100% healthy.'}
                 </div>
               </div>
-            ))}
-          </div>
+
+              {/* Subsystem Health Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                {(systemHealth?.subsystems || []).map((sub: any) => (
+                  <div key={sub.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fff' }}>
+                        {sub.icon} {sub.name}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: sub.status === 'healthy' ? '#00e676' : sub.status === 'warning' ? '#ffd700' : '#ff1744' }}>
+                        {sub.status === 'healthy' ? 'OK' : sub.status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#ccc', lineHeight: 1.3 }}>
+                      {sub.plainEnglishStatus}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#666', marginTop: '4px' }}>
+                      Latency: {sub.latencyMs}ms
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* TAB 1: User Impersonation & Account Management Desk */}
