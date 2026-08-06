@@ -45,9 +45,10 @@ function saveFilters(filters: object) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, isImpersonating, originalAdmin } = useAuth();
+  const { user, isImpersonating } = useAuth();
   const { maintenance } = useMaintenance();
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin'));
+  const isClientView = user?.role !== 'admin' && user?.role !== 'super_admin';
+  const showMaintenanceLock = maintenance.enabled && isClientView;
 
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -171,10 +172,10 @@ export const Dashboard: React.FC = () => {
         <TrialWelcomeBanner />
         <MarketClosedBanner />
 
-        {maintenance.enabled && !isAdmin && <ClientMaintenanceBanner />}
+        {showMaintenanceLock && <ClientMaintenanceBanner />}
 
         {/* Real-Time Asset Decision Matrix */}
-        {(!maintenance.enabled || isAdmin) && (
+        {!showMaintenanceLock && (
           <AssetDecisionMatrix 
             rawSetups={safeSetups}
             onOpenCalculator={(s) => setCalcSetup(s)}
@@ -182,7 +183,7 @@ export const Dashboard: React.FC = () => {
         )}
 
         {/* Active Runners Desk */}
-        {(!maintenance.enabled || isAdmin) && (
+        {!showMaintenanceLock && (
           <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
         )}
 
@@ -298,7 +299,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Setups Display */}
-        {maintenance.enabled && !isAdmin ? (
+        {showMaintenanceLock ? (
           <MockMaintenanceSignalCard />
         ) : loading && setups.length === 0 ? (
           <div className="dashboard-loading glass-card font-mono">
