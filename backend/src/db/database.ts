@@ -96,6 +96,12 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS was_runner INTEGER DEFAULT 0`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS runner_realized_r DOUBLE PRECISION DEFAULT 0.0`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS mfe DOUBLE PRECISION`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS highest_price DOUBLE PRECISION`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS lowest_price DOUBLE PRECISION`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS bars_held INTEGER`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS duration_min DOUBLE PRECISION`,
+                    `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS exit_reason TEXT`,
                     `CREATE INDEX IF NOT EXISTS idx_edge_setups_strategy ON edge_setups(strategy_id)`,
                     `CREATE INDEX IF NOT EXISTS idx_forex_edge_setups_strategy ON forex_edge_setups(strategy_id)`,
                     // Hard-cap PnL values in outcomes table to exact R multiples

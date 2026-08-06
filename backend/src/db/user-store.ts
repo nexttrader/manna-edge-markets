@@ -1,3 +1,5 @@
+import { queryDb, getPgPool, isPg } from './database.js';
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -41,87 +43,150 @@ export interface UserProfile {
   };
 }
 
-const initialUserProfiles: UserProfile[] = [
-  { id: 'usr_chadwin_super', name: 'Chadwin Solomon', email: 'chadwinsolomon@gmail.com', password: 'temp123', mustChangePassword: false, role: 'super_admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Super Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_cindy', name: 'Cindy King', email: 'Cindy.king@kingdomdaytraders.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_brian_king', name: 'Brian King', email: 'kdtfutures@gmail.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_kaylin', name: 'Kaylin Van Ordt', email: 'kaylinangelinemeyer@gmail.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_isabell', name: 'Isabell Truitt', email: 'isabelltruitt@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_david_lee', name: 'David Lee', email: 'fabulousyachts@me.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_parke', name: 'Parke Deans', email: 'pl_deans@comcast.net', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_teresa', name: 'Teresa Orton', email: 'fcubed.tfo@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_bob', name: 'Bob Wills', email: 'bwills@socal.rr.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_timothy', name: 'Timothy Miranda', email: 'timothyj.miranda@icloud.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_lance', name: 'Lance Smith', email: 'smithlrds@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_sean', name: 'Sean Findley', email: 'fins@iglide.net', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_chris', name: 'Chris Edwards', email: 'chrislek@aol.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_elizabeth', name: 'Elizabeth Speers', email: 'icanoe@mac.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_jeffery', name: 'Jeffery Smith', email: 'jeffery.j.smith007@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_alberto', name: 'Alberto Guevara', email: 'solyjupiter2016@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_douglas_h', name: 'Douglas Hardiman', email: 'douglashardiman@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_karen', name: 'Karen Millar', email: 'tkmillar1611@yahoo.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_sequoia', name: 'Sequoia Ross', email: 'sequoiaross@protonmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_claudio', name: 'Claudio Martinez', email: 'dalastclaw@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_mark', name: 'Mark Martino', email: 'mtino15@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_valerie', name: 'Valerie Chaille', email: 'valerie.chaille@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_joseph', name: 'Joseph Tucker', email: 'coachjrt@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_andre_sr', name: 'Andre Martin', email: 'andremartinsr@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_douglas_s', name: 'Douglas Schulz', email: 'drschulz@sbcglobal.net', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_dennis', name: 'Dennis Brock', email: 'dennisbrock83@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_deb', name: 'Deb Mead', email: 'lilomee@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_cassandra', name: 'Cassandra Irwin', email: 'cassylee1344@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_andre_mst', name: 'Andre Martin', email: 'andremartmst@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_george', name: 'George Arceneaux Jr', email: 'georgearceneauxtrades@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_chad', name: 'Chad Terrell', email: 'spirittrading25@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_brian', name: 'Brian Hillabush', email: 'bhillabush@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_mary', name: 'Mary E Herriott', email: '1dawnmillie@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_sade', name: 'Sade Aina', email: 'falx3trade@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded - Pending First Login', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
-  { id: 'usr_joette', name: 'Joette Rodriguez', email: 'joetterodriguez@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_deven', name: 'Deven Daehn', email: 'devendaehn@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_sekou', name: 'Sekou Reid', email: 'sekou_reid@yahoo.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_joshua', name: 'Joshua Adam Smith', email: 'hcfman83@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_rigobert', name: 'Rigobert Ebonta', email: 'ebonta1@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_kelly', name: 'Kelly Carraway', email: 'kckingdomcapital@gmail.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_william', name: 'William Nathaniel Jewell', email: 'stillpressingtoward@yahoo.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_phillip', name: 'Phillip Steiner', email: 'coachphilsteiner@gmaiil.com', password: 'temp123', mustChangePassword: true, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Preloaded 21-Day VIP Trial Pass', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0, isTrial: true, trialExpiresAt: new Date(Date.now() + 21 * 86400000).toISOString(), trialDaysRemaining: 21, trialExpired: false },
-  { id: 'usr_demo_trader', name: 'Demo Trader', email: 'demo.trader@mannaedge.com', password: 'demopassword123', mustChangePassword: false, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Active Demo Session', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 18, watchlistCount: 4 }
-];
-
-let userStore: UserProfile[] = [...initialUserProfiles];
-let holdingZoneStore: UserProfile[] = [];
-
-export const findUserByEmail = (email: string): UserProfile | undefined => {
-  const all = getAllUsers();
-  return all.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+// Convert DB row to UserProfile object
+const mapRowToUserProfile = (row: any): UserProfile => {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    password: row.password,
+    mustChangePassword: row.must_change_password === 1 || row.must_change_password === true,
+    role: row.role as any,
+    tier: row.tier,
+    marketAccess: row.market_access,
+    status: row.status as any,
+    subscriptionStatus: row.subscription_status as any,
+    subscriptionStart: row.subscription_start,
+    subscriptionEnd: row.subscription_end,
+    billingCycle: row.billing_cycle as any,
+    autoRenew: row.auto_renew === 1 || row.auto_renew === true,
+    pauseStartDate: row.pause_start_date,
+    pauseResumeDate: row.pause_resume_date,
+    pausedRemainingDays: row.paused_remaining_days,
+    createdAt: row.created_at,
+    lastActive: row.last_active,
+    preferredMarket: row.preferred_market as any,
+    riskLimit: row.risk_limit as any,
+    signalsViewed: row.signals_viewed,
+    watchlistCount: row.watchlist_count,
+    deletedAt: row.deleted_at,
+    purgeAt: row.purge_at,
+    daysRemaining: row.days_remaining,
+    isTrial: row.is_trial === 1 || row.is_trial === true,
+    trialStartedAt: row.trial_started_at,
+    trialExpiresAt: row.trial_expires_at,
+    trialDaysRemaining: row.trial_days_remaining,
+    trialExpired: row.trial_expired === 1 || row.trial_expired === true,
+    trialExtendedCount: row.trial_extended_count,
+    customFeatures: row.custom_features ? JSON.parse(row.custom_features) : undefined,
+  };
 };
 
-export const getAllUsers = (): UserProfile[] => {
+const mapUserProfileToParams = (u: UserProfile): any[] => {
+  return [
+    u.id, u.name, u.email, u.password || null, u.mustChangePassword ? 1 : 0, u.role, u.tier, u.marketAccess,
+    u.status, u.subscriptionStatus || null, u.subscriptionStart || null, u.subscriptionEnd || null, u.billingCycle || null,
+    u.autoRenew ? 1 : 0, u.pauseStartDate || null, u.pauseResumeDate || null, u.pausedRemainingDays || null,
+    u.createdAt, u.lastActive || null, u.preferredMarket || null, u.riskLimit || null, u.signalsViewed || 0,
+    u.watchlistCount || 0, u.deletedAt || null, u.purgeAt || null, u.daysRemaining || null, u.isTrial ? 1 : 0,
+    u.trialStartedAt || null, u.trialExpiresAt || null, u.trialDaysRemaining || null, u.trialExpired ? 1 : 0,
+    u.trialExtendedCount || 0, u.customFeatures ? JSON.stringify(u.customFeatures) : null
+  ];
+};
+
+const upsertUserSql = `
+  INSERT INTO user_profiles (
+    id, name, email, password, must_change_password, role, tier, market_access, status,
+    subscription_status, subscription_start, subscription_end, billing_cycle, auto_renew,
+    pause_start_date, pause_resume_date, paused_remaining_days, created_at, last_active,
+    preferred_market, risk_limit, signals_viewed, watchlist_count, deleted_at, purge_at,
+    days_remaining, is_trial, trial_started_at, trial_expires_at, trial_days_remaining,
+    trial_expired, trial_extended_count, custom_features
+  ) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+  )
+  ON CONFLICT (email) DO UPDATE SET
+    name = EXCLUDED.name,
+    password = EXCLUDED.password,
+    must_change_password = EXCLUDED.must_change_password,
+    role = EXCLUDED.role,
+    tier = EXCLUDED.tier,
+    market_access = EXCLUDED.market_access,
+    status = EXCLUDED.status,
+    subscription_status = EXCLUDED.subscription_status,
+    subscription_start = EXCLUDED.subscription_start,
+    subscription_end = EXCLUDED.subscription_end,
+    billing_cycle = EXCLUDED.billing_cycle,
+    auto_renew = EXCLUDED.auto_renew,
+    pause_start_date = EXCLUDED.pause_start_date,
+    pause_resume_date = EXCLUDED.pause_resume_date,
+    paused_remaining_days = EXCLUDED.paused_remaining_days,
+    last_active = EXCLUDED.last_active,
+    preferred_market = EXCLUDED.preferred_market,
+    risk_limit = EXCLUDED.risk_limit,
+    signals_viewed = EXCLUDED.signals_viewed,
+    watchlist_count = EXCLUDED.watchlist_count,
+    deleted_at = EXCLUDED.deleted_at,
+    purge_at = EXCLUDED.purge_at,
+    days_remaining = EXCLUDED.days_remaining,
+    is_trial = EXCLUDED.is_trial,
+    trial_started_at = EXCLUDED.trial_started_at,
+    trial_expires_at = EXCLUDED.trial_expires_at,
+    trial_days_remaining = EXCLUDED.trial_days_remaining,
+    trial_expired = EXCLUDED.trial_expired,
+    trial_extended_count = EXCLUDED.trial_extended_count,
+    custom_features = EXCLUDED.custom_features
+`;
+
+const upsertUser = async (user: UserProfile) => {
+  if (isPg()) {
+    await queryDb(upsertUserSql, mapUserProfileToParams(user));
+  } else {
+    // SQLite upsert
+    const sqliteSql = upsertUserSql.replace('ON CONFLICT (email)', 'ON CONFLICT (email)');
+    await queryDb(sqliteSql, mapUserProfileToParams(user));
+  }
+};
+
+export const findUserByEmail = async (email: string): Promise<UserProfile | undefined> => {
+  const rows = await queryDb('SELECT * FROM user_profiles WHERE LOWER(email) = LOWER(?)', [email.trim()]);
+  if (rows.length > 0) return mapRowToUserProfile(rows[0]);
+  return undefined;
+};
+
+export const findUserById = async (id: string): Promise<UserProfile | undefined> => {
+  const rows = await queryDb('SELECT * FROM user_profiles WHERE id = ? OR LOWER(email) = LOWER(?)', [id, id]);
+  if (rows.length > 0) return mapRowToUserProfile(rows[0]);
+  return undefined;
+};
+
+export const getAllUsers = async (): Promise<UserProfile[]> => {
   const now = Date.now();
-  return userStore.map(u => {
+  const rows = await queryDb('SELECT * FROM user_profiles WHERE status != ?', ['pending_deletion']);
+  return rows.map(mapRowToUserProfile).map(u => {
     if (u.isTrial && u.trialExpiresAt) {
       const expiresTime = new Date(u.trialExpiresAt).getTime();
       const remainingMs = Math.max(0, expiresTime - now);
       const trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
       const trialExpired = remainingMs <= 0;
-      return {
-        ...u,
-        trialDaysRemaining,
-        trialExpired
-      };
+      return { ...u, trialDaysRemaining, trialExpired };
     }
     return u;
   });
 };
 
-export const getHoldingZoneUsers = (): UserProfile[] => {
+export const getHoldingZoneUsers = async (): Promise<UserProfile[]> => {
   const now = Date.now();
-  // Filter out any users older than 30 days (auto-purge)
-  holdingZoneStore = holdingZoneStore.filter(u => {
+  const rows = await queryDb('SELECT * FROM user_profiles WHERE status = ?', ['pending_deletion']);
+  let users = rows.map(mapRowToUserProfile);
+  
+  // Auto-purge
+  users = users.filter(u => {
     if (!u.purgeAt) return true;
     return new Date(u.purgeAt).getTime() > now;
   });
 
-  return holdingZoneStore.map(u => {
+  return users.map(u => {
     const purgeTime = u.purgeAt ? new Date(u.purgeAt).getTime() : now + 30 * 86400000;
     const remainingMs = Math.max(0, purgeTime - now);
     const daysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
@@ -129,7 +194,7 @@ export const getHoldingZoneUsers = (): UserProfile[] => {
   });
 };
 
-export const addUser = (profile: { 
+export const addUser = async (profile: { 
   name: string; 
   email: string; 
   password?: string;
@@ -140,9 +205,9 @@ export const addUser = (profile: {
   riskLimit?: '1%' | '2%' | '5%';
   isTrial?: boolean;
   trialDays?: number;
-}): UserProfile => {
+}): Promise<UserProfile> => {
   const now = new Date();
-  const trialDays = profile.trialDays !== undefined ? profile.trialDays : 14; // Default 14-day trial
+  const trialDays = profile.trialDays !== undefined ? profile.trialDays : 14; 
   const trialExpiresDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
   const newUser: UserProfile = {
@@ -169,24 +234,25 @@ export const addUser = (profile: {
     trialExpired: false
   };
 
-  const existingIdx = userStore.findIndex(u => u.email.toLowerCase() === profile.email.toLowerCase());
-  if (existingIdx >= 0) {
-    userStore[existingIdx] = { ...userStore[existingIdx], ...newUser };
-    return userStore[existingIdx];
+  const existing = await findUserByEmail(profile.email);
+  if (existing) {
+    const merged = { ...existing, ...newUser, id: existing.id };
+    await upsertUser(merged);
+    return merged;
   }
 
-  userStore.unshift(newUser);
+  await upsertUser(newUser);
   return newUser;
 };
 
-export const bulkPreloadUsers = (
+export const bulkPreloadUsers = async (
   rawUsers: Array<{ name: string; email: string; tier?: 'free' | 'forex_only' | 'futures_forex'; role?: 'trader' | 'admin' }>,
   isTrial: boolean = false
-): { importedCount: number; users: UserProfile[] } => {
+): Promise<{ importedCount: number; users: UserProfile[] }> => {
   let count = 0;
   for (const raw of rawUsers) {
     if (raw.name && raw.email) {
-      addUser({
+      await addUser({
         name: raw.name.trim(),
         email: raw.email.trim(),
         role: raw.role || 'trader',
@@ -197,123 +263,118 @@ export const bulkPreloadUsers = (
       count++;
     }
   }
-
-  return { importedCount: count, users: getAllUsers() };
+  return { importedCount: count, users: await getAllUsers() };
 };
 
-export const completeFirstLoginPasswordSetup = (email: string, newPassword: string): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.email.toLowerCase() === email.toLowerCase());
+export const completeFirstLoginPasswordSetup = async (email: string, newPassword: string): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserByEmail(email);
   if (!user) return { success: false, error: 'User account not found' };
 
   user.password = newPassword;
   user.mustChangePassword = false;
   user.lastActive = 'Just logged in';
+  await upsertUser(user);
   return { success: true, user };
 };
 
-export const updateUserTier = (userId: string, tier: 'free' | 'forex_only' | 'futures_forex'): UserProfile | null => {
-  const user = userStore.find(u => u.id === userId || u.email === userId);
+export const updateUserTier = async (userId: string, tier: 'free' | 'forex_only' | 'futures_forex'): Promise<UserProfile | null> => {
+  const user = await findUserById(userId);
   if (!user) return null;
 
   user.tier = tier;
   user.marketAccess = tier === 'forex_only' ? 'forex' : tier === 'free' ? '2 Futures + 2 Forex' : 'all';
+  await upsertUser(user);
   return user;
 };
 
-export const updateUserPassword = (
+export const updateUserPassword = async (
   userId: string,
   newPassword: string,
   requesterRole: 'trader' | 'admin' | 'super_admin',
   requesterEmail?: string
-): { success: boolean; error?: string } => {
-  const target = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<{ success: boolean; error?: string }> => {
+  const target = await findUserById(userId);
   if (!target) {
     return { success: false, error: 'User account not found' };
   }
 
   const isSelf = Boolean(requesterEmail && requesterEmail.toLowerCase() === target.email.toLowerCase());
 
-  // Rule 1: Self password change is always allowed
   if (isSelf) {
     target.password = newPassword;
     target.mustChangePassword = false;
+    await upsertUser(target);
     return { success: true };
   }
 
-  // Rule 2: Super Admin can change password for ANY trader or admin account
   if (requesterRole === 'super_admin') {
     target.password = newPassword;
+    await upsertUser(target);
     return { success: true };
   }
 
-  // Rule 3: Regular Admin can change password for TRADER accounts, but CANNOT change password for ADMIN accounts
   if (requesterRole === 'admin') {
     if (target.role === 'admin' || target.role === 'super_admin') {
       return { success: false, error: 'Access Denied: Only Super Admin can change an Admin account password.' };
     }
     target.password = newPassword;
+    await upsertUser(target);
     return { success: true };
   }
 
   return { success: false, error: 'Unauthorized: You do not have permission to change this password.' };
 };
 
-export const softDeleteUser = (userId: string): { success: boolean; user?: UserProfile } => {
-  const idx = userStore.findIndex(u => u.id === userId || u.email === userId);
-  if (idx === -1) return { success: false };
+export const softDeleteUser = async (userId: string): Promise<{ success: boolean; user?: UserProfile }> => {
+  const target = await findUserById(userId);
+  if (!target) return { success: false };
 
-  const [target] = userStore.splice(idx, 1);
   const now = new Date();
-  const purgeDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+  const purgeDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
 
   target.status = 'pending_deletion';
   target.deletedAt = now.toISOString();
   target.purgeAt = purgeDate.toISOString();
   target.daysRemaining = 30;
 
-  holdingZoneStore.unshift(target);
+  await upsertUser(target);
   return { success: true, user: target };
 };
 
-export const restoreUser = (userId: string): { success: boolean; user?: UserProfile } => {
-  const idx = holdingZoneStore.findIndex(u => u.id === userId || u.email === userId);
-  if (idx === -1) return { success: false };
+export const restoreUser = async (userId: string): Promise<{ success: boolean; user?: UserProfile }> => {
+  const target = await findUserById(userId);
+  if (!target) return { success: false };
 
-  const [target] = holdingZoneStore.splice(idx, 1);
   target.status = 'active';
-  delete target.deletedAt;
-  delete target.purgeAt;
-  delete target.daysRemaining;
+  target.deletedAt = undefined;
+  target.purgeAt = undefined;
+  target.daysRemaining = undefined;
 
-  const activeIdx = userStore.findIndex(u => u.id === target.id);
-  if (activeIdx >= 0) {
-    userStore[activeIdx] = target;
-  } else {
-    userStore.unshift(target);
-  }
-
+  await upsertUser(target);
   return { success: true, user: target };
 };
 
-export const updateUserRole = (userId: string, role: 'trader' | 'admin' | 'super_admin'): UserProfile | null => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+export const updateUserRole = async (userId: string, role: 'trader' | 'admin' | 'super_admin'): Promise<UserProfile | null> => {
+  const user = await findUserById(userId);
   if (!user) return null;
   user.role = role;
+  await upsertUser(user);
   return user;
 };
 
-export const updateUserStatus = (userId: string, status: 'active' | 'suspended'): UserProfile | null => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+export const updateUserStatus = async (userId: string, status: 'active' | 'suspended'): Promise<UserProfile | null> => {
+  const user = await findUserById(userId);
   if (!user) return null;
   user.status = status;
+  await upsertUser(user);
   return user;
 };
 
-export const updateUserFull = (
+export const updateUserFull = async (
   userId: string, 
   updates: Partial<Pick<UserProfile, 'name' | 'tier' | 'role' | 'status' | 'preferredMarket' | 'riskLimit'>>
-): UserProfile | null => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<UserProfile | null> => {
+  const user = await findUserById(userId);
   if (!user) return null;
   if (updates.name) user.name = updates.name;
   if (updates.tier) user.tier = updates.tier;
@@ -321,14 +382,15 @@ export const updateUserFull = (
   if (updates.status) user.status = updates.status;
   if (updates.preferredMarket) user.preferredMarket = updates.preferredMarket;
   if (updates.riskLimit) user.riskLimit = updates.riskLimit;
+  await upsertUser(user);
   return user;
 };
 
-export const pauseUserSubscription = (
+export const pauseUserSubscription = async (
   userId: string,
   autoResumeDate?: string
-): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserById(userId);
   if (!user) return { success: false, error: 'User account not found' };
 
   const now = new Date();
@@ -342,13 +404,14 @@ export const pauseUserSubscription = (
   user.pauseResumeDate = autoResumeDate || undefined;
   user.pausedRemainingDays = pausedRemainingDays;
 
+  await upsertUser(user);
   return { success: true, user };
 };
 
-export const resumeUserSubscription = (
+export const resumeUserSubscription = async (
   userId: string
-): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserById(userId);
   if (!user) return { success: false, error: 'User account not found' };
 
   const now = new Date();
@@ -358,20 +421,21 @@ export const resumeUserSubscription = (
   user.status = 'active';
   user.subscriptionStatus = user.isTrial ? 'trialing' : 'active';
   user.subscriptionEnd = newEnd.toISOString();
-  delete user.pauseStartDate;
-  delete user.pauseResumeDate;
-  delete user.pausedRemainingDays;
+  user.pauseStartDate = undefined;
+  user.pauseResumeDate = undefined;
+  user.pausedRemainingDays = undefined;
 
+  await upsertUser(user);
   return { success: true, user };
 };
 
-export const setCustomSubscriptionDates = (
+export const setCustomSubscriptionDates = async (
   userId: string,
   startDate: string,
   endDate: string,
   billingCycle: 'monthly' | 'yearly' | 'custom' | 'lifetime' = 'custom'
-): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserById(userId);
   if (!user) return { success: false, error: 'User account not found' };
 
   user.subscriptionStart = startDate;
@@ -380,14 +444,15 @@ export const setCustomSubscriptionDates = (
   user.status = 'active';
   user.subscriptionStatus = 'active';
 
+  await upsertUser(user);
   return { success: true, user };
 };
 
-export const extendUserTrial = (
+export const extendUserTrial = async (
   userId: string,
   daysToExtend: number
-): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.id === userId || u.email.toLowerCase() === userId.toLowerCase());
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserById(userId);
   if (!user) return { success: false, error: 'User account not found' };
 
   const currentExpiry = user.trialExpiresAt ? new Date(user.trialExpiresAt).getTime() : Date.now();
@@ -401,32 +466,34 @@ export const extendUserTrial = (
   user.status = 'active';
   user.subscriptionStatus = 'trialing';
 
+  await upsertUser(user);
   return { success: true, user };
 };
 
-export const bulkUpdateUsers = (
+export const bulkUpdateUsers = async (
   userIds: string[],
   action: 'extend_trial_7d' | 'extend_sub_30d' | 'pause' | 'resume' | 'change_tier',
   payload?: any
-): { updatedCount: number } => {
+): Promise<{ updatedCount: number }> => {
   let count = 0;
   for (const id of userIds) {
     if (action === 'extend_trial_7d') {
-      if (extendUserTrial(id, 7).success) count++;
+      if ((await extendUserTrial(id, 7)).success) count++;
     } else if (action === 'extend_sub_30d') {
-      const user = userStore.find(u => u.id === id || u.email.toLowerCase() === id.toLowerCase());
+      const user = await findUserById(id);
       if (user) {
         const curEnd = user.subscriptionEnd ? new Date(user.subscriptionEnd).getTime() : Date.now();
         user.subscriptionEnd = new Date(curEnd + 30 * 86400000).toISOString();
         user.status = 'active';
+        await upsertUser(user);
         count++;
       }
     } else if (action === 'pause') {
-      if (pauseUserSubscription(id).success) count++;
+      if ((await pauseUserSubscription(id)).success) count++;
     } else if (action === 'resume') {
-      if (resumeUserSubscription(id).success) count++;
+      if ((await resumeUserSubscription(id)).success) count++;
     } else if (action === 'change_tier' && payload?.tier) {
-      if (updateUserTier(id, payload.tier)) count++;
+      if (await updateUserTier(id, payload.tier)) count++;
     }
   }
   return { updatedCount: count };
@@ -442,11 +509,11 @@ export interface CustomTrialPayload {
   allowCalculators: boolean;
 }
 
-export const applyCustomTrialToUser = (
+export const applyCustomTrialToUser = async (
   userIdOrEmail: string,
   payload: CustomTrialPayload
-): { success: boolean; user?: UserProfile; error?: string } => {
-  const user = userStore.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === userIdOrEmail.toLowerCase());
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const user = await findUserById(userIdOrEmail);
   if (!user) return { success: false, error: 'User account not found' };
 
   let expiryIso: string;
@@ -473,7 +540,26 @@ export const applyCustomTrialToUser = (
     trialName: payload.trialName || 'Custom Trial'
   };
 
+  await upsertUser(user);
   return { success: true, user };
 };
 
+// Seed utility to initialize database if empty
+export const seedUsersIfEmpty = async () => {
+  const existing = await queryDb('SELECT COUNT(*) as count FROM user_profiles');
+  if (existing[0].count === 0) {
+    console.log('User profiles table empty. Seeding initial preloaded users...');
+    
+    const initialUserProfiles: any[] = [
+      { id: 'usr_chadwin_super', name: 'Chadwin Solomon', email: 'chadwinsolomon@gmail.com', password: 'temp123', mustChangePassword: false, role: 'super_admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Super Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
+      { id: 'usr_cindy', name: 'Cindy King', email: 'Cindy.king@kingdomdaytraders.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
+      { id: 'usr_brian_king', name: 'Brian King', email: 'kdtfutures@gmail.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
+      { id: 'usr_kaylin', name: 'Kaylin Van Ordt', email: 'kaylinangelinemeyer@gmail.com', password: 'temp123', mustChangePassword: false, role: 'admin', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Admin', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 0, watchlistCount: 0 },
+      { id: 'usr_demo_trader', name: 'Demo Trader', email: 'demo.trader@mannaedge.com', password: 'demopassword123', mustChangePassword: false, role: 'trader', tier: 'futures_forex', marketAccess: 'all', status: 'active', createdAt: new Date().toISOString(), lastActive: 'Active Demo Session', preferredMarket: 'Both', riskLimit: '1%', signalsViewed: 18, watchlistCount: 4 }
+    ];
 
+    for (const profile of initialUserProfiles) {
+      await upsertUser(profile);
+    }
+  }
+};

@@ -67,7 +67,7 @@ router.use(requireAdminOrSuperAdmin);
 // ==========================================
 // USER DIRECTORY & PROFILE ENDPOINTS
 // ==========================================
-router.get('/users', (req: Request, res: Response) => {
+router.get('/users', async (req: Request, res: Response) => {
   const search = ((req.query.search as string) || '').toLowerCase().trim();
   const role = (req.query.role as string) || '';
   const status = (req.query.status as string) || '';
@@ -75,49 +75,64 @@ router.get('/users', (req: Request, res: Response) => {
   const tagId = (req.query.tagId as string) || '';
   const groupId = (req.query.groupId as string) || '';
 
-  let users = getAllUsers();
+  let users = await getAllUsers();
 
   // Attach dynamic tags and groups to each user profile
-  users = users.map(u => {
-    const tags = getUserTags(u.id).map(t => t.name);
-    const groups = getUserGroups(u.id).map(g => g.name);
+  users = await Promise.all(users.map(async u => {
+    const tagsArr = await getUserTags(u.id);
+    const groupsArr = await getUserGroups(u.id);
+    const tags = tagsArr.map((t: any) => t.name);
+    const groups = groupsArr.map((g: any) => g.name);
     return { ...u, tags, groups };
-  });
+  }));
 
   if (search) {
-    users = users.filter(u => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search) || u.id.toLowerCase().includes(search));
+    users = users.filter((u: any) => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search) || u.id.toLowerCase().includes(search));
   }
   if (role) {
-    users = users.filter(u => u.role === role);
+    users = users.filter((u: any) => u.role === role);
   }
   if (status) {
-    users = users.filter(u => u.status === status);
+    users = users.filter((u: any) => u.status === status);
   }
   if (tier) {
-    users = users.filter(u => u.tier === tier);
+    users = users.filter((u: any) => u.tier === tier);
   }
   if (tagId) {
-    users = users.filter(u => getUserTags(u.id).some(t => t.id === tagId));
+    // Need to do this properly. Since tags/groups are arrays of names now, we should query mapped users if tagId or groupId is present.
+    const mappings = await getTags();
+    const specificTag = mappings.find((t: any) => t.id === tagId);
+    if (specificTag) {
+        users = users.filter((u: any) => u.tags.includes(specificTag.name));
+    } else {
+        users = [];
+    }
   }
   if (groupId) {
-    users = users.filter(u => getUserGroups(u.id).some(g => g.id === groupId));
+    const mappings = await getGroups();
+    const specificGroup = mappings.find((g: any) => g.id === groupId);
+    if (specificGroup) {
+        users = users.filter((u: any) => u.groups.includes(specificGroup.name));
+    } else {
+        users = [];
+    }
   }
 
   res.json({ success: true, count: users.length, users });
 });
 
-router.post('/users', (req: Request, res: Response) => {
+router.post('/users', async (req: Request, res: Response) => {
   const { name, email, role, tier, isTrial, preferredMarket, riskLimit } = req.body;
   if (!name || !email) {
     return res.status(400).json({ success: false, error: 'Name and Email are required.' });
   }
 
-  const existing = findUserByEmail(email);
+  const existing = await findUserByEmail(email);
   if (existing) {
     return res.status(400).json({ success: false, error: 'A user with this email address already exists.' });
   }
 
-  const user = addUser({
+  const user = await addUser({
     name,
     email,
     role: role || 'trader',
@@ -127,7 +142,7 @@ router.post('/users', (req: Request, res: Response) => {
     riskLimit: riskLimit || '1%'
   });
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'USER_CREATED',
@@ -138,13 +153,13 @@ router.post('/users', (req: Request, res: Response) => {
   res.json({ success: true, user });
 });
 
-router.put('/users/:id', (req: Request, res: Response) => {
+router.put('/users/:id', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const updates = req.body;
-  const user = updateUserFull(id, updates);
+  const user = await updateUserFull(id, updates);
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'USER_UPDATED',
@@ -155,12 +170,12 @@ router.put('/users/:id', (req: Request, res: Response) => {
   res.json({ success: true, user });
 });
 
-router.delete('/users/:id', (req: Request, res: Response) => {
+router.delete('/users/:id', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const result = softDeleteUser(id);
+  const result = await softDeleteUser(id);
   if (!result.success) return res.status(404).json({ success: false, error: 'User not found' });
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'USER_SOFT_DELETED',
@@ -170,12 +185,12 @@ router.delete('/users/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'User moved to 30-day holding zone.' });
 });
 
-router.post('/users/:id/restore', (req: Request, res: Response) => {
+router.post('/users/:id/restore', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const result = restoreUser(id);
+  const result = await restoreUser(id);
   if (!result.success) return res.status(404).json({ success: false, error: 'User not found in holding zone' });
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'USER_RESTORED',
@@ -188,13 +203,13 @@ router.post('/users/:id/restore', (req: Request, res: Response) => {
 // ==========================================
 // SUBSCRIPTION PAUSE / RESUME / CUSTOM DATES / TRIALS
 // ==========================================
-router.post('/users/:id/pause', (req: Request, res: Response) => {
+router.post('/users/:id/pause', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { autoResumeDate } = req.body;
-  const resObj = pauseUserSubscription(id, autoResumeDate);
+  const resObj = await pauseUserSubscription(id, autoResumeDate);
   if (!resObj.success) return res.status(400).json(resObj);
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'SUBSCRIPTION_PAUSED',
@@ -205,12 +220,12 @@ router.post('/users/:id/pause', (req: Request, res: Response) => {
   res.json(resObj);
 });
 
-router.post('/users/:id/resume', (req: Request, res: Response) => {
+router.post('/users/:id/resume', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const resObj = resumeUserSubscription(id);
+  const resObj = await resumeUserSubscription(id);
   if (!resObj.success) return res.status(400).json(resObj);
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'SUBSCRIPTION_RESUMED',
@@ -221,15 +236,15 @@ router.post('/users/:id/resume', (req: Request, res: Response) => {
   res.json(resObj);
 });
 
-router.post('/users/:id/custom-dates', (req: Request, res: Response) => {
+router.post('/users/:id/custom-dates', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { startDate, endDate, billingCycle } = req.body;
   if (!startDate || !endDate) return res.status(400).json({ success: false, error: 'startDate and endDate are required.' });
 
-  const resObj = setCustomSubscriptionDates(id, startDate, endDate, billingCycle);
+  const resObj = await setCustomSubscriptionDates(id, startDate, endDate, billingCycle);
   if (!resObj.success) return res.status(400).json(resObj);
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'CUSTOM_SUB_DATES_SET',
@@ -240,13 +255,13 @@ router.post('/users/:id/custom-dates', (req: Request, res: Response) => {
   res.json(resObj);
 });
 
-router.post('/users/:id/extend-trial', (req: Request, res: Response) => {
+router.post('/users/:id/extend-trial', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const days = Number(req.body.days) || 7;
-  const resObj = extendUserTrial(id, days);
+  const resObj = await extendUserTrial(id, days);
   if (!resObj.success) return res.status(400).json(resObj);
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'TRIAL_EXTENDED',
@@ -257,15 +272,15 @@ router.post('/users/:id/extend-trial', (req: Request, res: Response) => {
   res.json(resObj);
 });
 
-router.post('/users/bulk', (req: Request, res: Response) => {
+router.post('/users/bulk', async (req: Request, res: Response) => {
   const { userIds, action, payload } = req.body;
   if (!Array.isArray(userIds) || userIds.length === 0 || !action) {
     return res.status(400).json({ success: false, error: 'userIds array and action are required.' });
   }
 
-  const result = bulkUpdateUsers(userIds, action, payload);
+  const result = await bulkUpdateUsers(userIds, action, payload);
 
-  recordAuditLog({
+  await recordAuditLog({
     adminEmail: req.body._adminEmail,
     adminRole: req.body._adminRole,
     action: 'BULK_USER_ACTION',
@@ -278,17 +293,17 @@ router.post('/users/bulk', (req: Request, res: Response) => {
 // ==========================================
 // COUPON ENGINE ENDPOINTS
 // ==========================================
-router.get('/coupons', (_req: Request, res: Response) => {
-  res.json({ success: true, coupons: getCoupons() });
+router.get('/coupons', async (_req: Request, res: Response) => {
+  res.json({ success: true, coupons: await getCoupons() });
 });
 
-router.post('/coupons', (req: Request, res: Response) => {
+router.post('/coupons', async (req: Request, res: Response) => {
   const { code, discountType, discountValue, validUntil, maxRedemptions, perUserLimit, applicableTiers } = req.body;
   if (!code || discountValue === undefined) {
     return res.status(400).json({ success: false, error: 'Coupon code and discountValue are required.' });
   }
 
-  const coupon = createCoupon({
+  const coupon = await createCoupon({
     code: code.trim().toUpperCase(),
     discountType: discountType || 'percentage',
     discountValue: Number(discountValue),
@@ -304,21 +319,21 @@ router.post('/coupons', (req: Request, res: Response) => {
   res.json({ success: true, coupon });
 });
 
-router.put('/coupons/:id/status', (req: Request, res: Response) => {
+router.put('/coupons/:id/status', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { status } = req.body;
-  const coupon = updateCouponStatus(id, status, req.body._adminEmail);
+  const coupon = await updateCouponStatus(id, status, req.body._adminEmail);
   if (!coupon) return res.status(404).json({ success: false, error: 'Coupon not found' });
   res.json({ success: true, coupon });
 });
 
-router.post('/coupons/apply', (req: Request, res: Response) => {
+router.post('/coupons/apply', async (req: Request, res: Response) => {
   const { code, userEmail } = req.body;
   if (!code || !userEmail) {
     return res.status(400).json({ success: false, error: 'Coupon code and userEmail are required.' });
   }
 
-  const result = applyCouponToUser(code, userEmail, req.body._adminEmail);
+  const result = await applyCouponToUser(code, userEmail, req.body._adminEmail);
   if (!result.success) return res.status(400).json(result);
   res.json(result);
 });
@@ -326,94 +341,94 @@ router.post('/coupons/apply', (req: Request, res: Response) => {
 // ==========================================
 // TAGS & GROUPS ENDPOINTS
 // ==========================================
-router.get('/tags', (_req: Request, res: Response) => {
-  res.json({ success: true, tags: getTags() });
+router.get('/tags', async (_req: Request, res: Response) => {
+  res.json({ success: true, tags: await getTags() });
 });
 
-router.post('/tags', (req: Request, res: Response) => {
+router.post('/tags', async (req: Request, res: Response) => {
   const { name, color, description } = req.body;
   if (!name) return res.status(400).json({ success: false, error: 'Tag name is required.' });
-  const tag = createTag(name, color || '#3b82f6', description);
+  const tag = await createTag(name, color || '#3b82f6', description);
   res.json({ success: true, tag });
 });
 
-router.delete('/tags/:id', (req: Request, res: Response) => {
+router.delete('/tags/:id', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  deleteTag(id);
+  await deleteTag(id);
   res.json({ success: true, message: 'Tag deleted.' });
 });
 
-router.post('/tags/assign', (req: Request, res: Response) => {
+router.post('/tags/assign', async (req: Request, res: Response) => {
   const { userId, tagId } = req.body;
-  assignTagToUser(userId, tagId);
+  await assignTagToUser(userId, tagId);
   res.json({ success: true, message: 'Tag assigned to user.' });
 });
 
-router.post('/tags/remove', (req: Request, res: Response) => {
+router.post('/tags/remove', async (req: Request, res: Response) => {
   const { userId, tagId } = req.body;
-  removeTagFromUser(userId, tagId);
+  await removeTagFromUser(userId, tagId);
   res.json({ success: true, message: 'Tag removed from user.' });
 });
 
-router.get('/groups', (_req: Request, res: Response) => {
-  res.json({ success: true, groups: getGroups() });
+router.get('/groups', async (_req: Request, res: Response) => {
+  res.json({ success: true, groups: await getGroups() });
 });
 
-router.post('/groups', (req: Request, res: Response) => {
+router.post('/groups', async (req: Request, res: Response) => {
   const { name, description, tierAssignment } = req.body;
   if (!name) return res.status(400).json({ success: false, error: 'Group name is required.' });
-  const group = createGroup(name, description, tierAssignment || 'futures_forex');
+  const group = await createGroup(name, description, tierAssignment || 'futures_forex');
   res.json({ success: true, group });
 });
 
-router.post('/groups/assign', (req: Request, res: Response) => {
+router.post('/groups/assign', async (req: Request, res: Response) => {
   const { userId, groupId } = req.body;
-  assignUserToGroup(userId, groupId);
+  await assignUserToGroup(userId, groupId);
   res.json({ success: true, message: 'User added to group.' });
 });
 
-router.post('/groups/remove', (req: Request, res: Response) => {
+router.post('/groups/remove', async (req: Request, res: Response) => {
   const { userId, groupId } = req.body;
-  removeUserFromGroup(userId, groupId);
+  await removeUserFromGroup(userId, groupId);
   res.json({ success: true, message: 'User removed from group.' });
 });
 
 // ==========================================
 // NOTIFICATIONS & AUDIT LOG ENDPOINTS
 // ==========================================
-router.get('/notifications/logs', (_req: Request, res: Response) => {
-  res.json({ success: true, notifications: getNotificationLogs() });
+router.get('/notifications/logs', async (_req: Request, res: Response) => {
+  res.json({ success: true, notifications: await getNotificationLogs() });
 });
 
-router.post('/notifications/broadcast', (req: Request, res: Response) => {
+router.post('/notifications/broadcast', async (req: Request, res: Response) => {
   const { targetType, targetId, title, message } = req.body;
   if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required.' });
 
-  const resObj = broadcastNotification(targetType || 'all', targetId || null, title, message, req.body._adminEmail);
+  const resObj = await broadcastNotification(targetType || 'all', targetId || null, title, message, req.body._adminEmail);
   res.json({ success: true, recipientCount: resObj.recipientCount });
 });
 
-router.get('/audit-logs', (_req: Request, res: Response) => {
-  res.json({ success: true, auditLogs: getAuditLogs() });
+router.get('/audit-logs', async (_req: Request, res: Response) => {
+  res.json({ success: true, auditLogs: await getAuditLogs() });
 });
 
-router.post('/scheduler/run-now', (_req: Request, res: Response) => {
-  const stats = checkSubscriptionAndTrialExpirations();
+router.post('/scheduler/run-now', async (_req: Request, res: Response) => {
+  const stats = await checkSubscriptionAndTrialExpirations();
   res.json({ success: true, stats });
 });
 
 // ==========================================
 // CUSTOM TRIAL & FEATURE PERMISSION ENDPOINTS
 // ==========================================
-router.get('/trials/templates', (_req: Request, res: Response) => {
-  res.json({ success: true, templates: getCustomTrialTemplates() });
+router.get('/trials/templates', async (_req: Request, res: Response) => {
+  res.json({ success: true, templates: await getCustomTrialTemplates() });
 });
 
-router.post('/trials/templates', (req: Request, res: Response) => {
+router.post('/trials/templates', async (req: Request, res: Response) => {
   const { name, days, expiryDate, tier, strategyAccess, maxSignals, allowCalculators } = req.body;
   if (!name) return res.status(400).json({ success: false, error: 'Trial template name is required.' });
 
-  const template = createCustomTrialTemplate({
+  const template = await createCustomTrialTemplate({
     name,
     days: days ? Number(days) : undefined,
     expiryDate: expiryDate || undefined,
@@ -427,13 +442,13 @@ router.post('/trials/templates', (req: Request, res: Response) => {
   res.json({ success: true, template });
 });
 
-router.post('/trials/assign', (req: Request, res: Response) => {
+router.post('/trials/assign', async (req: Request, res: Response) => {
   const { targetType, targetIds, payload } = req.body;
   if (!targetType || !Array.isArray(targetIds) || targetIds.length === 0 || !payload) {
     return res.status(400).json({ success: false, error: 'targetType, targetIds array, and trial payload are required.' });
   }
 
-  const result = assignCustomTrialToTargets(targetType, targetIds, payload, req.body._adminEmail);
+  const result = await assignCustomTrialToTargets(targetType, targetIds, payload, req.body._adminEmail);
   res.json(result);
 });
 

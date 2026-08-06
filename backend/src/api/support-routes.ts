@@ -30,14 +30,14 @@ const p = (param: string | string[]): string => Array.isArray(param) ? param[0] 
 // ─── User-facing Routes ───────────────────────────────────────────────────────
 
 // Create a ticket (user submitting upgrade request or support query)
-router.post('/tickets', (req: Request, res: Response) => {
+router.post('/tickets', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
     if (!body.userId || !body.userEmail || !body.userName) {
       return res.status(400).json({ error: 'userId, userEmail, and userName are required' });
     }
 
-    const ticket = createTicket(body as CreateTicketInput);
+    const ticket = await createTicket(body as CreateTicketInput);
     res.json({ success: true, ticket });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create ticket', details: err.message });
@@ -45,7 +45,7 @@ router.post('/tickets', (req: Request, res: Response) => {
 });
 
 // User replies to their ticket
-router.post('/tickets/:id/user-reply', (req: Request, res: Response) => {
+router.post('/tickets/:id/user-reply', async (req: Request, res: Response) => {
   try {
     const id = p(req.params.id);
     const { userEmail, userName, body: msgBody } = req.body || {};
@@ -53,11 +53,11 @@ router.post('/tickets/:id/user-reply', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'userEmail, userName, and body are required' });
     }
 
-    const ticket = getTicketById(id);
+    const ticket = await getTicketById(id);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     if (ticket.userEmail !== userEmail) return res.status(403).json({ error: 'Access denied' });
 
-    const result = replyToTicket(id, { email: userEmail, name: userName }, msgBody, 'trader');
+    const result = await replyToTicket(id, { email: userEmail, name: userName }, msgBody, 'trader');
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -66,11 +66,11 @@ router.post('/tickets/:id/user-reply', (req: Request, res: Response) => {
 });
 
 // Get tickets for a specific user
-router.get('/tickets/user/:userEmail', (req: Request, res: Response) => {
+router.get('/tickets/user/:userEmail', async (req: Request, res: Response) => {
   try {
     const userEmail = p(req.params.userEmail);
-    const tickets = getTicketsByUser(decodeURIComponent(userEmail));
-    const unreadCount = getUserUnreadCount(decodeURIComponent(userEmail));
+    const tickets = await getTicketsByUser(decodeURIComponent(userEmail));
+    const unreadCount = await getUserUnreadCount(decodeURIComponent(userEmail));
     res.json({ success: true, tickets, unreadCount });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch user tickets', details: err.message });
@@ -78,43 +78,43 @@ router.get('/tickets/user/:userEmail', (req: Request, res: Response) => {
 });
 
 // Mark all messages in a ticket as read by user
-router.post('/tickets/:id/read-by-user', (req: Request, res: Response) => {
-  markTicketMessagesReadByUser(p(req.params.id));
+router.post('/tickets/:id/read-by-user', async (req: Request, res: Response) => {
+  await markTicketMessagesReadByUser(p(req.params.id));
   res.json({ success: true });
 });
 
 // ─── Admin-facing Routes ──────────────────────────────────────────────────────
 
 // Get all tickets (centralised inbox)
-router.get('/tickets', (_req: Request, res: Response) => {
-  res.json({ success: true, tickets: getAllTickets() });
+router.get('/tickets', async (_req: Request, res: Response) => {
+  res.json({ success: true, tickets: await getAllTickets() });
 });
 
 // Get tickets claimed by a specific admin (personal box)
-router.get('/tickets/admin/:adminEmail', (req: Request, res: Response) => {
-  const tickets = getTicketsByAdmin(decodeURIComponent(p(req.params.adminEmail)));
+router.get('/tickets/admin/:adminEmail', async (req: Request, res: Response) => {
+  const tickets = await getTicketsByAdmin(decodeURIComponent(p(req.params.adminEmail)));
   res.json({ success: true, tickets });
 });
 
 // Get pending transfers for a specific admin
-router.get('/tickets/pending-transfer/:adminEmail', (req: Request, res: Response) => {
-  const tickets = getPendingTransfersForAdmin(decodeURIComponent(p(req.params.adminEmail)));
+router.get('/tickets/pending-transfer/:adminEmail', async (req: Request, res: Response) => {
+  const tickets = await getPendingTransfersForAdmin(decodeURIComponent(p(req.params.adminEmail)));
   res.json({ success: true, tickets });
 });
 
 // Get a single ticket
-router.get('/tickets/:id', (req: Request, res: Response) => {
-  const ticket = getTicketById(p(req.params.id));
+router.get('/tickets/:id', async (req: Request, res: Response) => {
+  const ticket = await getTicketById(p(req.params.id));
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
   res.json({ success: true, ticket });
 });
 
 // Claim a ticket
-router.post('/tickets/:id/claim', (req: Request, res: Response) => {
+router.post('/tickets/:id/claim', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName } = req.body || {};
     if (!adminEmail || !adminName) return res.status(400).json({ error: 'adminEmail and adminName are required' });
-    const result = claimTicket(p(req.params.id), { email: adminEmail, name: adminName });
+    const result = await claimTicket(p(req.params.id), { email: adminEmail, name: adminName });
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -123,11 +123,11 @@ router.post('/tickets/:id/claim', (req: Request, res: Response) => {
 });
 
 // Admin reply to a ticket
-router.post('/tickets/:id/reply', (req: Request, res: Response) => {
+router.post('/tickets/:id/reply', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName, body: msgBody } = req.body || {};
     if (!adminEmail || !adminName || !msgBody) return res.status(400).json({ error: 'adminEmail, adminName, and body are required' });
-    const result = replyToTicket(p(req.params.id), { email: adminEmail, name: adminName }, msgBody, 'admin');
+    const result = await replyToTicket(p(req.params.id), { email: adminEmail, name: adminName }, msgBody, 'admin');
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -136,7 +136,7 @@ router.post('/tickets/:id/reply', (req: Request, res: Response) => {
 });
 
 // Send invoice to user
-router.post('/tickets/:id/send-invoice', (req: Request, res: Response) => {
+router.post('/tickets/:id/send-invoice', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName, invoice } = req.body || {};
     if (!adminEmail || !adminName || !invoice) return res.status(400).json({ error: 'adminEmail, adminName, and invoice are required' });
@@ -152,7 +152,7 @@ router.post('/tickets/:id/send-invoice', (req: Request, res: Response) => {
       bankDetails: invoice.bankDetails,
       dueDate: invoice.dueDate
     };
-    const result = sendInvoice(p(req.params.id), { email: adminEmail, name: adminName }, invoiceDetails);
+    const result = await sendInvoice(p(req.params.id), { email: adminEmail, name: adminName }, invoiceDetails);
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -161,13 +161,13 @@ router.post('/tickets/:id/send-invoice', (req: Request, res: Response) => {
 });
 
 // Transfer ticket to another admin
-router.post('/tickets/:id/transfer', (req: Request, res: Response) => {
+router.post('/tickets/:id/transfer', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName, toAdminEmail, toAdminName, note } = req.body || {};
     if (!adminEmail || !adminName || !toAdminEmail || !toAdminName) {
       return res.status(400).json({ error: 'adminEmail, adminName, toAdminEmail, toAdminName required' });
     }
-    const result = transferTicket(p(req.params.id), { email: adminEmail, name: adminName }, toAdminEmail, toAdminName, note || '');
+    const result = await transferTicket(p(req.params.id), { email: adminEmail, name: adminName }, toAdminEmail, toAdminName, note || '');
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -176,11 +176,11 @@ router.post('/tickets/:id/transfer', (req: Request, res: Response) => {
 });
 
 // Accept transfer
-router.post('/tickets/:id/accept-transfer', (req: Request, res: Response) => {
+router.post('/tickets/:id/accept-transfer', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName } = req.body || {};
     if (!adminEmail || !adminName) return res.status(400).json({ error: 'adminEmail and adminName required' });
-    const result = acceptTransfer(p(req.params.id), { email: adminEmail, name: adminName });
+    const result = await acceptTransfer(p(req.params.id), { email: adminEmail, name: adminName });
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -189,11 +189,11 @@ router.post('/tickets/:id/accept-transfer', (req: Request, res: Response) => {
 });
 
 // Decline transfer
-router.post('/tickets/:id/decline-transfer', (req: Request, res: Response) => {
+router.post('/tickets/:id/decline-transfer', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName, reason } = req.body || {};
     if (!adminEmail || !adminName) return res.status(400).json({ error: 'adminEmail and adminName required' });
-    const result = declineTransfer(p(req.params.id), { email: adminEmail, name: adminName }, reason);
+    const result = await declineTransfer(p(req.params.id), { email: adminEmail, name: adminName }, reason);
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -202,11 +202,11 @@ router.post('/tickets/:id/decline-transfer', (req: Request, res: Response) => {
 });
 
 // Resolve ticket
-router.post('/tickets/:id/resolve', (req: Request, res: Response) => {
+router.post('/tickets/:id/resolve', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName, note, upgradeTier } = req.body || {};
     if (!adminEmail || !adminName) return res.status(400).json({ error: 'adminEmail and adminName required' });
-    const result = resolveTicket(p(req.params.id), { email: adminEmail, name: adminName }, note || '', upgradeTier);
+    const result = await resolveTicket(p(req.params.id), { email: adminEmail, name: adminName }, note || '', upgradeTier);
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -215,11 +215,11 @@ router.post('/tickets/:id/resolve', (req: Request, res: Response) => {
 });
 
 // Reopen ticket
-router.post('/tickets/:id/reopen', (req: Request, res: Response) => {
+router.post('/tickets/:id/reopen', async (req: Request, res: Response) => {
   try {
     const { adminEmail, adminName } = req.body || {};
     if (!adminEmail || !adminName) return res.status(400).json({ error: 'adminEmail and adminName required' });
-    const result = reopenTicket(p(req.params.id), { email: adminEmail, name: adminName });
+    const result = await reopenTicket(p(req.params.id), { email: adminEmail, name: adminName });
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true, ticket: result.ticket });
   } catch (err: any) {
@@ -228,15 +228,15 @@ router.post('/tickets/:id/reopen', (req: Request, res: Response) => {
 });
 
 // Mark messages read by admin
-router.post('/tickets/:id/read-by-admin', (req: Request, res: Response) => {
-  markTicketMessagesReadByAdmin(p(req.params.id));
+router.post('/tickets/:id/read-by-admin', async (req: Request, res: Response) => {
+  await markTicketMessagesReadByAdmin(p(req.params.id));
   res.json({ success: true });
 });
 
 // Get all admin accounts (for transfer dropdown)
-router.get('/admins', (_req: Request, res: Response) => {
+router.get('/admins', async (_req: Request, res: Response) => {
   try {
-    const allUsers = getAllUsers();
+    const allUsers = await getAllUsers();
     const admins = allUsers
       .filter((u: any) => u.role === 'admin' || u.role === 'super_admin')
       .map((u: any) => ({ id: u.id, name: u.name, email: u.email, role: u.role }));

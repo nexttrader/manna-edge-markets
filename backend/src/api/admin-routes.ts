@@ -29,13 +29,13 @@ router.get('/strategies/status', async (req: Request, res: Response) => {
 import { getAllUsers, findUserByEmail, addUser, updateUserTier, softDeleteUser, restoreUser, getHoldingZoneUsers, updateUserPassword, bulkPreloadUsers, completeFirstLoginPasswordSetup } from '../db/user-store';
 
 // Smart Email Auth Check Endpoint
-router.post('/auth/check-email', (req: Request, res: Response) => {
+router.post('/auth/check-email', async (req: Request, res: Response) => {
   const { email } = req.body || {};
   if (!email || typeof email !== 'string') {
     return res.status(400).json({ error: 'Please enter a valid email address' });
   }
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user) {
     return res.json({ status: 'not_found', email: email.trim() });
   }
@@ -62,13 +62,13 @@ router.post('/auth/check-email', (req: Request, res: Response) => {
 });
 
 // Smart Password Activation for First-Time Preloaded Logins
-router.post('/auth/setup-first-password', (req: Request, res: Response) => {
+router.post('/auth/setup-first-password', async (req: Request, res: Response) => {
   const { email, password } = req.body || {};
   if (!email || !password || password.length < 4) {
     return res.status(400).json({ error: 'Please provide a valid password (at least 4 characters)' });
   }
 
-  const result = completeFirstLoginPasswordSetup(email, password);
+  const result = await completeFirstLoginPasswordSetup(email, password);
   if (!result.success) {
     return res.status(400).json({ error: result.error || 'Failed to update password' });
   }
@@ -77,18 +77,18 @@ router.post('/auth/setup-first-password', (req: Request, res: Response) => {
 });
 
 // Self-Registration Endpoint (Traders register themselves — Free Tier, 14-Day Trial ONLY)
-router.post('/auth/register', (req: Request, res: Response) => {
+router.post('/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
   }
 
-  const existing = findUserByEmail(email);
+  const existing = await findUserByEmail(email);
   if (existing) {
     return res.status(400).json({ error: 'An account with this email address already exists.' });
   }
 
-  const newUser = addUser({
+  const newUser = await addUser({
     name: name.trim(),
     email: email.trim(),
     password,
@@ -103,24 +103,24 @@ router.post('/auth/register', (req: Request, res: Response) => {
 });
 
 // User Accounts Management Endpoints
-router.get('/users', (_req: Request, res: Response) => {
-  const users = getAllUsers();
+router.get('/users', async (_req: Request, res: Response) => {
+  const users = await getAllUsers();
   res.json({ success: true, users });
 });
 
-router.get('/users/holding', (_req: Request, res: Response) => {
-  const holding = getHoldingZoneUsers();
+router.get('/users/holding', async (_req: Request, res: Response) => {
+  const holding = await getHoldingZoneUsers();
   res.json({ success: true, holding });
 });
 
-router.post('/users/bulk-import', (req: Request, res: Response) => {
+router.post('/users/bulk-import', async (req: Request, res: Response) => {
   try {
     const { rawUsers, isTrial = false } = req.body || {};
     if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of users to import' });
     }
 
-    const result = bulkPreloadUsers(rawUsers, isTrial);
+    const result = await bulkPreloadUsers(rawUsers, isTrial);
     res.json({ 
       success: true, 
       message: `Successfully preloaded ${result.importedCount} user accounts ${isTrial ? '(21-Day VIP Trial Pass)' : ''}`, 
@@ -132,7 +132,7 @@ router.post('/users/bulk-import', (req: Request, res: Response) => {
   }
 });
 
-router.post('/first-login-password', (req: Request, res: Response) => {
+router.post('/first-login-password', async (req: Request, res: Response) => {
   try {
     const { email, newPassword } = req.body || {};
     if (!email || !newPassword) {
@@ -142,7 +142,7 @@ router.post('/first-login-password', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 4 characters long' });
     }
 
-    const result = completeFirstLoginPasswordSetup(email, newPassword);
+    const result = await completeFirstLoginPasswordSetup(email, newPassword);
     if (!result.success) {
       return res.status(400).json({ error: result.error || 'Failed to complete password setup' });
     }
@@ -153,7 +153,7 @@ router.post('/first-login-password', (req: Request, res: Response) => {
   }
 });
 
-router.post('/users', (req: Request, res: Response) => {
+router.post('/users', async (req: Request, res: Response) => {
   try {
     const { name, email, tier = 'free', preferredMarket, riskLimit } = req.body || {};
     if (!name || !email) {
@@ -161,7 +161,7 @@ router.post('/users', (req: Request, res: Response) => {
     }
 
     // Admins can ONLY create trader accounts
-    const newUser = addUser({
+    const newUser = await addUser({
       name,
       email,
       role: 'trader',
@@ -170,13 +170,13 @@ router.post('/users', (req: Request, res: Response) => {
       riskLimit
     });
 
-    res.json({ success: true, user: newUser, users: getAllUsers() });
+    res.json({ success: true, user: newUser, users: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create user account', details: err.message });
   }
 });
 
-router.put('/users/:id/tier', (req: Request, res: Response) => {
+router.put('/users/:id/tier', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -186,50 +186,50 @@ router.put('/users/:id/tier', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid tier specified' });
     }
 
-    const updated = updateUserTier(userId, tier);
+    const updated = await updateUserTier(userId, tier);
     if (!updated) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ success: true, user: updated, users: getAllUsers() });
+    res.json({ success: true, user: updated, users: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user tier', details: err.message });
   }
 });
 
-router.delete('/users/:id', (req: Request, res: Response) => {
+router.delete('/users/:id', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
 
-    const result = softDeleteUser(userId);
+    const result = await softDeleteUser(userId);
     if (!result.success) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ success: true, message: 'User moved to 30-day holding zone', users: getAllUsers(), holding: getHoldingZoneUsers() });
+    res.json({ success: true, message: 'User moved to 30-day holding zone', users: await getAllUsers(), holding: await getHoldingZoneUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to delete user', details: err.message });
   }
 });
 
-router.post('/users/:id/restore', (req: Request, res: Response) => {
+router.post('/users/:id/restore', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
 
-    const result = restoreUser(userId);
+    const result = await restoreUser(userId);
     if (!result.success) {
       return res.status(404).json({ error: 'User not found in holding zone' });
     }
 
-    res.json({ success: true, message: 'User restored from holding zone', users: getAllUsers(), holding: getHoldingZoneUsers() });
+    res.json({ success: true, message: 'User restored from holding zone', users: await getAllUsers(), holding: await getHoldingZoneUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to restore user', details: err.message });
   }
 });
 
-router.put('/users/:id/password', (req: Request, res: Response) => {
+router.put('/users/:id/password', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -239,12 +239,12 @@ router.put('/users/:id/password', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 4 characters long' });
     }
 
-    const result = updateUserPassword(userId, newPassword, requesterRole, requesterEmail);
+    const result = await updateUserPassword(userId, newPassword, requesterRole, requesterEmail);
     if (!result.success) {
       return res.status(403).json({ error: result.error || 'Failed to update password' });
     }
 
-    res.json({ success: true, message: 'Password updated successfully', users: getAllUsers() });
+    res.json({ success: true, message: 'Password updated successfully', users: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update password', details: err.message });
   }

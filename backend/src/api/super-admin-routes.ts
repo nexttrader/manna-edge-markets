@@ -101,7 +101,7 @@ router.post('/telemetry', (req: Request, res: Response) => {
 router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const now = Date.now();
-    const allUsers = getAllUsers();
+    const allUsers = await getAllUsers();
     
     // Auto-touch requestor session if headers provided
     const reqEmail = (req.headers['x-user-email'] || req.headers['x-email'] || req.query.email || 'chadwinsolomon@gmail.com').toString().toLowerCase().trim();
@@ -296,45 +296,45 @@ router.get('/users/:email/activity', (req: Request, res: Response) => {
 });
 
 // 2C. FULL USER ACCOUNT GOVERNANCE (Tier, Role, Status, Name)
-router.put('/users/:id/full', (req: Request, res: Response) => {
+router.put('/users/:id/full', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
     const { name, tier, role, status, preferredMarket, riskLimit } = req.body || {};
 
-    const updated = updateUserFull(userId, { name, tier, role, status, preferredMarket, riskLimit });
+    const updated = await updateUserFull(userId, { name, tier, role, status, preferredMarket, riskLimit });
     if (!updated) {
       return res.status(404).json({ error: 'User account not found' });
     }
 
-    res.json({ success: true, message: 'User updated successfully', user: updated, allUsers: getAllUsers() });
+    res.json({ success: true, message: 'User updated successfully', user: updated, allUsers: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update user', details: err.message });
   }
 });
 
 // 3. SUPER ADMIN CREATES USERS & ADMINS
-router.post('/users', (req: Request, res: Response) => {
+router.post('/users', async (req: Request, res: Response) => {
   try {
     const { name, email, role = 'trader', tier = 'futures_forex' } = req.body || {};
     if (!name || !email) {
       return res.status(400).json({ error: 'Display Name and Email are required' });
     }
 
-    const newUser = addUser({
+    const newUser = await addUser({
       name,
       email,
       role: role === 'admin' ? 'admin' : 'trader',
       tier
     });
 
-    res.json({ success: true, user: newUser, allUsers: getAllUsers() });
+    res.json({ success: true, user: newUser, allUsers: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create user/admin account', details: err.message });
   }
 });
 
-router.put('/users/:id/password', (req: Request, res: Response) => {
+router.put('/users/:id/password', async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
     const userId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -344,12 +344,12 @@ router.put('/users/:id/password', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 4 characters long' });
     }
 
-    const result = updateUserPassword(userId, newPassword, 'super_admin');
+    const result = await updateUserPassword(userId, newPassword, 'super_admin');
     if (!result.success) {
       return res.status(403).json({ error: result.error || 'Failed to update password' });
     }
 
-    res.json({ success: true, message: 'Password updated successfully by Super Admin', allUsers: getAllUsers() });
+    res.json({ success: true, message: 'Password updated successfully by Super Admin', allUsers: await getAllUsers() });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update password', details: err.message });
   }
@@ -577,7 +577,7 @@ router.get('/strategies/:id/admin-access', async (req: Request, res: Response) =
     try {
         const rawId = req.params.id;
         const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
-        const allUsers = getAllUsers();
+        const allUsers = await getAllUsers();
         const adminUsers = allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
         const allowedEmails = await queries.getAdminStrategyAccess(strategyId);
         

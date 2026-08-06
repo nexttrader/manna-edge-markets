@@ -2,13 +2,13 @@ import cron from 'node-cron';
 import { getAllUsers, pauseUserSubscription, resumeUserSubscription } from '../db/user-store.js';
 import { sendNotificationToUser, recordAuditLog } from '../db/user-management-store.js';
 
-export function checkSubscriptionAndTrialExpirations(): {
+export async function checkSubscriptionAndTrialExpirations(): Promise<{
   checkedCount: number;
   autoResumedCount: number;
   expiredTrialsCount: number;
   notificationsSentCount: number;
-} {
-  const users = getAllUsers();
+}> {
+  const users = await getAllUsers();
   const now = Date.now();
   let autoResumedCount = 0;
   let expiredTrialsCount = 0;
@@ -19,9 +19,9 @@ export function checkSubscriptionAndTrialExpirations(): {
     if (user.status === 'paused' && user.pauseResumeDate) {
       const resumeTime = new Date(user.pauseResumeDate).getTime();
       if (now >= resumeTime) {
-        resumeUserSubscription(user.id);
+        await resumeUserSubscription(user.id);
         autoResumedCount++;
-        sendNotificationToUser(
+        await sendNotificationToUser(
           user.id,
           'Subscription Resumed',
           'Your subscription pause period has completed. Access to Manna Edge Markets has been automatically restored.',
@@ -42,7 +42,7 @@ export function checkSubscriptionAndTrialExpirations(): {
         user.trialDaysRemaining = 0;
         user.status = 'expired';
         expiredTrialsCount++;
-        sendNotificationToUser(
+        await sendNotificationToUser(
           user.id,
           'VIP Trial Expired',
           'Your VIP trial pass for Manna Edge Markets has expired. Upgrade your plan to continue accessing live signals.',
@@ -50,7 +50,7 @@ export function checkSubscriptionAndTrialExpirations(): {
         );
         notificationsSentCount++;
       } else if (daysLeft === 7 || daysLeft === 3 || daysLeft === 1) {
-        sendNotificationToUser(
+        await sendNotificationToUser(
           user.id,
           `Trial Expiring in ${daysLeft} Day${daysLeft > 1 ? 's' : ''}`,
           `Your trial pass expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}. Secure your subscription to prevent signal access interruption.`,
@@ -69,7 +69,7 @@ export function checkSubscriptionAndTrialExpirations(): {
       if (remainingMs <= 0) {
         user.status = 'expired';
         user.subscriptionStatus = 'expired';
-        sendNotificationToUser(
+        await sendNotificationToUser(
           user.id,
           'Subscription Expired',
           'Your subscription to Manna Edge Markets has expired. Please renew to restore live market signal access.',
@@ -77,7 +77,7 @@ export function checkSubscriptionAndTrialExpirations(): {
         );
         notificationsSentCount++;
       } else if (daysLeft === 7 || daysLeft === 3 || daysLeft === 1) {
-        sendNotificationToUser(
+        await sendNotificationToUser(
           user.id,
           `Subscription Expiring in ${daysLeft} Day${daysLeft > 1 ? 's' : ''}`,
           `Your subscription will expire in ${daysLeft} day${daysLeft > 1 ? 's' : ''}. Renew today to stay ahead of market killzones.`,
@@ -89,7 +89,7 @@ export function checkSubscriptionAndTrialExpirations(): {
   }
 
   if (autoResumedCount > 0 || expiredTrialsCount > 0 || notificationsSentCount > 0) {
-    recordAuditLog({
+    await recordAuditLog({
       adminEmail: 'System Cron Scheduler',
       adminRole: 'super_admin',
       action: 'CRON_EXPIRATION_RUN',
@@ -108,10 +108,10 @@ export function checkSubscriptionAndTrialExpirations(): {
 export function startSubscriptionScheduler() {
   console.log('⏳ Starting Automated User Subscription & Trial Expiry Scheduler...');
   // Run daily at 00:00 midnight
-  cron.schedule('0 0 * * *', () => {
+  cron.schedule('0 0 * * *', async () => {
     try {
       console.log('⏰ Running daily User Subscription & Trial Expiry evaluation...');
-      const res = checkSubscriptionAndTrialExpirations();
+      const res = await checkSubscriptionAndTrialExpirations();
       console.log(`✅ Subscription Cron completed: Checked ${res.checkedCount} users, Auto-resumed ${res.autoResumedCount}, Notifications sent ${res.notificationsSentCount}`);
     } catch (e: any) {
       console.error('⚠️ Error running subscription cron:', e.message);
@@ -119,7 +119,11 @@ export function startSubscriptionScheduler() {
   });
 
   // Also run immediate pass on server start
-  setTimeout(() => {
-    checkSubscriptionAndTrialExpirations();
+  setTimeout(async () => {
+    try {
+      await checkSubscriptionAndTrialExpirations();
+    } catch (e: any) {
+      console.error('⚠️ Error on initial subscription check:', e.message);
+    }
   }, 5000);
 }

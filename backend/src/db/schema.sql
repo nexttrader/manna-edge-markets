@@ -179,3 +179,208 @@ CREATE TABLE IF NOT EXISTS admin_strategy_access (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_email, strategy_id)
 );
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT,
+    must_change_password INTEGER DEFAULT 0,
+    role TEXT DEFAULT 'trader',
+    tier TEXT DEFAULT 'free',
+    market_access TEXT,
+    status TEXT DEFAULT 'active',
+    subscription_status TEXT DEFAULT 'active',
+    subscription_start TEXT,
+    subscription_end TEXT,
+    billing_cycle TEXT,
+    auto_renew INTEGER DEFAULT 0,
+    pause_start_date TEXT,
+    pause_resume_date TEXT,
+    paused_remaining_days INTEGER,
+    created_at TEXT NOT NULL,
+    last_active TEXT,
+    preferred_market TEXT,
+    risk_limit TEXT,
+    signals_viewed INTEGER DEFAULT 0,
+    watchlist_count INTEGER DEFAULT 0,
+    deleted_at TEXT,
+    purge_at TEXT,
+    days_remaining INTEGER,
+    is_trial INTEGER DEFAULT 0,
+    trial_started_at TEXT,
+    trial_expires_at TEXT,
+    trial_days_remaining INTEGER,
+    trial_expired INTEGER DEFAULT 0,
+    trial_extended_count INTEGER DEFAULT 0,
+    custom_features TEXT
+);
+
+CREATE TABLE IF NOT EXISTS custom_trial_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    days INTEGER,
+    expiry_date TEXT,
+    tier TEXT,
+    strategy_access TEXT,
+    max_signals INTEGER,
+    allow_calculators INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    discount_type TEXT NOT NULL,
+    discount_value REAL NOT NULL,
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    max_redemptions INTEGER NOT NULL,
+    current_redemptions INTEGER DEFAULT 0,
+    per_user_limit INTEGER DEFAULT 1,
+    applicable_tiers TEXT,
+    status TEXT DEFAULT 'active',
+    created_by TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+    id TEXT PRIMARY KEY,
+    coupon_id TEXT NOT NULL,
+    coupon_code TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    discount_applied TEXT NOT NULL,
+    redeemed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_tag_mappings (
+    user_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    tier_assignment TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_group_mappings (
+    user_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notification_triggers (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    threshold_days INTEGER NOT NULL,
+    template_title TEXT NOT NULL,
+    template_body TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id TEXT PRIMARY KEY,
+    admin_email TEXT NOT NULL,
+    admin_role TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_user_id TEXT,
+    details_json TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS system_maintenance (
+    id TEXT PRIMARY KEY DEFAULT 'current',
+    enabled INTEGER DEFAULT 0,
+    message TEXT DEFAULT 'Manna is currently undergoing scheduled system maintenance.',
+    estimated_return_time TEXT DEFAULT 'Asia Session Today',
+    updated_at TEXT,
+    updated_by TEXT
+);
+
+INSERT INTO system_maintenance (id, enabled, message, estimated_return_time, updated_at)
+VALUES ('current', 0, 'Manna is currently undergoing scheduled system maintenance.', 'Asia Session Today', CURRENT_TIMESTAMP)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS system_signal_snapshots (
+    id TEXT PRIMARY KEY DEFAULT 'current',
+    snapshot_json TEXT NOT NULL,
+    count INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    requested_tier TEXT,
+    current_tier TEXT,
+    type TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    status TEXT NOT NULL,
+    claimed_by TEXT,
+    claimed_by_name TEXT,
+    claimed_at TEXT,
+    transfer_to_email TEXT,
+    transfer_to_name TEXT,
+    transfer_requested_at TEXT,
+    transfer_note TEXT,
+    invoice_sent INTEGER DEFAULT 0,
+    invoice_sent_at TEXT,
+    invoice_details TEXT,
+    resolved_by TEXT,
+    resolved_by_name TEXT,
+    resolved_at TEXT,
+    resolution_note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ticket_messages (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    at TEXT NOT NULL,
+    from_email TEXT NOT NULL,
+    from_name TEXT NOT NULL,
+    from_role TEXT NOT NULL,
+    body TEXT NOT NULL,
+    type TEXT NOT NULL,
+    invoice_details TEXT,
+    read_by_user INTEGER DEFAULT 0,
+    read_by_admin INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ticket_timeline (
+    ticket_id TEXT NOT NULL,
+    at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    actor_name TEXT NOT NULL,
+    event TEXT NOT NULL,
+    note TEXT
+);
