@@ -1,8 +1,9 @@
+process.env.NODE_ENV = 'test';
 import assert from 'assert';
 import path from 'path';
 import fs from 'fs';
 import { initializeDatabase, getDb, queryDb } from '../db/database';
-import { mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
+import { mapTimestampToKillzone, getCurrentKillzone, isForexMarketOpen, isFuturesMarketOpen, getForexReopenTime, getFuturesReopenTime } from '../scheduler/killzone-mapper';
 import { computeATR } from '../discovery/atr';
 import { computeConvictionScore, computeRMultiple } from '../discovery/scoring';
 import { revalidateSetup } from '../publish-gate/revalidation';
@@ -282,7 +283,46 @@ async function runAllTests() {
 
     console.log('✅ TEST 12: Mid-Killzone Booster Rescan Rule (< 2 Per Asset Class Rescans Missing Assets, >= 2 Skips Rescan)');
 
-    console.log('\n🎉 ALL 12 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 13. Forex & Futures Market Open/Closed Check Tests
+    const fri1659 = new Date('2026-08-07T16:59:00-04:00'); // Fri 16:59 ET -> open
+    const fri1701 = new Date('2026-08-07T17:01:00-04:00'); // Fri 17:01 ET -> closed
+    const sat1200 = new Date('2026-08-08T12:00:00-04:00'); // Sat 12:00 ET -> closed
+    const sun1659 = new Date('2026-08-09T16:59:00-04:00'); // Sun 16:59 ET -> closed
+    const sun1701 = new Date('2026-08-09T17:01:00-04:00'); // Sun 17:01 ET -> Forex open, Futures closed
+    const sun1801 = new Date('2026-08-09T18:01:00-04:00'); // Sun 18:01 ET -> both open
+    const mon1730 = new Date('2026-08-10T17:30:00-04:00'); // Mon 17:30 ET -> Forex open, Futures daily halt (closed)
+
+    assert.strictEqual(isForexMarketOpen(fri1659), true, 'Forex should be open on Fri 16:59 ET');
+    assert.strictEqual(isForexMarketOpen(fri1701), false, 'Forex should be closed on Fri 17:01 ET');
+    assert.strictEqual(isForexMarketOpen(sat1200), false, 'Forex should be closed on Sat 12:00 ET');
+    assert.strictEqual(isForexMarketOpen(sun1659), false, 'Forex should be closed on Sun 16:59 ET');
+    assert.strictEqual(isForexMarketOpen(sun1701), true, 'Forex should be open on Sun 17:01 ET');
+    assert.strictEqual(isForexMarketOpen(sun1801), true, 'Forex should be open on Sun 18:01 ET');
+    assert.strictEqual(isForexMarketOpen(mon1730), true, 'Forex should be open on Mon 17:30 ET');
+
+    assert.strictEqual(isFuturesMarketOpen(fri1659), true, 'Futures should be open on Fri 16:59 ET');
+    assert.strictEqual(isFuturesMarketOpen(fri1701), false, 'Futures should be closed on Fri 17:01 ET');
+    assert.strictEqual(isFuturesMarketOpen(sat1200), false, 'Futures should be closed on Sat 12:00 ET');
+    assert.strictEqual(isFuturesMarketOpen(sun1659), false, 'Futures should be closed on Sun 16:59 ET');
+    assert.strictEqual(isFuturesMarketOpen(sun1701), false, 'Futures should be closed on Sun 17:01 ET');
+    assert.strictEqual(isFuturesMarketOpen(sun1801), true, 'Futures should be open on Sun 18:01 ET');
+    assert.strictEqual(isFuturesMarketOpen(mon1730), false, 'Futures should be closed on Mon 17:30 ET (daily halt)');
+
+    // Verify Reopen Times
+    const forexReopen = getForexReopenTime(sat1200);
+    const futuresReopen = getFuturesReopenTime(sat1200);
+    const futuresDailyHaltReopen = getFuturesReopenTime(mon1730);
+
+    const formatOpts: Intl.DateTimeFormatOptions = { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', hour12: false };
+    const fmt = new Intl.DateTimeFormat('en-US', formatOpts);
+    
+    assert.strictEqual(fmt.format(forexReopen).replace(/,/g, '').replace(/\s+/g, ' ').trim(), 'Sun 17', 'Forex should reopen Sunday 17:00 ET');
+    assert.strictEqual(fmt.format(futuresReopen).replace(/,/g, '').replace(/\s+/g, ' ').trim(), 'Sun 18', 'Futures should reopen Sunday 18:00 ET');
+    assert.strictEqual(fmt.format(futuresDailyHaltReopen).replace(/,/g, '').replace(/\s+/g, ' ').trim(), 'Mon 18', 'Futures daily halt should reopen Monday 18:00 ET');
+
+    console.log('✅ TEST 13: Forex & Futures Market Open/Closed Checks (Weekend and Daily Halts)');
+
+    console.log('\n🎉 ALL 13 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

@@ -167,4 +167,9 @@ export interface SystemStatus {
   lastFailureAt?: string;
   resetsAt?: string;
   timeRemainingMs?: number;
+  isMarketOpen?: boolean;
+  isForexMarketOpen?: boolean;
+  isFuturesMarketOpen?: boolean;
+  forexReopenTime?: string;
+  futuresReopenTime?: string;
 }

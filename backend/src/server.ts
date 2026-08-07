@@ -7,7 +7,7 @@ import { initializeDatabase } from './db/database';
 import { saveSignalsSnapshot } from './db/signal-snapshot-restore';
 import * as queries from './db/queries';
 import { startScheduler, stopScheduler } from './scheduler/scheduler';
-import { getCurrentKillzone, getNextKillzoneBoundary } from './scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary, isForexMarketOpen, isFuturesMarketOpen } from './scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from './discovery/unified-discovery';
 import { executePublishRun } from './publish-gate/publish-gate';
 import { lifecycleSync } from './lifecycle/lifecycle-sync';
@@ -117,10 +117,28 @@ async function startServer() {
             async (kzInfo) => {
                 logger.info({ killzone: kzInfo.killzone }, 'Killzone start boundary triggered');
                 try {
+                    const now = new Date();
+                    const isForexOpen = isForexMarketOpen(now);
+                    const isFuturesOpen = isFuturesMarketOpen(now);
+                    
+                    let scope: 'both' | 'futures' | 'forex' | null = 'both';
+                    if (!isForexOpen && !isFuturesOpen) {
+                        scope = null;
+                    } else if (isForexOpen && !isFuturesOpen) {
+                        scope = 'forex';
+                    } else if (!isForexOpen && isFuturesOpen) {
+                        scope = 'futures';
+                    }
+                    
+                    if (!scope) {
+                        logger.info('Skipping Killzone boundary scan: Both Forex and Futures markets are closed.');
+                        return;
+                    }
+
                     const runId = `run_${Date.now()}`;
-                    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both');
+                    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope);
                     const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
-                    logger.info({ result }, 'Killzone boundary publish run completed');
+                    logger.info({ result, scope }, 'Killzone boundary publish run completed');
                 } catch (err) {
                     logger.error({ err }, 'Killzone boundary handler failed');
                 }

@@ -4,100 +4,120 @@ import { API_BASE } from '../config';
 
 export const MarketClosedBanner: React.FC = () => {
   const [isClosed, setIsClosed] = useState<boolean>(false);
-  const [countdownStr, setCountdownStr] = useState<string>('');
+  const [forexClosed, setForexClosed] = useState<boolean>(false);
+  const [futuresClosed, setFuturesClosed] = useState<boolean>(false);
+  const [forexReopen, setForexReopen] = useState<string>('');
+  const [futuresReopen, setFuturesReopen] = useState<string>('');
+  const [forexCountdown, setForexCountdown] = useState<string>('');
+  const [futuresCountdown, setFuturesCountdown] = useState<string>('');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
+  // Helper to format remaining time
+  const formatCountdown = (targetTimeStr: string) => {
+    if (!targetTimeStr) return '';
+    const target = new Date(targetTimeStr).getTime();
+    const now = Date.now();
+    const diff = target - now;
+    if (diff <= 0) return 'Opening soon...';
+    
+    const totalSecs = Math.floor(diff / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hrs = Math.floor((totalSecs % 86400) / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    parts.push(`${String(hrs).padStart(2, '0')}h`);
+    parts.push(`${String(mins).padStart(2, '0')}m`);
+    parts.push(`${String(secs).padStart(2, '0')}s`);
+    return parts.join(' ');
+  };
+
   useEffect(() => {
-    const checkMarketStatus = async () => {
-      const now = new Date();
-
-      // Check client ET time
-      const formatOptions: Intl.DateTimeFormatOptions = {
-        timeZone: 'America/New_York',
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      };
-      const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
-      const parts = formatter.formatToParts(now);
-      const weekday = parts.find(p => p.type === 'weekday')?.value;
-      const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
-      const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
-      const second = parseInt(parts.find(p => p.type === 'second')?.value || '0', 10);
-
-      // Market close: Friday 17:00 ET to Sunday 17:00 ET
-      let closed = false;
-      if (weekday === 'Fri' && hour >= 17) closed = true;
-      else if (weekday === 'Sat') closed = true;
-      else if (weekday === 'Sun' && hour < 17) closed = true;
-
-      // Try syncing with backend API if available
+    const fetchStatus = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/admin/system-status`);
         if (res.ok) {
           const data = await res.json();
-          if (typeof data.isMarketOpen === 'boolean') {
-            closed = !data.isMarketOpen;
-          }
-        }
-      } catch {}
-
-      setIsClosed(closed);
-
-      if (closed) {
-        // Calculate remaining time until next Sunday 17:00 ET
-        // Find next Sunday 17:00 ET target timestamp
-        // For simplicity: calculate hours remaining to Sunday 17:00 ET
-        let daysUntilSunday = 0;
-        if (weekday === 'Fri') daysUntilSunday = 2;
-        else if (weekday === 'Sat') daysUntilSunday = 1;
-        else if (weekday === 'Sun') daysUntilSunday = 0;
-
-        const targetHour = 17;
-        let totalSecondsRemaining = 0;
-
-        if (weekday === 'Sun') {
-          const currentTotalSec = hour * 3600 + minute * 60 + second;
-          const targetTotalSec = targetHour * 3600;
-          totalSecondsRemaining = Math.max(0, targetTotalSec - currentTotalSec);
-        } else {
-          const hoursLeftToday = 24 - hour - 1;
-          const minutesLeftToday = 60 - minute - 1;
-          const secondsLeftToday = 60 - second;
-          const todaySecRemaining = hoursLeftToday * 3600 + minutesLeftToday * 60 + secondsLeftToday;
+          // Fallback checks
+          const fxClosed = typeof data.isForexMarketOpen === 'boolean' ? !data.isForexMarketOpen : false;
+          const futClosed = typeof data.isFuturesMarketOpen === 'boolean' ? !data.isFuturesMarketOpen : false;
           
-          const interimDays = Math.max(0, daysUntilSunday - 1);
-          const interimSec = interimDays * 24 * 3600;
-
-          const sundaySecBefore17 = 17 * 3600;
-          totalSecondsRemaining = todaySecRemaining + interimSec + sundaySecBefore17;
+          setForexClosed(fxClosed);
+          setFuturesClosed(futClosed);
+          setIsClosed(fxClosed || futClosed);
+          
+          if (data.forexReopenTime) setForexReopen(data.forexReopenTime);
+          if (data.futuresReopenTime) setFuturesReopen(data.futuresReopenTime);
         }
-
-        const hrs = Math.floor(totalSecondsRemaining / 3600);
-        const mins = Math.floor((totalSecondsRemaining % 3600) / 60);
-        const secs = totalSecondsRemaining % 60;
-
-        const formatted = `${String(hrs).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
-        setCountdownStr(formatted);
+      } catch (err) {
+        console.error('Failed to sync market status with backend API:', err);
       }
     };
 
-    checkMarketStatus();
-    const interval = setInterval(checkMarketStatus, 1000);
-    return () => clearInterval(interval);
+    fetchStatus();
+    // Poll API status every 10 seconds
+    const apiInterval = setInterval(fetchStatus, 10000);
+
+    return () => clearInterval(apiInterval);
   }, []);
+
+  // Update countdown timers every second
+  useEffect(() => {
+    if (!isClosed) return;
+
+    const updateCountdowns = () => {
+      if (forexClosed && forexReopen) {
+        setForexCountdown(formatCountdown(forexReopen));
+      }
+      if (futuresClosed && futuresReopen) {
+        setFuturesCountdown(formatCountdown(futuresReopen));
+      }
+    };
+
+    updateCountdowns();
+    const secInterval = setInterval(updateCountdowns, 1000);
+
+    return () => clearInterval(secInterval);
+  }, [isClosed, forexClosed, futuresClosed, forexReopen, futuresReopen]);
+
+  // Format reopen date string nicely for label
+  const formatReopenLabel = (isoStr: string) => {
+    if (!isoStr) return '';
+    try {
+      const date = new Date(isoStr);
+      return date.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+    } catch {
+      return '';
+    }
+  };
 
   if (!isClosed) return null;
 
   if (isCollapsed) {
     return (
       <div className="market-closed-bar-collapsed font-mono" onClick={() => setIsCollapsed(false)}>
-        <span className="market-closed-pulse-dot"></span>
-        <strong>🔴 MARKETS CLOSED (WEEKEND PAUSE)</strong>
-        <span className="market-closed-timer-mini">Reopens in {countdownStr}</span>
-        <button type="button" className="market-closed-expand-btn">Expand ↗</button>
+        <div className="collapsed-left">
+          <span className="market-closed-pulse-dot"></span>
+          <strong>⚠️ MARKET TRADING PAUSE ACTIVE</strong>
+          <span className="market-collapsed-status-badges">
+            Forex: <span className={forexClosed ? "status-tag-closed" : "status-tag-open"}>{forexClosed ? "CLOSED" : "OPEN"}</span>
+            {" | "}
+            Futures: <span className={futuresClosed ? "status-tag-closed" : "status-tag-open"}>{futuresClosed ? "CLOSED" : "OPEN"}</span>
+          </span>
+        </div>
+        <div className="collapsed-right">
+          {forexClosed && <span className="mini-timer">Forex reopens in {forexCountdown}</span>}
+          {futuresClosed && <span className="mini-timer">Futures reopens in {futuresCountdown}</span>}
+          <button type="button" className="market-closed-expand-btn">Expand ↗</button>
+        </div>
       </div>
     );
   }
@@ -108,7 +128,7 @@ export const MarketClosedBanner: React.FC = () => {
         <div className="market-closed-header">
           <div className="market-closed-badge">
             <span className="market-closed-pulse-dot"></span>
-            <span>🔴 GLOBAL MARKETS PAUSED</span>
+            <span>🔴 MARKET PAUSE DETECTED</span>
           </div>
           <button 
             type="button" 
@@ -122,16 +142,56 @@ export const MarketClosedBanner: React.FC = () => {
 
         <div className="market-closed-body">
           <div className="market-closed-title">
-            Futures &amp; Forex Markets Closed for Weekend Pause
+            Financial Exchange Operational Hours Status
           </div>
           <p className="market-closed-subtitle">
-            Global exchanges (CME &amp; Forex) are currently closed. Live market scanning and new signal discovery are paused until trading resumes on <strong>Sunday at 17:00 ET (5:00 PM ET)</strong>.
+            Discovery scans are automatically blocked for closed markets to align with real-world trading times. Existing signals remain active.
           </p>
 
-          <div className="market-closed-timer-box">
-            <span className="timer-label">⏱️ MARKET REOPEN COUNTDOWN:</span>
-            <span className="timer-value">{countdownStr || 'Calculating...'}</span>
-            <span className="timer-subtext">(Sunday 17:00 ET Globex / Asia Open)</span>
+          <div className="market-cards-container">
+            {/* Forex Market Card */}
+            <div className={`market-status-card ${forexClosed ? 'card-closed' : 'card-open'}`}>
+              <div className="market-card-header">
+                <span className="market-card-title">Forex Market (24/5)</span>
+                <span className={`status-pill ${forexClosed ? 'pill-closed' : 'pill-open'}`}>
+                  {forexClosed ? 'CLOSED' : 'OPEN'}
+                </span>
+              </div>
+              {forexClosed ? (
+                <div className="market-card-timer">
+                  <span className="card-timer-label">⏱️ REOPENS IN:</span>
+                  <span className="card-timer-value">{forexCountdown || 'Calculating...'}</span>
+                  <span className="card-timer-subtext">Resumes: {formatReopenLabel(forexReopen)}</span>
+                </div>
+              ) : (
+                <div className="market-card-timer live-running">
+                  <span className="running-dot"></span>
+                  <span className="running-text">Scanning & discovery active</span>
+                </div>
+              )}
+            </div>
+
+            {/* Futures Market Card */}
+            <div className={`market-status-card ${futuresClosed ? 'card-closed' : 'card-open'}`}>
+              <div className="market-card-header">
+                <span className="market-card-title">CME Futures Market</span>
+                <span className={`status-pill ${futuresClosed ? 'pill-closed' : 'pill-open'}`}>
+                  {futuresClosed ? 'CLOSED' : 'OPEN'}
+                </span>
+              </div>
+              {futuresClosed ? (
+                <div className="market-card-timer">
+                  <span className="card-timer-label">⏱️ REOPENS IN:</span>
+                  <span className="card-timer-value">{futuresCountdown || 'Calculating...'}</span>
+                  <span className="card-timer-subtext">Resumes: {formatReopenLabel(futuresReopen)}</span>
+                </div>
+              ) : (
+                <div className="market-card-timer live-running">
+                  <span className="running-dot"></span>
+                  <span className="running-text">Scanning & discovery active</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

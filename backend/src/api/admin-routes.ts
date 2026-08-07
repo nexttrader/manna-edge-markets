@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { metrics } from '../telemetry/metrics';
-import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen, isForexMarketOpen, isFuturesMarketOpen, getForexReopenTime, getFuturesReopenTime } from '../scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
@@ -396,10 +396,18 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Single asset rescan is only permitted for pending (awaiting_entry) signals. Current state: ${stateStr}` });
     }
 
+    const now = new Date();
+    if (process.env.NODE_ENV !== 'test') {
+      const isForex = targetMarket.toLowerCase() === 'forex';
+      const isClosed = isForex ? !isForexMarketOpen(now) : !isFuturesMarketOpen(now);
+      if (isClosed) {
+        return res.status(400).json({ error: `Cannot rescan: The ${isForex ? 'Forex' : 'Futures'} market is currently closed.` });
+      }
+    }
+
     isSingleRescanActive = true;
 
     // Run unified discovery ONLY for this specific instrument
-    const now = new Date();
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
       killzone: 'ny_am' as const,
@@ -546,6 +554,28 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
   try {
     const { mode = 'live', market = 'both', strategyId } = req.body || {};
     const now = new Date();
+
+    if (process.env.NODE_ENV !== 'test') {
+      const scope = (market.toLowerCase() as 'both' | 'futures' | 'forex');
+      const isForexOpen = isForexMarketOpen(now);
+      const isFuturesOpen = isFuturesMarketOpen(now);
+      if (scope === 'forex' && !isForexOpen) {
+        return res.status(400).json({ error: 'Cannot scan: The Forex market is currently closed.' });
+      }
+      if (scope === 'futures' && !isFuturesOpen) {
+        return res.status(400).json({ error: 'Cannot scan: The Futures market is currently closed.' });
+      }
+      if (scope === 'both') {
+        if (!isForexOpen && !isFuturesOpen) {
+          return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
+        } else if (!isForexOpen) {
+          return res.status(400).json({ error: 'Cannot scan: The Forex market is currently closed.' });
+        } else if (!isFuturesOpen) {
+          return res.status(400).json({ error: 'Cannot scan: The Futures market is currently closed.' });
+        }
+      }
+    }
+
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
       killzone: 'ny_am' as const,
@@ -618,6 +648,10 @@ router.get('/system-status', async (_req: Request, res: Response) => {
     res.json({
       status: cbStatus.tripped ? 'tripped' : 'ok',
       isMarketOpen: isMarketOpen(now),
+      isForexMarketOpen: isForexMarketOpen(now),
+      isFuturesMarketOpen: isFuturesMarketOpen(now),
+      forexReopenTime: getForexReopenTime(now).toISOString(),
+      futuresReopenTime: getFuturesReopenTime(now).toISOString(),
       circuitBreaker: cbStatus,
       metrics: metrics.getAll(),
       currentKillzone: getCurrentKillzone(now),

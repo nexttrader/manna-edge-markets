@@ -558,11 +558,23 @@ router.post('/sentinel/tuning', async (req: Request, res: Response) => {
 
 router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     try {
-        const { getCurrentKillzone } = await import('../scheduler/killzone-mapper');
+        const { getCurrentKillzone, isForexMarketOpen, isFuturesMarketOpen } = await import('../scheduler/killzone-mapper');
         const { discoverUnifiedSetups } = await import('../discovery/unified-discovery');
         const { executePublishRun } = await import('../publish-gate/publish-gate');
         
         const now = new Date();
+        if (process.env.NODE_ENV !== 'test') {
+            const isForexOpen = isForexMarketOpen(now);
+            const isFuturesOpen = isFuturesMarketOpen(now);
+            if (!isForexOpen && !isFuturesOpen) {
+                return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
+            } else if (!isForexOpen) {
+                return res.status(400).json({ error: 'Cannot scan: The Forex market is currently closed.' });
+            } else if (!isFuturesOpen) {
+                return res.status(400).json({ error: 'Cannot scan: The Futures market is currently closed.' });
+            }
+        }
+
         const kzInfo = getCurrentKillzone(now);
         const runId = `sentinel_manual_${Date.now()}`;
         const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, 'both', [], 'sentinel_v2');

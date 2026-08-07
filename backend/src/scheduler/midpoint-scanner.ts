@@ -3,6 +3,7 @@ import * as queries from '../db/queries';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun } from '../publish-gate/publish-gate';
 import { createLogger } from '../telemetry/logger';
+import { isForexMarketOpen, isFuturesMarketOpen } from './killzone-mapper';
 
 const logger = createLogger('midpoint-scanner');
 
@@ -19,17 +20,21 @@ export async function processKillzoneMidpointScan(
     const futuresSetups = await queries.getActiveSetups('futures');
     const forexSetups = await queries.getActiveSetups('forex');
 
+    const now = new Date();
+    const isForexOpen = isForexMarketOpen(now);
+    const isFuturesOpen = isFuturesMarketOpen(now);
+
     const futuresCount = futuresSetups.length;
     const forexCount = forexSetups.length;
 
-    // Minimum requirement: 2 assets per asset class on the dashboard
-    const futuresNeedsScan = futuresCount < 2;
-    const forexNeedsScan = forexCount < 2;
+    // Minimum requirement: 2 assets per asset class on the dashboard (only for open markets)
+    const futuresNeedsScan = isFuturesOpen && futuresCount < 2;
+    const forexNeedsScan = isForexOpen && forexCount < 2;
 
     if (!futuresNeedsScan && !forexNeedsScan) {
         logger.info(
-            { futuresCount, forexCount },
-            'Killzone midpoint check: Both asset classes have >= 2 active setups on dash. Skipping rescan.'
+            { futuresCount, forexCount, isFuturesOpen, isForexOpen },
+            'Killzone midpoint check: Both asset classes have >= 2 active setups or their markets are closed. Skipping rescan.'
         );
         return { scanned: false, futuresCount, forexCount };
     }

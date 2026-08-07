@@ -141,7 +141,7 @@ export function getKillzoneBoundariesForDate(date: Date): KillzoneInfo[] {
     return boundaries;
 }
 
-export function isMarketOpen(timestamp: Date = new Date()): boolean {
+export function isForexMarketOpen(timestamp: Date = new Date()): boolean {
     const formatOptions: Intl.DateTimeFormatOptions = { 
         timeZone: 'America/New_York', 
         weekday: 'short',
@@ -153,11 +153,66 @@ export function isMarketOpen(timestamp: Date = new Date()): boolean {
     const weekday = parts.find(p => p.type === 'weekday')?.value;
     const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
 
-    // Global Forex & CME Futures Market Close:
-    // Closes Friday 17:00 ET (5 PM) and re-opens Sunday 17:00 ET (5 PM)
+    // Global Forex: Closes Friday 17:00 ET (5 PM) and re-opens Sunday 17:00 ET (5 PM)
     if (weekday === 'Fri' && hour >= 17) return false;
     if (weekday === 'Sat') return false;
     if (weekday === 'Sun' && hour < 17) return false;
 
     return true;
 }
+
+export function isFuturesMarketOpen(timestamp: Date = new Date()): boolean {
+    const formatOptions: Intl.DateTimeFormatOptions = { 
+        timeZone: 'America/New_York', 
+        weekday: 'short',
+        hour: '2-digit', 
+        hour12: false 
+    };
+    const formatter = new Intl.DateTimeFormat('en-US', formatOptions);
+    const parts = formatter.formatToParts(timestamp);
+    const weekday = parts.find(p => p.type === 'weekday')?.value;
+    const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+
+    // CME Futures: Closes Friday 17:00 ET (5 PM) and re-opens Sunday 18:00 ET (6 PM)
+    if (weekday === 'Fri' && hour >= 17) return false;
+    if (weekday === 'Sat') return false;
+    if (weekday === 'Sun' && hour < 18) return false;
+
+    // Daily maintenance halt: Monday through Thursday 17:00 to 18:00 ET
+    if ((weekday === 'Mon' || weekday === 'Tue' || weekday === 'Wed' || weekday === 'Thu') && hour === 17) {
+        return false;
+    }
+
+    return true;
+}
+
+export function isMarketOpen(timestamp: Date = new Date()): boolean {
+    return isForexMarketOpen(timestamp);
+}
+
+export function getForexReopenTime(now: Date = new Date()): Date {
+    const temp = new Date(now.getTime());
+    temp.setMinutes(0, 0, 0);
+    temp.setMilliseconds(0);
+    for (let i = 0; i < 200; i++) {
+        temp.setHours(temp.getHours() + 1);
+        if (isForexMarketOpen(temp)) {
+            return temp;
+        }
+    }
+    return temp;
+}
+
+export function getFuturesReopenTime(now: Date = new Date()): Date {
+    const temp = new Date(now.getTime());
+    temp.setMinutes(0, 0, 0);
+    temp.setMilliseconds(0);
+    for (let i = 0; i < 200; i++) {
+        temp.setHours(temp.getHours() + 1);
+        if (isFuturesMarketOpen(temp)) {
+            return temp;
+        }
+    }
+    return temp;
+}
+
