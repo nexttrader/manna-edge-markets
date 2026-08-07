@@ -129,6 +129,13 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   );
 
   const getOrderType = (): string => {
+    // Check if triggered immediately as a Market Order (within 60s of discovery)
+    if (setup.created_at && setup.entry_triggered_at) {
+      const diffMs = new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime();
+      if (diffMs <= 60000) {
+        return 'MARKET ORDER';
+      }
+    }
     if (setup.order_type) return setup.order_type.toUpperCase();
     if (setup.metadata) {
       try {
@@ -136,13 +143,6 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         if (meta.order_type) return meta.order_type.toUpperCase();
         if (meta.model_type === 'breakout') return isLong ? 'BUY STOP' : 'SELL STOP';
       } catch {}
-    }
-    // Check if triggered immediately as a Market Order (within 60s of discovery)
-    if (setup.created_at && setup.entry_triggered_at) {
-      const diffMs = new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime();
-      if (diffMs <= 60000) {
-        return 'MARKET ORDER';
-      }
     }
     return isLong ? 'BUY LIMIT' : 'SELL LIMIT';
   };

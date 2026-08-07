@@ -142,6 +142,10 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const [showGroupModal, setShowGroupModal] = useState<boolean>(false);
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
 
+  // Search & Control States
+  const [controlSearchQuery, setControlSearchQuery] = useState<string>('');
+  const [showControlSearchResults, setShowControlSearchResults] = useState<boolean>(false);
+
   // Forms
   const [newUserForm, setNewUserForm] = useState({
     name: '',
@@ -327,6 +331,26 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
         fetchAllData();
       } else {
         showNotification(data.error, true);
+      }
+    } catch (e: any) {
+      showNotification(e.message, true);
+    }
+  };
+
+  const handleSaveProfile = async (userId: string, role: string, tier: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}`, {
+        method: 'PUT',
+        headers: apiHeaders,
+        body: JSON.stringify({ role, tier })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Profile settings updated successfully for ${data.user.name}`);
+        setSelectedUser(data.user);
+        fetchAllData();
+      } else {
+        showNotification(data.error || 'Failed to update profile settings', true);
       }
     } catch (e: any) {
       showNotification(e.message, true);
@@ -804,7 +828,16 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                           >
                             🕵️ Impersonate
                           </button>
-                          <button className="ums-btn-secondary" onClick={() => setSelectedUser(user)}>
+                          <button
+                            className="ums-btn-secondary"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setActiveTab('subscriptions');
+                              setCustomStartDate(user.subscriptionStart ? user.subscriptionStart.split('T')[0] : '');
+                              setCustomEndDate(user.subscriptionEnd ? user.subscriptionEnd.split('T')[0] : '');
+                              setAutoResumeDate(user.pauseResumeDate ? user.pauseResumeDate.split('T')[0] : '');
+                            }}
+                          >
                             ⚙️ Manage User
                           </button>
                         </div>
@@ -822,6 +855,332 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
       {activeTab === 'subscriptions' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <h3>⚡ Subscription Pause, Resumption & Trial Control Center</h3>
+
+          {/* SEARCH & SELECT TRADER */}
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.8)',
+            border: '1px solid rgba(255, 215, 0, 0.3)',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 0 25px rgba(255, 215, 0, 0.05)'
+          }}>
+            <h4 style={{ margin: 0, color: '#ffd700', fontSize: '1.05rem', fontWeight: 900, marginBottom: '8px' }}>
+              🔍 SEARCH & SELECT TRADER TO MANAGE
+            </h4>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '12px' }}>
+              Search for a user by name or email address to manage their role, tier, custom dates, freeze options, or extend their trial access.
+            </span>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Type name or email address to search..."
+                value={controlSearchQuery}
+                onChange={e => {
+                  setControlSearchQuery(e.target.value);
+                  setShowControlSearchResults(true);
+                }}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.88rem' }}
+              />
+              {showControlSearchResults && controlSearchQuery.trim() && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: '6px',
+                  marginTop: '4px',
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  zIndex: 10,
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
+                }}>
+                  {users
+                    .filter(u => u.name.toLowerCase().includes(controlSearchQuery.toLowerCase()) || u.email.toLowerCase().includes(controlSearchQuery.toLowerCase()))
+                    .slice(0, 8)
+                    .map(u => (
+                      <div
+                        key={u.id}
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setControlSearchQuery('');
+                          setShowControlSearchResults(false);
+                          setCustomStartDate(u.subscriptionStart ? u.subscriptionStart.split('T')[0] : '');
+                          setCustomEndDate(u.subscriptionEnd ? u.subscriptionEnd.split('T')[0] : '');
+                          setAutoResumeDate(u.pauseResumeDate ? u.pauseResumeDate.split('T')[0] : '');
+                          setCtSelectedUserIds([u.id]);
+                        }}
+                        style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem', color: '#ccc' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <strong>{u.name}</strong> · {u.email} ({u.role} · {u.tier})
+                      </div>
+                    ))}
+                  {users.filter(u => u.name.toLowerCase().includes(controlSearchQuery.toLowerCase()) || u.email.toLowerCase().includes(controlSearchQuery.toLowerCase())).length === 0 && (
+                    <div style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#64748b' }}>No matching traders found</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* INLINE USER PROFILE EDITOR */}
+          {selectedUser && (
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid rgba(255, 215, 0, 0.4)',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 0 30px rgba(255, 215, 0, 0.08)',
+              color: '#fff'
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px', marginBottom: '20px' }}>
+                <h4 style={{ margin: 0, color: '#ffd700', fontSize: '1.25rem', fontWeight: 900 }}>
+                  ⚙️ MANAGE TRADER PROFILE: {selectedUser.name}
+                </h4>
+                <button
+                  onClick={() => {
+                    setSelectedUser(null);
+                    setCtSelectedUserIds([]);
+                  }}
+                  style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#f87171', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700 }}
+                >
+                  Clear Selection ✕
+                </button>
+              </div>
+
+              {/* Multi-Column Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                
+                {/* Column 1: Profile Overview */}
+                <div style={{ background: 'rgba(30,41,59,0.3)', padding: '18px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h5 style={{ margin: 0, fontSize: '0.9rem', color: '#38bdf8', fontWeight: 800 }}>👤 Account Information</h5>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #ffd700, #c084fc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 900, color: '#090314' }}>
+                      {selectedUser.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem' }}>{selectedUser.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{selectedUser.email}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', marginTop: '10px' }}>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Account Status:</span>{' '}
+                      <span className={`status-pill ${selectedUser.status === 'active' ? 'active' : selectedUser.status === 'paused' ? 'paused' : 'expired'}`} style={{ display: 'inline-block', marginLeft: '4px' }}>
+                        {selectedUser.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Role:</span>{' '}
+                      <span className={`status-pill ${selectedUser.role === 'super_admin' ? 'expired' : selectedUser.role === 'admin' ? 'active' : 'trialing'}`} style={{ display: 'inline-block', marginLeft: '4px' }}>
+                        {selectedUser.role}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Access Tier:</span>{' '}
+                      <span style={{ color: '#38bdf8', fontWeight: 700, marginLeft: '4px' }}>{selectedUser.tier}</span>
+                    </div>
+                    {selectedUser.isTrial && (
+                      <div style={{ background: 'rgba(255, 215, 0, 0.08)', border: '1px solid rgba(255,215,0,0.15)', padding: '8px 12px', borderRadius: '6px', marginTop: '8px' }}>
+                        <div style={{ color: '#ffd700', fontSize: '0.78rem', fontWeight: 800 }}>⭐ Trial Active:</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, marginTop: '2px' }}>
+                          Expires: {selectedUser.trialExpiresAt ? new Date(selectedUser.trialExpiresAt).toLocaleString() : 'N/A'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ums-btn-primary"
+                    onClick={() => handleImpersonateUser(selectedUser)}
+                    style={{
+                      background: 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)',
+                      color: '#fff',
+                      fontWeight: 900,
+                      width: '100%',
+                      marginTop: 'auto',
+                      padding: '10px',
+                      boxShadow: '0 0 15px rgba(2, 132, 199, 0.4)',
+                      cursor: 'pointer',
+                      border: 'none',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    🕵️ IMPERSONATE TRADER ACCOUNT
+                  </button>
+                </div>
+
+                {/* Column 2: Settings Forms */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Form A: General Role/Tier settings */}
+                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#c084fc', fontWeight: 800 }}>⚡ General Settings</h5>
+                    
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Role</label>
+                        <select
+                          value={selectedUser.role}
+                          onChange={e => setSelectedUser({ ...selectedUser, role: e.target.value as any })}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                        >
+                          <option value="trader">Trader</option>
+                          <option value="admin">Admin</option>
+                          {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                        </select>
+                      </div>
+
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Tier</label>
+                        <select
+                          value={selectedUser.tier}
+                          onChange={e => setSelectedUser({ ...selectedUser, tier: e.target.value })}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                        >
+                          <option value="futures_forex">Futures &amp; Forex</option>
+                          <option value="forex_only">Forex Only</option>
+                          <option value="free">Free</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      className="ums-btn-primary"
+                      onClick={() => handleSaveProfile(selectedUser.id, selectedUser.role, selectedUser.tier)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: 'none', background: '#3b82f6', color: '#fff' }}
+                    >
+                      💾 Save Role &amp; Tier Access Settings
+                    </button>
+                  </div>
+
+                  {/* Form B: Custom Dates */}
+                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#ffd700', fontWeight: 800 }}>📅 Custom Subscription Dates</h5>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Start Date</label>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={e => setCustomStartDate(e.target.value)}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>End Date</label>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={e => setCustomEndDate(e.target.value)}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      className="ums-btn-secondary"
+                      onClick={() => handleCustomDates(selectedUser.id)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                    >
+                      💾 Save Custom Subscription Dates
+                    </button>
+                  </div>
+
+                </div>
+
+                {/* Column 3: Pause/Resume, Coupons, Extensions */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Freeze / Pause */}
+                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#fbbf24', fontWeight: 800 }}>⏸️ Freeze or Pause Access</h5>
+                    {selectedUser.status === 'paused' ? (
+                      <div>
+                        <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 12px 0' }}>
+                          Currently paused. {selectedUser.pausedRemainingDays} frozen days remaining.
+                        </p>
+                        <button
+                          className="ums-btn-primary"
+                          onClick={() => handleResumeUser(selectedUser.id)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: 'none', background: '#22c55e', color: '#fff' }}
+                        >
+                          ▶️ Resume Access
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Optional Auto-Resume Date</label>
+                        <input
+                          type="date"
+                          value={autoResumeDate}
+                          onChange={e => setAutoResumeDate(e.target.value)}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem', marginBottom: '12px' }}
+                        />
+                        <button
+                          className="ums-btn-secondary"
+                          onClick={() => handlePauseUser(selectedUser.id)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: '1px solid #fbbf24', color: '#fbbf24', background: 'transparent' }}
+                        >
+                          ⏸️ Freeze Access Now
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Apply Coupon */}
+                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#c084fc', fontWeight: 800 }}>🎟️ Apply Coupon Code</h5>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="Enter coupon code..."
+                        value={applyCouponCode}
+                        onChange={e => setApplyCouponCode(e.target.value)}
+                        style={{ flex: 1, padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                      />
+                      <button
+                        className="ums-btn-secondary"
+                        onClick={() => handleApplyCoupon(selectedUser.email)}
+                        style={{ padding: '8px 16px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Trial Extensions */}
+                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#38bdf8', fontWeight: 800 }}>🎁 Trial Extension</h5>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        className="ums-btn-secondary"
+                        onClick={() => handleExtendTrial(selectedUser.id, 7)}
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: '1px solid #38bdf8', color: '#38bdf8', background: 'transparent' }}
+                      >
+                        +7 Days Trial
+                      </button>
+                      <button
+                        className="ums-btn-secondary"
+                        onClick={() => handleExtendTrial(selectedUser.id, 14)}
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: '1px solid #38bdf8', color: '#38bdf8', background: 'transparent' }}
+                      >
+                        +14 Days Trial
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          )}
 
           {/* CUSTOM TRIAL & FEATURE PERMISSION BUILDER */}
           <div style={{
@@ -1284,108 +1643,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
         </div>
       )}
 
-      {/* MODAL 1: EDIT USER DRAWER */}
-      {selectedUser && (
-        <div className="ums-modal-overlay">
-          <div className="ums-modal-card">
-            <div className="ums-modal-header">
-              <h3>⚙️ Manage User: {selectedUser.name}</h3>
-              <button className="ums-modal-close" onClick={() => setSelectedUser(null)}>✕</button>
-            </div>
-            <div className="ums-modal-body">
-              <button
-                type="button"
-                className="ums-btn-primary"
-                onClick={() => {
-                  handleImpersonateUser(selectedUser);
-                  setSelectedUser(null);
-                }}
-                style={{
-                  background: 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)',
-                  color: '#fff',
-                  fontWeight: 900,
-                  width: '100%',
-                  marginBottom: '1rem',
-                  padding: '10px',
-                  boxShadow: '0 0 15px rgba(2, 132, 199, 0.4)',
-                  cursor: 'pointer'
-                }}
-              >
-                🕵️ IMPERSONATE THIS USER ACCOUNT NOW
-              </button>
-              <div className="ums-form-group">
-                <label>Email Address</label>
-                <input type="text" value={selectedUser.email} disabled />
-              </div>
 
-              <div className="ums-form-row">
-                <div className="ums-form-group">
-                  <label>Role</label>
-                  <select value={selectedUser.role} onChange={e => setSelectedUser({ ...selectedUser, role: e.target.value as any })}>
-                    <option value="trader">Trader</option>
-                    <option value="admin">Admin</option>
-                    {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-                  </select>
-                </div>
-                <div className="ums-form-group">
-                  <label>Tier</label>
-                  <select value={selectedUser.tier} onChange={e => setSelectedUser({ ...selectedUser, tier: e.target.value })}>
-                    <option value="futures_forex">Futures & Forex</option>
-                    <option value="forex_only">Forex Only</option>
-                    <option value="free">Free</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Custom Dates Box */}
-              <div style={{ background: 'rgba(30,41,59,0.5)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: '#38bdf8' }}>📅 Custom Subscription Dates</h4>
-                <div className="ums-form-row">
-                  <div className="ums-form-group">
-                    <label>Start Date</label>
-                    <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                  </div>
-                  <div className="ums-form-group">
-                    <label>End Date</label>
-                    <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
-                  </div>
-                </div>
-                <button className="ums-btn-secondary" style={{ marginTop: '0.75rem' }} onClick={() => handleCustomDates(selectedUser.id)}>
-                  Save Custom Dates
-                </button>
-              </div>
-
-              {/* Subscription Pause Box */}
-              <div style={{ background: 'rgba(30,41,59,0.5)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: '#fbbf24' }}>⏸️ Subscription Pause & Auto-Resume</h4>
-                {selectedUser.status === 'paused' ? (
-                  <div>
-                    <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Currently paused. {selectedUser.pausedRemainingDays} remaining days frozen.</p>
-                    <button className="ums-btn-primary" onClick={() => handleResumeUser(selectedUser.id)}>Resume Subscription</button>
-                  </div>
-                ) : (
-                  <div className="ums-form-group">
-                    <label>Optional Auto-Resume Date</label>
-                    <input type="date" value={autoResumeDate} onChange={e => setAutoResumeDate(e.target.value)} />
-                    <button className="ums-btn-secondary" style={{ marginTop: '0.5rem' }} onClick={() => handlePauseUser(selectedUser.id)}>
-                      Pause Access Now
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Coupon Applicator */}
-              <div style={{ background: 'rgba(30,41,59,0.5)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: '#c084fc' }}>🎟️ Apply Coupon Code</h4>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input type="text" placeholder="Enter coupon code..." value={applyCouponCode} onChange={e => setApplyCouponCode(e.target.value)} />
-                  <button className="ums-btn-secondary" onClick={() => handleApplyCoupon(selectedUser.email)}>Apply</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL 2: ADD USER */}
       {showAddUserModal && (

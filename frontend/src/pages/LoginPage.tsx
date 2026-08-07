@@ -18,7 +18,7 @@ export const LoginPage: React.FC = () => {
   const [role, setRole] = useState<'trader' | 'admin' | 'super_admin'>('trader');
   const [tier, setTier] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
   
-  const [userInfo, setUserInfo] = useState<{ name: string; isTrial?: boolean; trialDaysRemaining?: number; role?: string; tier?: string } | null>(null);
+  const [userInfo, setUserInfo] = useState<{ name: string; isTrial?: boolean; trialDaysRemaining?: number; trialExpiresAt?: string; customFeatures?: any; role?: string; tier?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +63,11 @@ export const LoginPage: React.FC = () => {
         setUserInfo({
           name: data.name,
           role: data.role,
-          tier: data.tier
+          tier: data.tier,
+          isTrial: data.isTrial,
+          trialDaysRemaining: data.trialDaysRemaining,
+          trialExpiresAt: data.trialExpiresAt,
+          customFeatures: data.customFeatures
         });
         setRole(data.role || 'trader');
         setTier(data.tier || 'futures_forex');
@@ -107,7 +111,18 @@ export const LoginPage: React.FC = () => {
       }
 
       const activeUser = data.user;
-      login(activeUser.email, activeUser.role, activeUser.name, activeUser.tier);
+      login(
+        activeUser.email, 
+        activeUser.role, 
+        activeUser.name, 
+        activeUser.tier, 
+        activeUser.mustChangePassword,
+        activeUser.isTrial,
+        activeUser.trialDaysRemaining,
+        activeUser.trialExpired,
+        activeUser.trialExpiresAt,
+        activeUser.customFeatures
+      );
       navigate(activeUser.role === 'admin' || activeUser.role === 'super_admin' ? '/admin' : '/dashboard');
     } catch (err: any) {
       setLoading(false);
@@ -123,7 +138,18 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setError(null);
-    login(email.trim(), role, userInfo?.name || 'Institutional Trader', tier);
+    login(
+      email.trim(), 
+      role, 
+      userInfo?.name || 'Institutional Trader', 
+      tier, 
+      false, 
+      userInfo?.isTrial, 
+      userInfo?.trialDaysRemaining, 
+      false,
+      userInfo?.trialExpiresAt,
+      userInfo?.customFeatures
+    );
     navigate(role === 'admin' || role === 'super_admin' ? '/admin' : '/dashboard');
   };
 
@@ -156,7 +182,7 @@ export const LoginPage: React.FC = () => {
       }
 
       const registeredUser = data.user;
-      login(registeredUser.email, 'trader', registeredUser.name, 'free');
+      login(registeredUser.email, 'trader', registeredUser.name, 'free', false, true, 14, false);
       navigate('/dashboard');
     } catch (err: any) {
       setLoading(false);
@@ -222,9 +248,9 @@ export const LoginPage: React.FC = () => {
                   {userInfo?.role === 'admin' || userInfo?.role === 'super_admin' ? (
                     <>Set up your private password below to activate your <strong>Administrative Access</strong>.</>
                   ) : userInfo?.isTrial ? (
-                    <>Your account is preloaded with <strong>{userInfo?.trialDaysRemaining || 14}-Day VIP Trial Access</strong>! Create your private password below to activate your account.</>
+                    <>Welcome back! As part of our recent system upgrade, we kindly ask that you reset your password. Once set, your <strong>{userInfo?.trialDaysRemaining || 21}-Day VIP Trial Access</strong> will activate. We apologize for the inconvenience!</>
                   ) : (
-                    <>Your account has been provisioned with <strong>Full Membership Access</strong>! Create your private password below to activate your account.</>
+                    <>Welcome back! As part of our recent system upgrade, we kindly ask that you reset your password to restore your <strong>Full Membership Access</strong>. We apologize for this one-time inconvenience—once set, you'll be able to log in normally moving forward.</>
                   )}
                 </p>
               </div>

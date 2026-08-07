@@ -11,31 +11,28 @@ const SNAPSHOT_TMP_PATH = '/tmp/persistent_signals_snapshot.json';
 
 export async function saveSignalsSnapshot(setups: EdgeSetup[]): Promise<void> {
   try {
-    if (!setups || setups.length === 0) return;
-    const activeOnly = setups.filter(s => s.superseded === 0 && ['awaiting_entry', 'active'].includes(s.signal_state));
-    if (activeOnly.length > 0) {
-      const jsonStr = JSON.stringify(activeOnly, null, 2);
-      const now = new Date().toISOString();
+    const activeOnly = (setups || []).filter(s => s && s.superseded === 0 && ['awaiting_entry', 'active'].includes(s.signal_state));
+    const jsonStr = JSON.stringify(activeOnly, null, 2);
+    const now = new Date().toISOString();
 
-      // 1. Save to persistent database table
-      try {
-        await queryDb(
-          `INSERT INTO system_signal_snapshots (id, snapshot_json, count, updated_at) VALUES ('current', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET snapshot_json = EXCLUDED.snapshot_json, count = EXCLUDED.count, updated_at = EXCLUDED.updated_at`,
-          [jsonStr, activeOnly.length, now]
-        );
-      } catch (dbErr: any) {
-        logger.warn({ err: dbErr.message }, 'Could not save signal snapshot to database table');
-      }
-
-      // 2. Save to disk files
-      for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_TMP_PATH]) {
-        try {
-          fs.writeFileSync(fpath, jsonStr, 'utf8');
-        } catch {}
-      }
-
-      logger.info({ count: activeOnly.length }, 'Saved active signals snapshot to database & disk');
+    // 1. Save to persistent database table
+    try {
+      await queryDb(
+        `INSERT INTO system_signal_snapshots (id, snapshot_json, count, updated_at) VALUES ('current', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET snapshot_json = EXCLUDED.snapshot_json, count = EXCLUDED.count, updated_at = EXCLUDED.updated_at`,
+        [jsonStr, activeOnly.length, now]
+      );
+    } catch (dbErr: any) {
+      logger.warn({ err: dbErr.message }, 'Could not save signal snapshot to database table');
     }
+
+    // 2. Save to disk files
+    for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_TMP_PATH]) {
+      try {
+        fs.writeFileSync(fpath, jsonStr, 'utf8');
+      } catch {}
+    }
+
+    logger.info({ count: activeOnly.length }, 'Saved active signals snapshot to database & disk');
   } catch (err: any) {
     logger.warn({ err: err.message }, 'Failed to write signals snapshot file');
   }

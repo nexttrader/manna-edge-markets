@@ -36,7 +36,8 @@ export const TrialExpiredModal: React.FC = () => {
         // Paid plan → fire a support ticket, admin will review + send invoice
         setStep('submitting');
         const tierLabel = TIER_LABEL[selectedPlan];
-        const body = `${user.name} has completed a 21-day VIP trial and is requesting an upgrade to the ${tierLabel} plan. Please review, send an invoice to ${user.email}, and activate their account once payment is confirmed.`;
+        const trialText = user.customFeatures?.trialName ? `custom '${user.customFeatures.trialName}' trial` : '21-day VIP trial';
+        const body = `${user.name} has completed a ${trialText} and is requesting an upgrade to the ${tierLabel} plan. Please review, send an invoice to ${user.email}, and activate their account once payment is confirmed.`;
 
         const res = await fetch(`${API_BASE}/api/support/tickets`, {
           method: 'POST',
@@ -84,7 +85,7 @@ export const TrialExpiredModal: React.FC = () => {
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
               <span style={{ fontSize: '3rem' }}>⏰</span>
               <h2 style={{ color: '#ffd700', margin: '8px 0 4px 0', fontSize: '1.4rem', fontWeight: 900 }}>
-                21-DAY VIP PASS EXPIRED
+                VIP PASS EXPIRED
               </h2>
               <p style={{ color: '#00e5ff', margin: 0, fontSize: '0.9rem', fontWeight: 800 }}>
                 CHOOSE A PLAN TO CONTINUE ACCESS
@@ -92,7 +93,7 @@ export const TrialExpiredModal: React.FC = () => {
             </div>
 
             <p style={{ fontSize: '0.85rem', color: '#ccc', lineHeight: '1.6', textAlign: 'center', marginBottom: '24px' }}>
-              Your 21-day trial has completed. Select a plan below. Free Tier activates instantly. Paid plans require an invoice — your admin will send payment details directly to your inbox.
+              Your VIP Trial has completed. Select a plan below. Free Tier activates instantly. Paid plans require an invoice — your admin will send payment details directly to your inbox.
             </p>
 
             {/* Plan cards */}

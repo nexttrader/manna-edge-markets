@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { API_BASE } from '../config';
 
 export interface User {
   id: string;
@@ -13,13 +14,30 @@ export interface User {
   trialDaysRemaining?: number;
   trialExpired?: boolean;
   lastActive?: string;
+  customFeatures?: {
+    maxSignals?: number;
+    strategyAccess?: string;
+    allowCalculators?: boolean;
+    trialName?: string;
+  };
 }
 
 interface AuthContextType {
   user: User | null;
   originalAdmin: User | null;
   isImpersonating: boolean;
-  login: (email: string, role?: 'trader' | 'admin' | 'super_admin', name?: string, tier?: 'free' | 'forex_only' | 'futures_forex', mustChangePassword?: boolean) => void;
+  login: (
+    email: string,
+    role?: 'trader' | 'admin' | 'super_admin',
+    name?: string,
+    tier?: 'free' | 'forex_only' | 'futures_forex' | string,
+    mustChangePassword?: boolean,
+    isTrial?: boolean,
+    trialDaysRemaining?: number,
+    trialExpired?: boolean,
+    trialExpiresAt?: string,
+    customFeatures?: any
+  ) => void;
   logout: () => void;
   elevateToSuperAdmin: () => void;
   impersonateUser: (targetUser: User) => void;
@@ -67,16 +85,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [originalAdmin]);
 
-  const login = (email: string, role: 'trader' | 'admin' | 'super_admin' = 'trader', name?: string, tier: 'free' | 'forex_only' | 'futures_forex' = 'futures_forex', mustChangePassword: boolean = false) => {
+  const login = (
+    email: string,
+    role: 'trader' | 'admin' | 'super_admin' = 'trader',
+    name?: string,
+    tier: 'free' | 'forex_only' | 'futures_forex' | string = 'futures_forex',
+    mustChangePassword: boolean = false,
+    isTrial: boolean = false,
+    trialDaysRemaining?: number,
+    trialExpired: boolean = false,
+    trialExpiresAt?: string,
+    customFeatures?: any
+  ) => {
     const defaultName = role === 'super_admin' ? 'Super Administrator (Master)' : role === 'admin' ? 'System Administrator' : 'Institutional Trader';
     const newUser: User = {
       id: `usr_${Date.now()}`,
       name: name || defaultName,
       email,
       role,
-      tier: (role === 'admin' || role === 'super_admin') ? 'futures_forex' : tier,
+      tier: (role === 'admin' || role === 'super_admin') ? 'futures_forex' : tier as any,
       marketAccess: tier === 'forex_only' ? 'forex' : 'all',
-      mustChangePassword
+      mustChangePassword,
+      isTrial,
+      trialDaysRemaining,
+      trialExpired,
+      trialExpiresAt,
+      customFeatures
     };
     setOriginalAdmin(null);
     setUser(newUser);
@@ -89,6 +123,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('manna_user', JSON.stringify(updated));
     }
   };
+
+  useEffect(() => {
+    if (user && !isImpersonating) {
+      // Sync user profile state dynamically on app load
+      fetch(`${API_BASE}/api/admin/auth/profile?email=${encodeURIComponent(user.email)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.user) {
+            setUser(prev => {
+              if (!prev) return null;
+              const updated = {
+                ...prev,
+                name: data.user.name,
+                role: data.user.role,
+                tier: data.user.tier,
+                mustChangePassword: data.user.mustChangePassword,
+                isTrial: data.user.isTrial,
+                trialExpiresAt: data.user.trialExpiresAt,
+                trialDaysRemaining: data.user.trialDaysRemaining,
+                trialExpired: data.user.trialExpired,
+                customFeatures: data.user.customFeatures,
+              };
+              localStorage.setItem('manna_user', JSON.stringify(updated));
+              return updated;
+            });
+          }
+        })
+        .catch(err => console.error('Failed to sync user profile:', err));
+    }
+  }, [user?.email, isImpersonating]);
 
   const impersonateUser = (targetUser: User) => {
     if (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin') {

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { initializeDatabase } from './db/database';
+import { saveSignalsSnapshot } from './db/signal-snapshot-restore';
 import * as queries from './db/queries';
 import { startScheduler, stopScheduler } from './scheduler/scheduler';
 import { getCurrentKillzone, getNextKillzoneBoundary } from './scheduler/killzone-mapper';
@@ -148,16 +149,23 @@ async function startServer() {
         });
 
         // Graceful shutdown
-        const shutdown = (signal: string) => {
+        const shutdown = async (signal: string) => {
             logger.info({ signal }, 'Shutting down gracefully...');
+            try {
+                const activeSetups = await queries.getAllActiveSetups();
+                await saveSignalsSnapshot(activeSetups);
+                logger.info('Active signals snapshotted successfully during shutdown.');
+            } catch (err: any) {
+                logger.warn({ err: err.message }, 'Failed to save active signals snapshot on shutdown');
+            }
             lifecycleSync.stop();
             outcomeDetector.stop();
             stopScheduler();
             process.exit(0);
         };
 
-        process.on('SIGTERM', () => shutdown('SIGTERM'));
-        process.on('SIGINT', () => shutdown('SIGINT'));
+        process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+        process.on('SIGINT', () => { shutdown('SIGINT'); });
 
     } catch (error) {
         logger.error({ err: error }, 'Failed to start server');

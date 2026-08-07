@@ -150,10 +150,12 @@ export class SentinelV2Strategy implements IStrategyEngine {
         if (expansionIdx >= 3) {
           const consCandles = closed1h.slice(Math.max(0, expansionIdx - 6), expansionIdx - 2);
           if (consCandles.length >= 3) {
+            const cHigh = Math.max(...consCandles.map(c => c.high));
+            const cLow = Math.min(...consCandles.map(c => c.low));
+            const totalHeight = cHigh - cLow;
             const maxR = Math.max(...consCandles.map(c => c.high - c.low));
-            if (maxR < avgRange * 1.5) {
-              const cHigh = Math.max(...consCandles.map(c => c.high));
-              const cLow = Math.min(...consCandles.map(c => c.low));
+            // Tightened criteria: individual candle range <= 1.1x of average range, and the entire channel height <= 1.25x of average range
+            if (maxR < avgRange * 1.1 && totalHeight < avgRange * 1.25) {
               pois.push({ type: 'CONSOLIDATION', high: cHigh, low: cLow });
             }
           }

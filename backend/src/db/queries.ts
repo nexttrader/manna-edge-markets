@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { queryDb } from './database';
 import { EdgeSetup, InvalidationAudit, PublishRun, Outcome } from '../discovery/types';
+import { saveSignalsSnapshot } from './signal-snapshot-restore';
 
 // ── Active Setup Queries ──
 
@@ -66,6 +67,12 @@ export async function insertSetup(setup: EdgeSetup, market: string): Promise<voi
     const placeholders = keys.map(() => '?').join(', ');
     const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`;
     await queryDb(query, values);
+    
+    // Auto update snapshot
+    try {
+        const active = await getAllActiveSetups();
+        await saveSignalsSnapshot(active);
+    } catch {}
 }
 
 export const createSetup = async (setup: EdgeSetup, market?: string): Promise<void> => {
@@ -82,6 +89,12 @@ export async function updateSetupState(id: string, market: string, state: string
     const setClause = keys.map(k => `${k} = ?`).join(', ');
     await queryDb(`UPDATE ${primaryTable} SET ${setClause} WHERE id = ?`, [...values, id]);
     await queryDb(`UPDATE ${fallbackTable} SET ${setClause} WHERE id = ?`, [...values, id]);
+
+    // Auto update snapshot
+    try {
+        const active = await getAllActiveSetups();
+        await saveSignalsSnapshot(active);
+    } catch {}
 }
 
 export async function updateSetup(setup: EdgeSetup): Promise<void> {
@@ -98,6 +111,12 @@ export async function updateSetup(setup: EdgeSetup): Promise<void> {
         setup.invalidation_reason || null, setup.invalidation_detail || null, setup.tradable,
         setup.metadata || null, setup.id
     ]);
+
+    // Auto update snapshot
+    try {
+        const active = await getAllActiveSetups();
+        await saveSignalsSnapshot(active);
+    } catch {}
 }
 
 // ── Invalidation Audit ──

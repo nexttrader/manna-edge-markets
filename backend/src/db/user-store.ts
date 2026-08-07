@@ -205,6 +205,8 @@ export const addUser = async (profile: {
   riskLimit?: '1%' | '2%' | '5%';
   isTrial?: boolean;
   trialDays?: number;
+  trialStartedAt?: string | null;
+  trialExpiresAt?: string | null;
 }): Promise<UserProfile> => {
   const now = new Date();
   const trialDays = profile.trialDays !== undefined ? profile.trialDays : 14; 
@@ -228,8 +230,8 @@ export const addUser = async (profile: {
     signalsViewed: 0,
     watchlistCount: 0,
     isTrial: profile.isTrial !== undefined ? profile.isTrial : true,
-    trialStartedAt: now.toISOString(),
-    trialExpiresAt: trialExpiresDate.toISOString(),
+    trialStartedAt: profile.trialStartedAt !== undefined ? (profile.trialStartedAt || undefined) : now.toISOString(),
+    trialExpiresAt: profile.trialExpiresAt !== undefined ? (profile.trialExpiresAt || undefined) : trialExpiresDate.toISOString(),
     trialDaysRemaining: trialDays,
     trialExpired: false
   };
@@ -273,6 +275,15 @@ export const completeFirstLoginPasswordSetup = async (email: string, newPassword
   user.password = newPassword;
   user.mustChangePassword = false;
   user.lastActive = 'Just logged in';
+
+  // If this is a trial user whose trial hasn't started yet (i.e. trialStartedAt is null or empty)
+  if (user.isTrial && !user.trialStartedAt) {
+    const now = new Date();
+    const trialDays = user.trialDaysRemaining || 21;
+    user.trialStartedAt = now.toISOString();
+    user.trialExpiresAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000).toISOString();
+  }
+
   await upsertUser(user);
   return { success: true, user };
 };

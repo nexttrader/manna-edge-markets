@@ -57,7 +57,12 @@ router.post('/auth/check-email', async (req: Request, res: Response) => {
     name: user.name,
     email: user.email,
     role: user.role,
-    tier: user.tier
+    tier: user.tier,
+    isTrial: user.isTrial || false,
+    trialExpiresAt: user.trialExpiresAt,
+    trialDaysRemaining: user.trialDaysRemaining,
+    trialExpired: user.trialExpired || false,
+    customFeatures: user.customFeatures
   });
 });
 
@@ -100,6 +105,33 @@ router.post('/auth/register', async (req: Request, res: Response) => {
   });
 
   return res.json({ success: true, user: newUser });
+});
+
+// Sync user profile state dynamically on reload
+router.get('/auth/profile', async (req: Request, res: Response) => {
+  try {
+    const email = req.query.email as string;
+    if (!email) {
+      return res.status(400).json({ error: 'Email query parameter is required' });
+    }
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Dynamically update trial remaining days and status
+    if (user.isTrial && user.trialExpiresAt) {
+      const now = Date.now();
+      const expiresTime = new Date(user.trialExpiresAt).getTime();
+      const remainingMs = Math.max(0, expiresTime - now);
+      user.trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+      user.trialExpired = remainingMs <= 0;
+    }
+
+    return res.json({ success: true, user });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error', details: String(error) });
+  }
 });
 
 // User Accounts Management Endpoints
