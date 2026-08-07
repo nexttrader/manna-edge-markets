@@ -3,7 +3,7 @@ import * as queries from '../db/queries';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
-import { isMarketOpen } from '../scheduler/killzone-mapper';
+import { isMarketOpen, mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
 
 const logger = createLogger('LifecycleSync');
 
@@ -87,14 +87,23 @@ export class LifecycleSync {
           const nowTime = new Date();
           const entryTriggeredAt = nowTime;
 
+          const entryKz = mapTimestampToKillzone(entryTriggeredAt) || getCurrentKillzone(entryTriggeredAt);
+          let metaObj: any = {};
+          try {
+            metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {});
+          } catch {}
+          metaObj.entry_session = entryKz?.killzone || 'unknown';
+          metaObj.entry_session_name = entryKz?.name || 'UNKNOWN';
+
           const market = setup.market || 'futures';
           await queries.updateSetupState(setup.id, market, 'active', {
             entry_triggered_at: entryTriggeredAt.toISOString(),
-            entry_price_recorded: executionPrice
+            entry_price_recorded: executionPrice,
+            metadata: JSON.stringify(metaObj)
           });
           
-          logger.info({ setupId: setup.id, price: executionPrice, instrument: setup.instrument }, 'Setup filled');
-          publishEvents.emit('setup_entered', { ...setup, signal_state: 'active', entry_triggered_at: entryTriggeredAt.toISOString() });
+          logger.info({ setupId: setup.id, price: executionPrice, instrument: setup.instrument, entrySession: metaObj.entry_session_name }, 'Setup filled');
+          publishEvents.emit('setup_entered', { ...setup, signal_state: 'active', entry_triggered_at: entryTriggeredAt.toISOString(), metadata: JSON.stringify(metaObj) });
         }
       }
     } catch (err) {

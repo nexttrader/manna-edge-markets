@@ -47,6 +47,30 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
   const [rescanMessage, setRescanMessage] = useState<string | null>(null);
 
+  const metaObj = (() => {
+    if (!setup.metadata) return {};
+    try {
+      return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
+    } catch {
+      return {};
+    }
+  })();
+
+  const getEntrySessionName = (): string => {
+    if (metaObj?.entry_session_name) return metaObj.entry_session_name.replace('_', ' ').toUpperCase();
+    if (!setup.entry_triggered_at) return '';
+    try {
+      const dt = new Date(setup.entry_triggered_at);
+      const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false });
+      const hourET = parseInt(formatter.format(dt), 10);
+      if (hourET >= 20 || hourET < 2) return 'ASIA';
+      if (hourET >= 2 && hourET < 8) return 'LONDON';
+      if (hourET >= 8 && hourET < 14) return 'NY AM';
+      if (hourET >= 14 && hourET < 20) return 'NY PM';
+    } catch {}
+    return 'UNKNOWN';
+  };
+
   // Live Price Tick Flash Tracking
   const prevPriceRef = useRef<number | null>(null);
   const [priceTick, setPriceTick] = useState<'up' | 'down' | 'neutral'>('neutral');
@@ -226,8 +250,19 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               onClick={(e) => { e.stopPropagation(); onToggleWatchlist(setup.id); }}
               title={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
               aria-label={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              style={{
+                borderRadius: '16px',
+                width: 'auto',
+                padding: '0 8px 0 6px',
+                gap: '4px',
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
             >
-              <span className="eye-icon">{isWatchlisted ? '👁️' : '👁️‍🗨️'}</span>
+              <span className="eye-icon" style={{ display: 'inline-block', transform: 'translateY(-1px)' }}>{isWatchlisted ? '👁️' : '👁️‍🗨️'}</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                {isWatchlisted ? 'Watching' : 'Watch'}
+              </span>
             </button>
           )}
           <StatusBadge status={stateStr} />
@@ -275,6 +310,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="level-label text-gold">Exact Fill</span>
             <span className="level-val text-gold font-bold">{exactFill}</span>
             <span className="level-pips text-gold">⚡ FILLED</span>
+          </div>
+        )}
+        {setup.entry_triggered_at && (
+          <div className="level-row entry-session-row">
+            <span className="level-label text-green font-bold">Fill Session</span>
+            <span className="level-val text-green font-bold">
+              {getEntrySessionName()} · {formatETTime(setup.entry_triggered_at)}
+            </span>
+            <span className="level-pips text-green font-bold">📥 FILL TIME</span>
           </div>
         )}
         <div className="level-row">
