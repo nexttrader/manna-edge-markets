@@ -4,6 +4,7 @@ import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
 import { isMarketOpen, mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
+import { calculateAssetMatrix } from '../analytics/decision-matrix';
 
 const logger = createLogger('LifecycleSync');
 
@@ -95,6 +96,33 @@ export class LifecycleSync {
           metaObj.entry_session = entryKz?.killzone || 'unknown';
           metaObj.entry_session_name = entryKz?.name || 'UNKNOWN';
 
+          // Calculate entry time decision matrix to rank the setup
+          let entryRank = 99;
+          let entryPriorityScore = 0;
+          try {
+            const rawActiveSetups = await queries.getAllActiveSetups();
+            const priceMap: Record<string, number> = {};
+            const enriched = await Promise.all(
+              rawActiveSetups.map(async (s) => {
+                const price = s.id === setup.id ? executionPrice : (await getLiveCurrentPrice(s.instrument) || (s as any).current_price || 0);
+                if (price) priceMap[s.instrument] = price;
+                return { ...s, current_price: price } as any;
+              })
+            );
+            const matrix = calculateAssetMatrix(enriched, priceMap);
+            const index = matrix.findIndex(m => m.id === setup.id);
+            if (index !== -1) {
+              entryRank = index + 1;
+              entryPriorityScore = matrix[index].priority_score;
+            }
+          } catch (e) {
+            logger.warn({ err: e }, 'Failed to compute entry decision matrix rank');
+          }
+          
+          metaObj.entry_matrix_rank = entryRank;
+          metaObj.entry_priority_score = entryPriorityScore;
+          metaObj.is_best_trade_at_entry = entryRank === 1;
+
           const market = setup.market || 'futures';
           await queries.updateSetupState(setup.id, market, 'active', {
             entry_triggered_at: entryTriggeredAt.toISOString(),
@@ -102,7 +130,7 @@ export class LifecycleSync {
             metadata: JSON.stringify(metaObj)
           });
           
-          logger.info({ setupId: setup.id, price: executionPrice, instrument: setup.instrument, entrySession: metaObj.entry_session_name }, 'Setup filled');
+          logger.info({ setupId: setup.id, price: executionPrice, instrument: setup.instrument, entrySession: metaObj.entry_session_name, entryRank }, 'Setup filled');
           publishEvents.emit('setup_entered', { ...setup, signal_state: 'active', entry_triggered_at: entryTriggeredAt.toISOString(), metadata: JSON.stringify(metaObj) });
         }
       }

@@ -1675,6 +1675,70 @@ export const AdminPanel: React.FC = () => {
           </div>
         )}
 
+        {/* Decision Matrix Accuracy Tracker */}
+        {analytics?.summary?.decisionMatrixAccuracy && (
+          <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ margin: 0, color: '#00e5ff' }}>⚡ Decision Matrix Accuracy Tracker</h2>
+              <span className="badge badge-manual font-mono" style={{ background: 'rgba(0, 229, 255, 0.12)', color: '#00e5ff', border: '1px solid rgba(0, 229, 255, 0.4)' }}>RANK #1 TRACKING</span>
+            </div>
+            <p style={{ color: 'var(--kdt-text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Tracks how often the Decision Matrix's **Rank #1 Selection (Best Trade)** resolved with a winning outcome (TP hit) rather than a loss (SL hit).
+            </p>
+            
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              <div 
+                style={{ 
+                  background: 'rgba(0, 229, 255, 0.05)', 
+                  border: '1px solid rgba(0, 229, 255, 0.25)', 
+                  borderRadius: '8px', 
+                  padding: '16px',
+                  flex: '1 1 200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}
+              >
+                <span style={{ fontSize: '0.8rem', color: '#00e5ff', fontWeight: 800, textTransform: 'uppercase' }}>Best Trade Win Rate</span>
+                <span style={{ fontSize: '2.4rem', fontWeight: 900, margin: '8px 0', color: '#00e5ff' }}>
+                  {analytics.summary.decisionMatrixAccuracy.winRate}%
+                </span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--kdt-text-muted)' }}>
+                  Overall Selection Accuracy
+                </span>
+              </div>
+
+              <div 
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.02)', 
+                  border: '1px solid rgba(255, 255, 255, 0.08)', 
+                  borderRadius: '8px', 
+                  padding: '16px',
+                  flex: '2 1 300px',
+                  display: 'flex',
+                  justifyContent: 'space-around',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--kdt-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Rank 1 Selections</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{analytics.summary.decisionMatrixAccuracy.totalSelected}</div>
+                </div>
+                <div style={{ height: '30px', width: '1px', background: 'rgba(255, 255, 255, 0.1)' }}></div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--kdt-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Wins</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--kdt-green)' }}>{analytics.summary.decisionMatrixAccuracy.wins}</div>
+                </div>
+                <div style={{ height: '30px', width: '1px', background: 'rgba(255, 255, 255, 0.1)' }}></div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--kdt-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Losses</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--kdt-red)' }}>{analytics.summary.decisionMatrixAccuracy.losses}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Conviction Score Performance Influence Tracker */}
         {convictionPerformance && (
           <div className="runs-card glass-card font-mono" style={{ marginBottom: '24px' }}>

@@ -802,6 +802,10 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let totalHoldingTimeMs = 0;
     let holdingTimeCount = 0;
 
+    let matrixRankOneTotal = 0;
+    let matrixRankOneWins = 0;
+    let matrixRankOneLosses = 0;
+
     const enrichedOutcomes = await Promise.all(outcomes.slice(0, 100).map(async (o: any) => {
       let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
       // Retry with opposite market if first lookup returned nothing (misclassified rows)
@@ -970,6 +974,34 @@ router.get('/analytics', async (req: Request, res: Response) => {
       convictionPerformance[cKey].plR += tradeR;
       if (isWin) convictionPerformance[cKey].wins++;
       else if (isLoss) convictionPerformance[cKey].losses++;
+
+      // Decision Matrix Rank #1 selection tracking
+      let wasRankOne = false;
+      if (setup) {
+        let meta: any = {};
+        try {
+          meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {});
+        } catch {}
+        if (meta.entry_matrix_rank === 1 || meta.is_best_trade_at_entry === true) {
+          wasRankOne = true;
+        } else {
+          // Fallback approximation for historical trades: if it had a very high conviction (>=88) and liquidity (>=85)
+          const S_conviction = Math.max(0, Math.min(100, setup.conviction_score || 75));
+          const S_winrate = 90; // Default approximation
+          const S_liquidity = Math.max(0, Math.min(100, setup.liquidity_score || 80));
+          const S_rr = Math.min(100, Math.max(0, ((setup.r_multiple_1 || 2) / 2.5) * 100));
+          const priorityScore = (0.25 * S_conviction + 0.25 * S_winrate + 0.15 * S_liquidity + 0.15 * S_rr + 0.10 * 85 + 0.10 * 95);
+          if (priorityScore >= 84.0) {
+            wasRankOne = true;
+          }
+        }
+      }
+
+      if (wasRankOne) {
+        matrixRankOneTotal++;
+        if (isWin) matrixRankOneWins++;
+        else if (isLoss) matrixRankOneLosses++;
+      }
     }
 
     for (const k of Object.keys(convictionPerformance)) {
@@ -1030,6 +1062,12 @@ router.get('/analytics', async (req: Request, res: Response) => {
         forexR: Number(forexR.toFixed(2)),
         avgTimeToFillMinutes: avgTimeToFill,
         avgHoldingDurationMinutes: avgHoldingDuration,
+        decisionMatrixAccuracy: {
+          totalSelected: matrixRankOneTotal,
+          wins: matrixRankOneWins,
+          losses: matrixRankOneLosses,
+          winRate: matrixRankOneTotal > 0 ? Number(((matrixRankOneWins / (matrixRankOneWins + matrixRankOneLosses || 1)) * 100).toFixed(1)) : 0
+        }
       },
       currentSession: {
         activeKillzone: getCurrentKillzone(now),

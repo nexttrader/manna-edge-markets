@@ -38,6 +38,12 @@ export interface AnalyticsData {
     maxLossesStreak?: number;
     avgTimeToFillMinutes?: number;
     avgHoldingDurationMinutes?: number;
+    decisionMatrixAccuracy?: {
+      totalSelected: number;
+      wins: number;
+      losses: number;
+      winRate: number;
+    };
   };
   collective?: StrategyStat;
   strategies?: StrategyStat[];

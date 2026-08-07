@@ -1,7 +1,7 @@
 import assert from 'assert';
 import path from 'path';
 import fs from 'fs';
-import { initializeDatabase, getDb } from '../db/database';
+import { initializeDatabase, getDb, queryDb } from '../db/database';
 import { mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { computeATR } from '../discovery/atr';
 import { computeConvictionScore, computeRMultiple } from '../discovery/scoring';
@@ -233,6 +233,8 @@ async function runAllTests() {
 
     // 12. Mid-Killzone Booster Rescan Rule Test (< 2 assets per asset class triggers rescan, >= 2 skips)
     const clearAllActive = async () => {
+        await queryDb(`DELETE FROM edge_setups WHERE id LIKE 'kz_mid_%' OR id LIKE 'test_%'`);
+        await queryDb(`DELETE FROM forex_edge_setups WHERE id LIKE 'kz_mid_%' OR id LIKE 'test_%'`);
         const futuresBefore = await queries.getActiveSetups('futures');
         for (const s of futuresBefore) {
             await queries.updateSetupState(s.id, 'futures', 'superseded', { superseded: 1 });
