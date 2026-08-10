@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import './ExpandableCalendar.css';
 
 interface Outcome {
@@ -20,6 +20,7 @@ interface Outcome {
   time_to_fill_min?: number;
   holding_duration_min?: number;
   killzone_origin?: string;
+  created_at?: string;
 }
 
 interface ExpandableCalendarProps {
