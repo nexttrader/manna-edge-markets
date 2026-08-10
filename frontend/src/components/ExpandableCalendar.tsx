@@ -21,6 +21,7 @@ interface Outcome {
   holding_duration_min?: number;
   killzone_origin?: string;
   created_at?: string;
+  setup_market?: string;
 }
 
 interface ExpandableCalendarProps {
@@ -109,6 +110,7 @@ function getTradingDayAndSession(timeStr: string): { tradingDay: string; session
 }
 
 export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: ExpandableCalendarProps) {
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
@@ -122,7 +124,42 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
   ];
 
-  // 1. Filter outcomes by the selected strategy and map them to trading days and sessions
+  // Formatting helpers declared early to be used in calculations
+  const formatPNLString = (rVal: number) => {
+    const sign = rVal > 0 ? '+' : '';
+    return `${sign}${rVal.toFixed(2)}R`;
+  };
+
+  const formatCurrency = (rVal: number) => {
+    const value = rVal * riskPerR;
+    const sign = value > 0 ? '+$' : value < 0 ? '-$' : '$';
+    return `${sign}${Math.abs(value).toFixed(2)}`;
+  };
+
+  const getPnlClass = (rVal: number) => {
+    if (rVal > 0.01) return 'text-green';
+    if (rVal < -0.01) return 'text-red';
+    return 'text-muted';
+  };
+
+  // 1. Calculate overall Forex vs Futures realized R splits
+  const { totalFuturesR, totalForexR } = useMemo(() => {
+    let fut = 0;
+    let fx = 0;
+    outcomes.forEach(o => {
+      if (strategyFilter !== 'all' && o.strategy_id !== strategyFilter) return;
+      const r = o.realized_r ?? 0;
+      const mkt = o.market || o.setup_market || 'futures';
+      if (mkt === 'forex') {
+        fx += r;
+      } else {
+        fut += r;
+      }
+    });
+    return { totalFuturesR: fut, totalForexR: fx };
+  }, [outcomes, strategyFilter]);
+
+  // 2. Filter outcomes by the selected strategy and map them to trading days and sessions
   const processedOutcomes = useMemo(() => {
     // Filter by strategy
     const filtered = strategyFilter === 'all'
@@ -154,7 +191,7 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     return grouped;
   }, [outcomes, strategyFilter]);
 
-  // 2. Generate Calendar Month Grid Cells
+  // 3. Generate Calendar Month Grid Cells
   const calendarCells = useMemo(() => {
     const cells: DayData[] = [];
     
@@ -264,6 +301,30 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     return calendarCells.find(c => c.dateStr === selectedDayStr && c.isCurrentMonth) || null;
   }, [selectedDayStr, calendarCells]);
 
+  // Calculate day-specific splits for the selected day details drawer
+  const { dayFuturesR, dayForexR } = useMemo(() => {
+    let fut = 0;
+    let fx = 0;
+    if (selectedDayData) {
+      const allTrades = [
+        ...selectedDayData.sessions.asia.trades,
+        ...selectedDayData.sessions.london.trades,
+        ...selectedDayData.sessions.ny_am.trades,
+        ...selectedDayData.sessions.ny_pm.trades
+      ];
+      allTrades.forEach(t => {
+        const r = t.realized_r ?? 0;
+        const mkt = t.market || t.setup_market || 'futures';
+        if (mkt === 'forex') {
+          fx += r;
+        } else {
+          fut += r;
+        }
+      });
+    }
+    return { dayFuturesR: fut, dayForexR: fx };
+  }, [selectedDayData]);
+
   const handleDayClick = (cell: DayData) => {
     if (!cell.isCurrentMonth) return;
     if (selectedDayStr === cell.dateStr) {
@@ -273,25 +334,39 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     }
   };
 
-  const formatPNLString = (rVal: number) => {
-    const sign = rVal > 0 ? '+' : '';
-    return `${sign}${rVal.toFixed(2)}R`;
-  };
-
-  const formatCurrency = (rVal: number) => {
-    const value = rVal * riskPerR;
-    const sign = value > 0 ? '+$' : value < 0 ? '-$' : '$';
-    return `${sign}${Math.abs(value).toFixed(2)}`;
-  };
-
-  const getPnlClass = (rVal: number) => {
-    if (rVal > 0.01) return 'text-green';
-    if (rVal < -0.01) return 'text-red';
-    return 'text-muted';
-  };
-
   const weekdayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
+  // Render Minimized State
+  if (!isExpanded) {
+    return (
+      <div className="session-calendar-wrapper font-mono">
+        <div className="calendar-header-card glass-card" style={{ padding: '14px 20px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
+          <div className="calendar-title-group" onClick={() => setIsExpanded(true)} style={{ cursor: 'pointer' }}>
+            <span>📅</span>
+            <div>
+              <h2 style={{ fontSize: '1.15rem' }}>Session Performance Calendar</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '2px', flexWrap: 'wrap' }}>
+                <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE PERFORMANCE:</span>
+                <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
+                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+              </div>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className="nav-btn" 
+            onClick={() => setIsExpanded(true)} 
+            style={{ width: 'auto', padding: '0 16px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+          >
+            Expand Calendar &darr;
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Full Calendar View
   return (
     <div className="session-calendar-wrapper font-mono">
       {/* Calendar Header */}
@@ -299,10 +374,26 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
         <div className="calendar-title-group">
           <span>📅</span>
           <div>
-            <h2>Session Performance Calendar</h2>
-            <span style={{ fontSize: '0.78rem', color: 'var(--kdt-text-muted, #888)' }}>
-              Tracks realized R & P&L aggregated by trading session daily (NY Time)
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h2>Session Performance Calendar</h2>
+              <button 
+                type="button" 
+                className="nav-btn" 
+                onClick={() => {
+                  setSelectedDayStr(null);
+                  setIsExpanded(false);
+                }} 
+                style={{ width: 'auto', height: '24px', padding: '0 10px', fontSize: '0.7rem' }}
+              >
+                Collapse &uarr;
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
+              <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE PERFORMANCE:</span>
+              <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
+              <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+              <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+            </div>
           </div>
         </div>
 
@@ -392,11 +483,17 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
             <span className="drawer-title">
               🔍 PERFORMANCE DETAILS: {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
-            <div className="drawer-summary-stats">
+            <div className="drawer-summary-stats" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <span className="drawer-stat-pill">
                 Net Result: <strong className={getPnlClass(selectedDayData.totalR)}>{formatPNLString(selectedDayData.totalR)} ({formatCurrency(selectedDayData.totalR)})</strong>
               </span>
-              <button type="button" className="close-drawer-btn" onClick={() => setSelectedDayStr(null)}>&times;</button>
+              <span className="drawer-stat-pill">
+                Futures: <strong className={getPnlClass(dayFuturesR)}>{formatPNLString(dayFuturesR)}</strong>
+              </span>
+              <span className="drawer-stat-pill">
+                Forex: <strong className={getPnlClass(dayForexR)}>{formatPNLString(dayForexR)}</strong>
+              </span>
+              <button type="button" className="close-drawer-btn" onClick={() => setSelectedDayStr(null)} style={{ marginLeft: '10px' }}>&times;</button>
             </div>
           </div>
 
