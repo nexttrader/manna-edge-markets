@@ -109,6 +109,8 @@ export async function initializeDatabase(): Promise<void> {
                     `UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`,
                     `UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`,
                     `UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`,
+                    // Clean up any duplicate outcome logs (keep only the earliest created for each setup)
+                    `DELETE FROM outcomes WHERE id NOT IN (SELECT MIN(id) FROM outcomes GROUP BY setup_id)`,
                     // Retroactive restoration of premature outcomes & setups where trade was never filled
                     `DELETE FROM outcomes WHERE setup_id IN (SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL UNION SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL)`,
                     `UPDATE edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`,
@@ -598,6 +600,7 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'manna_snd', strategy_tier = 'pro' WHERE (strategy_id IS NULL OR strategy_id = 'manna_basic') AND metadata LIKE '%MANNA SND%'`); } catch {}
     try { db.exec(`UPDATE edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
+    try { db.exec(`DELETE FROM outcomes WHERE id NOT IN (SELECT MIN(id) FROM outcomes GROUP BY setup_id)`); } catch {}
     try { db.exec(`DELETE FROM outcomes WHERE setup_id IN (SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL UNION SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL)`); } catch {}
     try { db.exec(`UPDATE edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`); } catch {}

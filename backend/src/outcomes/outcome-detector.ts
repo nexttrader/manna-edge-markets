@@ -9,6 +9,7 @@ const logger = createLogger('OutcomeDetector');
 
 export class OutcomeDetector {
   private interval: NodeJS.Timeout | null = null;
+  private isEvaluating = false;
   
   start(intervalMs: number = 15000): void {
     if (this.interval) return;
@@ -36,6 +37,11 @@ export class OutcomeDetector {
   }
 
   public async evaluateAllSetups(forceCheck: boolean = false): Promise<void> {
+    if (this.isEvaluating) {
+      logger.debug('Skipping evaluateAllSetups: evaluation already in progress');
+      return;
+    }
+    this.isEvaluating = true;
     try {
       if (!forceCheck && !isMarketOpen()) {
         return;
@@ -294,6 +300,8 @@ export class OutcomeDetector {
       }
     } catch (err) {
       logger.error({ err }, 'Error during OutcomeDetector evaluateAllSetups');
+    } finally {
+      this.isEvaluating = false;
     }
   }
 }
