@@ -12,6 +12,7 @@ import { SignalReplaceModal } from '../components/SignalReplaceModal';
 import { AdminSupportInbox } from '../components/AdminSupportInbox';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
+import { ExpandableCalendar } from '../components/ExpandableCalendar';
 
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
@@ -1043,6 +1044,8 @@ export const AdminPanel: React.FC = () => {
             🟡 Manna SnD
           </button>
         </div>
+
+        <ExpandableCalendar outcomes={recentOutcomes} strategyFilter={strategyFilter} />
 
         <MetricsPanel />
 

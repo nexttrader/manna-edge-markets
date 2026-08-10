@@ -1,0 +1,431 @@
+/* ExpandableCalendar.css - Premium Glassmorphic Trading Calendar */
+
+.session-calendar-wrapper {
+  margin: 24px 0;
+  color: var(--kdt-white, #ffffff);
+  font-family: inherit;
+}
+
+.calendar-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.calendar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-title-group h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--kdt-gold, #ffd700);
+}
+
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.risk-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--kdt-text-muted, #aaa);
+}
+
+.risk-input {
+  width: 70px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--kdt-gold, #ffd700);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-weight: bold;
+  text-align: center;
+}
+
+.risk-input:focus {
+  outline: none;
+  border-color: var(--kdt-gold, #ffd700);
+}
+
+.month-navigator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-weight: bold;
+}
+
+.nav-btn:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: #00e5ff;
+  color: #00e5ff;
+}
+
+.current-month-display {
+  font-size: 1rem;
+  font-weight: 800;
+  min-width: 140px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* Calendar Grid */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.weekday-header {
+  text-align: center;
+  padding: 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--kdt-text-muted, #777);
+  letter-spacing: 1px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.calendar-day-cell {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  min-height: 85px;
+  padding: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.calendar-day-cell:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.calendar-day-cell.outside-month {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.calendar-day-cell.today {
+  border-color: var(--kdt-gold, #ffd700);
+  background: rgba(255, 215, 0, 0.03);
+}
+
+.calendar-day-cell.has-trades {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.day-number {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--kdt-text-muted, #888);
+}
+
+.calendar-day-cell.today .day-number {
+  color: var(--kdt-gold, #ffd700);
+}
+
+/* Day Outcomes */
+.day-pnl-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  margin: 6px 0;
+}
+
+.r-pnl-pill {
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.dollar-pnl-sub {
+  font-size: 0.72rem;
+  color: var(--kdt-text-muted, #888);
+  margin-top: 1px;
+}
+
+/* Indicators */
+.day-session-dots {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  height: 6px;
+  margin-top: 4px;
+}
+
+.session-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: block;
+}
+
+.session-dot.asia { background: #e056fd; }     /* Purple */
+.session-dot.london { background: #00e5ff; }   /* Cyan */
+.session-dot.ny_am { background: #ffd700; }    /* Gold */
+.session-dot.ny_pm { background: #00e676; }    /* Green */
+
+/* Details Section / Drawer style (collapsible below calendar) */
+.calendar-details-drawer {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(10, 10, 15, 0.95);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.drawer-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--kdt-gold, #ffd700);
+}
+
+.drawer-summary-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 0.85rem;
+}
+
+.drawer-stat-pill {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.close-drawer-btn {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.close-drawer-btn:hover {
+  color: #fff;
+}
+
+/* Session Cards Inside Expanded Drawer */
+.sessions-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.session-detail-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.session-detail-card.has-activity {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Border styles for sessions */
+.session-detail-card.asia-session-card { border-left: 4px solid #e056fd; }
+.session-detail-card.london-session-card { border-left: 4px solid #00e5ff; }
+.session-detail-card.ny_am-session-card { border-left: 4px solid #ffd700; }
+.session-detail-card.ny_pm-session-card { border-left: 4px solid #00e676; }
+
+.session-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 8px;
+}
+
+.session-card-title {
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-card-pnl {
+  font-weight: 900;
+  font-size: 0.95rem;
+}
+
+/* Trade items in details */
+.session-trades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+  overflow-y: auto;
+  max-height: 250px;
+}
+
+.no-trades-placeholder {
+  color: var(--kdt-text-muted, #666);
+  font-size: 0.8rem;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+}
+
+.session-trade-item {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.2s;
+}
+
+.session-trade-item:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.trade-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.trade-symbol-bias {
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trade-strat-badge {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+}
+
+.trade-outcome-pill {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.trade-pnl-value {
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.trade-item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--kdt-text-muted, #777);
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  padding-top: 4px;
+  margin-top: 2px;
+}
+
+/* Animations */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Colors standard */
+.text-green {
+  color: #00e676 !important;
+}
+
+.text-red {
+  color: #ff5252 !important;
+}
+
+.text-muted {
+  color: #888 !important;
+}
+
+/* Responsive fixes */
+@media (max-width: 768px) {
+  .calendar-grid {
+    gap: 4px;
+  }
+  
+  .calendar-day-cell {
+    min-height: 65px;
+    padding: 4px;
+  }
+  
+  .r-pnl-pill {
+    font-size: 0.72rem;
+  }
+  
+  .dollar-pnl-sub {
+    display: none;
+  }
+}

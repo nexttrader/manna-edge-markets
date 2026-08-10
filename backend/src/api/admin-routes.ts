@@ -776,7 +776,26 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let futuresQuery = `SELECT * FROM edge_setups`;
     let forexQuery = `SELECT * FROM forex_edge_setups`;
     let outcomesQuery = `
-      SELECT o.* FROM outcomes o
+      SELECT 
+        o.*,
+        COALESCE(e.instrument, f.instrument) as instrument,
+        COALESCE(e.market, f.market) as market,
+        COALESCE(e.bias, f.bias) as bias,
+        COALESCE(e.conviction_score, f.conviction_score) as conviction_score,
+        COALESCE(e.liquidity_score, f.liquidity_score) as liquidity_score,
+        COALESCE(e.r_multiple_1, f.r_multiple_1) as r_multiple_1,
+        COALESCE(e.r_multiple_2, f.r_multiple_2) as r_multiple_2,
+        COALESCE(e.entry_price_recorded, f.entry_price_recorded) as entry_price_recorded,
+        COALESCE(e.entry_zone_mid, f.entry_zone_mid) as entry_zone_mid,
+        COALESCE(e.initial_stop, f.initial_stop) as initial_stop,
+        COALESCE(e.stop, f.stop) as stop,
+        COALESCE(e.tp1, f.tp1) as tp1,
+        COALESCE(e.metadata, f.metadata) as metadata,
+        COALESCE(e.created_at, f.created_at) as time_signaled,
+        COALESCE(e.entry_triggered_at, f.entry_triggered_at) as time_entered,
+        COALESCE(e.resolved_at, f.resolved_at) as time_exited,
+        COALESCE(e.killzone_origin, f.killzone_origin) as killzone_origin
+      FROM outcomes o
       LEFT JOIN edge_setups e ON o.setup_id = e.id
       LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
     `;
@@ -840,22 +859,19 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let matrixRankOneWins = 0;
     let matrixRankOneLosses = 0;
 
-    const enrichedOutcomes = await Promise.all(outcomes.slice(0, 100).map(async (o: any) => {
-      let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
-      // Retry with opposite market if first lookup returned nothing (misclassified rows)
-      if (!setup) setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
+    const enrichedOutcomes = outcomes.map((o: any) => {
       let tradeR = 0;
       // Hard-cap: losses are always -1R
-      if (o.outcome_type === 'tp1_hit') tradeR = setup?.r_multiple_1 || 2.0;
-      else if (o.outcome_type === 'tp2_hit') tradeR = setup?.r_multiple_2 || 3.0;
+      if (o.outcome_type === 'tp1_hit') tradeR = o.r_multiple_1 || 2.0;
+      else if (o.outcome_type === 'tp2_hit') tradeR = o.r_multiple_2 || 3.0;
       else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
       else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
-      else if (setup) {
-        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-        const initialStop = setup.initial_stop || setup.stop;
+      else {
+        const entryPrice = o.entry_price_recorded || o.entry_zone_mid;
+        const initialStop = o.initial_stop || o.stop;
         let risk = Math.abs(entryPrice - initialStop);
-        if (risk < 0.00001 && setup.tp1) risk = Math.abs(setup.tp1 - entryPrice) / (setup.r_multiple_1 || 2.0);
-        const isLong = setup.bias === 'long';
+        if (risk < 0.00001 && o.tp1) risk = Math.abs(o.tp1 - entryPrice) / (o.r_multiple_1 || 2.0);
+        const isLong = o.bias === 'long';
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
         if (risk > 0) {
@@ -864,9 +880,9 @@ router.get('/analytics', async (req: Request, res: Response) => {
         }
       }
 
-      const signalTime = setup?.created_at;
-      const entryTime = setup?.entry_triggered_at;
-      const exitTime = setup?.resolved_at || o.execution_time || o.created_at;
+      const signalTime = o.time_signaled;
+      const entryTime = o.time_entered;
+      const exitTime = o.time_exited || o.execution_time || o.created_at;
 
       let timeToFillMin: number | undefined = undefined;
       let holdingDurationMin: number | undefined = undefined;
@@ -891,10 +907,10 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
       return {
         ...o,
-        instrument: setup?.instrument || 'UNKNOWN',
-        market: setup?.market || 'futures',
-        bias: setup?.bias || 'long',
-        conviction_score: setup?.conviction_score || o.conviction_score || 85,
+        instrument: o.instrument || 'UNKNOWN',
+        market: o.market || 'futures',
+        bias: o.bias || 'long',
+        conviction_score: o.conviction_score || o.conviction_score || 85,
         time_signaled: signalTime,
         time_entered: entryTime,
         time_exited: exitTime,
@@ -902,7 +918,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
         holding_duration_min: holdingDurationMin,
         realized_r: tradeR
       };
-    }));
+    });
 
     let grossWinR = 0;
     let grossLossR = 0;
@@ -922,30 +938,12 @@ router.get('/analytics', async (req: Request, res: Response) => {
       standard: { label: 'Standard (<70%)', min: 0, max: 69.9, total: 0, wins: 0, losses: 0, winRate: 0, plR: 0 }
     };
 
-    for (const o of outcomes) {
-      let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
-      // Retry with opposite market if first lookup returned nothing
-      if (!setup) setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
-      let tradeR = 0;
-      const effectiveStratId = o.strategy_id || setup?.strategy_id || 'sentinel_v2';
+    for (const o of enrichedOutcomes) {
+      let setup = o;
+      let tradeR = o.realized_r ?? 0;
+      const effectiveStratId = o.strategy_id || 'sentinel_v2';
       const isWin = o.outcome_type.includes('tp');
       const isLoss = o.outcome_type.includes('sl');
-
-      if (o.outcome_type === 'tp1_hit') tradeR = setup?.r_multiple_1 || 2.0;
-      else if (o.outcome_type === 'tp2_hit') tradeR = setup?.r_multiple_2 || 3.0;
-      else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
-      else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
-      else if (setup) {
-        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-        const risk = Math.abs(entryPrice - setup.stop);
-        const isLong = setup.bias === 'long';
-        const execPrice = o.execution_price || entryPrice;
-        const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
-        if (risk > 0) {
-          tradeR = Number((diff / risk).toFixed(2));
-          if (tradeR < -1.0) tradeR = -1.0;
-        }
-      }
 
       if (isWin) {
         wins++;
@@ -970,7 +968,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       if (o.setup_market === 'forex') forexR += tradeR;
       else futuresR += tradeR;
 
-      const inst = setup?.instrument || 'OTHER';
+      const inst = o.instrument || 'OTHER';
       const stratId = effectiveStratId;
       const key = `${inst}__${stratId}`;
       if (!assetPerformance[key]) {
@@ -981,7 +979,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
           wins: 0, 
           losses: 0, 
           plR: 0, 
-          market: setup?.market || 'futures' 
+          market: o.market || 'futures' 
         };
       }
       assetPerformance[key].total++;
@@ -989,7 +987,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       if (isWin) assetPerformance[key].wins++;
       else if (isLoss) assetPerformance[key].losses++;
 
-      const kzRaw = setup?.killzone_origin || o?.killzone_origin || 'ny_am';
+      const kzRaw = o.killzone_origin || 'ny_am';
       const kzKey = String(kzRaw).toLowerCase().replace(/^kz_/, '');
       if (killzonePerformance[kzKey]) {
         killzonePerformance[kzKey].total++;
@@ -998,7 +996,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
         else if (isLoss) killzonePerformance[kzKey].losses++;
       }
 
-      const conviction = setup?.conviction_score || o.conviction_score || 85;
+      const conviction = o.conviction_score || 85;
       let cKey = 'standard';
       if (conviction >= 90) cKey = 'high';
       else if (conviction >= 80) cKey = 'medium';
@@ -1011,23 +1009,21 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
       // Decision Matrix Rank #1 selection tracking
       let wasRankOne = false;
-      if (setup) {
-        let meta: any = {};
-        try {
-          meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {});
-        } catch {}
-        if (meta.entry_matrix_rank === 1 || meta.is_best_trade_at_entry === true) {
+      let meta: any = {};
+      try {
+        meta = typeof o.metadata === 'string' ? JSON.parse(o.metadata) : (o.metadata || {});
+      } catch {}
+      if (meta.entry_matrix_rank === 1 || meta.is_best_trade_at_entry === true) {
+        wasRankOne = true;
+      } else {
+        // Fallback approximation for historical trades: if it had a very high conviction (>=88) and liquidity (>=85)
+        const S_conviction = Math.max(0, Math.min(100, o.conviction_score || 75));
+        const S_winrate = 90; // Default approximation
+        const S_liquidity = Math.max(0, Math.min(100, o.liquidity_score || 80));
+        const S_rr = Math.min(100, Math.max(0, ((o.r_multiple_1 || 2) / 2.5) * 100));
+        const priorityScore = (0.25 * S_conviction + 0.25 * S_winrate + 0.15 * S_liquidity + 0.15 * S_rr + 0.10 * 85 + 0.10 * 95);
+        if (priorityScore >= 84.0) {
           wasRankOne = true;
-        } else {
-          // Fallback approximation for historical trades: if it had a very high conviction (>=88) and liquidity (>=85)
-          const S_conviction = Math.max(0, Math.min(100, setup.conviction_score || 75));
-          const S_winrate = 90; // Default approximation
-          const S_liquidity = Math.max(0, Math.min(100, setup.liquidity_score || 80));
-          const S_rr = Math.min(100, Math.max(0, ((setup.r_multiple_1 || 2) / 2.5) * 100));
-          const priorityScore = (0.25 * S_conviction + 0.25 * S_winrate + 0.15 * S_liquidity + 0.15 * S_rr + 0.10 * 85 + 0.10 * 95);
-          if (priorityScore >= 84.0) {
-            wasRankOne = true;
-          }
         }
       }
 
