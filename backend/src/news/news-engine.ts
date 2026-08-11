@@ -35,24 +35,9 @@ export class NewsEngine {
 
     const candidateFeeds = [
       {
-        name: 'ForexFactory Primary JSON',
-        url: 'https://nfp.ourfocus.net/ff_calendar_thisweek.json',
+        name: 'ForexFactory NFS Media JSON',
+        url: 'https://nfs.faireconomy.media/ff_calendar_thisweek.json',
         type: 'ff'
-      },
-      {
-        name: 'ForexFactory CDN Mirror',
-        url: 'https://cdn-nfp.forexfactory.net/ff_calendar_thisweek.json',
-        type: 'ff'
-      },
-      {
-        name: 'FXStreet Public API',
-        url: 'https://calendar-api.fxstreet.com/en/economic-calendar/events',
-        type: 'fx'
-      },
-      {
-        name: 'FXStreet Mirror API',
-        url: 'https://nfp.ourfocus.net/en/economic-calendar/events',
-        type: 'fx'
       }
     ];
 

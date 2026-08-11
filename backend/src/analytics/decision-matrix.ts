@@ -65,6 +65,22 @@ export function getCurrentKillzone(dateStr?: string): { name: string; isActive: 
   return { name: 'off_hours', isActive: false, score: 35 };
 }
 
+function getRelevantCurrencies(instrument: string, market: string): string[] {
+  const inst = instrument.toUpperCase();
+  if (market === 'forex') {
+    const parts = inst.split('/');
+    if (parts.length === 2) {
+      return [parts[0], parts[1]];
+    }
+    if (inst.length === 6) {
+      return [inst.substring(0, 3), inst.substring(3, 6)];
+    }
+    return ['USD'];
+  } else {
+    return ['USD'];
+  }
+}
+
 export function calculateAssetMatrixItem(
   setup: any,
   currentPrice?: number,
@@ -88,7 +104,33 @@ export function calculateAssetMatrixItem(
 
   // 1. Conviction Score (Weight: 25%)
   const rawConviction = setup.conviction_score ?? setup.conviction ?? 75;
-  const S_conviction = Math.max(0, Math.min(100, rawConviction));
+  let S_conviction = Math.max(0, Math.min(100, rawConviction));
+  try {
+    const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata || {};
+    const trend15m = meta.trend15m;
+    const curveLocation = meta.curveLocation;
+    
+    if (trend15m) {
+      if (bias === 'long') {
+        if (trend15m === 'up') S_conviction += 5;
+        else if (trend15m === 'down') S_conviction -= 10;
+      } else {
+        if (trend15m === 'down') S_conviction += 5;
+        else if (trend15m === 'up') S_conviction -= 10;
+      }
+    }
+    
+    if (curveLocation) {
+      if (bias === 'long') {
+        if (curveLocation === 'low') S_conviction += 5;
+        else if (curveLocation === 'high') S_conviction -= 15;
+      } else {
+        if (curveLocation === 'high') S_conviction += 5;
+        else if (curveLocation === 'low') S_conviction -= 15;
+      }
+    }
+    S_conviction = Math.max(0, Math.min(100, S_conviction));
+  } catch {}
 
   // 2. Historical Win-Rate Edge Factor (Weight: 25%)
   const rawWinRate = setup.historical_winrate ?? setup.historical_win_rate ?? 78;
@@ -108,10 +150,12 @@ export function calculateAssetMatrixItem(
 
   // 5. Timing & News Window (Weight: 10%)
   const kz = getCurrentKillzone(customTimestamp);
+  const relevantCurrencies = getRelevantCurrencies(instrument, market);
   let S_news = 100;
   const now = customTimestamp ? new Date(customTimestamp) : new Date();
   for (const event of newsEvents) {
-    if (event.impact === 'high') {
+    const eventCurrency = (event.currency || '').toUpperCase();
+    if (event.impact === 'high' && (relevantCurrencies.includes(eventCurrency) || eventCurrency === 'ALL')) {
       const eventTime = new Date(event.time);
       const diffMinutes = Math.abs(eventTime.getTime() - now.getTime()) / (1000 * 60);
       if (diffMinutes <= 15) {
@@ -214,6 +258,21 @@ export function calculateAssetMatrixItem(
   };
 }
 
+function areCorrelated(instA: string, instB: string): boolean {
+  const a = instA.toUpperCase();
+  const b = instB.toUpperCase();
+  
+  // Futures Stock Indexes
+  const indices = ['ES', 'NQ', 'RTY', 'YM'];
+  if (indices.includes(a) && indices.includes(b)) return true;
+  
+  // USD-based Forex majors
+  const usdMajors = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
+  if (usdMajors.includes(a) && usdMajors.includes(b)) return true;
+  
+  return false;
+}
+
 export function calculateAssetMatrix(
   setups: any[],
   marketPrices: Record<string, number> = {},
@@ -227,6 +286,43 @@ export function calculateAssetMatrix(
 
   // Sort descending by priority_score
   items.sort((a, b) => b.priority_score - a.priority_score);
+
+  // Apply Correlation Penalty
+  for (let i = 0; i < items.length; i++) {
+    const itemA = items[i];
+    if (itemA.signal_state !== 'awaiting_entry' && itemA.signal_state !== 'active') continue;
+
+    for (let j = 0; j < i; j++) {
+      const itemB = items[j];
+      if (itemB.signal_state !== 'awaiting_entry' && itemB.signal_state !== 'active') continue;
+
+      if (itemA.bias === itemB.bias && areCorrelated(itemA.instrument, itemB.instrument)) {
+        // Apply correlation penalty to the lower-priority setup (itemA since items is sorted desc)
+        const penalty = 12.0;
+        itemA.priority_score = Number(Math.max(0, itemA.priority_score - penalty).toFixed(1));
+
+        // Downgrade its tier/action if needed
+        if (itemA.priority_score >= 85 || (itemA.priority_score >= 75 && itemA.is_in_zone)) {
+          itemA.priority_tier = 'IMMINENT_FOCUS';
+          itemA.actionable_recommendation = 'EXECUTE_OR_ARM';
+          itemA.status_label = itemA.is_in_zone ? 'IN EXECUTION ZONE' : 'HIGH EDGE IMMINENT';
+        } else if (itemA.priority_score >= 70 || (itemA.distance_in_r !== undefined && itemA.distance_in_r <= 0.3)) {
+          itemA.priority_tier = 'HIGH_ATTENTION';
+          itemA.actionable_recommendation = 'ARM_ORDER';
+          itemA.status_label = 'HIGH PROBABILITY';
+        } else if (itemA.priority_score >= 50) {
+          itemA.priority_tier = 'MONITORING';
+          itemA.actionable_recommendation = 'MONITOR_STRUCTURE';
+          itemA.status_label = 'IN DEVELOPMENT';
+        } else {
+          itemA.priority_tier = 'LOW_PRIORITY';
+          itemA.actionable_recommendation = 'STAND_BY';
+          itemA.status_label = 'Distant / Low Priority';
+        }
+        break; // Only apply penalty once
+      }
+    }
+  }
 
   // Assign ranks
   items.forEach((item, idx) => {
