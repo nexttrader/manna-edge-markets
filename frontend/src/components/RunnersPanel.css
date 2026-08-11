@@ -211,7 +211,7 @@
   gap: 4px;
 }
 
-.metric-label {
+.runner-metric-label {
   font-size: 0.65rem;
   color: #7a8c9e;
   font-weight: 700;
@@ -219,13 +219,13 @@
   text-transform: uppercase;
 }
 
-.metric-val {
+.runner-metric-val {
   font-size: 0.95rem;
   font-weight: 800;
   color: #e2e8f0;
 }
 
-.runner-metric.highlight-metric .metric-val {
+.runner-metric.highlight-metric .runner-metric-val {
   color: #ffd600;
   text-shadow: 0 0 10px rgba(255, 214, 0, 0.15);
 }

@@ -98,23 +98,23 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                     <div className="runner-card-body">
                       <div className="runner-metric-grid">
                         <div className="runner-metric">
-                          <span className="metric-label font-mono">ENTRY</span>
-                          <span className="metric-val font-mono">{entryPrice.toFixed(decimals)}</span>
+                          <span className="runner-metric-label font-mono">ENTRY</span>
+                          <span className="runner-metric-val font-mono">{entryPrice.toFixed(decimals)}</span>
                         </div>
 
                         <div className="runner-metric highlight-metric">
-                          <span className="metric-label font-mono">CURRENT</span>
-                          <span className="metric-val font-mono price-val">{currentPrice ? currentPrice.toFixed(decimals) : '---'}</span>
+                          <span className="runner-metric-label font-mono">CURRENT</span>
+                          <span className="runner-metric-val font-mono price-val">{currentPrice ? currentPrice.toFixed(decimals) : '---'}</span>
                         </div>
 
                         <div className="runner-metric">
-                          <span className="metric-label font-mono">STOP LOSS (BE)</span>
-                          <span className="metric-val font-mono stop-val">{(setup.stop || entryPrice).toFixed(decimals)}</span>
+                          <span className="runner-metric-label font-mono">STOP LOSS (BE)</span>
+                          <span className="runner-metric-val font-mono stop-val">{(setup.stop || entryPrice).toFixed(decimals)}</span>
                         </div>
 
                         <div className="runner-metric">
-                          <span className="metric-label font-mono">TARGET 2 (3R)</span>
-                          <span className="metric-val font-mono target-val">{tp2.toFixed(decimals)}</span>
+                          <span className="runner-metric-label font-mono">TARGET 2 (3R)</span>
+                          <span className="runner-metric-val font-mono target-val">{tp2.toFixed(decimals)}</span>
                         </div>
                       </div>
 
