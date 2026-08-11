@@ -46,6 +46,39 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
     fetchCalendar();
   }, [currencyFilter, impactFilter]);
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loading || events.length === 0) return;
+
+    // Find closest event to now
+    let closestId: string | null = null;
+    let minDiff = Infinity;
+    const nowMs = Date.now();
+
+    events.forEach(ev => {
+      const evMs = new Date(ev.eventTime).getTime();
+      const diff = Math.abs(evMs - nowMs);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestId = ev.id;
+      }
+    });
+
+    if (closestId) {
+      const timer = setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        
+        const targetElement = container.querySelector(`[data-event-id="${closestId}"]`);
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, events]);
+
   return (
     <div className="econ-modal-backdrop" onClick={onClose}>
       <div className="econ-modal-card animate-scale-up" onClick={e => e.stopPropagation()}>
@@ -119,7 +152,7 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
         )}
 
         {/* Calendar Events List */}
-        <div className="econ-events-body">
+        <div className="econ-events-body" ref={containerRef}>
           {loading ? (
             <div className="econ-loading font-headline">Syncing live economic events...</div>
           ) : events.length === 0 ? (
@@ -159,7 +192,7 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
                         const isPast = dateObj.getTime() < Date.now();
 
                         return (
-                          <div key={ev.id} className={`econ-event-card ${ev.impact} ${isPast ? 'is-past' : ''}`}>
+                          <div key={ev.id} data-event-id={ev.id} className={`econ-event-card ${ev.impact} ${isPast ? 'is-past' : ''}`}>
                             <div className="econ-event-left">
                               <span className={`impact-dot ${ev.impact}`} title={`${ev.impact.toUpperCase()} Impact`} />
                               <div className="econ-time-box">
