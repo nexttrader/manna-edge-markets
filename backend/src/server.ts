@@ -14,6 +14,7 @@ import { lifecycleSync } from './lifecycle/lifecycle-sync';
 import { outcomeDetector } from './outcomes/outcome-detector';
 import { startAutomatedHealthDiagnostics } from './diagnostics/health-checker';
 import { createLogger } from './telemetry/logger';
+import { startIBPriceStreaming } from './discovery/ib-provider';
 
 import { processKillzoneMidpointScan } from './scheduler/midpoint-scanner';
 import setupRoutes from './api/setup-routes';
@@ -98,6 +99,13 @@ async function startServer() {
     try {
         logger.info('Initializing database...');
         await initializeDatabase();
+
+        logger.info('Starting IBKR price streaming daemon (if enabled)...');
+        try {
+            startIBPriceStreaming();
+        } catch (err: any) {
+            logger.error({ err: err.message }, 'Failed to start IBKR price streaming daemon');
+        }
 
         logger.info('Starting lifecycle sync...');
         lifecycleSync.start(15000);

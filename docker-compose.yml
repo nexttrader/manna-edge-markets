@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  ib-gateway:
+    image: gnzsnz/ib-gateway-docker:stable
+    container_name: ib-gateway
+    restart: always
+    ports:
+      # Expose API port: 4002 for Paper Trading (change to 4001 inside container if using Live)
+      - "4002:4002"
+      # Expose VNC port to visually inspect the Gateway interface (logins, 2FA prompt, etc.)
+      - "5900:5900"
+    environment:
+      # Replace these with your actual IBKR Paper trading credentials
+      - TWS_USERID=your_paper_username
+      - TWS_PASSWORD=your_paper_password
+      # TRADING_MODE can be 'paper' or 'live'
+      - TRADING_MODE=paper
+      # VNC connection password to view the Gateway screen
+      - VNC_PASSWORD=my_secure_vnc_pass
+      # Automatically accept incoming API connections from localhost/trusted IPs
+      - READ_ONLY_API=yes

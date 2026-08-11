@@ -1,6 +1,7 @@
 import YahooFinance from 'yahoo-finance2';
 import { Candle } from './types';
 import { createLogger } from '../telemetry/logger';
+import { queryDb } from '../db/database';
 
 const logger = createLogger('YahooProvider');
 
@@ -145,6 +146,26 @@ export async function getLiveCandles(
 }
 
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
+    // 1. Check if IBKR is configured as the active provider
+    if (process.env.MARKET_DATA_PROVIDER === 'ibkr') {
+        try {
+            const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
+            if (rows && rows.length > 0) {
+                const lastUpdate = new Date(rows[0].updated_at).getTime();
+                const now = Date.now();
+                // If the price was updated less than 30 seconds ago, consider it valid and fresh
+                if (now - lastUpdate < 30 * 1000) {
+                    return rows[0].price;
+                }
+                logger.warn({ instrument, lastUpdate: rows[0].updated_at }, 'IBKR price in database is stale (>30s). Falling back to Yahoo.');
+            } else {
+                logger.warn({ instrument }, 'No IBKR price found in database. Falling back to Yahoo.');
+            }
+        } catch (err: any) {
+            logger.error({ instrument, err: err.message }, 'Failed to query instrument_prices from DB. Falling back to Yahoo.');
+        }
+    }
+
     const yahooSymbol = SYMBOL_MAP[instrument];
 
     const cached = priceCache.get(instrument);
