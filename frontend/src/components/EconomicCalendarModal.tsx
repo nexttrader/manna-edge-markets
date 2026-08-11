@@ -128,51 +128,78 @@ export const EconomicCalendarModal: React.FC<EconomicCalendarModalProps> = ({ on
             </div>
           ) : (
             <div className="econ-events-list">
-              {events.map(ev => {
-                const dateObj = new Date(ev.eventTime);
-                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
-                const dateStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
-                const isPast = dateObj.getTime() < Date.now();
+              {(() => {
+                const dayGroups: { dateKey: string; dateLabel: string; events: EconomicEvent[] }[] = [];
+                events.forEach(ev => {
+                  const dateObj = new Date(ev.eventTime);
+                  const year = dateObj.getFullYear();
+                  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const date = String(dateObj.getDate()).padStart(2, '0');
+                  const dateKey = `${year}-${month}-${date}`;
+                  const dateLabel = dateObj.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+                  
+                  let group = dayGroups.find(g => g.dateKey === dateKey);
+                  if (!group) {
+                    group = { dateKey, dateLabel, events: [] };
+                    dayGroups.push(group);
+                  }
+                  group.events.push(ev);
+                });
 
-                return (
-                  <div key={ev.id} className={`econ-event-card ${ev.impact} ${isPast ? 'is-past' : ''}`}>
-                    <div className="econ-event-left">
-                      <span className={`impact-dot ${ev.impact}`} title={`${ev.impact.toUpperCase()} Impact`} />
-                      <div className="econ-time-box">
-                        <span className="ev-time font-mono">{timeStr}</span>
-                        <span className="ev-date">{dateStr}</span>
-                      </div>
-                      <span className="ev-currency">{ev.currency}</span>
+                return dayGroups.map(group => (
+                  <div key={group.dateKey} className="econ-day-section">
+                    <div className="econ-day-header font-headline">
+                      <span>{group.dateLabel}</span>
+                      <span className="econ-day-count">{group.events.length} {group.events.length === 1 ? 'event' : 'events'}</span>
                     </div>
+                    <div className="econ-day-events">
+                      {group.events.map(ev => {
+                        const dateObj = new Date(ev.eventTime);
+                        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+                        const isPast = dateObj.getTime() < Date.now();
 
-                    <div className="econ-event-center">
-                      <span className="ev-title">{ev.title}</span>
-                      {isPast && <span className="ev-released-badge">RELEASED</span>}
-                    </div>
+                        return (
+                          <div key={ev.id} className={`econ-event-card ${ev.impact} ${isPast ? 'is-past' : ''}`}>
+                            <div className="econ-event-left">
+                              <span className={`impact-dot ${ev.impact}`} title={`${ev.impact.toUpperCase()} Impact`} />
+                              <div className="econ-time-box">
+                                <span className="ev-time font-mono">{timeStr}</span>
+                              </div>
+                              <span className="ev-currency">{ev.currency}</span>
+                            </div>
 
-                    <div className="econ-event-right font-mono">
-                      {ev.forecast && (
-                        <div className="ev-meta">
-                          <span className="m-lbl">FORECAST:</span>
-                          <span className="m-val">{ev.forecast}</span>
-                        </div>
-                      )}
-                      {ev.previous && (
-                        <div className="ev-meta">
-                          <span className="m-lbl">PREVIOUS:</span>
-                          <span className="m-val">{ev.previous}</span>
-                        </div>
-                      )}
-                      {ev.actual && (
-                        <div className="ev-meta">
-                          <span className="m-lbl">ACTUAL:</span>
-                          <span className="m-val text-gold">{ev.actual}</span>
-                        </div>
-                      )}
+                            <div className="econ-event-center">
+                              <span className="ev-title">{ev.title}</span>
+                              {isPast && <span className="ev-released-badge">RELEASED</span>}
+                            </div>
+
+                            <div className="econ-event-right font-mono">
+                              {ev.forecast && (
+                                <div className="ev-meta">
+                                  <span className="m-lbl">FORECAST:</span>
+                                  <span className="m-val">{ev.forecast}</span>
+                                </div>
+                              )}
+                              {ev.previous && (
+                                <div className="ev-meta">
+                                  <span className="m-lbl">PREVIOUS:</span>
+                                  <span className="m-val">{ev.previous}</span>
+                                </div>
+                              )}
+                              {ev.actual && (
+                                <div className="ev-meta">
+                                  <span className="m-lbl">ACTUAL:</span>
+                                  <span className="m-val text-gold">{ev.actual}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                ));
+              })()}
             </div>
           )}
         </div>

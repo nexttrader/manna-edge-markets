@@ -157,7 +157,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 210px;
+  width: 160px;
   flex-shrink: 0;
 }
 
@@ -252,4 +252,52 @@
   padding: 40px 0;
   color: var(--kdt-white-muted);
   font-size: 1rem;
+}
+
+/* Day Section Grouping */
+.econ-day-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.econ-day-section:last-child {
+  margin-bottom: 8px;
+}
+
+.econ-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(201, 168, 76, 0.12) 0%, transparent 100%);
+  border-left: 3px solid var(--kdt-gold);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.econ-day-header span:first-child {
+  font-family: var(--font-headline);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--kdt-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.econ-day-count {
+  font-size: 0.7rem;
+  color: var(--kdt-white-muted);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--kdt-purple-border);
+}
+
+.econ-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
