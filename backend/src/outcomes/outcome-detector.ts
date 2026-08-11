@@ -213,14 +213,16 @@ export class OutcomeDetector {
           await queries.createOutcome(outcome);
           
           if (outcomeType === 'tp1_hit') {
+            const calculatedTp2 = Number(tp2.toFixed(setup.market === 'forex' ? 5 : 2));
             await queries.updateSetupState(setup.id, setup.market || 'futures', 'runner', {
               stop: entryPrice,
               initial_stop: origStop,
               is_breakeven: 1,
-              invalidation_reason: 'tp1_hit'
+              invalidation_reason: 'tp1_hit',
+              tp2: calculatedTp2
             });
-            logger.info({ setupId: setup.id, instrument: setup.instrument }, 'TP1 (2R) hit: Logged 2R, moved to RUNNERS tab');
-            publishEvents.emit('setup_runner_started', { setup: { ...setup, signal_state: 'runner', stop: entryPrice, is_breakeven: 1 }, outcome });
+            logger.info({ setupId: setup.id, instrument: setup.instrument, tp2: calculatedTp2 }, 'TP1 (2R) hit: Logged 2R, moved to RUNNERS tab with TP2 target');
+            publishEvents.emit('setup_runner_started', { setup: { ...setup, signal_state: 'runner', stop: entryPrice, is_breakeven: 1, tp2: calculatedTp2 }, outcome });
           } else {
             await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
               tradable: 0,

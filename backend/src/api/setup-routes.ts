@@ -219,8 +219,12 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
         const unrealizedPL = Number(diff.toFixed(5));
         const unrealizedR = risk > 0 ? Number((diff / risk).toFixed(2)) : 2.0;
 
+        const decimals = setup.market === 'forex' ? 5 : 2;
+        const tp2 = setup.tp2 || Number((isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0)).toFixed(decimals));
+
         return {
           ...setup,
+          tp2,
           current_price: currentPrice,
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,

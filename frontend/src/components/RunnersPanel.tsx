@@ -60,52 +60,88 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
             </div>
           ) : (
             <div className="runners-grid">
-              {runnerSetups.map((setup) => {
+               {runnerSetups.map((setup) => {
                 const currentPrice = setup.current_price || 0;
                 const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid || 0;
                 const isLong = (setup.bias || 'long').toLowerCase() === 'long';
-                const tp2 = setup.tp2 || 0;
+                const stop = setup.initial_stop || setup.stop || 0;
+                const risk = Math.abs(entryPrice - stop);
+                const decimals = setup.market === 'forex' ? 5 : 2;
+                const calculatedTp2 = isLong ? (entryPrice + risk * 3.0) : (entryPrice - risk * 3.0);
+                const tp2 = setup.tp2 || calculatedTp2 || 0;
                 const distToTp2 = currentPrice > 0 && tp2 > 0
-                  ? Math.abs(tp2 - currentPrice).toFixed(2)
+                  ? Math.abs(tp2 - currentPrice).toFixed(decimals)
                   : 'N/A';
 
+                const totalDistance = Math.abs(tp2 - entryPrice);
+                const currentDistance = currentPrice > 0
+                  ? (isLong ? (currentPrice - entryPrice) : (entryPrice - currentPrice))
+                  : 0;
+                const progressPercent = totalDistance > 0
+                  ? Math.min(100, Math.max(0, (currentDistance / totalDistance) * 100))
+                  : 0;
+
+                const tp1Percent = 66.6;
+
                 return (
-                  <div key={setup.id} className="runner-card glass-card">
+                  <div key={setup.id} className={`runner-card glass-card ${isLong ? 'is-long' : 'is-short'}`}>
                     <div className="runner-card-header">
                       <div className="runner-symbol-group">
                         <span className="runner-symbol font-mono">{setup.instrument}</span>
                         <span className={`runner-bias-badge font-mono ${isLong ? 'bias-long' : 'bias-short'}`}>
-                          {isLong ? '▲ LONG RUNNER' : '▼ SHORT RUNNER'}
+                          {isLong ? '▲ LONG' : '▼ SHORT'}
                         </span>
                       </div>
-                      <span className="runner-logged-badge font-mono">+2.00R LOGGED</span>
+                      <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
                     </div>
 
                     <div className="runner-card-body">
-                      <div className="runner-metric">
-                        <span className="metric-label font-mono">ENTRY PRICE</span>
-                        <span className="metric-val font-mono">{entryPrice}</span>
+                      <div className="runner-metric-grid">
+                        <div className="runner-metric">
+                          <span className="metric-label font-mono">ENTRY</span>
+                          <span className="metric-val font-mono">{entryPrice.toFixed(decimals)}</span>
+                        </div>
+
+                        <div className="runner-metric highlight-metric">
+                          <span className="metric-label font-mono">CURRENT</span>
+                          <span className="metric-val font-mono price-val">{currentPrice ? currentPrice.toFixed(decimals) : '---'}</span>
+                        </div>
+
+                        <div className="runner-metric">
+                          <span className="metric-label font-mono">STOP LOSS (BE)</span>
+                          <span className="metric-val font-mono stop-val">{(setup.stop || entryPrice).toFixed(decimals)}</span>
+                        </div>
+
+                        <div className="runner-metric">
+                          <span className="metric-label font-mono">TARGET 2 (3R)</span>
+                          <span className="metric-val font-mono target-val">{tp2.toFixed(decimals)}</span>
+                        </div>
                       </div>
 
-                      <div className="runner-metric">
-                        <span className="metric-label font-mono">CURRENT PRICE</span>
-                        <span className="metric-val font-mono text-gold">{currentPrice || '---'}</span>
-                      </div>
-
-                      <div className="runner-metric">
-                        <span className="metric-label font-mono">STOP LOSS (BE)</span>
-                        <span className="metric-val font-mono text-green">{setup.stop || entryPrice} (RISK FREE)</span>
-                      </div>
-
-                      <div className="runner-metric">
-                        <span className="metric-label font-mono">TARGET 2 (3R)</span>
-                        <span className="metric-val font-mono text-gold">{setup.tp2 || 'N/A'} (+3.00R)</span>
+                      {/* Premium Progress Bar representing move to 3R */}
+                      <div className="runner-progress-wrapper">
+                        <div className="runner-progress-labels font-mono">
+                          <span>BE</span>
+                          <span className="tp1-label" style={{ left: `${tp1Percent}%` }}>TP1 (2R)</span>
+                          <span>TP2 (3R)</span>
+                        </div>
+                        <div className="runner-progress-bar-container">
+                          <div 
+                            className="runner-progress-bar-fill" 
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                          <div className="runner-progress-marker tp1-marker" style={{ left: `${tp1Percent}%` }} />
+                        </div>
+                        <div className="runner-progress-stats font-mono">
+                          <span className="progress-pct">{progressPercent.toFixed(0)}% reached</span>
+                          <span className="progress-r">+{((progressPercent / 100) * 3.0).toFixed(2)}R</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="runner-card-footer">
                       <div className="runner-status-line font-mono">
-                        <span>DISTANCE TO TP2:</span>
+                        <span className="status-label">DISTANCE TO TP2:</span>
                         <span className="text-gold font-bold">{distToTp2} pts</span>
                       </div>
                       <div className="runner-tracking-note font-mono">
