@@ -249,8 +249,7 @@ function subscribeToAllSymbols() {
   if (!ib || !isConnected) return;
 
   const instruments = [
-    'ES', 'NQ', 'YM', 'GC', 'CL', 'SI',
-    'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'EUR/GBP', 'GBP/JPY'
+    'ES', 'NQ', 'YM', 'GC', 'CL', 'SI'
   ];
 
   activeRequests.clear();
