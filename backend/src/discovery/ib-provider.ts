@@ -7,7 +7,7 @@ const logger = createLogger('IBProvider');
 // 1. Configuration from environment variables
 const IB_HOST = process.env.IB_GATEWAY_HOST || '127.0.0.1';
 const IB_PORT = Number(process.env.IB_GATEWAY_PORT || '4002'); // Default 4002 for paper trading
-const IB_CLIENT_ID = Number(process.env.IB_CLIENT_ID || '1');
+const IB_CLIENT_ID = process.env.IB_CLIENT_ID ? Number(process.env.IB_CLIENT_ID) : Math.floor(Math.random() * 8999) + 1000;
 
 let ib: IBApi | null = null;
 let isConnected = false;
@@ -157,7 +157,7 @@ export function startIBPriceStreaming() {
     return;
   }
 
-  logger.info({ host: IB_HOST, port: IB_PORT }, 'Initializing IBKR live price streaming...');
+  logger.info({ host: IB_HOST, port: IB_PORT, clientId: IB_CLIENT_ID }, 'Initializing IBKR live price streaming...');
 
   ib = new IBApi({
     host: IB_HOST,
@@ -231,15 +231,11 @@ function setupListeners() {
     const instrument = activeRequests.get(reqId);
     if (!instrument || price <= 0) return;
 
-    // Field 4: Last Price (Futures)
-    // Field 9: Close Price
-    // Field 1 & 2: Bid/Ask (Forex) - using midpoint
-    if (field === 4 || field === 9) {
-      await updateCachedPrice(instrument, price);
-    } else if (field === 1 || field === 2) {
-      // Calculate a simple mid-price for Forex
-      // For simplicity, we directly write the bid or ask, or keep track of them.
-      // Writing any active bid/ask quote updates the current trade price immediately.
+    // Field 1: Bid
+    // Field 2: Ask
+    // Field 4: Last
+    // Field 9: Close
+    if (field === 1 || field === 2 || field === 4 || field === 9) {
       await updateCachedPrice(instrument, price);
     }
   });
