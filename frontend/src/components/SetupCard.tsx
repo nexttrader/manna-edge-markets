@@ -89,6 +89,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   }, [setup.current_price]);
 
   if (!setup) return null;
+  const isForex = setup.market === 'forex' || setup.instrument.includes('/');
 
   const handleSingleRescan = async () => {
     try {
@@ -348,11 +349,23 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           <>
             <div 
               className={`level-row live-price-level-row tick-${priceTick}`}
-              style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
-              onClick={() => setShowPriceDropdown(!showPriceDropdown)}
-              title="Click to view feed details and true live price"
+              style={{ cursor: isForex ? 'default' : 'pointer', transition: 'background-color 0.2s' }}
+              onClick={() => {
+                if (!isForex) {
+                  setShowPriceDropdown(!showPriceDropdown);
+                }
+              }}
+              title={isForex ? undefined : "Click to view feed details and true live price"}
             >
-              {setup.is_ibkr_fresh ? (
+              {isForex ? (
+                <>
+                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE (Y)</span>
+                  <span className="level-val font-bold text-white">
+                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
+                  </span>
+                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ Y-Feed</span>
+                </>
+              ) : setup.is_ibkr_fresh ? (
                 <>
                   <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE (I)</span>
                   <span className="level-val font-bold text-white">
@@ -372,7 +385,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 </>
               )}
             </div>
-            {showPriceDropdown && (
+            {!isForex && showPriceDropdown && (
               <div 
                 className="font-mono text-left" 
                 style={{ 

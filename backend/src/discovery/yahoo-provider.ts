@@ -146,8 +146,9 @@ export async function getLiveCandles(
 }
 
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
-    // 1. Check if IBKR is configured as the active provider
-    if (process.env.MARKET_DATA_PROVIDER === 'ibkr') {
+    const isForex = instrument.includes('/');
+    // 1. Check if IBKR is configured as the active provider (futures only)
+    if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
         try {
             const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
             if (rows && rows.length > 0) {

@@ -9,6 +9,9 @@ import { outcomeDetector } from '../outcomes/outcome-detector';
 const router = express.Router();
 
 async function getIbkrPriceInfo(instrument: string): Promise<{ ibkrPrice: number | null, isIbkrFresh: boolean }> {
+  if (instrument.includes('/')) {
+    return { ibkrPrice: null, isIbkrFresh: false };
+  }
   try {
     const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
     if (rows && rows.length > 0) {
