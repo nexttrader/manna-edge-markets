@@ -8,6 +8,21 @@ import { outcomeDetector } from '../outcomes/outcome-detector';
 
 const router = express.Router();
 
+async function getIbkrPriceInfo(instrument: string): Promise<{ ibkrPrice: number | null, isIbkrFresh: boolean }> {
+  try {
+    const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
+    if (rows && rows.length > 0) {
+      const price = Number(rows[0].price);
+      const updatedAt = new Date(rows[0].updated_at).getTime();
+      const isFresh = (Date.now() - updatedAt) < 30 * 1000;
+      return { ibkrPrice: price, isIbkrFresh: isFresh };
+    }
+  } catch (err) {
+    // ignore
+  }
+  return { ibkrPrice: null, isIbkrFresh: false };
+}
+
 router.get('/system/maintenance', async (_req: Request, res: Response) => {
   try {
     const maintenance = await queries.getMaintenanceState();
@@ -57,6 +72,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         let initialStop = setup.initial_stop;
 
@@ -111,6 +127,8 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
         return {
           ...setup,
           current_price: currentPrice,
+          ibkr_price: ibkrPrice,
+          is_ibkr_fresh: isIbkrFresh,
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,
           distance_to_entry_r: distanceToEntryR,
@@ -210,6 +228,7 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         let initialStop = setup.initial_stop || setup.stop;
         const risk = Math.abs(entryPrice - initialStop);
@@ -226,6 +245,8 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
           ...setup,
           tp2,
           current_price: currentPrice,
+          ibkr_price: ibkrPrice,
+          is_ibkr_fresh: isIbkrFresh,
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,
           is_breakeven: 1
@@ -317,12 +338,15 @@ router.get('/accelerate/decision-matrix', async (req: Request, res: Response) =>
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
         if (currentPrice) {
           priceMap[setup.instrument] = currentPrice;
         }
         return {
           ...setup,
-          current_price: currentPrice
+          current_price: currentPrice,
+          ibkr_price: ibkrPrice,
+          is_ibkr_fresh: isIbkrFresh
         };
       })
     );

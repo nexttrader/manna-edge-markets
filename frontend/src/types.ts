@@ -76,6 +76,8 @@ export interface EdgeSetup {
   invalidation_detail?: string;
   
   current_price?: number;
+  ibkr_price?: number | null;
+  is_ibkr_fresh?: boolean;
   unrealized_pl?: number;
   unrealizedR?: number;
   distance_to_entry_r?: number;

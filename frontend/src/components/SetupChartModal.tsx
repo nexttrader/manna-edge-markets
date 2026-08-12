@@ -12,6 +12,32 @@ interface SetupChartModalProps {
 
 export type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
+function getCurrentCandleTime(timeframe: ChartTimeframe): number {
+  const now = Date.now();
+  const date = new Date(now);
+  const minutes = date.getMinutes();
+  
+  if (timeframe === '1m') {
+    date.setSeconds(0, 0);
+  } else if (timeframe === '5m') {
+    const roundedMin = Math.floor(minutes / 5) * 5;
+    date.setMinutes(roundedMin, 0, 0);
+  } else if (timeframe === '15m') {
+    const roundedMin = Math.floor(minutes / 15) * 15;
+    date.setMinutes(roundedMin, 0, 0);
+  } else if (timeframe === '1h') {
+    date.setMinutes(0, 0, 0);
+  } else if (timeframe === '4h') {
+    const hours = date.getHours();
+    const roundedHours = Math.floor(hours / 4) * 4;
+    date.setHours(roundedHours, 0, 0, 0);
+  } else if (timeframe === '1d') {
+    date.setHours(0, 0, 0, 0);
+  }
+  
+  return Math.floor(date.getTime() / 1000);
+}
+
 const parseNum = (val: any): number => {
   if (val === undefined || val === null) return 0;
   const n = typeof val === 'number' ? val : parseFloat(String(val));
@@ -25,6 +51,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const priceLinesRef = useRef<any[]>([]);
   const lastFittedTimeframeRef = useRef<string | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const liveCandleRef = useRef<any>(null);
 
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [loading, setLoading] = useState(true);
@@ -411,6 +438,36 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       isMounted = false;
     };
   }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive]);
+
+  // 3. Dynamic Real-Time Candle Drawing
+  useEffect(() => {
+    if (!candleSeriesRef.current || !setup.current_price) return;
+
+    const currentPrice = Number(setup.current_price);
+    const candleTime = getCurrentCandleTime(timeframe);
+
+    // If we don't have a live candle yet, or if the time rolled over, initialize it.
+    if (!liveCandleRef.current || liveCandleRef.current.time !== candleTime) {
+      liveCandleRef.current = {
+        time: candleTime,
+        open: currentPrice,
+        high: currentPrice,
+        low: currentPrice,
+        close: currentPrice
+      };
+    } else {
+      // Update the current candle values based on the new price tick
+      liveCandleRef.current.high = Math.max(liveCandleRef.current.high, currentPrice);
+      liveCandleRef.current.low = Math.min(liveCandleRef.current.low, currentPrice);
+      liveCandleRef.current.close = currentPrice;
+    }
+
+    try {
+      candleSeriesRef.current.update(liveCandleRef.current);
+    } catch (err) {
+      console.warn('Failed to update live candle on chart:', err);
+    }
+  }, [setup.current_price, timeframe]);
 
   const drawZones = useCallback(() => {
     if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;

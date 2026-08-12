@@ -46,6 +46,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [rescanning, setRescanning] = useState(false);
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
   const [rescanMessage, setRescanMessage] = useState<string | null>(null);
+  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
 
   const metaObj = (() => {
     if (!setup.metadata) return {};
@@ -344,13 +345,70 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         )}
         {/* Live Price Bubble inside the black levels section below TP2 */}
         {currentPrice !== undefined && currentPrice > 0 && (
-          <div className={`level-row live-price-level-row tick-${priceTick}`}>
-            <span className="level-label text-cyan font-bold">● LIVE PRICE</span>
-            <span className="level-val font-bold text-white">
-              {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
-            </span>
-            <span className="level-pips text-cyan font-bold">⚡ Live Feed</span>
-          </div>
+          <>
+            <div 
+              className={`level-row live-price-level-row tick-${priceTick}`}
+              style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+              onClick={() => setShowPriceDropdown(!showPriceDropdown)}
+              title="Click to view feed details and true live price"
+            >
+              {setup.is_ibkr_fresh ? (
+                <>
+                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● REAL-TIME PRICE</span>
+                  <span className="level-val font-bold text-white">
+                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
+                  </span>
+                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ IBKR Live</span>
+                </>
+              ) : (
+                <>
+                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>● DELAYED PRICE (15m)</span>
+                  <span className="level-val font-bold text-white">
+                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
+                  </span>
+                  <span className="level-pips font-bold" style={{ color: '#ffb703' }}>⏱️ Yahoo Feed</span>
+                </>
+              )}
+            </div>
+            {showPriceDropdown && (
+              <div 
+                className="font-mono text-left" 
+                style={{ 
+                  margin: '-8px 8px 8px 8px', 
+                  padding: '8px 12px', 
+                  background: 'rgba(255, 255, 255, 0.03)', 
+                  border: '1px solid rgba(255, 255, 255, 0.08)', 
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  lineHeight: '1.4'
+                }}
+              >
+                {setup.is_ibkr_fresh ? (
+                  <div style={{ color: '#00e676' }}>
+                    🟢 Feed active. Receiving real-time ticks from IBKR Gateway.
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ color: '#ffab00', fontWeight: 'bold', marginBottom: '4px' }}>
+                      ⚠️ IBKR API feed is currently offline or subscribing.
+                    </div>
+                    <div style={{ color: '#aaa' }}>
+                      Showing 15-minute delayed market data from Yahoo.
+                    </div>
+                    {setup.ibkr_price ? (
+                      <div style={{ marginTop: '4px', color: '#00e5ff' }}>
+                        📊 Last known IBKR price: <span style={{ fontWeight: 'bold' }}>{setup.ibkr_price}</span>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '4px', color: '#ff1744' }}>
+                        ❌ No cached IBKR price ticks recorded yet.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
