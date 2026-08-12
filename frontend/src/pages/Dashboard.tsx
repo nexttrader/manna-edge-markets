@@ -166,7 +166,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="dashboard">
       <NewsWarningBanner />
-      <DashboardHeader />
+      <DashboardHeader setups={setups} />
       
       <main className="container dashboard-main">
         <TrialWelcomeBanner />

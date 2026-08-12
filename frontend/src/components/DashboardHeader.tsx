@@ -13,8 +13,9 @@ import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { UserInbox } from './UserInbox';
 import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
+import { type EdgeSetup } from '../types';
 
-export const DashboardHeader: React.FC = () => {
+export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] }) => {
   const navigate = useNavigate();
   const { user, logout, originalAdmin, elevateToSuperAdmin } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
@@ -297,7 +298,7 @@ export const DashboardHeader: React.FC = () => {
         {/* Secondary Sub-Bar for Killzone Scanner Clock */}
         <div className="header-sub-bar font-mono">
           <div className="container sub-bar-container">
-            <KillzoneClock />
+            <KillzoneClock setups={setups} />
           </div>
         </div>
       </header>
