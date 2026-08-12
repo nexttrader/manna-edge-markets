@@ -166,7 +166,7 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
           <div className="clock-divider" />
           <div className="clock-next-scan font-mono clock-midpoint-scan">
             <span className="scan-label text-warning-amber">⚡ Midpoint Rescan ({activeMidpoint.et}):</span>
-            <span className="scan-countdown rescan-countdown-amber animate-pulse">in {midpointCountdownStr}</span>
+            <span className="scan-countdown rescan-countdown-amber animate-rescan-flash">in {midpointCountdownStr}</span>
           </div>
         </>
       )}
