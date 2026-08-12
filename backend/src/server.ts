@@ -78,7 +78,7 @@ const possibleDistPaths = [
     path.resolve(__dirname, '../../frontend/dist'),
     path.resolve(__dirname, '../../../frontend/dist')
 ];
-const frontendDistPath = possibleDistPaths.find(p => fs.existsSync(p));
+const frontendDistPath = possibleDistPaths.find(p => fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html')));
 
 if (frontendDistPath) {
     logger.info({ frontendDistPath }, '🟢 Serving static frontend dist assets & SPA fallback route.');

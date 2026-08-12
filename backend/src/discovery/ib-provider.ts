@@ -170,19 +170,31 @@ export function startIBPriceStreaming() {
 }
 
 function connectWithRetry() {
-  if (!ib) return;
+  if (!ib || isConnected) return;
   
   logger.info('Connecting to IB Gateway...');
-  ib.connect();
+  try {
+    ib.disconnect();
+  } catch (err) {
+    // Ignore disconnect errors
+  }
 
-  // Reconnection logic if connection fails to establish
-  if (reconnectTimer) clearTimeout(reconnectTimer);
+  try {
+    ib.connect();
+  } catch (err: any) {
+    logger.error({ err: err.message }, 'Failed to initiate ib.connect');
+    scheduleReconnect();
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+
+  logger.info('Scheduling reconnection to IB Gateway in 5 seconds...');
   reconnectTimer = setTimeout(() => {
-    if (!isConnected) {
-      logger.warn('Connection timeout. Retrying connection to IB Gateway...');
-      connectWithRetry();
-    }
-  }, 10000);
+    reconnectTimer = null;
+    connectWithRetry();
+  }, 5000);
 }
 
 function setupListeners() {
@@ -200,10 +212,9 @@ function setupListeners() {
 
   ib.on(EventName.disconnected, () => {
     isConnected = false;
-    logger.warn('Disconnected from IBKR Gateway. Retrying connection in 5 seconds...');
+    logger.warn('Disconnected from IBKR Gateway.');
     activeRequests.clear();
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(() => connectWithRetry(), 5000);
+    scheduleReconnect();
   });
 
   ib.on(EventName.error, (err: any, code: number, id: number) => {
