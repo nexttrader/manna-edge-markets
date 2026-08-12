@@ -241,6 +241,23 @@ function setupListeners() {
     if (lastErrors.length > 20) {
       lastErrors.pop();
     }
+
+    // Auto-resubscribe on competing session error (code 10197) after 10 seconds
+    if (code === 10197) {
+      const instrument = activeRequests.get(id);
+      if (instrument) {
+        logger.warn({ instrument, id }, 'Market data subscription rejected due to competing session. Retrying in 10s...');
+        setTimeout(() => {
+          if (isConnected && ib) {
+            const contract = getContractSpec(instrument);
+            if (contract) {
+              ib.reqMktData(id, contract, '', false, false);
+              logger.info({ instrument, id }, 'Retried market data subscription');
+            }
+          }
+        }, 10000);
+      }
+    }
   });
 
   // Handle incoming price ticks
