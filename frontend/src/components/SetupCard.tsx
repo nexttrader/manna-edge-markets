@@ -354,19 +354,19 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             >
               {setup.is_ibkr_fresh ? (
                 <>
-                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● REAL-TIME PRICE</span>
+                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE PRICE (I)</span>
                   <span className="level-val font-bold text-white">
                     {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
                   </span>
-                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ IBKR Live</span>
+                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ I-Feed</span>
                 </>
               ) : (
                 <>
-                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>● DELAYED PRICE (15m)</span>
+                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>● DELAY PRICE (Y)</span>
                   <span className="level-val font-bold text-white">
                     {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
                   </span>
-                  <span className="level-pips font-bold" style={{ color: '#ffb703' }}>⏱️ Yahoo Feed</span>
+                  <span className="level-pips font-bold" style={{ color: '#ffb703' }}>⏱️ Y-Feed</span>
                 </>
               )}
             </div>
@@ -385,23 +385,23 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               >
                 {setup.is_ibkr_fresh ? (
                   <div style={{ color: '#00e676' }}>
-                    🟢 Feed active. Receiving real-time ticks from IBKR Gateway.
+                    🟢 Feed active. Receiving real-time ticks from I-Feed.
                   </div>
                 ) : (
                   <div>
                     <div style={{ color: '#ffab00', fontWeight: 'bold', marginBottom: '4px' }}>
-                      ⚠️ IBKR API feed is currently offline or subscribing.
+                      ⚠️ I-Feed is currently offline or subscribing.
                     </div>
                     <div style={{ color: '#aaa' }}>
-                      Showing 15-minute delayed market data from Yahoo.
+                      Showing 15-minute delayed market data from Y-Feed.
                     </div>
                     {setup.ibkr_price ? (
                       <div style={{ marginTop: '4px', color: '#00e5ff' }}>
-                        📊 Last known IBKR price: <span style={{ fontWeight: 'bold' }}>{setup.ibkr_price}</span>
+                        📊 Last known I-Feed price: <span style={{ fontWeight: 'bold' }}>{setup.ibkr_price}</span>
                       </div>
                     ) : (
                       <div style={{ marginTop: '4px', color: '#ff1744' }}>
-                        ❌ No cached IBKR price ticks recorded yet.
+                        ❌ No cached I-Feed price ticks recorded yet.
                       </div>
                     )}
                   </div>
