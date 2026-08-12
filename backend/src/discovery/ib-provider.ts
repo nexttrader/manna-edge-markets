@@ -100,31 +100,17 @@ function getContractSpec(instrument: string): Contract | null {
   
   switch (symbol) {
     case 'ES':
-      return { symbol: 'ES', secType: SecType.FUT, exchange: 'GLOBEX', currency: 'USD', lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
+      return { symbol: 'ES', secType: SecType.FUT, exchange: 'CME', currency: 'USD', multiplier: 50, lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
     case 'NQ':
-      return { symbol: 'NQ', secType: SecType.FUT, exchange: 'GLOBEX', currency: 'USD', lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
+      return { symbol: 'NQ', secType: SecType.FUT, exchange: 'CME', currency: 'USD', multiplier: 20, lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
     case 'YM':
-      return { symbol: 'MYM', secType: SecType.FUT, exchange: 'ECBOT', currency: 'USD', lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
+      return { symbol: 'YM', secType: SecType.FUT, exchange: 'CBOT', currency: 'USD', multiplier: 5, lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
     case 'GC':
-      return { symbol: 'GC', secType: SecType.FUT, exchange: 'NYMEX', currency: 'USD', lastTradeDateOrContractMonth: getGoldExpiry() };
+      return { symbol: 'GC', secType: SecType.FUT, exchange: 'COMEX', currency: 'USD', multiplier: 100, lastTradeDateOrContractMonth: getGoldExpiry() };
     case 'CL':
-      return { symbol: 'CL', secType: SecType.FUT, exchange: 'NYMEX', currency: 'USD', lastTradeDateOrContractMonth: getCrudeOilExpiry() };
+      return { symbol: 'CL', secType: SecType.FUT, exchange: 'NYMEX', currency: 'USD', multiplier: 1000, lastTradeDateOrContractMonth: getCrudeOilExpiry() };
     case 'SI':
-      return { symbol: 'SI', secType: SecType.FUT, exchange: 'NYMEX', currency: 'USD', lastTradeDateOrContractMonth: getSilverExpiry() };
-    
-    // Forex (CASH)
-    case 'EUR/USD':
-      return { symbol: 'EUR', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'USD' };
-    case 'GBP/USD':
-      return { symbol: 'GBP', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'USD' };
-    case 'USD/JPY':
-      return { symbol: 'USD', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'JPY' };
-    case 'AUD/USD':
-      return { symbol: 'AUD', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'USD' };
-    case 'EUR/GBP':
-      return { symbol: 'EUR', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'GBP' };
-    case 'GBP/JPY':
-      return { symbol: 'GBP', secType: SecType.CASH, exchange: 'IDEALPRO', currency: 'JPY' };
+      return { symbol: 'SI', secType: SecType.FUT, exchange: 'COMEX', currency: 'USD', multiplier: 5000, lastTradeDateOrContractMonth: getSilverExpiry() };
     
     default:
       return null;
