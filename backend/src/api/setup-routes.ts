@@ -5,6 +5,7 @@ import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
+import { getIBKRGatewayStatus } from '../discovery/ib-provider';
 
 const router = express.Router();
 
@@ -365,6 +366,14 @@ router.get('/accelerate/decision-matrix', async (req: Request, res: Response) =>
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/diagnostics/ibkr', (req: Request, res: Response) => {
+  try {
+    res.json(getIBKRGatewayStatus());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || String(error) });
   }
 });
 

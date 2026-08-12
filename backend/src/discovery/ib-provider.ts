@@ -16,6 +16,7 @@ let reconnectTimer: NodeJS.Timeout | null = null;
 // Track active market data request IDs to map back to instruments
 const activeRequests = new Map<number, string>();
 let nextReqId = 1;
+const lastErrors: any[] = [];
 
 // 2. Dynamic Futures Expiry Calculators (Rollover automation)
 function getIndexFuturesExpiry(): string {
@@ -209,7 +210,17 @@ function setupListeners() {
       logger.debug({ code, message: err?.message }, 'IBKR Info');
       return;
     }
-    logger.error({ id, code, message: err?.message || String(err) }, 'IBKR Error received');
+    const message = err?.message || String(err);
+    logger.error({ id, code, message }, 'IBKR Error received');
+    lastErrors.unshift({
+      timestamp: new Date().toISOString(),
+      code,
+      message,
+      id
+    });
+    if (lastErrors.length > 20) {
+      lastErrors.pop();
+    }
   });
 
   // Handle incoming price ticks
@@ -253,4 +264,15 @@ function subscribeToAllSymbols() {
     ib!.reqMktData(reqId, contract, '', false, false);
     logger.info({ instrument, reqId, expiry: contract.lastTradeDateOrContractMonth || 'CASH' }, 'Requested market data stream');
   });
+}
+
+export function getIBKRGatewayStatus() {
+  return {
+    isConnected,
+    clientId: IB_CLIENT_ID,
+    host: IB_HOST,
+    port: IB_PORT,
+    activeRequests: Array.from(activeRequests.entries()).map(([reqId, instrument]) => ({ reqId, instrument })),
+    lastErrors
+  };
 }
