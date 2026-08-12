@@ -17,6 +17,7 @@ let reconnectTimer: NodeJS.Timeout | null = null;
 const activeRequests = new Map<number, string>();
 let nextReqId = 1;
 const lastErrors: any[] = [];
+const receivedFirstTick = new Set<string>();
 
 // 2. Dynamic Futures Expiry Calculators (Rollover automation)
 function getIndexFuturesExpiry(): string {
@@ -205,6 +206,14 @@ function setupListeners() {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    try {
+      // Enable delayed market data fallback (type 3) so that if real-time subscriptions are missing,
+      // the gateway will stream 15-minute delayed ticks instead of failing silently.
+      ib!.reqMarketDataType(3);
+      logger.info('Set IBKR market data type to 3 (delayed fallback)');
+    } catch (err: any) {
+      logger.warn({ err: err.message }, 'Failed to set market data type');
+    }
     subscribeToAllSymbols();
   });
 
@@ -239,11 +248,14 @@ function setupListeners() {
     const instrument = activeRequests.get(reqId);
     if (!instrument || price <= 0) return;
 
-    // Field 1: Bid
-    // Field 2: Ask
-    // Field 4: Last
-    // Field 9: Close
-    if (field === 1 || field === 2 || field === 4 || field === 9) {
+    if (!receivedFirstTick.has(`${instrument}-${field}`)) {
+      receivedFirstTick.add(`${instrument}-${field}`);
+      logger.info({ instrument, field, price }, 'Received first price tick from IBKR');
+    }
+
+    // Support both real-time fields (1=Bid, 2=Ask, 4=Last, 9=Close) and delayed fields (66=Bid, 67=Ask, 68=Last, 75=Close)
+    if (field === 1 || field === 2 || field === 4 || field === 9 || 
+        field === 66 || field === 67 || field === 68 || field === 75) {
       await updateCachedPrice(instrument, price);
     }
   });
