@@ -362,7 +362,9 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 </>
               ) : (
                 <>
-                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>● DELAY PRICE (Y)</span>
+                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>
+                    ● DELAY PRICE (Y) <span style={{ cursor: 'pointer', marginLeft: '2px', fontSize: '0.8rem' }} title="Why is this delayed?">❓</span>
+                  </span>
                   <span className="level-val font-bold text-white">
                     {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
                   </span>
@@ -375,7 +377,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 className="font-mono text-left" 
                 style={{ 
                   margin: '-8px 8px 8px 8px', 
-                  padding: '8px 12px', 
+                  padding: '10px 12px', 
                   background: 'rgba(255, 255, 255, 0.03)', 
                   border: '1px solid rgba(255, 255, 255, 0.08)', 
                   borderRadius: '4px',
@@ -389,18 +391,21 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                   </div>
                 ) : (
                   <div>
-                    <div style={{ color: '#ffab00', fontWeight: 'bold', marginBottom: '4px' }}>
+                    <div style={{ color: '#ffab00', fontWeight: 'bold', marginBottom: '6px' }}>
                       ⚠️ I-Feed is currently offline or subscribing.
                     </div>
-                    <div style={{ color: '#aaa' }}>
+                    <div style={{ color: '#aaa', marginBottom: '8px' }}>
                       Showing 15-minute delayed market data from Y-Feed.
                     </div>
+                    <div style={{ padding: '8px', background: 'rgba(255, 171, 0, 0.08)', borderLeft: '3px solid #ffab00', borderRadius: '4px', color: '#ffd700', fontSize: '0.72rem', marginBottom: '8px', lineHeight: '1.3' }}>
+                      <strong>🛡️ SIGNALS STILL TRUSTWORTHY:</strong> The discovery, entry-detection, and outvalidation engines remain fully functional and accurate. They automatically use the Y-Feed as a fallback to track targets and stops.
+                    </div>
                     {setup.ibkr_price ? (
-                      <div style={{ marginTop: '4px', color: '#00e5ff' }}>
+                      <div style={{ color: '#00e5ff' }}>
                         📊 Last known I-Feed price: <span style={{ fontWeight: 'bold' }}>{setup.ibkr_price}</span>
                       </div>
                     ) : (
-                      <div style={{ marginTop: '4px', color: '#ff1744' }}>
+                      <div style={{ color: '#ff1744' }}>
                         ❌ No cached I-Feed price ticks recorded yet.
                       </div>
                     )}
