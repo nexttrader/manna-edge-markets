@@ -51,15 +51,20 @@ function getGoldExpiry(): string {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const day = now.getDate();
-  const goldMonths = [2, 4, 6, 8, 12]; // Feb, Apr, Jun, Aug, Dec
   
-  // Roll on the 25th of the month before expiration (or 25th of the month)
-  for (const m of goldMonths) {
-    if (month < m || (month === m && day < 25)) {
-      return `${year}${m.toString().padStart(2, '0')}`;
-    }
+  if (month === 1 || (month === 2 && day < 25)) {
+    return `${year}02`;
+  } else if (month === 2 || month === 3 || (month === 4 && day < 25)) {
+    return `${year}04`;
+  } else if (month === 4 || month === 5 || (month === 6 && day < 25)) {
+    return `${year}06`;
+  } else if (month === 6 || (month === 7 && day < 25)) {
+    return `${year}08`;
+  } else if (month === 7 || month === 8 || month === 9 || month === 10 || (month === 11 && day < 25)) {
+    return `${year}12`;
+  } else {
+    return `${year + 1}02`;
   }
-  return `${year + 1}02`;
 }
 
 function getSilverExpiry(): string {
@@ -67,14 +72,20 @@ function getSilverExpiry(): string {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const day = now.getDate();
-  const silverMonths = [3, 5, 7, 9, 12]; // Mar, May, Jul, Sep, Dec
   
-  for (const m of silverMonths) {
-    if (month < m || (month === m && day < 25)) {
-      return `${year}${m.toString().padStart(2, '0')}`;
-    }
+  if (month === 1 || month === 2 || (month === 3 && day < 25)) {
+    return `${year}03`;
+  } else if (month === 3 || month === 4 || (month === 5 && day < 25)) {
+    return `${year}05`;
+  } else if (month === 5 || month === 6 || (month === 7 && day < 25)) {
+    return `${year}07`;
+  } else if (month === 7 || month === 8 || (month === 9 && day < 25)) {
+    return `${year}09`;
+  } else if (month === 9 || month === 10 || month === 11 || (month === 12 && day < 25)) {
+    return `${year}12`;
+  } else {
+    return `${year + 1}03`;
   }
-  return `${year + 1}03`;
 }
 
 function getCrudeOilExpiry(): string {
