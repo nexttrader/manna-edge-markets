@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import './Dashboard.css';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { SetupCard } from '../components/SetupCard';
-import { HawkeyePanel } from '../components/HawkeyePanel';
 import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
@@ -347,7 +346,6 @@ export const Dashboard: React.FC = () => {
           onClose={() => setCalcSetup(null)}
         />
       )}
-      <HawkeyePanel />
     </div>
   );
 };
