@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
+import { StrategyComparisonDashboard } from '../components/admin/StrategyComparisonDashboard';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout } = useAuth();
@@ -14,7 +15,7 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'sentinel'>('sentinel');
+  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel'>('sentinel');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
@@ -424,6 +425,19 @@ export const SuperAdminPanel: React.FC = () => {
             type="button"
             className="super-tab-btn"
             style={{
+              border: activeTab === 'strategy_comparison' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'strategy_comparison' ? 'rgba(255, 171, 0, 0.25)' : 'transparent',
+              color: activeTab === 'strategy_comparison' ? '#ffab00' : '#ccc'
+            }}
+            onClick={() => setActiveTab('strategy_comparison')}
+          >
+            ⚔️ Strategy Analytics &amp; LLM Export
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
               border: activeTab === 'admin_audit' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
               background: activeTab === 'admin_audit' ? 'rgba(255, 171, 0, 0.2)' : 'transparent',
               color: activeTab === 'admin_audit' ? '#ffab00' : '#ccc'
@@ -667,7 +681,17 @@ export const SuperAdminPanel: React.FC = () => {
         {/* TAB 5: Strategy Governance */}
         {activeTab === 'strategies' && (
           <div className="super-card font-mono">
-            <h2 style={{ margin: '0 0 16px 0', color: '#00e5ff' }}>⚙️ Strategy Governance &amp; Admin Access Control</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ margin: 0, color: '#00e5ff' }}>⚙️ Strategy Governance &amp; Admin Access Control</h2>
+              <button
+                type="button"
+                className="font-mono"
+                style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffab00', color: '#ffab00', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem' }}
+                onClick={() => setActiveTab('strategy_comparison')}
+              >
+                ⚔️ View Strategy Success &amp; Comparison Matrix →
+              </button>
+            </div>
             <div className="table-responsive">
               <table className="runs-table">
                 <thead>
@@ -875,6 +899,11 @@ export const SuperAdminPanel: React.FC = () => {
               </form>
             </div>
           </div>
+        )}
+
+        {/* TAB: Strategy Analytics & LLM Export */}
+        {activeTab === 'strategy_comparison' && (
+          <StrategyComparisonDashboard />
         )}
 
         {/* TAB 6: Admin Audit Log */}

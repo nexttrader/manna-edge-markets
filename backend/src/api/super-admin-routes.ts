@@ -639,4 +639,508 @@ router.delete('/strategies/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 5. STRATEGY SUCCESS COMPARISON & LLM DATA EXPORTER ENDPOINTS
+
+async function calculateStrategyComparisonData(filters?: {
+  timeframe?: string;
+  market?: string;
+  session?: string;
+  strategyId?: string;
+}) {
+  await outcomeDetector.evaluateAllSetups(true);
+
+  const registeredStrategies = await queries.getStrategySettings('super_admin');
+  const futuresSetups = await queryDb<any>(`SELECT * FROM edge_setups`);
+  const forexSetups = await queryDb<any>(`SELECT * FROM forex_edge_setups`);
+  const allSetups = [...futuresSetups, ...forexSetups];
+  const outcomes = await queryDb<any>(`SELECT * FROM outcomes ORDER BY created_at DESC`);
+
+  // Apply time filter
+  const now = Date.now();
+  let minTimeMs = 0;
+  if (filters?.timeframe === '24h') minTimeMs = now - 24 * 60 * 60 * 1000;
+  else if (filters?.timeframe === '7d') minTimeMs = now - 7 * 24 * 60 * 60 * 1000;
+  else if (filters?.timeframe === '30d') minTimeMs = now - 30 * 24 * 60 * 60 * 1000;
+
+  // Filter setups & outcomes
+  const filterSetups = (s: any) => {
+    if (minTimeMs > 0 && new Date(s.created_at).getTime() < minTimeMs) return false;
+    if (filters?.market && filters.market !== 'both' && s.market !== filters.market) return false;
+    if (filters?.session && filters.session !== 'all') {
+      const kz = (s.killzone_origin || '').toLowerCase().replace(/^kz_/, '');
+      const targetKz = filters.session.toLowerCase().replace(/^kz_/, '');
+      if (kz !== targetKz) return false;
+    }
+    if (filters?.strategyId && filters.strategyId !== 'all') {
+      const sid = s.strategy_id || 'sentinel_v2';
+      if (sid !== filters.strategyId) return false;
+    }
+    return true;
+  };
+
+  const filteredSetups = allSetups.filter(filterSetups);
+  const setupMap = new Map<string, any>();
+  allSetups.forEach(s => setupMap.set(s.id, s));
+
+  const filteredOutcomes = outcomes.filter(o => {
+    if (minTimeMs > 0 && new Date(o.created_at).getTime() < minTimeMs) return false;
+    const parentSetup = setupMap.get(o.setup_id);
+    if (parentSetup && !filterSetups(parentSetup)) return false;
+    if (filters?.strategyId && filters.strategyId !== 'all') {
+      const sid = o.strategy_id || parentSetup?.strategy_id || 'sentinel_v2';
+      if (sid !== filters.strategyId) return false;
+    }
+    return true;
+  });
+
+  // Unique list of strategies from registered + existing setups/outcomes
+  const stratMap = new Map<string, string>();
+  registeredStrategies.forEach(s => stratMap.set(s.id, s.name));
+  allSetups.forEach(s => {
+    const id = s.strategy_id || 'sentinel_v2';
+    if (!stratMap.has(id)) {
+      stratMap.set(id, id === 'manna_snd' ? 'Manna SnD' : id === 'sentinel_v2' ? 'Manna Elite V1' : id);
+    }
+  });
+
+  // Calculate detailed stats per strategy
+  const strategyStats: Record<string, any> = {};
+
+  stratMap.forEach((name, id) => {
+    strategyStats[id] = {
+      strategyId: id,
+      strategyName: name,
+      totalSignals: 0,
+      activeSignals: 0,
+      resolvedSignals: 0,
+      invalidatedSignals: 0,
+      totalTrades: 0,
+      wins: 0,
+      losses: 0,
+      breakevens: 0,
+      tp1Hits: 0,
+      tp2Hits: 0,
+      winRate: 0,
+      totalRealizedR: 0,
+      expectancyR: 0,
+      profitFactor: 0,
+      winningRSum: 0,
+      losingRSum: 0,
+      avgFillDurationMin: 0,
+      avgHoldDurationMin: 0,
+      marketBreakdown: {
+        futures: { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0 },
+        forex: { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0 }
+      },
+      sessionBreakdown: {
+        london: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 },
+        ny_am: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 },
+        ny_pm: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 },
+        asia: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 }
+      },
+      convictionDistribution: {
+        totalScore: 0,
+        count: 0,
+        avgConviction: 0,
+        highTier: { count: 0, wins: 0, winRate: 0 },
+        medTier: { count: 0, wins: 0, winRate: 0 }
+      },
+      poiTypeDistribution: { FVG: 0, OC: 0, REVERSAL: 0, CONSOLIDATION: 0, OTHER: 0 },
+      fillTimeTracker: { totalMs: 0, count: 0 },
+      holdTimeTracker: { totalMs: 0, count: 0 }
+    };
+  });
+
+  // Process setups
+  for (const s of filteredSetups) {
+    const stratId = s.strategy_id || 'sentinel_v2';
+    if (!strategyStats[stratId]) {
+      strategyStats[stratId] = {
+        strategyId: stratId,
+        strategyName: stratId,
+        totalSignals: 0, activeSignals: 0, resolvedSignals: 0, invalidatedSignals: 0,
+        totalTrades: 0, wins: 0, losses: 0, breakevens: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0,
+        totalRealizedR: 0, expectancyR: 0, profitFactor: 0, winningRSum: 0, losingRSum: 0,
+        avgFillDurationMin: 0, avgHoldDurationMin: 0,
+        marketBreakdown: { futures: { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0 }, forex: { totalTrades: 0, wins: 0, losses: 0, winRate: 0, totalR: 0 } },
+        sessionBreakdown: { london: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 }, ny_am: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 }, ny_pm: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 }, asia: { totalTrades: 0, wins: 0, winRate: 0, totalR: 0 } },
+        convictionDistribution: { totalScore: 0, count: 0, avgConviction: 0, highTier: { count: 0, wins: 0, winRate: 0 }, medTier: { count: 0, wins: 0, winRate: 0 } },
+        poiTypeDistribution: { FVG: 0, OC: 0, REVERSAL: 0, CONSOLIDATION: 0, OTHER: 0 },
+        fillTimeTracker: { totalMs: 0, count: 0 }, holdTimeTracker: { totalMs: 0, count: 0 }
+      };
+    }
+
+    const st = strategyStats[stratId];
+    st.totalSignals++;
+    if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) st.activeSignals++;
+    else if (s.signal_state === 'resolved') st.resolvedSignals++;
+    else if (s.signal_state === 'invalidated') st.invalidatedSignals++;
+
+    if (s.conviction_score !== undefined && s.conviction_score !== null) {
+      st.convictionDistribution.totalScore += Number(s.conviction_score);
+      st.convictionDistribution.count++;
+      if (s.conviction_score >= 85) st.convictionDistribution.highTier.count++;
+      else st.convictionDistribution.medTier.count++;
+    }
+
+    try {
+      const meta = JSON.parse(s.metadata || '{}');
+      const poi = (meta.poi_type || 'OTHER').toUpperCase();
+      if (st.poiTypeDistribution[poi] !== undefined) st.poiTypeDistribution[poi]++;
+      else st.poiTypeDistribution.OTHER++;
+    } catch {
+      st.poiTypeDistribution.OTHER++;
+    }
+
+    if (s.created_at && s.entry_triggered_at) {
+      const fillDiff = new Date(s.entry_triggered_at).getTime() - new Date(s.created_at).getTime();
+      if (fillDiff > 0) {
+        st.fillTimeTracker.totalMs += fillDiff;
+        st.fillTimeTracker.count++;
+      }
+    }
+
+    if (s.entry_triggered_at && s.resolved_at) {
+      const holdDiff = new Date(s.resolved_at).getTime() - new Date(s.entry_triggered_at).getTime();
+      if (holdDiff > 0) {
+        st.holdTimeTracker.totalMs += holdDiff;
+        st.holdTimeTracker.count++;
+      }
+    }
+  }
+
+  const tradeLogs: any[] = [];
+
+  for (const o of filteredOutcomes) {
+    const setup = setupMap.get(o.setup_id);
+    const stratId = o.strategy_id || setup?.strategy_id || 'sentinel_v2';
+    const st = strategyStats[stratId];
+    if (!st) continue;
+
+    st.totalTrades++;
+    const typeStr = String(o.outcome_type || '').toLowerCase();
+    const marketKey = (o.setup_market || setup?.market || 'futures').toLowerCase();
+    const isFutures = marketKey === 'futures';
+    const kzKey = (setup?.killzone_origin || 'london').toLowerCase().replace(/^kz_/, '');
+
+    let rVal = 0;
+    let isWin = false;
+    let isLoss = false;
+    let isBE = false;
+
+    if (typeStr.includes('tp2')) {
+      isWin = true;
+      st.wins++;
+      st.tp2Hits++;
+      rVal = setup?.r_multiple_2 || 3.0;
+    } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
+      isWin = true;
+      st.wins++;
+      st.tp1Hits++;
+      rVal = setup?.r_multiple_1 || 2.0;
+    } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
+      isLoss = true;
+      st.losses++;
+      rVal = -1.0;
+    } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
+      isBE = true;
+      st.breakevens++;
+      rVal = 0.0;
+    } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
+      rVal = Math.max(-1.0, o.realized_pl);
+      if (rVal > 0) { isWin = true; st.wins++; }
+      else if (rVal < 0) { isLoss = true; st.losses++; }
+      else { isBE = true; st.breakevens++; }
+    }
+
+    st.totalRealizedR += rVal;
+    if (rVal > 0) st.winningRSum += rVal;
+    else if (rVal < 0) st.losingRSum += Math.abs(rVal);
+
+    if (setup?.conviction_score !== undefined) {
+      if (setup.conviction_score >= 85 && isWin) st.convictionDistribution.highTier.wins++;
+      else if (setup.conviction_score < 85 && isWin) st.convictionDistribution.medTier.wins++;
+    }
+
+    const mkt = isFutures ? st.marketBreakdown.futures : st.marketBreakdown.forex;
+    mkt.totalTrades++;
+    if (isWin) mkt.wins++;
+    else if (isLoss) mkt.losses++;
+    mkt.totalR += rVal;
+
+    if (st.sessionBreakdown[kzKey]) {
+      const sess = st.sessionBreakdown[kzKey];
+      sess.totalTrades++;
+      if (isWin) sess.wins++;
+      sess.totalR += rVal;
+    }
+
+    tradeLogs.push({
+      outcomeId: o.id,
+      setupId: o.setup_id,
+      strategyId: stratId,
+      strategyName: st.strategyName,
+      instrument: o.instrument || setup?.instrument || 'N/A',
+      market: isFutures ? 'Futures' : 'Forex',
+      bias: setup?.bias || 'N/A',
+      killzone: setup?.killzone_origin || 'N/A',
+      convictionScore: setup?.conviction_score || 0,
+      poiType: (() => {
+        try { return JSON.parse(setup?.metadata || '{}').poi_type || 'N/A'; } catch { return 'N/A'; }
+      })(),
+      entryPrice: setup?.entry_zone_mid || 0,
+      stopLoss: setup?.stop || 0,
+      tp1: setup?.tp1 || 0,
+      tp2: setup?.tp2 || 0,
+      outcomeType: o.outcome_type || 'N/A',
+      realizedR: Number(rVal.toFixed(2)),
+      createdAt: o.created_at || setup?.created_at || new Date().toISOString()
+    });
+  }
+
+  const strategyList: any[] = [];
+
+  Object.values(strategyStats).forEach((st: any) => {
+    if (st.totalTrades > 0) {
+      st.winRate = Number(((st.wins / st.totalTrades) * 100).toFixed(1));
+      st.expectancyR = Number((st.totalRealizedR / st.totalTrades).toFixed(2));
+      st.profitFactor = st.losingRSum > 0 ? Number((st.winningRSum / st.losingRSum).toFixed(2)) : (st.totalRealizedR > 0 ? 99.9 : 0);
+    } else {
+      st.winRate = 0;
+      st.expectancyR = 0;
+      st.profitFactor = 0;
+    }
+
+    st.totalRealizedR = Number(st.totalRealizedR.toFixed(2));
+
+    st.avgFillDurationMin = st.fillTimeTracker.count > 0 ? Number((st.fillTimeTracker.totalMs / st.fillTimeTracker.count / 60000).toFixed(1)) : 0;
+    st.avgHoldDurationMin = st.holdTimeTracker.count > 0 ? Number((st.holdTimeTracker.totalMs / st.holdTimeTracker.count / 60000).toFixed(1)) : 0;
+
+    if (st.convictionDistribution.count > 0) {
+      st.convictionDistribution.avgConviction = Number((st.convictionDistribution.totalScore / st.convictionDistribution.count).toFixed(1));
+    }
+
+    if (st.convictionDistribution.highTier.count > 0) {
+      st.convictionDistribution.highTier.winRate = Number(((st.convictionDistribution.highTier.wins / st.convictionDistribution.highTier.count) * 100).toFixed(1));
+    }
+    if (st.convictionDistribution.medTier.count > 0) {
+      st.convictionDistribution.medTier.winRate = Number(((st.convictionDistribution.medTier.wins / st.convictionDistribution.medTier.count) * 100).toFixed(1));
+    }
+
+    ['futures', 'forex'].forEach(m => {
+      const mb = st.marketBreakdown[m];
+      if (mb.totalTrades > 0) {
+        mb.winRate = Number(((mb.wins / mb.totalTrades) * 100).toFixed(1));
+        mb.totalR = Number(mb.totalR.toFixed(2));
+      }
+    });
+
+    Object.keys(st.sessionBreakdown).forEach(s => {
+      const sb = st.sessionBreakdown[s];
+      if (sb.totalTrades > 0) {
+        sb.winRate = Number(((sb.wins / sb.totalTrades) * 100).toFixed(1));
+        sb.totalR = Number(sb.totalR.toFixed(2));
+      }
+    });
+
+    strategyList.push(st);
+  });
+
+  let bestWinRateStrategy = strategyList[0];
+  let bestExpectancyStrategy = strategyList[0];
+  let totalCombinedR = 0;
+  let totalCombinedTrades = 0;
+
+  strategyList.forEach(s => {
+    if (s.winRate > (bestWinRateStrategy?.winRate || 0)) bestWinRateStrategy = s;
+    if (s.expectancyR > (bestExpectancyStrategy?.expectancyR || 0)) bestExpectancyStrategy = s;
+    totalCombinedR += s.totalRealizedR;
+    totalCombinedTrades += s.totalTrades;
+  });
+
+  return {
+    timestamp: new Date().toISOString(),
+    filters: filters || { timeframe: 'all', market: 'both', session: 'all' },
+    summary: {
+      totalStrategiesTracked: strategyList.length,
+      totalCombinedTrades,
+      totalCombinedR: Number(totalCombinedR.toFixed(2)),
+      bestWinRateStrategy: bestWinRateStrategy ? { id: bestWinRateStrategy.strategyId, name: bestWinRateStrategy.strategyName, winRate: bestWinRateStrategy.winRate } : null,
+      bestExpectancyStrategy: bestExpectancyStrategy ? { id: bestExpectancyStrategy.strategyId, name: bestExpectancyStrategy.strategyName, expectancyR: bestExpectancyStrategy.expectancyR } : null
+    },
+    strategies: strategyList,
+    tradeLogs
+  };
+}
+
+router.get('/strategy-analytics/comparison', async (req: Request, res: Response) => {
+  try {
+    const timeframe = (req.query.timeframe || 'all').toString();
+    const market = (req.query.market || 'both').toString();
+    const session = (req.query.session || 'all').toString();
+    const strategyId = (req.query.strategy_id || 'all').toString();
+
+    const data = await calculateStrategyComparisonData({ timeframe, market, session, strategyId });
+    res.json({ success: true, ...data });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to compute strategy comparison data', details: err.message });
+  }
+});
+
+router.get('/strategy-analytics/export', async (req: Request, res: Response) => {
+  try {
+    const format = (req.query.format || 'markdown').toString().toLowerCase();
+    const timeframe = (req.query.timeframe || 'all').toString();
+    const market = (req.query.market || 'both').toString();
+    const session = (req.query.session || 'all').toString();
+    const strategyId = (req.query.strategy_id || 'all').toString();
+
+    const dataset = await calculateStrategyComparisonData({ timeframe, market, session, strategyId });
+
+    if (format === 'json') {
+      const exportJson = {
+        metadata: {
+          export_name: "MANNA_EDGE_STRATEGY_PERFORMANCE_DATASET",
+          generated_at: dataset.timestamp,
+          system_version: "2.0_SENTINEL_PRO",
+          filter_applied: dataset.filters
+        },
+        summary: dataset.summary,
+        strategies: dataset.strategies,
+        trade_logs: dataset.tradeLogs,
+        llm_prompt_templates: getLlmPromptTemplates(dataset)
+      };
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="llm_strategy_analysis_${Date.now()}.json"`);
+      return res.send(JSON.stringify(exportJson, null, 2));
+    }
+
+    if (format === 'csv') {
+      let csv = 'OutcomeID,SetupID,StrategyID,StrategyName,Instrument,Market,Bias,Killzone,ConvictionScore,PoiType,EntryPrice,StopLoss,TP1,TP2,OutcomeType,RealizedR,CreatedAt\n';
+      dataset.tradeLogs.forEach((t: any) => {
+        csv += `"${t.outcomeId}","${t.setupId}","${t.strategyId}","${t.strategyName}","${t.instrument}","${t.market}","${t.bias}","${t.killzone}",${t.convictionScore},"${t.poiType}",${t.entryPrice},${t.stopLoss},${t.tp1},${t.tp2},"${t.outcomeType}",${t.realizedR},"${t.createdAt}"\n`;
+      });
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="strategy_trade_logs_${Date.now()}.csv"`);
+      return res.send(csv);
+    }
+
+    let md = `# 🤖 MANNA EDGE — SYSTEMIC STRATEGY PERFORMANCE & TRADE LOG DATASET
+> **Generated:** ${dataset.timestamp}  
+> **System:** Manna Edge Markets 2.0 Super Admin Intelligence Engine  
+> **Filters Applied:** Timeframe: \`${dataset.filters.timeframe}\` | Market: \`${dataset.filters.market}\` | Session: \`${dataset.filters.session}\` | Target Strategy: \`${dataset.filters.strategyId}\`
+
+---
+
+## 📊 EXECUTIVE STRATEGY COMPARISON SUMMARY
+
+| Strategy Name | Strategy ID | Win Rate % | Total Trades | Total Realized R | Expectancy (Avg R) | Profit Factor | Futures Win Rate | Forex Win Rate | Avg Fill (Min) | Avg Hold (Min) |
+|---|---|---|---|---|---|---|---|---|---|---|
+`;
+
+    dataset.strategies.forEach((s: any) => {
+      md += `| **${s.strategyName}** | \`${s.strategyId}\` | **${s.winRate}%** | ${s.totalTrades} | **${s.totalRealizedR}R** | **${s.expectancyR}R** | ${s.profitFactor} | ${s.marketBreakdown.futures.winRate}% (${s.marketBreakdown.futures.totalR}R) | ${s.marketBreakdown.forex.winRate}% (${s.marketBreakdown.forex.totalR}R) | ${s.avgFillDurationMin}m | ${s.avgHoldDurationMin}m |\n`;
+    });
+
+    md += `
+---
+
+## 🎯 IN-DEPTH STRATEGY PROFILES
+
+`;
+
+    dataset.strategies.forEach((s: any) => {
+      md += `### 🟢 Strategy: ${s.strategyName} (\`${s.strategyId}\`)
+- **Signal Volume:** ${s.totalSignals} Total Signals (${s.activeSignals} Active, ${s.resolvedSignals} Resolved, ${s.invalidatedSignals} Invalidated)
+- **Trade Outcome Breakdown:** ${s.wins} Wins (${s.tp1Hits} TP1 Hits, ${s.tp2Hits} TP2 Hits) | ${s.losses} Losses | ${s.breakevens} Breakevens
+- **Conviction Metrics:** Avg Conviction Score: \`${s.convictionDistribution.avgConviction}\` | High Tier (>=85) Win Rate: **${s.convictionDistribution.highTier.winRate}%** | Medium Tier (<85) Win Rate: **${s.convictionDistribution.medTier.winRate}%**
+- **Session Breakdown:**
+  - **London Killzone:** ${s.sessionBreakdown.london.totalTrades} Trades | Win Rate: **${s.sessionBreakdown.london.winRate}%** | Realized: **${s.sessionBreakdown.london.totalR}R**
+  - **NY AM Killzone:** ${s.sessionBreakdown.ny_am.totalTrades} Trades | Win Rate: **${s.sessionBreakdown.ny_am.winRate}%** | Realized: **${s.sessionBreakdown.ny_am.totalR}R**
+  - **NY PM Killzone:** ${s.sessionBreakdown.ny_pm.totalTrades} Trades | Win Rate: **${s.sessionBreakdown.ny_pm.winRate}%** | Realized: **${s.sessionBreakdown.ny_pm.totalR}R**
+  - **Asian Session:** ${s.sessionBreakdown.asia.totalTrades} Trades | Win Rate: **${s.sessionBreakdown.asia.winRate}%** | Realized: **${s.sessionBreakdown.asia.totalR}R**
+- **POI Type Distribution:** FVG: \`${s.poiTypeDistribution.FVG}\` | Order Block (OC): \`${s.poiTypeDistribution.OC}\` | Reversal: \`${s.poiTypeDistribution.REVERSAL}\` | Consolidation: \`${s.poiTypeDistribution.CONSOLIDATION}\`
+
+`;
+    });
+
+    md += `
+---
+
+## 📋 GRANULAR TRADE LOG DATASET (${dataset.tradeLogs.length} Records)
+
+\`\`\`json
+${JSON.stringify(dataset.tradeLogs, null, 2)}
+\`\`\`
+
+---
+
+## 🧠 PRE-FORMULATED LLM ANALYSIS PROMPTS
+*Copy and paste any of the prompt templates below directly into ChatGPT, Claude, Gemini, or DeepSeek along with this document to perform deep AI strategy diagnostics:*
+
+### 1. ⚔️ Strategy Edge & Comparative Advantage Audit
+\`\`\`markdown
+You are a quantitative trading strategy auditor. Analyze the attached dataset containing strategy performance metrics and trade logs from Manna Edge Markets 2.0.
+1. Compare the mathematical edge between the strategies. Which strategy demonstrates superior risk-adjusted expectancy and why?
+2. Identify specific market regimes or POI types where the win rate drops below expected baselines.
+3. Provide 3 actionable recommendations to optimize overall system profitability based strictly on empirical trade log evidence.
+\`\`\`
+
+### 2. ⏳ Session & Market Regime Sensitivity Analysis
+\`\`\`markdown
+Analyze the killzone session performance (London vs NY AM vs NY PM vs Asian) and market type (Futures vs Forex) across all strategies in this dataset.
+1. Which session provides the highest win rate and expectancy R for each strategy?
+2. Are there sessions where trades consistently hit Stop Losses or take too long to fill?
+3. Should certain killzone sessions be filtered out or restricted for specific asset classes?
+\`\`\`
+
+### 3. 🎯 Risk/Reward & R-Multiple Parameter Optimization
+\`\`\`markdown
+Review the trade outcomes and R-multiple distributions (TP1 vs TP2 vs Stop Losses) in this strategy dataset.
+1. Evaluate whether the TP1 and TP2 targets are mathematically optimal or if trailing stops/scale-out points would yield higher expectancy.
+2. Analyze the impact of conviction scores on win rate. Does filtering setups to conviction score >= 85 increase net expectancy without sacrificing trade volume?
+\`\`\`
+
+### 4. 🔍 Anomalous Drawdown & Loss Diagnostic
+\`\`\`markdown
+Focus on all losing trades (SL_HIT) in the trade log table.
+1. What patterns, instruments, or POI types account for the highest cluster of losses?
+2. Is there evidence of false breakouts during low-liquidity market transitions?
+3. Propose a rule-based invalidation filter to eliminate high-risk losing trades before entry.
+\`\`\`
+`;
+
+    res.setHeader('Content-Type', 'text/markdown');
+    res.setHeader('Content-Disposition', `attachment; filename="llm_strategy_analysis_${Date.now()}.md"`);
+    return res.send(md);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to export strategy dataset', details: err.message });
+  }
+});
+
+function getLlmPromptTemplates(dataset: any) {
+  return [
+    {
+      id: "edge_audit",
+      name: "Strategy Edge & Comparative Advantage Audit",
+      prompt: `You are a quantitative trading strategy auditor. Analyze the attached dataset containing strategy performance metrics and trade logs from Manna Edge Markets 2.0.\n1. Compare the mathematical edge between the strategies. Which strategy demonstrates superior risk-adjusted expectancy and why?\n2. Identify specific market regimes or POI types where the win rate drops below expected baselines.\n3. Provide 3 actionable recommendations to optimize overall system profitability based strictly on empirical trade log evidence.`
+    },
+    {
+      id: "session_regime",
+      name: "Session & Market Regime Sensitivity Analysis",
+      prompt: `Analyze the killzone session performance (London vs NY AM vs NY PM vs Asian) and market type (Futures vs Forex) across all strategies in this dataset.\n1. Which session provides the highest win rate and expectancy R for each strategy?\n2. Are there sessions where trades consistently hit Stop Losses or take too long to fill?\n3. Should certain killzone sessions be filtered out or restricted for specific asset classes?`
+    },
+    {
+      id: "r_multiple_optimization",
+      name: "Risk/Reward & R-Multiple Parameter Optimization",
+      prompt: `Review the trade outcomes and R-multiple distributions (TP1 vs TP2 vs Stop Losses) in this strategy dataset.\n1. Evaluate whether the TP1 and TP2 targets are mathematically optimal or if trailing stops/scale-out points would yield higher expectancy.\n2. Analyze the impact of conviction scores on win rate. Does filtering setups to conviction score >= 85 increase net expectancy without sacrificing trade volume?`
+    },
+    {
+      id: "drawdown_diagnostic",
+      name: "Anomalous Drawdown & Loss Diagnostic",
+      prompt: `Focus on all losing trades (SL_HIT) in the trade log table.\n1. What patterns, instruments, or POI types account for the highest cluster of losses?\n2. Is there evidence of false breakouts during low-liquidity market transitions?\n3. Propose a rule-based invalidation filter to eliminate high-risk losing trades before entry.`
+    }
+  ];
+}
+
 export default router;

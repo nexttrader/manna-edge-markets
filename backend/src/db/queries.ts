@@ -65,7 +65,7 @@ export async function insertSetup(setup: EdgeSetup, market: string): Promise<voi
     const keys = Object.keys(setup).filter(k => setup[k as keyof EdgeSetup] !== undefined);
     const values = keys.map(k => setup[k as keyof EdgeSetup]);
     const placeholders = keys.map(() => '?').join(', ');
-    const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`;
+    const query = `INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`;
     await queryDb(query, values);
     
     // Auto update snapshot
