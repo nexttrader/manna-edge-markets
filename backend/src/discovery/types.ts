@@ -19,7 +19,8 @@ export enum InvalidationReason {
     structure_displaced = 'structure_displaced',
     opposing_signal = 'opposing_signal',
     discarded_duplicate = 'discarded_duplicate',
-    manual = 'manual'
+    manual = 'manual',
+    mock_data_detected = 'mock_data_detected'
 }
 
 export interface EdgeSetup {

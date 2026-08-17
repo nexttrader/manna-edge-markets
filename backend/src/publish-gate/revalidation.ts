@@ -6,7 +6,24 @@ export interface RevalidationResult {
   detail?: string;
 }
 
+export function isMockSetup(setup: EdgeSetup | null | undefined): boolean {
+  if (!setup) return true;
+  if (setup.id?.startsWith('kz_mid_') || setup.id?.includes('seed') || setup.id?.toLowerCase().includes('mock_data')) return true;
+  if (setup.conviction_score === null) return true;
+  if (setup.metadata && (setup.metadata.includes('"source":"mock"') || setup.metadata.includes('"seed":true'))) return true;
+  return false;
+}
+
 export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: number): RevalidationResult {
+  // Rule 0: Anti-Mock Data Enforcement — Invalidate any mock/placeholder data instantly
+  if (isMockSetup(setup)) {
+    return {
+      isValid: false,
+      reason: InvalidationReason.mock_data_detected,
+      detail: 'Mock or placeholder data detected — invalidating setup to force live rescan'
+    };
+  }
+
   const isLong = setup.bias === 'long';
   
   // Rule 1: sl_breached (active setups only)

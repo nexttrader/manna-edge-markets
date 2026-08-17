@@ -1,5 +1,5 @@
 import { EdgeSetup, CandidateSetup, InvalidationReason } from '../discovery/types';
-import { shouldInvalidateForOpposingSignal } from './revalidation';
+import { shouldInvalidateForOpposingSignal, isMockSetup } from './revalidation';
 
 export interface DedupeResult {
   action: 'preserve' | 'replace' | 'insert' | 'no_action';
@@ -37,6 +37,14 @@ export function dedupeAndSelect(
   }
   
   if (candidates.length === 0 && existingSetup) {
+    if (isMockSetup(existingSetup)) {
+      invalidations.push({
+        setupId: existingSetup.id,
+        reason: InvalidationReason.mock_data_detected,
+        detail: 'Mock setup detected with 0 new candidates — invalidating mock setup'
+      });
+      return { action: 'no_action', invalidations };
+    }
     return { action: 'preserve', invalidations };
   }
 
@@ -51,6 +59,15 @@ export function dedupeAndSelect(
   }
 
   if (existingSetup && existingSetup.signal_state !== 'invalidated' && existingSetup.signal_state !== 'resolved') {
+    // 0. Anti-Mock Data Rule: Always replace any existing mock setup with live selected candidate
+    if (isMockSetup(existingSetup)) {
+       invalidations.push({
+         setupId: existingSetup.id,
+         reason: InvalidationReason.mock_data_detected,
+         detail: 'Existing setup is mock data — replacing with live candidate'
+       });
+       return { action: 'replace', selectedCandidate: selected, invalidations };
+    }
     // 1. ACTIVE trades currently live in market MUST be preserved and never auto-superseded by new candidates
     if (existingSetup.signal_state === 'active') {
       return { action: 'preserve', invalidations };

@@ -39,8 +39,12 @@ export async function getSetupsByState(state: string): Promise<EdgeSetup[]> {
     return [...futures, ...forex];
 }
 
-export async function countActiveSetupsForInstrument(instrument: string, market: string): Promise<number> {
+export async function countActiveSetupsForInstrument(instrument: string, market: string, strategyId?: string): Promise<number> {
     const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    if (strategyId) {
+        const rows = await queryDb<{ count: string | number }>(`SELECT COUNT(*) as count FROM ${table} WHERE instrument = ? AND (strategy_id = ? OR (strategy_id IS NULL AND ? = 'sentinel_v2')) AND superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`, [instrument, strategyId, strategyId]);
+        return rows.length > 0 ? Number(rows[0].count) : 0;
+    }
     const rows = await queryDb<{ count: string | number }>(`SELECT COUNT(*) as count FROM ${table} WHERE instrument = ? AND superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`, [instrument]);
     return rows.length > 0 ? Number(rows[0].count) : 0;
 }

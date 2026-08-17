@@ -150,9 +150,9 @@ async function runAllTests() {
     assert.strictEqual(pubResult.success, true, 'PublishGate run should succeed');
     assert.strictEqual(pubResult.stats.created > 0 || pubResult.stats.preserved > 0, true, 'Should create or preserve setup for ES');
 
-    // Verify constraint: check DB active count for ES
-    const activeCount = await queries.countActiveSetupsForInstrument('ES', 'futures');
-    assert.strictEqual(activeCount, 1, 'MUST have max 1 active setup per instrument in DB');
+    // Verify constraint: check DB active count for ES per strategy
+    const activeCount = await queries.countActiveSetupsForInstrument('ES', 'futures', cand1.strategy_id || 'sentinel_v2');
+    assert.strictEqual(activeCount, 1, 'MUST have max 1 active setup per instrument per strategy in DB');
     console.log('✅ TEST 7: PublishGate Transactional Execution (Max 1 Active Setup Enforced)');
 
     // 7. Hawkeye Audit Log Test

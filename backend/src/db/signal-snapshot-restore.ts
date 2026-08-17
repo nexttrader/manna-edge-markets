@@ -9,9 +9,11 @@ const logger = createLogger('SignalSnapshotRestore');
 const SNAPSHOT_FILE_PATH = path.resolve(process.cwd(), 'src/db/persistent_signals_snapshot.json');
 const SNAPSHOT_TMP_PATH = '/tmp/persistent_signals_snapshot.json';
 
+import { isMockSetup } from '../publish-gate/revalidation';
+
 export async function saveSignalsSnapshot(setups: EdgeSetup[]): Promise<void> {
   try {
-    const activeOnly = (setups || []).filter(s => s && s.superseded === 0 && ['awaiting_entry', 'active'].includes(s.signal_state));
+    const activeOnly = (setups || []).filter(s => s && !isMockSetup(s) && s.superseded === 0 && ['awaiting_entry', 'active'].includes(s.signal_state));
     const jsonStr = JSON.stringify(activeOnly, null, 2);
     const now = new Date().toISOString();
 
@@ -45,8 +47,9 @@ export async function loadSignalsSnapshot(): Promise<EdgeSetup[]> {
     if (rows && rows.length > 0 && rows[0].snapshot_json) {
       const parsed = JSON.parse(rows[0].snapshot_json);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        logger.info({ count: parsed.length }, 'Loaded signals snapshot from persistent database table');
-        return parsed;
+        const realOnly = parsed.filter((s: EdgeSetup) => !isMockSetup(s));
+        logger.info({ count: realOnly.length }, 'Loaded signals snapshot from persistent database table');
+        return realOnly;
       }
     }
   } catch (err: any) {
@@ -60,8 +63,9 @@ export async function loadSignalsSnapshot(): Promise<EdgeSetup[]> {
         const content = fs.readFileSync(fpath, 'utf8');
         const parsed = JSON.parse(content);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          logger.info({ count: parsed.length, fpath }, 'Loaded signals snapshot from disk file');
-          return parsed;
+          const realOnly = parsed.filter((s: EdgeSetup) => !isMockSetup(s));
+          logger.info({ count: realOnly.length, fpath }, 'Loaded signals snapshot from disk file');
+          return realOnly;
         }
       }
     } catch {}
@@ -72,10 +76,10 @@ export async function loadSignalsSnapshot(): Promise<EdgeSetup[]> {
 
 export async function ensureActiveSignalsRestored(): Promise<void> {
   try {
-    // 1. Clean out any legacy seed/synthetic setups from database
+    // 1. Clean out any legacy seed/synthetic/mock setups from database
     try {
-      await queryDb(`DELETE FROM edge_setups WHERE id LIKE '%seed%' OR created_by_run = 'seed_init' OR metadata LIKE '%"seed":true%'`);
-      await queryDb(`DELETE FROM forex_edge_setups WHERE id LIKE '%seed%' OR created_by_run = 'seed_init' OR metadata LIKE '%"seed":true%'`);
+      await queryDb(`DELETE FROM edge_setups WHERE id LIKE '%seed%' OR id LIKE 'kz_mid_%' OR id LIKE '%mock%' OR created_by_run = 'seed_init' OR conviction_score IS NULL OR metadata LIKE '%"seed":true%' OR metadata LIKE '%"source":"mock"%'`);
+      await queryDb(`DELETE FROM forex_edge_setups WHERE id LIKE '%seed%' OR id LIKE 'kz_mid_%' OR id LIKE '%mock%' OR created_by_run = 'seed_init' OR conviction_score IS NULL OR metadata LIKE '%"seed":true%' OR metadata LIKE '%"source":"mock"%'`);
     } catch {}
 
     const futures = await queryDb<EdgeSetup>(`SELECT * FROM edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
