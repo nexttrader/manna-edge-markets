@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMaintenance } from '../context/MaintenanceContext';
 import { ClientMaintenanceBanner } from '../components/ClientMaintenanceBanner';
 import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCard';
+import { SessionScanCountdown } from '../components/SessionScanCountdown';
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
@@ -312,14 +313,23 @@ export const Dashboard: React.FC = () => {
             <h3>
               {marketFilter === 'watchlist' 
                 ? 'Your Watchlist is Empty' 
+                : safeSetups.length === 0
+                ? 'NO ACTIVE SIGNALS FOR THIS SESSION'
                 : 'No setups match your selected filters'}
             </h3>
             <p>
               {marketFilter === 'watchlist'
                 ? 'Click the ☆ Watch button on any setup card to pin it to your personal watchlist.'
+                : safeSetups.length === 0
+                ? 'Institutional models are currently in Stand By. High-conviction entry criteria have not been met for the current session. Please wait until the next session scan.'
                 : 'Try adjusting your state, market, or direction filters above.'}
             </p>
-            {hasActiveFilter && (
+
+            {safeSetups.length === 0 && marketFilter !== 'watchlist' && (
+              <SessionScanCountdown />
+            )}
+
+            {hasActiveFilter && (marketFilter === 'watchlist' || safeSetups.length > 0) && (
               <button className="btn-hero-secondary btn-reset-empty" onClick={resetFilters}>
                 Clear All Filters
               </button>
