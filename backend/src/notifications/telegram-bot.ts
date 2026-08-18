@@ -156,6 +156,15 @@ class TelegramBotService {
     return `${iso} UTC`;
   }
 
+  private formatTradeId(setup: EdgeSetup): string {
+    if (!setup || !setup.id) return '#SND-0001';
+    const cleanInst = (setup.instrument || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const rawId = setup.id.replace(/^test_/, '');
+    const parts = rawId.split('-');
+    const suffix = parts.length > 1 ? parts[0].substring(0, 4).toUpperCase() : rawId.substring(rawId.length - 4).toUpperCase();
+    return `#${cleanInst}-${suffix}`;
+  }
+
   // ── Message Formatters ─────────────────────────────────────────────────────
 
   public formatNewSetupMessage(setup: EdgeSetup): string {
@@ -165,9 +174,11 @@ class TelegramBotService {
     const directionBadge = isLong ? '🟢 BUY LIMIT (LONG)' : '🔴 SELL LIMIT (SHORT)';
     const convScore = setup.conviction_score ? `${setup.conviction_score}%` : 'N/A';
     const sentTime = this.formatTimestamp(setup.created_at);
+    const tradeId = this.formatTradeId(setup);
 
     return `<b>🟡 ${headerTitle} ⚡</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 📊 <b>Asset:</b> ${setup.instrument}
 🎯 <b>Order:</b> ${directionBadge}
 📍 <b>Entry Zone:</b> <code>${setup.entry_zone_low} – ${setup.entry_zone_high}</code>
@@ -186,9 +197,11 @@ class TelegramBotService {
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
     const sentTime = this.formatTimestamp(setup.entry_triggered_at);
+    const tradeId = this.formatTradeId(setup);
 
     return `⚡ <b>${headerTitle} ENTRY TRIGGERED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 Price has entered the Entry Zone at <code>${setup.entry_zone_mid || setup.entry_zone_low}</code>.
 Trade is now <b>LIVE</b> in the market!
 🎯 <b>Target 1 (+2R):</b> <code>${setup.tp1}</code>
@@ -203,9 +216,11 @@ Trade is now <b>LIVE</b> in the market!
     const dir = isLong ? 'LONG' : 'SHORT';
     const entryMid = setup.entry_zone_mid || setup.entry_zone_low;
     const sentTime = this.formatTimestamp();
+    const tradeId = this.formatTradeId(setup);
 
     return `🛡️ <b>${headerTitle} RISK-FREE ALERT — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 Price reached <b>+1.0R open profit</b>!
 👉 <b>ACTION REQUIRED:</b> Move Stop Loss to Breakeven (BE @ <code>${entryMid}</code>).
 Position is now <b>$0 RISK-FREE</b>! 🚀
@@ -218,9 +233,11 @@ Position is now <b>$0 RISK-FREE</b>! 🚀
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
     const sentTime = this.formatTimestamp();
+    const tradeId = this.formatTradeId(setup);
 
     return `🎯 <b>${headerTitle} TAKE PROFIT 1 HIT — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 Target 1 (+2.0R Profit) achieved at <code>${setup.tp1}</code>!
 💰 <b>Realized +2.0R Profit Locked In</b>.
 Adjust remaining runner stop loss to Breakeven.
@@ -233,9 +250,11 @@ Adjust remaining runner stop loss to Breakeven.
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
     const sentTime = this.formatTimestamp();
+    const tradeId = this.formatTradeId(setup);
 
     return `🏆 <b>${headerTitle} TARGET 2 RUNNER ACHIEVED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 Full Target 2 (+3.0R Profit) hit at <code>${setup.tp2 || setup.tp1}</code>!
 🎉 <b>Maximum +3.0R Runner Profit Logged!</b>
 📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
@@ -247,9 +266,11 @@ Full Target 2 (+3.0R Profit) hit at <code>${setup.tp2 || setup.tp1}</code>!
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
     const sentTime = this.formatTimestamp();
+    const tradeId = this.formatTradeId(setup);
 
     return `⛔ <b>${headerTitle} SIGNAL INVALIDATED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Trade ID:</b> <code>${tradeId}</code>
 Signal for <code>${setup.instrument}</code> was invalidated.
 ${reason ? `Reason: <i>${reason}</i>\n` : ''}📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
