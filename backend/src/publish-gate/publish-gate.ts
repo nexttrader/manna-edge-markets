@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const logger = createLogger('PublishGate');
 export const publishEvents = new EventEmitter();
+publishEvents.setMaxListeners(100);
 
 export interface PublishGateResult {
   success: boolean;
