@@ -27,6 +27,7 @@ import newsRoutes from './api/news-routes';
 import supportRoutes from './api/support-routes';
 import userManagementRoutes from './api/user-management-routes';
 import { startSubscriptionScheduler } from './scheduler/subscription-cron';
+import { telegramBotService } from './notifications/telegram-bot';
 
 const logger = createLogger('server');
 const app = express();
@@ -118,6 +119,9 @@ async function startServer() {
 
         logger.info('Starting automated user subscription & trial expiry scheduler...');
         startSubscriptionScheduler();
+
+        logger.info('Initializing Telegram Bot Service...');
+        telegramBotService.init();
 
         logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
         startScheduler(
