@@ -162,7 +162,8 @@ async function startServer() {
             }
         );
 
-        // Server boot starts cleanly. Automatic startup scan removed to ensure active setups are preserved.
+        // Server boot starts cleanly. A delayed gap-fill scan runs 30s after boot to detect
+        // and fill any under-populated sessions (e.g. server restart mid-session with < 2 signals).
         app.listen(Number(PORT), '0.0.0.0', () => {
             const now = new Date();
             const currentKz = getCurrentKillzone(now);
@@ -172,6 +173,30 @@ async function startServer() {
                 currentKillzone: currentKz?.killzone || 'unknown',
                 nextBoundary: nextBoundary?.killzone || 'unknown',
             }, `🚀 Killzone Discovery Engine running on port ${PORT}`);
+
+            // ── Startup Gap-Fill: runs 30s after boot ──────────────────────────────
+            // If we boot mid-session with fewer than 2 signals per open asset class,
+            // immediately run a targeted fill scan without waiting for the next cron.
+            setTimeout(async () => {
+                try {
+                    logger.info('🔍 Running startup gap-fill check...');
+                    const result = await processKillzoneMidpointScan(getCurrentKillzone(), 'live');
+                    if (result.scanned) {
+                        logger.info(
+                            { scope: result.marketScope, futuresCount: result.futuresCount, forexCount: result.forexCount },
+                            '✅ Startup gap-fill scan completed — signals topped up.'
+                        );
+                    } else {
+                        logger.info(
+                            { futuresCount: result.futuresCount, forexCount: result.forexCount },
+                            '✅ Startup gap-fill check passed — signal counts are sufficient, no scan needed.'
+                        );
+                    }
+                } catch (err) {
+                    logger.error({ err }, 'Startup gap-fill scan failed');
+                }
+            }, 30_000); // 30-second delay allows DB init & lifecycle sync to stabilise first
+            // ───────────────────────────────────────────────────────────────────────
         });
 
         // Graceful shutdown

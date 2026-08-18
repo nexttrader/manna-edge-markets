@@ -7,6 +7,9 @@ import { isForexMarketOpen, isFuturesMarketOpen } from './killzone-mapper';
 
 const logger = createLogger('midpoint-scanner');
 
+// Minimum signals required per asset class. Scan fires if either open market is below this.
+const MIN_SIGNALS_PER_CLASS = 2;
+
 export async function processKillzoneMidpointScan(
     kzInfo: KillzoneInfo,
     runMode: 'live' | 'dry_run' = 'live'
@@ -27,9 +30,11 @@ export async function processKillzoneMidpointScan(
     const futuresCount = futuresSetups.length;
     const forexCount = forexSetups.length;
 
-    // Minimum requirement: 2 assets per asset class on the dashboard (only for open markets)
-    const futuresNeedsScan = isFuturesOpen && futuresCount < 2;
-    const forexNeedsScan = isForexOpen && forexCount < 2;
+    // Scan fires when EITHER open market is below the minimum signal threshold.
+    // Uses <= (less than or equal) so that having exactly MIN_SIGNALS_PER_CLASS - 1
+    // or fewer in an open market always triggers a fill attempt.
+    const futuresNeedsScan = isFuturesOpen && futuresCount < MIN_SIGNALS_PER_CLASS;
+    const forexNeedsScan = isForexOpen && forexCount < MIN_SIGNALS_PER_CLASS;
 
     if (!futuresNeedsScan && !forexNeedsScan) {
         logger.info(
