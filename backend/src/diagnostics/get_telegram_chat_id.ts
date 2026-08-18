@@ -7,7 +7,7 @@ async function findChatId() {
 
   // 1. Get Me
   const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-  const meData = await meRes.json();
+  const meData: any = await meRes.json();
 
   if (!meData.ok) {
     console.error('❌ Bot Token Error:', meData);
@@ -20,7 +20,7 @@ async function findChatId() {
 
   // 2. Get Updates
   const updatesRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
-  const updatesData = await updatesRes.json();
+  const updatesData: any = await updatesRes.json();
 
   if (updatesData.ok && updatesData.result.length > 0) {
     console.log('\nFound Channel/Group Updates:');

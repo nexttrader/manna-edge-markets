@@ -147,87 +147,111 @@ class TelegramBotService {
     }
   }
 
+  // ── Helper Formatter ───────────────────────────────────────────────────────
+
+  private formatTimestamp(dateStr?: string): string {
+    const d = dateStr ? new Date(dateStr) : new Date();
+    // Format: YYYY-MM-DD HH:MM:SS UTC
+    const iso = d.toISOString().replace('T', ' ').substring(0, 19);
+    return `${iso} UTC`;
+  }
+
   // ── Message Formatters ─────────────────────────────────────────────────────
 
   public formatNewSetupMessage(setup: EdgeSetup): string {
-    const isSnD = (setup.strategy_id || '').toLowerCase().includes('snd');
-    const stratTitle = isSnD ? '🟡 MANNA SND' : '🟣 SENTINEL V2';
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX SIGNAL' : 'SND FUTURES SIGNAL';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const directionBadge = isLong ? '🟢 BUY LIMIT (LONG)' : '🔴 SELL LIMIT (SHORT)';
-
-    let rationale = '';
-    if (setup.metadata) {
-      try {
-        const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
-        rationale = meta.selection_rationale || meta.description || '';
-      } catch {}
-    }
-
     const convScore = setup.conviction_score ? `${setup.conviction_score}%` : 'N/A';
-    const marketStr = (setup.market || 'futures').toUpperCase();
+    const sentTime = this.formatTimestamp(setup.created_at);
 
-    return `<b>${stratTitle} — NEW TRADE SETUP ⚡</b>
+    return `<b>🟡 ${headerTitle} ⚡</b>
 ━━━━━━━━━━━━━━━━━━━━━
-📊 <b>Asset:</b> ${setup.instrument} (${marketStr})
+📊 <b>Asset:</b> ${setup.instrument}
 🎯 <b>Order:</b> ${directionBadge}
 📍 <b>Entry Zone:</b> <code>${setup.entry_zone_low} – ${setup.entry_zone_high}</code>
 🛑 <b>Stop Loss:</b> <code>${setup.stop}</code>
 🎯 <b>Target 1 (+2R):</b> <code>${setup.tp1}</code>
 🏆 <b>Target 2 (+3R):</b> <code>${setup.tp2 || 'Open Runner'}</code>
-🔥 <b>Conviction Score:</b> <b>${convScore}</b>
-${rationale ? `\n📚 <b>Rationale:</b> <i>${rationale}</i>` : ''}
+🔥 <b>Conviction:</b> <b>${convScore}</b>
+📅 <b>Date & Time:</b> <code>${sentTime}</code>
 ━━━━━━━━━━━━━━━━━━━━━
-<i>Execute with discipline & check your position sizing before placing orders.</i>`;
+<i>Execute with discipline & proper risk management.</i>`;
   }
 
   public formatEntryTriggeredMessage(setup: EdgeSetup): string {
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX' : 'SND FUTURES';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
-    return `⚡ <b>ENTRY TRIGGERED — ${setup.instrument} (${dir})</b>
+    const sentTime = this.formatTimestamp(setup.entry_triggered_at);
+
+    return `⚡ <b>${headerTitle} ENTRY TRIGGERED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
-Price has tapped the 15M Entry Zone at <code>${setup.entry_zone_mid || setup.entry_zone_low}</code>.
+Price has entered the Entry Zone at <code>${setup.entry_zone_mid || setup.entry_zone_low}</code>.
 Trade is now <b>LIVE</b> in the market!
 🎯 <b>Target 1 (+2R):</b> <code>${setup.tp1}</code>
-🛑 <b>Stop Loss:</b> <code>${setup.stop}</code>`;
+🛑 <b>Stop Loss:</b> <code>${setup.stop}</code>
+📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
 
   public formatBreakevenMessage(setup: EdgeSetup): string {
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX' : 'SND FUTURES';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
     const entryMid = setup.entry_zone_mid || setup.entry_zone_low;
-    return `🛡️ <b>RISK-FREE TRADE ALERT — ${setup.instrument} (${dir})</b>
+    const sentTime = this.formatTimestamp();
+
+    return `🛡️ <b>${headerTitle} RISK-FREE ALERT — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
 Price reached <b>+1.0R open profit</b>!
 👉 <b>ACTION REQUIRED:</b> Move Stop Loss to Breakeven (BE @ <code>${entryMid}</code>).
-Position is now <b>$0 RISK-FREE</b>! 🚀`;
+Position is now <b>$0 RISK-FREE</b>! 🚀
+📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
 
   public formatTarget1HitMessage(setup: EdgeSetup): string {
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX' : 'SND FUTURES';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
-    return `🎯 <b>TAKE PROFIT 1 HIT — ${setup.instrument} (${dir})</b>
+    const sentTime = this.formatTimestamp();
+
+    return `🎯 <b>${headerTitle} TAKE PROFIT 1 HIT — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
 Target 1 (+2.0R Profit) achieved at <code>${setup.tp1}</code>!
 💰 <b>Realized +2.0R Profit Locked In</b>.
-Adjust remaining runner stop loss to Breakeven.`;
+Adjust remaining runner stop loss to Breakeven.
+📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
 
   public formatTarget2HitMessage(setup: EdgeSetup): string {
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX' : 'SND FUTURES';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
-    return `🏆 <b>TARGET 2 RUNNER ACHIEVED — ${setup.instrument} (${dir})</b>
+    const sentTime = this.formatTimestamp();
+
+    return `🏆 <b>${headerTitle} TARGET 2 RUNNER ACHIEVED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
 Full Target 2 (+3.0R Profit) hit at <code>${setup.tp2 || setup.tp1}</code>!
-🎉 <b>Maximum +3.0R Runner Profit Logged!</b>`;
+🎉 <b>Maximum +3.0R Runner Profit Logged!</b>
+📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
 
   public formatInvalidatedMessage(setup: EdgeSetup, reason?: string): string {
+    const isForex = (setup.market || '').toLowerCase() === 'forex';
+    const headerTitle = isForex ? 'SND FOREX' : 'SND FUTURES';
     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
     const dir = isLong ? 'LONG' : 'SHORT';
-    return `⛔ <b>SIGNAL INVALIDATED — ${setup.instrument} (${dir})</b>
+    const sentTime = this.formatTimestamp();
+
+    return `⛔ <b>${headerTitle} SIGNAL INVALIDATED — ${setup.instrument} (${dir})</b>
 ━━━━━━━━━━━━━━━━━━━━━
 Signal for <code>${setup.instrument}</code> was invalidated.
-${reason ? `Reason: <i>${reason}</i>` : 'Market structure displaced or setup superseded.'}`;
+${reason ? `Reason: <i>${reason}</i>\n` : ''}📅 <b>Date & Time:</b> <code>${sentTime}</code>`;
   }
 }
 

@@ -4,8 +4,8 @@ import { EdgeSetup } from '../discovery/types';
 async function runTelegramTest() {
   console.log('--- Telegram Bot Notification Service Test ---');
 
-  const sampleSetup: EdgeSetup = {
-    id: `test_snd_${Date.now()}`,
+  const futuresSetup: EdgeSetup = {
+    id: `test_futures_${Date.now()}`,
     instrument: 'NQ',
     market: 'futures',
     created_at: new Date().toISOString(),
@@ -24,44 +24,71 @@ async function runTelegramTest() {
     tradable: 1,
     conviction_score: 89.7,
     liquidity_score: 92.5,
-    strategy_id: 'manna_snd',
-    strategy_tier: 'pro',
-    metadata: JSON.stringify({
-      source: 'yahoo_finance_futures',
-      selection_rationale: '[MANNA SND] Curve: LOW | 15M Trend: UP. Imbalance Zone (Rally-Base-Rally) inside 1H Demand Curve. Limit Buy at Proximal line (30296.75), SL beyond Distal line (30240.88).'
-    })
+    strategy_id: 'snd_pro',
+    strategy_tier: 'pro'
   };
 
-  const newSetupMsg = telegramBotService.formatNewSetupMessage(sampleSetup);
-  console.log('\n--- Sample Telegram Message: NEW SETUP ---');
-  console.log(newSetupMsg);
+  const forexSetup: EdgeSetup = {
+    id: `test_forex_${Date.now()}`,
+    instrument: 'EUR/USD',
+    market: 'forex',
+    created_at: new Date().toISOString(),
+    killzone_origin: 'london',
+    bias: 'long',
+    entry_zone_low: 1.0820,
+    entry_zone_high: 1.0825,
+    entry_zone_mid: 1.08225,
+    stop: 1.0805,
+    tp1: 1.0855,
+    tp2: 1.0875,
+    r_multiple_1: 2.0,
+    r_multiple_2: 3.0,
+    signal_state: 'awaiting_entry',
+    superseded: 0,
+    tradable: 1,
+    conviction_score: 91.2,
+    liquidity_score: 95.0,
+    strategy_id: 'snd_pro',
+    strategy_tier: 'pro'
+  };
 
-  const entryMsg = telegramBotService.formatEntryTriggeredMessage(sampleSetup);
-  console.log('\n--- Sample Telegram Message: ENTRY TRIGGERED ---');
-  console.log(entryMsg);
+  console.log('\n--- 1. Sample Message: SND FUTURES SIGNAL ---');
+  const futuresMsg = telegramBotService.formatNewSetupMessage(futuresSetup);
+  console.log(futuresMsg);
 
-  const beMsg = telegramBotService.formatBreakevenMessage(sampleSetup);
-  console.log('\n--- Sample Telegram Message: BREAKEVEN ALERT ---');
-  console.log(beMsg);
+  console.log('\n--- 2. Sample Message: SND FOREX SIGNAL ---');
+  const forexMsg = telegramBotService.formatNewSetupMessage(forexSetup);
+  console.log(forexMsg);
 
-  const tp1Msg = telegramBotService.formatTarget1HitMessage(sampleSetup);
-  console.log('\n--- Sample Telegram Message: TARGET 1 HIT ---');
-  console.log(tp1Msg);
+  console.log('\n--- 3. Sample Message: ENTRY TRIGGERED ---');
+  console.log(telegramBotService.formatEntryTriggeredMessage(futuresSetup));
 
-  const tp2Msg = telegramBotService.formatTarget2HitMessage(sampleSetup);
-  console.log('\n--- Sample Telegram Message: TARGET 2 HIT ---');
-  console.log(tp2Msg);
+  console.log('\n--- 4. Sample Message: BREAKEVEN RISK-FREE ALERT ---');
+  console.log(telegramBotService.formatBreakevenMessage(futuresSetup));
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  console.log('\n--- 5. Sample Message: TARGET 1 HIT (+2R) ---');
+  console.log(telegramBotService.formatTarget1HitMessage(futuresSetup));
+
+  console.log('\n--- 6. Sample Message: TARGET 2 RUNNER HIT (+3R) ---');
+  console.log(telegramBotService.formatTarget2HitMessage(futuresSetup));
+
+  const token = process.env.TELEGRAM_BOT_TOKEN || '8967922501:AAHTrpdPi5tdOo7RA0elzha74BQPGLNM1rY';
+  const chatId = process.env.TELEGRAM_CHAT_ID || '-1004468729951';
 
   if (token && chatId) {
-    console.log('\n🚀 Dispatching live test message to Telegram channel/group...');
+    console.log(`\n🚀 Dispatching live test signal to channel ${chatId}...`);
+    process.env.TELEGRAM_BOT_TOKEN = token;
+    process.env.TELEGRAM_CHAT_ID = chatId;
+    process.env.TELEGRAM_ENABLED = 'true';
     telegramBotService.init();
-    const success = await telegramBotService.sendMessage(newSetupMsg);
-    console.log(`Live Send Status: ${success ? 'SUCCESS ✅' : 'FAILED ❌'}`);
-  } else {
-    console.log('\nℹ️ Live send skipped: TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID environment variables not provided.');
+    
+    // Send Futures Signal
+    const res1 = await telegramBotService.sendMessage(futuresMsg);
+    console.log(`Futures Signal Send Status: ${res1 ? 'SUCCESS ✅' : 'FAILED ❌'}`);
+
+    // Send Forex Signal
+    const res2 = await telegramBotService.sendMessage(forexMsg);
+    console.log(`Forex Signal Send Status: ${res2 ? 'SUCCESS ✅' : 'FAILED ❌'}`);
   }
 }
 
