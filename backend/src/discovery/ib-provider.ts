@@ -1,6 +1,8 @@
 import { IBApi, EventName, Contract, SecType } from '@stoqey/ib';
 import { queryDb } from '../db/database';
 import { createLogger } from '../telemetry/logger';
+import { processKillzoneMidpointScan } from '../scheduler/midpoint-scanner';
+import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 
 const logger = createLogger('IBProvider');
 
@@ -9,9 +11,17 @@ const IB_HOST = process.env.IB_GATEWAY_HOST || '127.0.0.1';
 const IB_PORT = Number(process.env.IB_GATEWAY_PORT || '4002'); // Default 4002 for paper trading
 const IB_CLIENT_ID = process.env.IB_CLIENT_ID ? Number(process.env.IB_CLIENT_ID) : Math.floor(Math.random() * 8999) + 1000;
 
+// How long the gateway must be continuously disconnected before the watchdog
+// triggers a Yahoo-based gap-fill scan (10 minutes).
+const WATCHDOG_TRIGGER_MS = 10 * 60 * 1000;
+// How often the watchdog checks connection state (5 minutes).
+const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
+
 let ib: IBApi | null = null;
 let isConnected = false;
 let reconnectTimer: NodeJS.Timeout | null = null;
+let disconnectedSince: number | null = null; // epoch ms when we first lost the gateway
+let watchdogTimer: NodeJS.Timeout | null = null;
 
 // Track active market data request IDs to map back to instruments
 const activeRequests = new Map<number, string>();
@@ -144,6 +154,54 @@ async function updateCachedPrice(instrument: string, price: number) {
   }
 }
 
+// ── IB Gateway Watchdog ────────────────────────────────────────────────────
+// Runs every 5 minutes. If the gateway has been unreachable for > 10 minutes
+// it fires a Yahoo-based gap-fill scan so signals still appear on the board.
+function startIBWatchdog() {
+  if (watchdogTimer) return; // already running
+
+  watchdogTimer = setInterval(async () => {
+    if (isConnected || !disconnectedSince) return; // All good — nothing to do
+
+    const downMs = Date.now() - disconnectedSince;
+    if (downMs < WATCHDOG_TRIGGER_MS) {
+      logger.info(
+        { downSec: Math.round(downMs / 1000), triggerSec: WATCHDOG_TRIGGER_MS / 1000 },
+        'IB Watchdog: gateway still down but below trigger threshold — waiting...'
+      );
+      return;
+    }
+
+    logger.warn(
+      { downMinutes: Math.round(downMs / 60000) },
+      '🚨 IB Watchdog: Gateway has been unreachable for > 10 minutes. Triggering Yahoo fallback gap-fill scan to ensure signals remain live.'
+    );
+
+    try {
+      const kzInfo = getCurrentKillzone();
+      const result = await processKillzoneMidpointScan(kzInfo, 'live');
+      if (result.scanned) {
+        logger.info(
+          { scope: result.marketScope, futuresCount: result.futuresCount, forexCount: result.forexCount },
+          '✅ IB Watchdog: Yahoo fallback gap-fill scan completed — signals topped up while IB is offline.'
+        );
+      } else {
+        logger.info(
+          { futuresCount: result.futuresCount, forexCount: result.forexCount },
+          '✅ IB Watchdog: Signal counts are already sufficient — no fill needed.'
+        );
+      }
+    } catch (err: any) {
+      logger.error({ err: err.message }, 'IB Watchdog: fallback gap-fill scan failed');
+    }
+  }, WATCHDOG_INTERVAL_MS);
+
+  logger.info(
+    { intervalMin: WATCHDOG_INTERVAL_MS / 60000, triggerMin: WATCHDOG_TRIGGER_MS / 60000 },
+    '🐕 IB Gateway Watchdog started — will trigger Yahoo fallback scan if gateway is down > 10 minutes.'
+  );
+}
+
 // 5. Connect and Stream Ticks
 export function startIBPriceStreaming() {
   if (process.env.MARKET_DATA_PROVIDER !== 'ibkr') {
@@ -166,7 +224,9 @@ export function startIBPriceStreaming() {
 
   setupListeners();
   connectWithRetry();
+  startIBWatchdog(); // Start the crash-recovery watchdog alongside the connection
 }
+
 
 function connectWithRetry() {
   if (!ib || isConnected) return;
@@ -201,6 +261,7 @@ function setupListeners() {
 
   ib.on(EventName.connected, () => {
     isConnected = true;
+    disconnectedSince = null; // Gateway is back — reset the watchdog clock
     logger.info('Successfully connected to IBKR Gateway. Registering active symbol subscriptions...');
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -219,10 +280,14 @@ function setupListeners() {
 
   ib.on(EventName.disconnected, () => {
     isConnected = false;
-    logger.warn('Disconnected from IBKR Gateway.');
+    if (!disconnectedSince) {
+      disconnectedSince = Date.now(); // Start the watchdog clock on first disconnect
+    }
+    logger.warn({ disconnectedSince: new Date(disconnectedSince).toISOString() }, 'Disconnected from IBKR Gateway. Watchdog clock started.');
     activeRequests.clear();
     scheduleReconnect();
   });
+
 
   ib.on(EventName.error, (err: any, code: number, id: number) => {
     // Suppress warning code 2104, 2106, 2158 (Standard connection status messages from IB)
@@ -312,7 +377,11 @@ export function getIBKRGatewayStatus() {
     clientId: IB_CLIENT_ID,
     host: IB_HOST,
     port: IB_PORT,
+    disconnectedSince: disconnectedSince ? new Date(disconnectedSince).toISOString() : null,
+    downMinutes: disconnectedSince ? Math.round((Date.now() - disconnectedSince) / 60000) : 0,
+    watchdogActive: !!watchdogTimer,
     activeRequests: Array.from(activeRequests.entries()).map(([reqId, instrument]) => ({ reqId, instrument })),
     lastErrors
   };
 }
+

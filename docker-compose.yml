@@ -20,3 +20,23 @@ services:
       - VNC_PASSWORD=my_secure_vnc_pass
       # Automatically accept incoming API connections from localhost/trusted IPs
       - READ_ONLY_API=yes
+      # ── Stability & Crash-Prevention Tuning ────────────────────────────────
+      # Increase JVM heap from default 768m → 1024m to prevent OOM crashes
+      # (the default 768m is borderline for the embedded JxBrowser component)
+      - JVM_HEAP=1024m
+      # Force a clean IBC cold-restart at 23:50 UTC every night — just before
+      # IBKR's own daily server reset window (00:00–00:05 ET) — so the container
+      # reconnects on clean terms rather than being caught mid-session by the reset.
+      - RESTART_CRON=50 23 * * *
+      # Exit cleanly if 2FA times out instead of hanging the container indefinitely
+      - EXIT_AFTER_2FA_TIMEOUT=yes
+    # Health-check: test that the API port is open every 30s.
+    # After 3 consecutive failures Docker marks the container unhealthy and
+    # restart: always brings it back up automatically.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 4002 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
