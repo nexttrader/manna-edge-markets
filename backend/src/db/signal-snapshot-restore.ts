@@ -130,7 +130,9 @@ export async function ensureActiveSignalsRestored(): Promise<void> {
         setup.entry_zone_low,
         setup.entry_zone_high,
         setup.entry_zone_mid,
-        setup.entry_price_recorded || setup.entry_zone_mid,
+        // Only restore entry_price_recorded if the signal was actually filled (active).
+        // Awaiting_entry signals never filled, so their entry_price_recorded must stay NULL.
+        (setup.signal_state === 'active' ? setup.entry_price_recorded : null) || null,
         setup.stop,
         setup.initial_stop || setup.stop,
         setup.tp1,

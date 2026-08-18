@@ -114,7 +114,12 @@ export async function initializeDatabase(): Promise<void> {
                     // Retroactive restoration of premature outcomes & setups where trade was never filled
                     `DELETE FROM outcomes WHERE setup_id IN (SELECT id FROM edge_setups WHERE entry_triggered_at IS NULL UNION SELECT id FROM forex_edge_setups WHERE entry_triggered_at IS NULL)`,
                     `UPDATE edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`,
-                    `UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`
+                    `UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`,
+                    // Fix: clear stale entry_price_recorded on awaiting_entry signals.
+                    // These were incorrectly written by the snapshot restore fallback (entry_zone_mid was used
+                    // as a placeholder), causing the signal card to show a fake "Exact Fill" price.
+                    `UPDATE edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`,
+                    `UPDATE forex_edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`
                 ];
                 for (const sql of safeAlters) {
                     try { await client.query(sql); } catch (_) { /* column/index/query safe execution */ }

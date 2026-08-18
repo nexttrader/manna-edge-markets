@@ -174,7 +174,14 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   };
   const orderTypeStr = getOrderType();
 
-  const exactFill = setup.entry_price_recorded || setup.entry_price_executed;
+  // Only show "Exact Fill" if the signal has genuinely been filled:
+  // signal_state must be 'active' AND entry_triggered_at must exist.
+  // Awaiting-entry signals must never show a fill price even if entry_price_recorded
+  // somehow has a value (e.g. from a stale snapshot restore).
+  const exactFill =
+    setup.signal_state === 'active' && setup.entry_triggered_at
+      ? setup.entry_price_recorded || setup.entry_price_executed
+      : null;
 
   const currentPrice = setup.current_price;
   const isStillInZone = Boolean(
