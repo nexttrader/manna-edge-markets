@@ -69,7 +69,10 @@ export async function insertSetup(setup: EdgeSetup, market: string): Promise<voi
     const keys = Object.keys(setup).filter(k => setup[k as keyof EdgeSetup] !== undefined);
     const values = keys.map(k => setup[k as keyof EdgeSetup]);
     const placeholders = keys.map(() => '?').join(', ');
-    const query = `INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`;
+    // Use standard UPSERT syntax compatible with both PostgreSQL and SQLite ≥ 3.24
+    const nonIdKeys = keys.filter(k => k !== 'id');
+    const setClause = nonIdKeys.map(k => `${k} = excluded.${k}`).join(', ');
+    const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${setClause}`;
     await queryDb(query, values);
     
     // Auto update snapshot
@@ -78,6 +81,7 @@ export async function insertSetup(setup: EdgeSetup, market: string): Promise<voi
         await saveSignalsSnapshot(active);
     } catch {}
 }
+
 
 export const createSetup = async (setup: EdgeSetup, market?: string): Promise<void> => {
     const m = market || setup.market || 'futures';
