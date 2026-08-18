@@ -1,0 +1,83 @@
+/* ── Equity Curve ─────────────────────────────────────────── */
+
+.ec-wrapper {
+  background: rgba(18, 18, 28, 0.9);
+  border: 1px solid rgba(255, 171, 0, 0.2);
+  border-radius: 14px;
+  padding: 20px 24px 16px;
+  margin-bottom: 24px;
+}
+
+.ec-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.ec-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ec-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.ec-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #ffab00;
+  letter-spacing: 0.04em;
+}
+
+.ec-subtitle {
+  font-size: 0.72rem;
+  color: #666;
+  margin-top: 3px;
+}
+
+.ec-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ec-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.ec-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ec-chart-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.ec-svg {
+  display: block;
+  min-width: 480px;
+}
+
+.ec-empty {
+  text-align: center;
+  padding: 48px 0;
+  color: #555;
+  font-size: 0.82rem;
+  font-style: italic;
+}

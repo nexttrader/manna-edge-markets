@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../../config';
 import './StrategyComparisonDashboard.css';
+import { EquityCurve } from './EquityCurve';
+
 
 interface StrategyStat {
   strategyId: string;
@@ -361,12 +363,21 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
         ))}
       </div>
 
+      {/* Equity Curve — cumulative R per strategy */}
+      {data && (
+        <EquityCurve
+          tradeLogs={data.tradeLogs ?? []}
+          strategies={data.strategies ?? []}
+        />
+      )}
+
       {/* Comparative Strategy Matrix Table */}
       {data && data.strategies.length > 0 && (
         <div style={{ background: 'rgba(18, 18, 28, 0.85)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
           <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', color: '#ffab00', fontWeight: 800 }}>
             📋 COMPARATIVE PERFORMANCE MATRIX
           </h3>
+
 
           <div className="scd-table-wrapper">
             <table className="scd-table">
