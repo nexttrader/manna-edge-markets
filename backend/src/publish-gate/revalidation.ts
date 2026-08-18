@@ -38,7 +38,28 @@ export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: n
   }
 
   if (setup.signal_state === 'awaiting_entry') {
-    // Rule 2: zone_consumed — price has blown THROUGH the zone without triggering a fill.
+    // Rule 2a: TP2 blown — price has already reached the take-profit target without ever
+    // filling the entry. The full move has completed without us — supersede immediately.
+    // Uses TP2 as the threshold; falls back to TP1 if TP2 is not set.
+    const tpTarget = setup.tp2 ?? setup.tp1;
+    if (tpTarget) {
+      if (isLong && currentPrice >= tpTarget) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${currentPrice} reached TP target ${tpTarget} without filling entry — full move missed, setup superseded`
+        };
+      }
+      if (!isLong && currentPrice <= tpTarget) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${currentPrice} reached TP target ${tpTarget} without filling entry — full move missed, setup superseded`
+        };
+      }
+    }
+
+    // Rule 2b: zone_consumed — price has blown THROUGH the zone without triggering a fill.
     // For LONG (limit buy waiting for price to DROP into zone):
     //   The demand zone sits BELOW current price. Price being above is NORMAL — we're waiting.
     //   Only invalidate if price crashes BELOW the zone bottom (entry_zone_low = zone.distal)
