@@ -1351,7 +1351,8 @@ function buildAnalyticsCSV(
     'conviction_score', 'checklist_score', 'risk_quality_score', 'trend_quality_score', 'execution_score', 'entry_quality_score', 'overall_trade_grade',
     'atr', 'atr_multiple', 'volatility_rating', 'adx', 'rsi', 'session_range', 'news_event_active', 'high_impact_news_within_30_min', 'market_regime',
     'liquidity_condition', 'volume_rating', 'correlation_score', 'signal_generated_time', 'order_submitted_time', 'order_filled_time', 'execution_delay_ms',
-    'missed_entry_pct', 'limit_or_market_order', 'order_modified', 'requote'
+    'missed_entry_pct', 'limit_or_market_order', 'order_modified', 'requote',
+    'client_tagged_count', 'client_tag_outcome'
   ];
 
   const rows: string[] = [...headers, columnHeaders.join(',')];
@@ -1515,7 +1516,10 @@ function buildAnalyticsCSV(
       0.0,
       'Limit',
       setup.is_breakeven ? 1 : 0,
-      0
+      0,
+      // Client tagging columns — populated from client_signal_tags by setup_id
+      o.client_tagged_count ?? 0,
+      o.client_tag_outcome ?? ''
     ];
 
     rows.push(row.map(val => (val === null || val === undefined) ? '' : val).join(','));
@@ -1561,6 +1565,14 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
 
       const targetAudience = meta.target_audience || 'public';
 
+      // Client tagging stats for this signal
+      let clientTaggedCount = 0;
+      let clientTagOutcome = '';
+      try {
+        const tagRows = await queryDb<any>(`SELECT COUNT(*) as cnt, outcome_type FROM client_signal_tags WHERE setup_id = ? GROUP BY outcome_type`, [o.setup_id]);
+        for (const tr of tagRows) { clientTaggedCount += tr.cnt || 0; if (tr.outcome_type && !clientTagOutcome) clientTagOutcome = tr.outcome_type; }
+      } catch { /* non-critical */ }
+
       return {
         ...o,
         setup,
@@ -1575,7 +1587,9 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
         time_exited: setup?.resolved_at || o.execution_time,
         time_to_fill_min: fillMin,
         holding_duration_min: holdMin,
-        realized_r: tradeR
+        realized_r: tradeR,
+        client_tagged_count: clientTaggedCount,
+        client_tag_outcome: clientTagOutcome
       };
     }));
 
@@ -2207,4 +2221,139 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
   }
 });
 
+// ── CLIENT SIGNAL TAGGING ROUTES ─────────────────────────────────────────────
+
+// POST /api/admin/tag-signal — toggle a tag on/off for the calling user
+router.post('/tag-signal', async (req: Request, res: Response) => {
+  try {
+    const { userId, userEmail, setupId, market = 'futures', instrument, bias, conviction_score, strategy_id } = req.body || {};
+    if (!userId || !userEmail || !setupId || !instrument) {
+      return res.status(400).json({ error: 'Missing required fields: userId, userEmail, setupId, instrument' });
+    }
+
+    // Check if already tagged — if so, remove the tag (toggle off)
+    const existing = await queryDb<any>(
+      `SELECT id FROM client_signal_tags WHERE user_id = ? AND setup_id = ?`,
+      [userId, setupId]
+    );
+
+    if (existing && existing.length > 0) {
+      await queryDb(`DELETE FROM client_signal_tags WHERE user_id = ? AND setup_id = ?`, [userId, setupId]);
+      return res.json({ tagged: false, message: 'Tag removed' });
+    }
+
+    // Insert new tag
+    const tagId = uuidv4();
+    await queryDb(
+      `INSERT INTO client_signal_tags (id, user_id, user_email, setup_id, setup_market, instrument, strategy_id, bias, conviction_score, tagged_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tagId, userId, userEmail, setupId, market, instrument, strategy_id || null, bias || null, conviction_score || null, new Date().toISOString()]
+    );
+
+    return res.json({ tagged: true, tagId, message: 'Signal tagged for demo tracking' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to tag signal', details: error?.message || String(error) });
+  }
+});
+
+// GET /api/admin/my-tags?userId=xxx — returns setup IDs the user has tagged
+router.get('/my-tags', async (req: Request, res: Response) => {
+  try {
+    const userId = req.query.userId as string;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const rows = await queryDb<{ setup_id: string }>(
+      `SELECT setup_id FROM client_signal_tags WHERE user_id = ?`,
+      [userId]
+    );
+    res.json({ taggedIds: rows.map(r => r.setup_id) });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch tags', details: error?.message || String(error) });
+  }
+});
+
+// GET /api/admin/client-accuracy-analytics — Super Admin only aggregate analytics
+router.get('/client-accuracy-analytics', async (req: Request, res: Response) => {
+  try {
+    const role = (req.query.role as string) || '';
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Access restricted to Super Admins' });
+    }
+
+    // All tags ever placed
+    const allTags = await queryDb<any>(`SELECT * FROM client_signal_tags ORDER BY tagged_at DESC`);
+
+    const totalTags = allTags.length;
+    const uniqueTaggers = new Set(allTags.map((t: any) => t.user_id)).size;
+
+    // Resolved tags (have an outcome)
+    const resolvedTags = allTags.filter((t: any) => t.outcome_type);
+    const resolvedCount = resolvedTags.length;
+    const clientWins = resolvedTags.filter((t: any) => t.was_correct === 1 || t.was_correct === true).length;
+    const clientWinRate = resolvedCount > 0 ? Number(((clientWins / resolvedCount) * 100).toFixed(1)) : 0;
+
+    // System win rate (from outcomes table)
+    const allOutcomes = await queryDb<any>(`SELECT outcome_type, realized_pl FROM outcomes`);
+    const systemWins = allOutcomes.filter((o: any) => {
+      const t = String(o.outcome_type || '').toLowerCase();
+      return t.includes('tp1') || t.includes('tp2');
+    }).length;
+    const systemWinRate = allOutcomes.length > 0 ? Number(((systemWins / allOutcomes.length) * 100).toFixed(1)) : 0;
+
+    // Top tagged instruments
+    const instrumentMap: Record<string, number> = {};
+    const sessionMap: Record<string, number> = {};
+    const stratMap: Record<string, number> = {};
+    const biasMap: Record<string, number> = {};
+
+    for (const t of allTags) {
+      instrumentMap[t.instrument] = (instrumentMap[t.instrument] || 0) + 1;
+      stratMap[t.strategy_id || 'sentinel_v2'] = (stratMap[t.strategy_id || 'sentinel_v2'] || 0) + 1;
+      biasMap[t.bias || 'long'] = (biasMap[t.bias || 'long'] || 0) + 1;
+    }
+
+    // Per-user summary
+    const userMap: Record<string, { email: string; tags: number; wins: number; losses: number }> = {};
+    for (const t of allTags) {
+      if (!userMap[t.user_id]) userMap[t.user_id] = { email: t.user_email, tags: 0, wins: 0, losses: 0 };
+      userMap[t.user_id].tags++;
+      if (t.outcome_type) {
+        if (t.was_correct === 1 || t.was_correct === true) userMap[t.user_id].wins++;
+        else userMap[t.user_id].losses++;
+      }
+    }
+
+    const perUserStats = Object.values(userMap)
+      .map(u => ({
+        email: u.email,
+        tags: u.tags,
+        wins: u.wins,
+        losses: u.losses,
+        winRate: (u.wins + u.losses) > 0 ? Number(((u.wins / (u.wins + u.losses)) * 100).toFixed(1)) : null
+      }))
+      .sort((a, b) => b.tags - a.tags);
+
+    const topInstruments = Object.entries(instrumentMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topStrategies = Object.entries(stratMap).sort((a, b) => b[1] - a[1]);
+
+    res.json({
+      totalTags,
+      uniqueTaggers,
+      resolvedCount,
+      clientWins,
+      clientWinRate,
+      systemWinRate,
+      edgeDelta: Number((clientWinRate - systemWinRate).toFixed(1)),
+      topInstruments,
+      topStrategies,
+      biasMap,
+      perUserStats,
+      recentTags: allTags.slice(0, 20)
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch client accuracy analytics', details: error?.message || String(error) });
+  }
+});
+
 export default router;
+

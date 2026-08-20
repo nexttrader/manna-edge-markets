@@ -284,6 +284,18 @@ export const createOutcome = async (outcome: any): Promise<void> => {
     (o as any).runner_realized_r = outcome.runner_realized_r || 0.0;
     (o as any).is_breakeven = outcome.is_breakeven || 0;
     await insertOutcome(o);
+
+    // ── Backfill client tag outcomes ──────────────────────────────────────────
+    // When a tagged signal resolves, mark its outcome so Super Admin can compute accuracy.
+    try {
+      const typeStr = String(outcome.outcome_type || '').toLowerCase();
+      const isWin = typeStr.includes('tp1') || typeStr.includes('tp2');
+      const outcomeR = outcome.realized_pl ?? (isWin ? (outcome.r_multiple_1 || 2.0) : typeStr.includes('sl') || typeStr.includes('stop') ? -1.0 : 0.0);
+      await queryDb(
+        `UPDATE client_signal_tags SET outcome_type = ?, outcome_r = ?, outcome_resolved_at = ?, was_correct = ? WHERE setup_id = ? AND outcome_type IS NULL`,
+        [outcome.outcome_type, outcomeR, new Date().toISOString(), isWin ? 1 : 0, outcome.setup_id]
+      );
+    } catch { /* non-critical, never block outcome writes */ }
 };
 
 export async function updateOutcomeBySetupId(setupId: string, updates: Partial<Outcome>): Promise<void> {

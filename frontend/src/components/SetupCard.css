@@ -566,13 +566,15 @@
 
 /* Uniform Action Buttons */
 .sc-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
 }
 
 .btn-action {
+  flex: 1;
+  min-width: 70px;
   padding: 8px 10px;
   font-family: var(--font-headline);
   font-size: 0.85rem;
@@ -608,6 +610,30 @@
   border-color: var(--green);
   color: var(--green);
 }
+
+/* Tag Button */
+.btn-tag {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 171, 0, 0.3);
+  color: #888;
+  flex: 0 0 auto;
+}
+
+.btn-tag:hover {
+  background: rgba(255, 171, 0, 0.12) !important;
+  border-color: #ffab00 !important;
+  color: #ffab00 !important;
+  transform: translateY(-1px);
+}
+
+.btn-tag--active {
+  background: rgba(255, 171, 0, 0.15) !important;
+  border-color: #ffab00 !important;
+  color: #ffab00 !important;
+  font-weight: 900;
+  box-shadow: 0 0 8px rgba(255, 171, 0, 0.2);
+}
+
 
 /* Expanded Details Drawer */
 .sc-details {

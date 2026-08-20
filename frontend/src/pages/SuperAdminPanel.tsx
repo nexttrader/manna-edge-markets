@@ -15,7 +15,7 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel'>('sentinel');
+  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel' | 'client_accuracy'>('sentinel');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
@@ -24,6 +24,23 @@ export const SuperAdminPanel: React.FC = () => {
   const [sentinelSetups, setSentinelSetups] = useState<any[]>([]);
   const [sentinelRollout, setSentinelRollout] = useState<{ visibleToAdmins: boolean; visibleToTraders: boolean }>({ visibleToAdmins: false, visibleToTraders: false });
   const [sentinelScanning, setSentinelScanning] = useState(false);
+
+  // Client Accuracy Intelligence State
+  const [clientAccuracy, setClientAccuracy] = useState<any>(null);
+  const [loadingClientAccuracy, setLoadingClientAccuracy] = useState(false);
+
+  const fetchClientAccuracy = async () => {
+    setLoadingClientAccuracy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/client-accuracy-analytics?role=super_admin`);
+      if (res.ok) {
+        const json = await res.json();
+        setClientAccuracy(json);
+      }
+    } catch {} finally {
+      setLoadingClientAccuracy(false);
+    }
+  };
 
   // User Activity Audit Modal State
   const [activityModalEmail, setActivityModalEmail] = useState<string | null>(null);
@@ -270,6 +287,7 @@ export const SuperAdminPanel: React.FC = () => {
     fetchSuperStrategies();
     fetchSentinelData();
     fetchTuningData();
+    fetchClientAccuracy();
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
@@ -445,6 +463,19 @@ export const SuperAdminPanel: React.FC = () => {
             onClick={() => setActiveTab('admin_audit')}
           >
             🛡️ Admin Audit ({adminLogs.length})
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'client_accuracy' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'client_accuracy' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
+              color: activeTab === 'client_accuracy' ? '#00e676' : '#ccc'
+            }}
+            onClick={() => { setActiveTab('client_accuracy'); fetchClientAccuracy(); }}
+          >
+            🏷️ Client Accuracy Intelligence
           </button>
         </div>
 
@@ -931,6 +962,246 @@ export const SuperAdminPanel: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Client Accuracy Intelligence */}
+        {activeTab === 'client_accuracy' && (
+          <div className="font-mono">
+            {/* Header / Summary Bar */}
+            <div className="super-card font-mono" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.04)', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h2 style={{ margin: 0, color: '#00e676', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🏷️ CLIENT SIGNAL SELECTION ACCURACY INTELLIGENCE
+                  </h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#aaa' }}>
+                    Tracking community demo-trading signal picks vs Manna's Institutional Decision Matrix.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{
+                      background: 'rgba(0, 230, 118, 0.15)',
+                      border: '1px solid #00e676',
+                      color: '#00e676',
+                      padding: '7px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.8rem'
+                    }}
+                    onClick={fetchClientAccuracy}
+                    disabled={loadingClientAccuracy}
+                  >
+                    {loadingClientAccuracy ? '⏳ Refreshing...' : '🔄 Refresh Data'}
+                  </button>
+                  <a
+                    href={`${API_BASE}/api/admin/analytics/export-csv`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono"
+                    style={{
+                      background: 'rgba(255, 171, 0, 0.15)',
+                      border: '1px solid #ffab00',
+                      color: '#ffab00',
+                      padding: '7px 16px',
+                      borderRadius: '6px',
+                      textDecoration: 'none',
+                      fontWeight: 800,
+                      fontSize: '0.8rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    📥 Download CSV Analytics
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI Cards Grid */}
+            <div className="stat-grid-4 font-mono" style={{ marginBottom: '20px' }}>
+              <div className="stat-box" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
+                <div className="stat-box-title">🏷️ Total Signals Tagged</div>
+                <div className="stat-box-value" style={{ color: '#00e5ff' }}>{clientAccuracy?.totalTags || 0}</div>
+                <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
+                  {clientAccuracy?.uniqueTaggers || 0} Unique Traders
+                </div>
+              </div>
+
+              <div className="stat-box" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.05)' }}>
+                <div className="stat-box-title">🎯 Client Win Rate</div>
+                <div className="stat-box-value" style={{ color: '#00e676' }}>
+                  {clientAccuracy?.clientWinRate !== undefined ? `${clientAccuracy.clientWinRate}%` : '0%'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
+                  {clientAccuracy?.clientWins || 0} Wins / {clientAccuracy?.resolvedCount || 0} Resolved
+                </div>
+              </div>
+
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">📊 System Win Rate</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>
+                  {clientAccuracy?.systemWinRate !== undefined ? `${clientAccuracy.systemWinRate}%` : '0%'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
+                  Decision Matrix Baseline
+                </div>
+              </div>
+
+              <div className="stat-box" style={{ borderColor: (clientAccuracy?.edgeDelta || 0) >= 0 ? '#00e676' : '#ffab00', background: 'rgba(255, 171, 0, 0.05)' }}>
+                <div className="stat-box-title">⚡ Client Edge Delta</div>
+                <div className="stat-box-value" style={{ color: (clientAccuracy?.edgeDelta || 0) >= 0 ? '#00e676' : '#ffab00' }}>
+                  {clientAccuracy?.edgeDelta !== undefined ? `${clientAccuracy.edgeDelta >= 0 ? '+' : ''}${clientAccuracy.edgeDelta}%` : '0.0%'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
+                  Client Alpha vs Matrix
+                </div>
+              </div>
+            </div>
+
+            {/* Breakdown Section: Instruments & Strategies */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+              <div className="super-card font-mono" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+                <h3 style={{ margin: '0 0 12px 0', color: '#00e5ff', fontSize: '0.95rem' }}>📈 Most Tagged Instruments</h3>
+                {(!clientAccuracy?.topInstruments || clientAccuracy.topInstruments.length === 0) ? (
+                  <div style={{ color: '#888', fontSize: '0.8rem', padding: '12px 0' }}>No signals tagged yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {clientAccuracy.topInstruments.map(([sym, count]: [string, number]) => (
+                      <div key={sym} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ fontWeight: 800, color: '#ffd700' }}>{sym}</span>
+                        <span className="market-tag font-mono" style={{ background: 'rgba(0, 229, 255, 0.15)', color: '#00e5ff' }}>{count} tags</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="super-card font-mono" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+                <h3 style={{ margin: '0 0 12px 0', color: '#ce93d8', fontSize: '0.95rem' }}>⚙️ Strategy Selection Distribution</h3>
+                {(!clientAccuracy?.topStrategies || clientAccuracy.topStrategies.length === 0) ? (
+                  <div style={{ color: '#888', fontSize: '0.8rem', padding: '12px 0' }}>No strategy tags recorded.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {clientAccuracy.topStrategies.map(([strat, count]: [string, number]) => (
+                      <div key={strat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ fontWeight: 700, color: '#fff' }}>{strat === 'manna_snd' ? 'Manna SnD' : 'Sentinel V2'}</span>
+                        <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8' }}>{count} tags</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Trader Accuracy Leaderboard */}
+            <div className="super-card font-mono" style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 14px 0', color: '#ffab00', fontSize: '1rem' }}>
+                🏆 Trader Selection Accuracy Leaderboard
+              </h3>
+              {(!clientAccuracy?.perUserStats || clientAccuracy.perUserStats.length === 0) ? (
+                <div style={{ color: '#888', fontSize: '0.82rem', padding: '16px 0' }}>
+                  No trader tags recorded yet. As clients tag signals on their dashboard, their accuracy will appear here.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="runs-table">
+                    <thead>
+                      <tr>
+                        <th>Trader Email</th>
+                        <th>Total Tags</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientAccuracy.perUserStats.map((u: any, idx: number) => (
+                        <tr key={idx}>
+                          <td style={{ color: '#fff', fontWeight: 700 }}>{u.email}</td>
+                          <td style={{ color: '#00e5ff' }}>{u.tags}</td>
+                          <td style={{ color: '#00e676' }}>{u.wins}</td>
+                          <td style={{ color: '#ff1744' }}>{u.losses}</td>
+                          <td>
+                            {u.winRate !== null ? (
+                              <span style={{ fontWeight: 800, color: u.winRate >= 60 ? '#00e676' : u.winRate >= 50 ? '#ffab00' : '#ff1744' }}>
+                                {u.winRate}%
+                              </span>
+                            ) : (
+                              <span style={{ color: '#888' }}>Pending</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Recent Tags Feed */}
+            <div className="super-card font-mono">
+              <h3 style={{ margin: '0 0 14px 0', color: '#00e676', fontSize: '1rem' }}>
+                📡 Live Community Signal Tags Feed
+              </h3>
+              {(!clientAccuracy?.recentTags || clientAccuracy.recentTags.length === 0) ? (
+                <div style={{ color: '#888', fontSize: '0.82rem', padding: '16px 0' }}>
+                  No tagged signals yet.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="runs-table">
+                    <thead>
+                      <tr>
+                        <th>Tagged At</th>
+                        <th>Trader</th>
+                        <th>Instrument</th>
+                        <th>Bias</th>
+                        <th>Conviction</th>
+                        <th>Outcome</th>
+                        <th>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientAccuracy.recentTags.map((t: any) => (
+                        <tr key={t.id}>
+                          <td style={{ fontSize: '0.78rem', color: '#888' }}>
+                            {t.tagged_at ? new Date(t.tagged_at).toLocaleString() : '-'}
+                          </td>
+                          <td style={{ color: '#aaa', fontSize: '0.82rem' }}>{t.user_email}</td>
+                          <td style={{ color: '#ffd700', fontWeight: 800 }}>{t.instrument}</td>
+                          <td>
+                            <span style={{ color: (t.bias || '').toLowerCase() === 'long' ? '#00e676' : '#ff1744', fontWeight: 700 }}>
+                              {(t.bias || 'LONG').toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ color: '#00e5ff' }}>{t.conviction_score ? `${t.conviction_score}%` : '-'}</td>
+                          <td>
+                            <span className="market-tag font-mono" style={{ background: t.outcome_type ? 'rgba(255,255,255,0.08)' : 'rgba(255, 171, 0, 0.1)', color: t.outcome_type ? '#fff' : '#ffab00' }}>
+                              {t.outcome_type ? t.outcome_type.toUpperCase() : '⏳ PENDING'}
+                            </span>
+                          </td>
+                          <td>
+                            {t.outcome_type ? (
+                              <span style={{ fontWeight: 800, color: t.was_correct === 1 ? '#00e676' : '#ff1744' }}>
+                                {t.was_correct === 1 ? '✅ WIN' : '❌ LOSS'}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#666' }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

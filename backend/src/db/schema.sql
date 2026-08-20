@@ -384,3 +384,24 @@ CREATE TABLE IF NOT EXISTS ticket_timeline (
     event TEXT NOT NULL,
     note TEXT
 );
+
+-- Client Signal Tagging: tracks which signals users personally select for demo trading
+CREATE TABLE IF NOT EXISTS client_signal_tags (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    setup_id TEXT NOT NULL,
+    setup_market TEXT NOT NULL DEFAULT 'futures',
+    instrument TEXT NOT NULL,
+    strategy_id TEXT,
+    bias TEXT,
+    conviction_score REAL,
+    tagged_at TEXT NOT NULL,
+    outcome_type TEXT,
+    outcome_r REAL,
+    outcome_resolved_at TEXT,
+    was_correct INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_signal_tags_user ON client_signal_tags(user_id);
+CREATE INDEX IF NOT EXISTS idx_client_signal_tags_setup ON client_signal_tags(setup_id);

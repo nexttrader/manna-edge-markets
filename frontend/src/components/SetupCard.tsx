@@ -33,9 +33,11 @@ interface SetupCardProps {
   setup: EdgeSetup;
   isWatchlisted?: boolean;
   onToggleWatchlist?: (id: string) => void;
+  isTagged?: boolean;
+  onToggleTag?: (setupId: string, setup: EdgeSetup) => void;
 }
 
-export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist }) => {
+export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist, isTagged = false, onToggleTag }) => {
   const { user, originalAdmin, isImpersonating } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
@@ -518,6 +520,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <button className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide Details' : 'Show Details'}
         </button>
+        {onToggleTag && (
+          <button
+            className={`btn-action btn-tag${isTagged ? ' btn-tag--active' : ''}`}
+            onClick={() => onToggleTag(setup.id, setup)}
+            title={isTagged ? 'Remove demo tag from this signal' : 'Tag this signal — you plan to demo trade it'}
+          >
+            {isTagged ? '🏷️ Tagged' : '🏷️ Tag'}
+          </button>
+        )}
       </div>
 
       {showChart && (

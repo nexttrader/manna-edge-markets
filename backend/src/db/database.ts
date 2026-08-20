@@ -622,6 +622,28 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
 
+    // ── Client Signal Tagging ─────────────────────────────────────────────────
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS client_signal_tags (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        user_email TEXT NOT NULL,
+        setup_id TEXT NOT NULL,
+        setup_market TEXT NOT NULL DEFAULT 'futures',
+        instrument TEXT NOT NULL,
+        strategy_id TEXT,
+        bias TEXT,
+        conviction_score REAL,
+        tagged_at TEXT NOT NULL,
+        outcome_type TEXT,
+        outcome_r REAL,
+        outcome_resolved_at TEXT,
+        was_correct INTEGER DEFAULT 0
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_client_signal_tags_user ON client_signal_tags(user_id)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_client_signal_tags_setup ON client_signal_tags(setup_id)`);
+    } catch {}
+
     console.log('Database initialized successfully.');
     await ensureActiveSignalsRestored();
 }

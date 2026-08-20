@@ -26,6 +26,8 @@ import { useMaintenance } from '../context/MaintenanceContext';
 import { ClientMaintenanceBanner } from '../components/ClientMaintenanceBanner';
 import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCard';
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
+import { ResearchBanner } from '../components/ResearchBanner';
+import { useTaggedSignals } from '../hooks/useTaggedSignals';
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
@@ -58,6 +60,7 @@ export const Dashboard: React.FC = () => {
 
   const { setups, runnerSetups, loading } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
+  const { isTagged, toggleTag } = useTaggedSignals();
 
   // ── Load persisted filter preferences from localStorage ──────────────────
   const saved = loadFilters();
@@ -336,16 +339,21 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="setups-grid">
-            {sortedSetups.map(setup => (
-              <SetupCard 
-                key={setup.id} 
-                setup={setup} 
-                isWatchlisted={isWatchlisted(setup.id)}
-                onToggleWatchlist={toggleWatchlist}
-              />
-            ))}
-          </div>
+          <>
+            <ResearchBanner />
+            <div className="setups-grid">
+              {sortedSetups.map(setup => (
+                <SetupCard
+                  key={setup.id}
+                  setup={setup}
+                  isWatchlisted={isWatchlisted(setup.id)}
+                  onToggleWatchlist={toggleWatchlist}
+                  isTagged={isTagged(setup.id)}
+                  onToggleTag={toggleTag}
+                />
+              ))}
+            </div>
+          </>
         )}
       </main>
 
