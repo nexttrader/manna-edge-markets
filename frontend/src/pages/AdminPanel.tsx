@@ -2058,8 +2058,12 @@ export const AdminPanel: React.FC = () => {
             onSuccess={() => {
               setRescanCandidate(null);
               setRescanCurrentSetup(null);
-              refetchActiveSetups();
-              refetchAnalytics();
+              // Small delay so the DB write fully commits before we re-fetch,
+              // otherwise the superseded old setup can still appear in the list.
+              setTimeout(() => {
+                refetchActiveSetups();
+                refetchAnalytics();
+              }, 800);
             }}
           />
         )}

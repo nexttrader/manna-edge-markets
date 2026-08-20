@@ -531,7 +531,9 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           onClose={() => setReplacementCandidate(null)}
           onSuccess={() => {
             setReplacementCandidate(null);
-            window.location.reload();
+            // Delay reload slightly so the DB write fully commits before the
+            // page re-fetches — otherwise the old signal can still appear.
+            setTimeout(() => window.location.reload(), 800);
           }}
         />
       )}
