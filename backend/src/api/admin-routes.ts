@@ -2355,39 +2355,4 @@ router.get('/client-accuracy-analytics', async (req: Request, res: Response) => 
   }
 });
 
-// ── Notification Feature Toggles ─────────────────────────────────────────────
-
-/**
- * GET /api/admin/notification-settings
- * Returns all Telegram notification toggles with their current enabled state.
- */
-router.get('/notification-settings', async (_req: Request, res: Response) => {
-  try {
-    const settings = await queries.getNotificationSettings();
-    res.json({ settings });
-  } catch (error: any) {
-    res.status(500).json({ error: 'Failed to fetch notification settings', details: error?.message || String(error) });
-  }
-});
-
-/**
- * PUT /api/admin/notification-settings/:key
- * Toggle a single notification feature on or off.
- * Body: { enabled: boolean }
- */
-router.put('/notification-settings/:key', async (req: Request, res: Response) => {
-  try {
-    const { key } = req.params;
-    const { enabled } = req.body;
-    if (typeof enabled !== 'boolean') {
-      return res.status(400).json({ error: 'Body must contain { enabled: boolean }' });
-    }
-    await queries.setNotificationSetting(key as string, enabled);
-    const settings = await queries.getNotificationSettings();
-    res.json({ success: true, settings });
-  } catch (error: any) {
-    res.status(500).json({ error: 'Failed to update notification setting', details: error?.message || String(error) });
-  }
-});
-
 export default router;

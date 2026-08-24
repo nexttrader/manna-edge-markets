@@ -1143,4 +1143,39 @@ function getLlmPromptTemplates(dataset: any) {
   ];
 }
 
+// ── Notification Feature Toggles (Super Admin Only) ──────────────────────────
+
+/**
+ * GET /api/super-admin/notification-settings
+ * Returns all Telegram notification toggles with their current enabled state.
+ */
+router.get('/notification-settings', async (_req: Request, res: Response) => {
+  try {
+    const settings = await queries.getNotificationSettings();
+    res.json({ settings });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch notification settings', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * PUT /api/super-admin/notification-settings/:key
+ * Toggle a single Telegram notification feature on or off.
+ * Body: { enabled: boolean }
+ */
+router.put('/notification-settings/:key', async (req: Request, res: Response) => {
+  try {
+    const key = req.params.key as string;
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { enabled: boolean }' });
+    }
+    await queries.setNotificationSetting(key, enabled);
+    const settings = await queries.getNotificationSettings();
+    res.json({ success: true, settings });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update notification setting', details: error?.message || String(error) });
+  }
+});
+
 export default router;

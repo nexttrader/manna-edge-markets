@@ -15,9 +15,14 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel' | 'client_accuracy'>('sentinel');
+  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel' | 'client_accuracy' | 'notifications'>('sentinel');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
+
+  // Notification toggles state
+  const [notifSettings, setNotifSettings] = useState<Array<{ key: string; label: string; description: string; enabled: boolean }>>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifSaving, setNotifSaving] = useState<string | null>(null);
 
   // Sentinel Specific State
   const [sentinelAnalytics, setSentinelAnalytics] = useState<any>(null);
@@ -39,6 +44,36 @@ export const SuperAdminPanel: React.FC = () => {
       }
     } catch {} finally {
       setLoadingClientAccuracy(false);
+    }
+  };
+
+  const fetchNotifSettings = async () => {
+    setNotifLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/notification-settings`);
+      if (res.ok) {
+        const json = await res.json();
+        setNotifSettings(json.settings || []);
+      }
+    } catch {} finally {
+      setNotifLoading(false);
+    }
+  };
+
+  const toggleNotifSetting = async (key: string, enabled: boolean) => {
+    setNotifSaving(key);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/notification-settings/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifSettings(json.settings || []);
+      }
+    } catch {} finally {
+      setNotifSaving(null);
     }
   };
 
@@ -477,7 +512,96 @@ export const SuperAdminPanel: React.FC = () => {
           >
             🏷️ Client Accuracy Intelligence
           </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'notifications' ? '1px solid #29b6f6' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'notifications' ? 'rgba(41, 182, 246, 0.2)' : 'transparent',
+              color: activeTab === 'notifications' ? '#29b6f6' : '#ccc'
+            }}
+            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); }}
+          >
+            📡 Telegram Notifications
+          </button>
         </div>
+
+        {/* TAB: Telegram Notification Toggles */}
+        {activeTab === 'notifications' && (
+          <div className="font-mono">
+            <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: 0, color: '#29b6f6' }}>📡 TELEGRAM NOTIFICATION CONTROLS</h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#aaa' }}>
+                    Toggle which Telegram alerts are dispatched to the SND channel. All changes take effect immediately — no redeploy required.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchNotifSettings}
+                  style={{ padding: '6px 14px', background: 'rgba(41, 182, 246, 0.15)', border: '1px solid #29b6f6', color: '#29b6f6', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
+                >
+                  🔄 Refresh
+                </button>
+              </div>
+
+              {notifLoading && (
+                <p style={{ color: '#888', textAlign: 'center' }}>Loading toggles…</p>
+              )}
+
+              {!notifLoading && notifSettings.length === 0 && (
+                <p style={{ color: '#888', textAlign: 'center' }}>No notification settings found. They will appear after first server boot.</p>
+              )}
+
+              {!notifLoading && notifSettings.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {notifSettings.map(s => (
+                    <div
+                      key={s.key}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '14px 18px',
+                        borderRadius: '8px',
+                        border: s.enabled ? '1px solid rgba(0, 230, 118, 0.35)' : '1px solid rgba(255,255,255,0.08)',
+                        background: s.enabled ? 'rgba(0, 230, 118, 0.06)' : 'rgba(255,255,255,0.03)',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: '220px' }}>
+                        <div style={{ fontWeight: 700, color: s.enabled ? '#e0e0e0' : '#888', fontSize: '0.9rem' }}>{s.label}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>{s.description}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#444', marginTop: '3px', fontFamily: 'monospace' }}>{s.key}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={notifSaving === s.key}
+                        onClick={() => toggleNotifSetting(s.key, !s.enabled)}
+                        style={{
+                          padding: '7px 18px',
+                          borderRadius: '6px',
+                          border: s.enabled ? '1px solid #00e676' : '1px solid #ff1744',
+                          background: s.enabled ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.15)',
+                          color: s.enabled ? '#00e676' : '#ff5252',
+                          fontWeight: 800,
+                          cursor: notifSaving === s.key ? 'wait' : 'pointer',
+                          fontSize: '0.8rem',
+                          minWidth: '90px'
+                        }}
+                      >
+                        {notifSaving === s.key ? '…' : s.enabled ? '🟢 ON' : '🔴 OFF'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: Sentinel V2 Intelligence & Signal Cards */}
         {activeTab === 'sentinel' && (
