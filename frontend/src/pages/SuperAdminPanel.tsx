@@ -407,7 +407,31 @@ export const SuperAdminPanel: React.FC = () => {
         {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
         <MaintenanceControlCard />
 
-        {/* Super Admin Navigation Tabs */}
+        {/* Quick-Access: Telegram Notification Controls */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+          <button
+            type="button"
+            className="font-mono"
+            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); setTimeout(() => { document.getElementById('notif-tab-section')?.scrollIntoView({ behavior: 'smooth' }); }, 50); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 18px',
+              background: 'rgba(41, 182, 246, 0.12)',
+              border: '1px solid #29b6f6',
+              borderRadius: '8px',
+              color: '#29b6f6',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              letterSpacing: '0.03em'
+            }}
+          >
+            📡 Telegram Notification Toggles →
+          </button>
+        </div>
+
         <div className="super-nav-tabs font-mono">
           <button
             type="button"
@@ -529,7 +553,7 @@ export const SuperAdminPanel: React.FC = () => {
 
         {/* TAB: Telegram Notification Toggles */}
         {activeTab === 'notifications' && (
-          <div className="font-mono">
+          <div id="notif-tab-section" className="font-mono">
             <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
                 <div>
