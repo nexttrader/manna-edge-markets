@@ -547,19 +547,19 @@ export const SuperAdminPanel: React.FC = () => {
             }}
             onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); }}
           >
-            📡 Telegram Notifications
+            📡 Telegram Feature Toggles
           </button>
         </div>
 
-        {/* TAB: Telegram Notification Toggles */}
+        {/* TAB: Telegram Feature Toggles */}
         {activeTab === 'notifications' && (
           <div id="notif-tab-section" className="font-mono">
             <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#29b6f6' }}>📡 TELEGRAM NOTIFICATION CONTROLS</h2>
+                  <h2 style={{ margin: 0, color: '#29b6f6' }}>📡 TELEGRAM BROADCAST FEATURE TOGGLES</h2>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#aaa' }}>
-                    Toggle which Telegram alerts are dispatched to the SND channel. All changes take effect immediately — no redeploy required.
+                    Control automated alert features and message categories dispatched to Telegram. Turning a feature toggle OFF silences that specific message category without interrupting engine analysis or trade lifecycle tracking.
                   </p>
                 </div>
                 <button
@@ -567,16 +567,16 @@ export const SuperAdminPanel: React.FC = () => {
                   onClick={fetchNotifSettings}
                   style={{ padding: '6px 14px', background: 'rgba(41, 182, 246, 0.15)', border: '1px solid #29b6f6', color: '#29b6f6', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
                 >
-                  🔄 Refresh
+                  🔄 Refresh Toggles
                 </button>
               </div>
 
               {notifLoading && (
-                <p style={{ color: '#888', textAlign: 'center' }}>Loading toggles…</p>
+                <p style={{ color: '#888', textAlign: 'center' }}>Loading broadcast feature toggles…</p>
               )}
 
               {!notifLoading && notifSettings.length === 0 && (
-                <p style={{ color: '#888', textAlign: 'center' }}>No notification settings found. They will appear after first server boot.</p>
+                <p style={{ color: '#888', textAlign: 'center' }}>Initializing broadcast toggles. Click Refresh to reload.</p>
               )}
 
               {!notifLoading && notifSettings.length > 0 && (
