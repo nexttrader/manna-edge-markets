@@ -587,11 +587,44 @@ export interface NotificationSetting {
   updated_at: string;
 }
 
+const NOTIF_DEFAULTS: Array<{ key: string; label: string; description: string }> = [
+  { key: 'notify_new_signal',         label: 'New Signal',                    description: 'Send SIGNAL alert when a new high-conviction setup is published' },
+  { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',       description: 'Send STATUS when price enters zone and order is filled/live' },
+  { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',    description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE' },
+  { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',              description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction' },
+  { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',              description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction' },
+  { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',         description: 'Send STATUS when Stop Loss (-1.0R) is triggered' },
+  { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',        description: 'Send STATUS when trade exits at Breakeven (0.0R)' },
+  { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)',     description: 'Send MANAGE cancel instruction when a pending order is superseded' },
+  { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (STATUS)', description: 'Send STATUS when zone is invalidated before order fill' },
+  { key: 'notify_performance_report', label: 'Performance Reports',            description: 'Broadcast weekly/monthly performance recap summaries to Telegram' },
+];
+
+async function ensureNotifSettingsSeeded(): Promise<void> {
+  try {
+    await queryDb(`CREATE TABLE IF NOT EXISTS notification_settings (
+      key TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      description TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    for (const d of NOTIF_DEFAULTS) {
+      await queryDb(
+        `INSERT OR IGNORE INTO notification_settings (key, label, description, enabled, updated_at) VALUES (?, ?, ?, 1, ?)`,
+        [d.key, d.label, d.description, new Date().toISOString()]
+      );
+    }
+  } catch { /* silently skip if already seeded */ }
+}
+
 /**
  * Returns all notification toggle settings as a flat array.
+ * Self-seeds defaults on first call so the table is never empty after deploy.
  */
 export async function getNotificationSettings(): Promise<NotificationSetting[]> {
   try {
+    await ensureNotifSettingsSeeded();
     const rows = await queryDb<{ key: string; label: string; description: string; enabled: number; updated_at: string }>(
       `SELECT key, label, description, enabled, updated_at FROM notification_settings ORDER BY key ASC`
     );
