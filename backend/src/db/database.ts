@@ -618,7 +618,8 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`UPDATE forex_edge_setups SET signal_state = 'awaiting_entry', tradable = 1, resolved_at = NULL, invalidation_reason = NULL, is_breakeven = 0, stop = COALESCE(initial_stop, stop) WHERE entry_triggered_at IS NULL AND superseded = 0 AND signal_state IN ('resolved', 'runner')`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET conviction_score = ROUND(83.0 + (COALESCE(r_multiple_1, 2.0) * 3.5), 1) WHERE conviction_score >= 90.5 AND conviction_score <= 91.5`); } catch {}
     try { db.exec(`INSERT OR IGNORE INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES ('manna_snd', 'Manna SnD', 1, 1, 1, CURRENT_TIMESTAMP), ('sentinel_v2', 'Manna Elite V1', 1, 1, 1, CURRENT_TIMESTAMP)`); } catch {}
-    try { db.exec(`UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2'`); } catch {}
+    // NOTE: Do NOT add unconditional UPDATE statements for strategy_settings here.
+    // INSERT OR IGNORE above safely seeds new rows without overwriting admin changes.
     try { db.exec(`UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
     try { db.exec(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`); } catch {}
 
