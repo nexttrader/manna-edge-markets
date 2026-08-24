@@ -611,11 +611,15 @@ async function ensureNotifSettingsSeeded(): Promise<void> {
     )`);
     for (const d of NOTIF_DEFAULTS) {
       await queryDb(
-        `INSERT OR IGNORE INTO notification_settings (key, label, description, enabled, updated_at) VALUES (?, ?, ?, 1, ?)`,
+        `INSERT INTO notification_settings (key, label, description, enabled, updated_at)
+         VALUES (?, ?, ?, 1, ?)
+         ON CONFLICT (key) DO NOTHING`,
         [d.key, d.label, d.description, new Date().toISOString()]
       );
     }
-  } catch { /* silently skip if already seeded */ }
+  } catch (err) {
+    console.error('Error seeding notification_settings table:', err);
+  }
 }
 
 /**
@@ -628,10 +632,21 @@ export async function getNotificationSettings(): Promise<NotificationSetting[]> 
     const rows = await queryDb<{ key: string; label: string; description: string; enabled: number; updated_at: string }>(
       `SELECT key, label, description, enabled, updated_at FROM notification_settings ORDER BY key ASC`
     );
-    return rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
-  } catch {
-    return [];
+    if (rows && rows.length > 0) {
+      return rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
+    }
+  } catch (err) {
+    console.error('Error fetching notification_settings:', err);
   }
+
+  // Guaranteed fallback so the UI is never blank
+  return NOTIF_DEFAULTS.map(d => ({
+    key: d.key,
+    label: d.label,
+    description: d.description,
+    enabled: true,
+    updated_at: new Date().toISOString()
+  }));
 }
 
 /**
@@ -648,8 +663,17 @@ export async function getNotificationSettingsMap(): Promise<Record<string, boole
  * Update a single notification toggle.
  */
 export async function setNotificationSetting(key: string, enabled: boolean): Promise<void> {
+  await ensureNotifSettingsSeeded();
+  const def = NOTIF_DEFAULTS.find(d => d.key === key);
+  const label = def?.label || key;
+  const description = def?.description || '';
+  const val = enabled ? 1 : 0;
+  const now = new Date().toISOString();
+
   await queryDb(
-    `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE key = ?`,
-    [enabled ? 1 : 0, new Date().toISOString(), key]
+    `INSERT INTO notification_settings (key, label, description, enabled, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET enabled = ?, updated_at = ?`,
+    [key, label, description, val, now, val, now]
   );
 }

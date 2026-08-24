@@ -524,6 +524,14 @@ export async function initializeDatabase(): Promise<void> {
                         note TEXT
                     );
 
+                    CREATE TABLE IF NOT EXISTS notification_settings (
+                        key TEXT PRIMARY KEY,
+                        label TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna SnD';
@@ -533,8 +541,6 @@ export async function initializeDatabase(): Promise<void> {
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna Elite V1';
 
                     UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE strategy_id = 'manna_basic' OR strategy_id IS NULL;
-
-                    UPDATE strategy_settings SET enabled = 1, visible_to_admins = 1, visible_to_traders = 1 WHERE id = 'sentinel_v2';
 
                     -- Restore sentinel_v2 strategy_id for Sentinel V2 setups based on metadata signature
                     UPDATE edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%';
