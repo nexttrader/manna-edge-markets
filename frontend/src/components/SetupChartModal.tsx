@@ -12,6 +12,58 @@ interface SetupChartModalProps {
 
 export type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
+export const TIMEZONE_OPTIONS = [
+  { value: 'America/New_York', label: 'New York (ET - Killzones)' },
+  { value: 'UTC', label: 'UTC (Universal Standard)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Berlin', label: 'Frankfurt (CET/CEST)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+  { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+  { value: 'local', label: 'Local (Device Time)' },
+];
+
+function getEffectiveTimezone(tz: string): string {
+  if (tz === 'local') {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  }
+  return tz;
+}
+
+function formatTzTime(unixSec: number, tz: string, includeSeconds = false): string {
+  try {
+    const d = new Date(unixSec * 1000);
+    const targetTz = getEffectiveTimezone(tz);
+    return d.toLocaleTimeString('en-US', {
+      timeZone: targetTz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: includeSeconds ? '2-digit' : undefined,
+      hour12: false
+    });
+  } catch {
+    return new Date(unixSec * 1000).toISOString().substring(11, includeSeconds ? 19 : 16);
+  }
+}
+
+function getTimezoneBadge(tz: string): string {
+  switch (tz) {
+    case 'America/New_York': return 'ET';
+    case 'UTC': return 'UTC';
+    case 'Europe/London': return 'LON';
+    case 'Europe/Berlin': return 'CET';
+    case 'Asia/Tokyo': return 'JST';
+    case 'Asia/Singapore': return 'SGT';
+    case 'Australia/Sydney': return 'SYD';
+    case 'local': return 'LOC';
+    default: return tz;
+  }
+}
+
 function getCurrentCandleTime(timeframe: ChartTimeframe): number {
   const now = Date.now();
   const date = new Date(now);
@@ -56,6 +108,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Timezone & Theme state with persistent localStorage
+  const [selectedTz, setSelectedTz] = useState<string>(() => {
+    return localStorage.getItem('manna_chart_timezone') || 'America/New_York';
+  });
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('manna_chart_theme') as 'dark' | 'light') || 'dark';
+  });
 
   const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -144,54 +204,85 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     container.innerHTML = '';
 
     const containerHeight = container.clientHeight || (window.innerHeight - 140);
+    const isLight = theme === 'light';
+    const targetTz = getEffectiveTimezone(selectedTz);
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#090314' },
-        textColor: '#e056fd',
+        background: { type: ColorType.Solid, color: isLight ? '#ffffff' : '#090314' },
+        textColor: isLight ? '#0f172a' : '#e056fd',
         fontSize: 12,
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: 'rgba(224, 86, 253, 0.06)' },
-        horzLines: { color: 'rgba(224, 86, 253, 0.06)' },
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
       },
       width: container.clientWidth,
       height: containerHeight,
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#e056fd',
+          color: isLight ? '#6366f1' : '#e056fd',
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: '#e056fd',
+          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
         },
         horzLine: {
-          color: '#e056fd',
+          color: isLight ? '#6366f1' : '#e056fd',
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: '#e056fd',
+          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(224, 86, 253, 0.2)',
+        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
         scaleMargins: { top: 0.1, bottom: 0.1 },
         autoScale: true,
       },
       timeScale: {
-        borderColor: 'rgba(224, 86, 253, 0.2)',
+        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: any, tickMarkType: number, locale: string) => {
+          try {
+            const d = new Date((time as number) * 1000);
+            if (tickMarkType < 3) {
+              return d.toLocaleDateString(locale || 'en-US', { timeZone: targetTz, month: 'short', day: 'numeric' });
+            }
+            return d.toLocaleTimeString(locale || 'en-US', { timeZone: targetTz, hour: '2-digit', minute: '2-digit', hour12: false });
+          } catch {
+            return '';
+          }
+        }
       },
+      localization: {
+        timeFormatter: (time: number) => {
+          try {
+            const d = new Date((time as number) * 1000);
+            return d.toLocaleString('en-US', {
+              timeZone: targetTz,
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            });
+          } catch {
+            return new Date((time as number) * 1000).toISOString();
+          }
+        }
+      }
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#00e676',
-      downColor: '#ff1744',
-      borderUpColor: '#00e676',
-      borderDownColor: '#ff1744',
-      wickUpColor: '#00e676',
-      wickDownColor: '#ff1744',
+      upColor: isLight ? '#00b060' : '#00e676',
+      downColor: isLight ? '#ef4444' : '#ff1744',
+      borderUpColor: isLight ? '#00b060' : '#00e676',
+      borderDownColor: isLight ? '#ef4444' : '#ff1744',
+      wickUpColor: isLight ? '#00b060' : '#00e676',
+      wickDownColor: isLight ? '#ef4444' : '#ff1744',
       autoscaleInfoProvider: (original: any) => {
         const res = original();
         let min = res?.priceRange?.minValue;
@@ -238,7 +329,94 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     };
   }, []);
 
-  // 2. Fetch candles and draw price lines whenever timeframe or levels update
+
+  // Dynamically update theme options on existing chart canvas
+  useEffect(() => {
+    localStorage.setItem('manna_chart_theme', theme);
+    if (!chartRef.current) return;
+
+    const isLight = theme === 'light';
+    chartRef.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: isLight ? '#ffffff' : '#090314' },
+        textColor: isLight ? '#0f172a' : '#e056fd',
+      },
+      grid: {
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
+      },
+      crosshair: {
+        vertLine: {
+          color: isLight ? '#6366f1' : '#e056fd',
+          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+        },
+        horzLine: {
+          color: isLight ? '#6366f1' : '#e056fd',
+          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+        },
+      },
+      rightPriceScale: {
+        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+      },
+      timeScale: {
+        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+      },
+    });
+
+    if (candleSeriesRef.current) {
+      candleSeriesRef.current.applyOptions({
+        upColor: isLight ? '#00b060' : '#00e676',
+        downColor: isLight ? '#ef4444' : '#ff1744',
+        borderUpColor: isLight ? '#00b060' : '#00e676',
+        borderDownColor: isLight ? '#ef4444' : '#ff1744',
+        wickUpColor: isLight ? '#00b060' : '#00e676',
+        wickDownColor: isLight ? '#ef4444' : '#ff1744',
+      });
+    }
+  }, [theme]);
+
+  // Dynamically update timezone formatting on existing chart canvas
+  useEffect(() => {
+    localStorage.setItem('manna_chart_timezone', selectedTz);
+    if (!chartRef.current) return;
+
+    const targetTz = getEffectiveTimezone(selectedTz);
+    chartRef.current.applyOptions({
+      timeScale: {
+        tickMarkFormatter: (time: any, tickMarkType: number, locale: string) => {
+          try {
+            const d = new Date((time as number) * 1000);
+            if (tickMarkType < 3) {
+              return d.toLocaleDateString(locale || 'en-US', { timeZone: targetTz, month: 'short', day: 'numeric' });
+            }
+            return d.toLocaleTimeString(locale || 'en-US', { timeZone: targetTz, hour: '2-digit', minute: '2-digit', hour12: false });
+          } catch {
+            return '';
+          }
+        }
+      },
+      localization: {
+        timeFormatter: (time: number) => {
+          try {
+            const d = new Date((time as number) * 1000);
+            return d.toLocaleString('en-US', {
+              timeZone: targetTz,
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            });
+          } catch {
+            return new Date((time as number) * 1000).toISOString();
+          }
+        }
+      }
+    });
+  }, [selectedTz]);
+
+  // 2. Fetch candles and draw price lines whenever timeframe, timezone, or levels update
   useEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current) return;
 
@@ -354,6 +532,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         // Superimpose Candlestick Markers for Entry and Exit
         const markers: any[] = [];
+        const tzBadge = getTimezoneBadge(selectedTz);
+
         if (entryTimestamp) {
           try {
             const entryTimeMs = new Date(entryTimestamp).getTime();
@@ -368,13 +548,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               }
             }
             if (closestCandle) {
-              const entryTimeStr = new Date(entryTimeMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+              const entryTimeStr = formatTzTime(entryUnix, selectedTz);
               markers.push({
                 time: closestCandle.time,
                 position: isLong ? 'belowBar' : 'aboveBar',
                 color: '#00e5ff',
                 shape: isLong ? 'arrowUp' : 'arrowDown',
-                text: `⚡ ENTRY @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`,
+                text: `⚡ ENTRY @ ${entryTimeStr} ${tzBadge} (${execPrice > 0 ? execPrice : 'Zone'})`,
                 size: 2,
               });
             }
@@ -395,7 +575,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               }
             }
             if (closestRes) {
-              const resTimeStr = new Date(resTimeMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+              const resTimeStr = formatTzTime(resUnix, selectedTz);
               const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
               const isWin = reason.includes('TP');
               markers.push({
@@ -403,7 +583,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                 position: isWin ? 'aboveBar' : 'belowBar',
                 color: isWin ? '#00e676' : '#ff1744',
                 shape: 'circle',
-                text: `🏁 ${reason} @ ${resTimeStr}`,
+                text: `🏁 ${reason} @ ${resTimeStr} ${tzBadge}`,
                 size: 2,
               });
             }
@@ -437,7 +617,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive]);
+  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive, selectedTz]);
 
   // 3. Dynamic Real-Time Candle Drawing
   useEffect(() => {
@@ -488,6 +668,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     const series = candleSeriesRef.current;
     const timeScale = chartRef.current.timeScale();
+    const isLight = theme === 'light';
+    const tzBadge = getTimezoneBadge(selectedTz);
 
     const getY = (price: number) => {
       if (!price || price <= 0) return null;
@@ -521,15 +703,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const boxWidth = width - startX;
 
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 230, 118, 0.18)';
-        ctx.strokeStyle = '#00e676';
+        ctx.fillStyle = isLight ? 'rgba(0, 176, 96, 0.15)' : 'rgba(0, 230, 118, 0.18)';
+        ctx.strokeStyle = isLight ? '#00a355' : '#00e676';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
 
         ctx.fillRect(startX, topY, boxWidth, boxHeight);
         ctx.strokeRect(startX, topY, boxWidth, boxHeight);
 
-        ctx.fillStyle = '#00e676';
+        ctx.fillStyle = isLight ? '#008544' : '#00e676';
         ctx.font = 'bold 11px monospace';
         const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
         const labelStr = `🔮 1H DEMAND CURVE${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
@@ -551,15 +733,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const boxWidth = width - startX;
 
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 23, 68, 0.18)';
-        ctx.strokeStyle = '#ff1744';
+        ctx.fillStyle = isLight ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 23, 68, 0.18)';
+        ctx.strokeStyle = isLight ? '#dc2626' : '#ff1744';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
 
         ctx.fillRect(startX, topY, boxWidth, boxHeight);
         ctx.strokeRect(startX, topY, boxWidth, boxHeight);
 
-        ctx.fillStyle = '#ff1744';
+        ctx.fillStyle = isLight ? '#b91c1c' : '#ff1744';
         ctx.font = 'bold 11px monospace';
         const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
         const labelStr = `🔮 1H SUPPLY CURVE${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
@@ -581,15 +763,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const boxWidth = width - startX;
 
         ctx.save();
-        ctx.fillStyle = isLong ? 'rgba(255, 171, 0, 0.22)' : 'rgba(255, 82, 82, 0.22)';
-        ctx.strokeStyle = isLong ? '#ffab00' : '#ff5252';
+        ctx.fillStyle = isLong
+          ? (isLight ? 'rgba(217, 119, 6, 0.18)' : 'rgba(255, 171, 0, 0.22)')
+          : (isLight ? 'rgba(220, 38, 38, 0.18)' : 'rgba(255, 82, 82, 0.22)');
+        ctx.strokeStyle = isLong ? (isLight ? '#d97706' : '#ffab00') : (isLight ? '#dc2626' : '#ff5252');
         ctx.lineWidth = 2;
 
         ctx.fillRect(startX, topY, boxWidth, boxHeight);
         ctx.strokeRect(startX, topY, boxWidth, boxHeight);
 
         // Label inside box
-        ctx.fillStyle = isLong ? '#ffab00' : '#ff5252';
+        ctx.fillStyle = isLong ? (isLight ? '#92400e' : '#ffab00') : (isLight ? '#991b1b' : '#ff5252');
         ctx.font = 'bold 11px monospace';
         const labelStr = `⚡ 15M ENTRY ZONE (${formation}: ${entryLow} - ${entryHigh})`;
         ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(16, boxHeight / 2 + 4));
@@ -605,7 +789,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         if (entryX !== null && entryX > 0 && entryX < width) {
           ctx.save();
-          ctx.strokeStyle = '#00e5ff';
+          ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
           ctx.lineWidth = 1.5;
           ctx.setLineDash([5, 4]);
 
@@ -614,7 +798,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           ctx.lineTo(entryX, height);
           ctx.stroke();
 
-          const entryTimeStr = new Date(entryTimestamp).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ET';
+          const entryTimeStr = formatTzTime(entryUnix, selectedTz, true) + ` ${tzBadge}`;
           const labelText = `⚡ EXACT ENTRY FILL @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`;
           ctx.font = 'bold 11px monospace';
           const textWidth = ctx.measureText(labelText).width;
@@ -622,15 +806,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           const badgeX = Math.max(10, Math.min(width - textWidth - 20, entryX - textWidth / 2));
           const badgeY = 28;
 
-          ctx.fillStyle = 'rgba(9, 3, 20, 0.9)';
-          ctx.strokeStyle = '#00e5ff';
+          ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(9, 3, 20, 0.9)';
+          ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
           ctx.lineWidth = 1;
           ctx.setLineDash([]);
 
           ctx.fillRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
           ctx.strokeRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
 
-          ctx.fillStyle = '#00e5ff';
+          ctx.fillStyle = isLight ? '#0369a1' : '#00e5ff';
           ctx.fillText(labelText, badgeX, badgeY);
           ctx.restore();
         }
@@ -646,7 +830,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         if (resX !== null && resX > 0 && resX < width) {
           const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
           const isWin = reason.includes('TP');
-          const flagColor = isWin ? '#00e676' : '#ff1744';
+          const flagColor = isWin ? (isLight ? '#059669' : '#00e676') : (isLight ? '#dc2626' : '#ff1744');
 
           ctx.save();
           ctx.strokeStyle = flagColor;
@@ -658,7 +842,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           ctx.lineTo(resX, height);
           ctx.stroke();
 
-          const resTimeStr = new Date(resolvedTimestamp).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }) + ' ET';
+          const resTimeStr = formatTzTime(resUnix, selectedTz) + ` ${tzBadge}`;
           const labelText = `🏁 TRADE EXIT (${reason}) @ ${resTimeStr}`;
           ctx.font = 'bold 11px monospace';
           const textWidth = ctx.measureText(labelText).width;
@@ -666,7 +850,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           const badgeX = Math.max(10, Math.min(width - textWidth - 20, resX - textWidth / 2));
           const badgeY = 54;
 
-          ctx.fillStyle = 'rgba(9, 3, 20, 0.9)';
+          ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(9, 3, 20, 0.9)';
           ctx.strokeStyle = flagColor;
           ctx.lineWidth = 1;
           ctx.setLineDash([]);
@@ -680,7 +864,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }
       } catch {}
     }
-  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice]);
+  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
@@ -699,7 +883,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
   return createPortal(
     <div className="chart-modal-backdrop font-sans">
-      <div className="chart-modal-content animate-fade-in">
+      <div className={`chart-modal-content animate-fade-in theme-${theme}`}>
         {/* Fullscreen Header */}
         <div className="chart-modal-header">
           <div className="header-left">
@@ -730,6 +914,33 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           </div>
 
           <div className="header-right">
+            {/* Timezone Selector Dropdown */}
+            <div className="tz-selector-wrapper font-mono">
+              <span className="tz-label">🌐 TZ:</span>
+              <select
+                className="tz-select"
+                value={selectedTz}
+                onChange={(e) => setSelectedTz(e.target.value)}
+                title="Change Chart Timezone (Display only — does not affect signals or feeds)"
+              >
+                {TIMEZONE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Light / Dark Mode Toggle Button */}
+            <button
+              type="button"
+              className={`theme-toggle-btn font-mono ${theme}`}
+              onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+            </button>
+
             {/* Zoom & Scroll Toolbar */}
             <div className="zoom-toolbar font-mono">
               <button className="zoom-btn" onClick={() => handleZoom(true)} title="Zoom In">🔍 +</button>
@@ -760,6 +971,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             </button>
           </div>
         </div>
+
 
         {/* Level Legend Bar */}
         <div className="level-legend-bar font-mono">
