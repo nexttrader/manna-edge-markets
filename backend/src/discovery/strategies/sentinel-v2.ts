@@ -298,6 +298,17 @@ export class SentinelV2Strategy implements IStrategyEngine {
         const liquidity_score = computeLiquidityScore(curVol, avgVol, spread);
 
         const decimals = getInstrumentDecimals(instrument, market);
+
+        // Re-derive TPs from rounded entry/stop so displayed values match exact 2R and 3R
+        const roundedEntry = Number(entry.toFixed(decimals));
+        const roundedStop  = Number(stop.toFixed(decimals));
+        const publishedRisk = Math.abs(roundedEntry - roundedStop);
+        tp1 = bias === 'long' ? roundedEntry + (publishedRisk * 2.0) : roundedEntry - (publishedRisk * 2.0);
+        // Only override tp2 with 3R if it was already set to the logicalRisk-based fallback (not phaseHigh/phaseLow)
+        if (tp2_rr < 3.0) {
+          tp2 = bias === 'long' ? roundedEntry + (publishedRisk * 3.0) : roundedEntry - (publishedRisk * 3.0);
+        }
+
         const ez_mid = Number(entry.toFixed(decimals));
         const ez_low = Number((entry - (logicalRisk * 0.1)).toFixed(decimals));
         const ez_high = Number((entry + (logicalRisk * 0.1)).toFixed(decimals));

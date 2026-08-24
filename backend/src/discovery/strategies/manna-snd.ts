@@ -366,10 +366,16 @@ export class MannaSndStrategy implements IStrategyEngine {
           const stop = entry_zone_mid - risk;
           if (risk <= 0) continue;
 
-          const tp1 = entry_zone_mid + (risk * 2.0); // 2:1 Minimum RR
-          const tp2 = entry_zone_mid + (risk * 3.0); // 3:1 RR
-
+          // Use decimals early so TPs are derived from the same rounded stop that gets published,
+          // guaranteeing that displayed TP1 = entry + 2×(entry - stop) and TP2 = entry + 3×(entry - stop)
           const decimals = market === 'futures' ? 2 : 5;
+          const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
+          const roundedStop  = Number(stop.toFixed(decimals));
+          const publishedRisk = Math.abs(roundedEntry - roundedStop);
+
+          const tp1 = roundedEntry + (publishedRisk * 2.0); // 2:1 Minimum RR
+          const tp2 = roundedEntry + (publishedRisk * 3.0); // 3:1 RR
+
           const ez_mid = Number(zone.proximal.toFixed(decimals));
           const ez_low = Number(zone.distal.toFixed(decimals));
           const ez_high = Number(zone.proximal.toFixed(decimals));
@@ -493,8 +499,15 @@ export class MannaSndStrategy implements IStrategyEngine {
           const stop = entry_zone_mid + risk;
           if (risk <= 0) continue;
 
-          const tp1 = entry_zone_mid - (risk * 2.0); // 2:1 Minimum RR
-          const tp2 = entry_zone_mid - (risk * 3.0); // 3:1 RR
+          // Use decimals early so TPs are derived from the same rounded stop that gets published,
+          // guaranteeing that displayed TP1 = entry - 2×(stop - entry) and TP2 = entry - 3×(stop - entry)
+          const decimals = market === 'futures' ? 2 : 5;
+          const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
+          const roundedStop  = Number(stop.toFixed(decimals));
+          const publishedRisk = Math.abs(roundedStop - roundedEntry);
+
+          const tp1 = roundedEntry - (publishedRisk * 2.0); // 2:1 Minimum RR
+          const tp2 = roundedEntry - (publishedRisk * 3.0); // 3:1 RR
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
@@ -533,7 +546,6 @@ export class MannaSndStrategy implements IStrategyEngine {
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
           const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
-          const decimals = market === 'futures' ? 2 : 5;
           const ez_mid = Number(zone.proximal.toFixed(decimals));
           // For a SUPPLY zone: proximal = bottom of the zone (limit sell entry), distal = top (above proximal, zone ceiling/stop boundary)
           const ez_low = Number(zone.proximal.toFixed(decimals));  // proximal = entry lower boundary
