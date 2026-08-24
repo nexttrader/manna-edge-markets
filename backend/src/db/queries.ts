@@ -576,3 +576,47 @@ export async function setMaintenanceState(enabled: boolean, message: string, est
 
   return state;
 }
+
+// ── Notification Feature Toggles ─────────────────────────────────────────────
+
+export interface NotificationSetting {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  updated_at: string;
+}
+
+/**
+ * Returns all notification toggle settings as a flat array.
+ */
+export async function getNotificationSettings(): Promise<NotificationSetting[]> {
+  try {
+    const rows = await queryDb<{ key: string; label: string; description: string; enabled: number; updated_at: string }>(
+      `SELECT key, label, description, enabled, updated_at FROM notification_settings ORDER BY key ASC`
+    );
+    return rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Returns a map of key → enabled for fast lookup inside the notification service.
+ */
+export async function getNotificationSettingsMap(): Promise<Record<string, boolean>> {
+  const rows = await getNotificationSettings();
+  const map: Record<string, boolean> = {};
+  for (const r of rows) map[r.key] = r.enabled;
+  return map;
+}
+
+/**
+ * Update a single notification toggle.
+ */
+export async function setNotificationSetting(key: string, enabled: boolean): Promise<void> {
+  await queryDb(
+    `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE key = ?`,
+    [enabled ? 1 : 0, new Date().toISOString(), key]
+  );
+}

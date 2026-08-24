@@ -644,6 +644,36 @@ export async function initializeDatabase(): Promise<void> {
       db.exec(`CREATE INDEX IF NOT EXISTS idx_client_signal_tags_setup ON client_signal_tags(setup_id)`);
     } catch {}
 
+    // ── Notification Feature Toggles ─────────────────────────────────────────
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS notification_settings (
+        key TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        description TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Seed defaults — INSERT OR IGNORE so existing user overrides are preserved
+      const defaults: Array<{ key: string; label: string; description: string }> = [
+        { key: 'notify_new_signal',         label: 'New Signal',                description: 'Send SIGNAL alert when a new high-conviction setup is published' },
+        { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',  description: 'Send STATUS when price enters zone and order is filled/live' },
+        { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE' },
+        { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',          description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction' },
+        { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',          description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction' },
+        { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',     description: 'Send STATUS when Stop Loss (-1.0R) is triggered' },
+        { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',    description: 'Send STATUS when trade exits at Breakeven (0.0R)' },
+        { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)', description: 'Send MANAGE cancel instruction when a pending order is superseded by a fresher scan' },
+        { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (STATUS)', description: 'Send STATUS when zone is invalidated before order fill (price blows through)' },
+        { key: 'notify_performance_report', label: 'Performance Reports',       description: 'Broadcast weekly/monthly performance recap summaries to Telegram' },
+      ];
+
+      for (const d of defaults) {
+        db.exec(`INSERT OR IGNORE INTO notification_settings (key, label, description, enabled, updated_at)
+          VALUES ('${d.key}', '${d.label.replace(/'/g, "''")}', '${d.description.replace(/'/g, "''")}', 1, CURRENT_TIMESTAMP)`);
+      }
+    } catch {}
+
     console.log('Database initialized successfully.');
     await ensureActiveSignalsRestored();
 }

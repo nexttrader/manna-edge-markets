@@ -113,7 +113,7 @@ export async function executePublishRun(
             });
             
             stats.invalidated++;
-            publishEvents.emit('setup_invalidated', { setupId: existingSetup.id, reason: revalResult.reason });
+            publishEvents.emit('setup_invalidated', { setupId: existingSetup.id, reason: revalResult.reason, setup: existingSetup, superseded: false });
             effectiveExisting = null; 
           }
         }
@@ -145,7 +145,8 @@ export async function executePublishRun(
                createdBy: 'publish_gate'
              });
              stats.invalidated++;
-             publishEvents.emit('setup_invalidated', { setupId: effectiveExisting.id, reason: inv.reason });
+             // superseded=true → telegram will send MANAGE cancel message before the new signal fires
+             publishEvents.emit('setup_invalidated', { setupId: effectiveExisting.id, reason: inv.reason, setup: effectiveExisting, superseded: true });
           }
         }
         
