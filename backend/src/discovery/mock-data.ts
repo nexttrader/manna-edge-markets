@@ -1,7 +1,7 @@
 import { Candle } from './types';
 
-export const FUTURES_INSTRUMENTS = ['ES', 'NQ', 'YM', 'GC', 'CL', 'SI'];
-export const FOREX_INSTRUMENTS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'EUR/GBP', 'GBP/JPY'];
+export const FUTURES_INSTRUMENTS = ['ES', 'NQ', 'YM', 'GC', 'CL', 'SI', 'RTY', 'ZN'];
+export const FOREX_INSTRUMENTS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'EUR/GBP', 'GBP/JPY', 'USD/CAD', 'EUR/JPY'];
 
 const basePrices: Record<string, number> = {
     'ES': 5500,
@@ -10,12 +10,16 @@ const basePrices: Record<string, number> = {
     'GC': 2400,
     'CL': 80,
     'SI': 30,
+    'RTY': 2200,
+    'ZN': 110.0,
     'EUR/USD': 1.09,
     'GBP/USD': 1.27,
     'USD/JPY': 155.0,
     'AUD/USD': 0.66,
     'EUR/GBP': 0.85,
-    'GBP/JPY': 197.0
+    'GBP/JPY': 197.0,
+    'USD/CAD': 1.37,
+    'EUR/JPY': 168.0
 };
 
 function generateRandomWalk(startPrice: number, count: number, volatility: number): number[] {

@@ -9,9 +9,11 @@ export const MIN_STOP_FLOORS: Record<string, number> = {
   'NQ': 18.0,        // Min 18 NQ points ($360/contract)
   'ES': 4.5,         // Min 4.5 ES points ($225/contract)
   'YM': 35.0,        // Min 35 YM points ($175/contract)
+  'RTY': 2.5,        // Min 2.5 RTY points ($125/contract)
   'GC': 4.0,         // Min $4.00 Gold points ($400/contract)
   'CL': 0.35,        // Min $0.35 Crude Oil points ($350/contract)
   'SI': 0.18,        // Min $0.18 Silver points ($900/contract)
+  'ZN': 0.15,        // Min 0.15 10Y T-Note points ($150/contract)
 
   // Forex Pairs (Pips / Quote Units)
   'EUR/USD': 0.0010, // Min 10 pips
@@ -19,7 +21,9 @@ export const MIN_STOP_FLOORS: Record<string, number> = {
   'USD/JPY': 0.15,   // Min 15 pips (0.15 JPY)
   'AUD/USD': 0.0010, // Min 10 pips
   'EUR/GBP': 0.0008, // Min 8 pips
-  'GBP/JPY': 0.20    // Min 20 pips (0.20 JPY)
+  'GBP/JPY': 0.20,   // Min 20 pips (0.20 JPY)
+  'USD/CAD': 0.0010, // Min 10 pips
+  'EUR/JPY': 0.15    // Min 15 pips (0.15 JPY)
 };
 
 /**
@@ -27,7 +31,7 @@ export const MIN_STOP_FLOORS: Record<string, number> = {
  */
 export function getInstrumentDecimals(instrument: string, market: 'futures' | 'forex'): number {
   if (instrument.includes('JPY')) return 3;
-  if (instrument === 'SI') return 3;
+  if (instrument === 'SI' || instrument === 'ZN') return 3;
   if (market === 'futures') return 2;
   return 5;
 }

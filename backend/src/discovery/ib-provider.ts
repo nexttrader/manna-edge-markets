@@ -134,6 +134,10 @@ function getContractSpec(instrument: string): Contract | null {
       return { symbol: 'CL', secType: SecType.FUT, exchange: 'NYMEX', currency: 'USD', multiplier: 1000, lastTradeDateOrContractMonth: getCrudeOilExpiry() };
     case 'SI':
       return { symbol: 'SI', secType: SecType.FUT, exchange: 'COMEX', currency: 'USD', multiplier: 5000, lastTradeDateOrContractMonth: getSilverExpiry() };
+    case 'RTY':
+      return { symbol: 'RTY', secType: SecType.FUT, exchange: 'CME', currency: 'USD', multiplier: 50, lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
+    case 'ZN':
+      return { symbol: 'ZN', secType: SecType.FUT, exchange: 'CBOT', currency: 'USD', multiplier: 1000, lastTradeDateOrContractMonth: getIndexFuturesExpiry() };
     
     default:
       return null;
@@ -347,7 +351,7 @@ function subscribeToAllSymbols() {
   if (!ib || !isConnected) return;
 
   const instruments = [
-    'ES', 'NQ', 'YM', 'GC', 'CL', 'SI'
+    'ES', 'NQ', 'YM', 'GC', 'CL', 'SI', 'RTY', 'ZN'
   ];
 
   activeRequests.clear();

@@ -15,12 +15,16 @@ export const SYMBOL_MAP: Record<string, string> = {
     'GC': 'GC=F',
     'CL': 'CL=F',
     'SI': 'SI=F',
+    'RTY': 'RTY=F',
+    'ZN': 'ZN=F',
     'EUR/USD': 'EURUSD=X',
     'GBP/USD': 'GBPUSD=X',
     'USD/JPY': 'USDJPY=X',
     'AUD/USD': 'AUDUSD=X',
     'EUR/GBP': 'EURGBP=X',
-    'GBP/JPY': 'GBPJPY=X'
+    'GBP/JPY': 'GBPJPY=X',
+    'USD/CAD': 'USDCAD=X',
+    'EUR/JPY': 'EURJPY=X'
 };
 
 interface CacheEntry<T> {

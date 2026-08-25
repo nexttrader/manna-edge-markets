@@ -30,10 +30,11 @@ export async function processKillzoneMidpointScan(
     const futuresCount = futuresSetups.length;
     const forexCount = forexSetups.length;
 
-    // Scan fires when EITHER open market is below the minimum signal threshold.
-    // Uses <= (less than or equal) so that having exactly MIN_SIGNALS_PER_CLASS - 1
-    // or fewer in an open market always triggers a fill attempt.
-    const futuresNeedsScan = isFuturesOpen && futuresCount < MIN_SIGNALS_PER_CLASS;
+    const isNYAMCashOpen = kzInfo.killzone === 'ny_am';
+
+    // Scan fires when EITHER open market is below the minimum signal threshold,
+    // OR unconditionally for futures at 09:30 ET (NY Cash Open) when cash market volume activates.
+    const futuresNeedsScan = isFuturesOpen && (futuresCount < MIN_SIGNALS_PER_CLASS || isNYAMCashOpen);
     const forexNeedsScan = isForexOpen && forexCount < MIN_SIGNALS_PER_CLASS;
 
     if (!futuresNeedsScan && !forexNeedsScan) {
@@ -51,17 +52,22 @@ export async function processKillzoneMidpointScan(
         marketScope = 'forex';
     }
 
+    // For regular midpoint booster, exclude active instruments.
+    // For 09:30 ET US Cash Open, do NOT exclude futures instruments so fresh Cash Open volume is evaluated for all futures contracts.
     const allActiveSetups = [...futuresSetups, ...forexSetups];
-    const activeInstruments = allActiveSetups.map((s: any) => s.instrument).filter(Boolean);
+    const activeInstruments = isNYAMCashOpen 
+        ? forexSetups.map((s: any) => s.instrument).filter(Boolean)
+        : allActiveSetups.map((s: any) => s.instrument).filter(Boolean);
 
     logger.info(
         {
             futuresCount,
             forexCount,
             marketScope,
+            isNYAMCashOpen,
             excludedInstruments: activeInstruments
         },
-        `🔍 Mid-killzone trigger: ${marketScope} has < 2 active assets per asset class. Triggering scan for missing assets.`
+        `🔍 Mid-killzone trigger: ${marketScope} scan activated${isNYAMCashOpen ? ' (09:30 ET US Cash Open Futures Recheck)' : ''}.`
     );
 
     const runId = `mid_run_${Date.now()}`;
