@@ -12,7 +12,8 @@ const MIN_SIGNALS_PER_CLASS = 2;
 
 export async function processKillzoneMidpointScan(
     kzInfo: KillzoneInfo,
-    runMode: 'live' | 'dry_run' = 'live'
+    runMode: 'live' | 'dry_run' = 'live',
+    timestamp: Date = new Date()
 ): Promise<{
     scanned: boolean;
     marketScope?: 'both' | 'futures' | 'forex';
@@ -23,18 +24,14 @@ export async function processKillzoneMidpointScan(
     const futuresSetups = await queries.getActiveSetups('futures');
     const forexSetups = await queries.getActiveSetups('forex');
 
-    const now = new Date();
-    const isForexOpen = isForexMarketOpen(now);
-    const isFuturesOpen = isFuturesMarketOpen(now);
+    const isForexOpen = isForexMarketOpen(timestamp);
+    const isFuturesOpen = isFuturesMarketOpen(timestamp);
 
     const futuresCount = futuresSetups.length;
     const forexCount = forexSetups.length;
 
-    const isNYAMCashOpen = kzInfo.killzone === 'ny_am';
-
-    // Scan fires when EITHER open market is below the minimum signal threshold,
-    // OR unconditionally for futures at 09:30 ET (NY Cash Open) when cash market volume activates.
-    const futuresNeedsScan = isFuturesOpen && (futuresCount < MIN_SIGNALS_PER_CLASS || isNYAMCashOpen);
+    // Scan fires when EITHER open market is below the minimum signal threshold.
+    const futuresNeedsScan = isFuturesOpen && futuresCount < MIN_SIGNALS_PER_CLASS;
     const forexNeedsScan = isForexOpen && forexCount < MIN_SIGNALS_PER_CLASS;
 
     if (!futuresNeedsScan && !forexNeedsScan) {
@@ -52,22 +49,18 @@ export async function processKillzoneMidpointScan(
         marketScope = 'forex';
     }
 
-    // For regular midpoint booster, exclude active instruments.
-    // For 09:30 ET US Cash Open, do NOT exclude futures instruments so fresh Cash Open volume is evaluated for all futures contracts.
+    // Exclude active instruments to prevent redundant duplicate setups across both markets
     const allActiveSetups = [...futuresSetups, ...forexSetups];
-    const activeInstruments = isNYAMCashOpen 
-        ? forexSetups.map((s: any) => s.instrument).filter(Boolean)
-        : allActiveSetups.map((s: any) => s.instrument).filter(Boolean);
+    const activeInstruments = allActiveSetups.map((s: any) => s.instrument).filter(Boolean);
 
     logger.info(
         {
             futuresCount,
             forexCount,
             marketScope,
-            isNYAMCashOpen,
             excludedInstruments: activeInstruments
         },
-        `🔍 Mid-killzone trigger: ${marketScope} scan activated${isNYAMCashOpen ? ' (09:30 ET US Cash Open Futures Recheck)' : ''}.`
+        `🔍 Mid-killzone trigger: ${marketScope} scan activated for missing assets.`
     );
 
     const runId = `mid_run_${Date.now()}`;

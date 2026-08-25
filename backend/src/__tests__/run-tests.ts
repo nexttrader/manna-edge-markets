@@ -248,7 +248,8 @@ async function runAllTests() {
 
     // Subtest A: 0 futures, 0 forex (< 2 per asset class) -> must trigger rescan for 'both'
     await clearAllActive();
-    const midResA = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    const openMarketTime = new Date('2026-07-28T09:30:00-04:00'); // Active NY session where both Forex & Futures are open
+    const midResA = await processKillzoneMidpointScan(kzInfo, 'dry_run', openMarketTime);
     assert.strictEqual(midResA.scanned, true, 'Should trigger scan when asset classes have < 2 active setups');
     assert.strictEqual(midResA.marketScope, 'both', 'Should scan both when both asset classes have < 2 setups');
 
@@ -264,7 +265,7 @@ async function runAllTests() {
     await queries.insertSetup(dummyForex1B, 'forex');
     await queries.insertSetup(dummyForex2B, 'forex');
 
-    const midResB = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    const midResB = await processKillzoneMidpointScan(kzInfo, 'dry_run', openMarketTime);
     assert.strictEqual(midResB.scanned, false, 'Should NOT rescan when both asset classes have >= 2 active setups on dash');
 
     // Subtest C: 1 futures setup, 2 forex setups (futures < 2, forex >= 2) -> must trigger rescan only for 'futures'
@@ -277,7 +278,7 @@ async function runAllTests() {
     await queries.insertSetup(dummyForex1C, 'forex');
     await queries.insertSetup(dummyForex2C, 'forex');
 
-    const midResC = await processKillzoneMidpointScan(kzInfo, 'dry_run');
+    const midResC = await processKillzoneMidpointScan(kzInfo, 'dry_run', openMarketTime);
     assert.strictEqual(midResC.scanned, true, 'Should trigger scan when futures has < 2 setups');
     assert.strictEqual(midResC.marketScope, 'futures', 'Should target futures market scope when futures < 2 and forex >= 2');
 

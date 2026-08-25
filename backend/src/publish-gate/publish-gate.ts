@@ -222,9 +222,9 @@ export async function executePublishRun(
         const activeSetups = await queries.getActiveSetups(marketName);
         const groups: Record<string, typeof activeSetups> = {};
         if (marketName === 'futures') {
-          groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM'].includes(s.instrument.toUpperCase()));
+          groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM', 'RTY'].includes(s.instrument.toUpperCase()));
         } else {
-          groups['forex_dollar'] = activeSetups.filter(s => ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(s.instrument.toUpperCase()));
+          groups['forex_dollar'] = activeSetups.filter(s => ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY', 'USD/CAD'].includes(s.instrument.toUpperCase()));
         }
 
         for (const [groupName, groupSetups] of Object.entries(groups)) {
@@ -232,7 +232,7 @@ export async function executePublishRun(
 
           const normalizedLongCount = groupSetups.filter(s => {
             const inst = s.instrument.toUpperCase();
-            if (inst === 'USD/JPY') return s.bias === 'short';
+            if (inst === 'USD/JPY' || inst === 'USD/CAD') return s.bias === 'short';
             return s.bias === 'long';
           }).length;
 
@@ -243,14 +243,14 @@ export async function executePublishRun(
 
           for (const setup of groupSetups) {
             const inst = setup.instrument.toUpperCase();
-            const setupNormalizedBias = (inst === 'USD/JPY') ? (setup.bias === 'short' ? 'long' : 'short') : setup.bias;
+            const setupNormalizedBias = (inst === 'USD/JPY' || inst === 'USD/CAD') ? (setup.bias === 'short' ? 'long' : 'short') : setup.bias;
             const isOutlier = setupNormalizedBias !== majorityNormalizedBias;
 
             let metaObj: any = {};
             try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
 
             if (isOutlier) {
-              const groupLabel = groupName === 'indices' ? 'Index Futures (ES, NQ, YM)' : 'Dollar pairs (EUR/USD, GBP/USD, USD/JPY)';
+              const groupLabel = groupName === 'indices' ? 'Index Futures (ES, NQ, YM, RTY)' : 'Dollar pairs (EUR/USD, GBP/USD, USD/JPY, USD/CAD)';
               const plainNote = `Conviction score reduced by 15%: This ${setup.bias.toUpperCase()} signal does not align with the general ${majorityNormalizedBias.toUpperCase()} direction of other correlated ${groupLabel}.`;
               
               if (!metaObj.correlation_penalty_applied) {

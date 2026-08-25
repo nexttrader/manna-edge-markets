@@ -82,24 +82,18 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
 
   const unifiedBiases: Record<string, Bias> = { ...rawBiases };
 
-  // ── 1. Equity Indices Group Synchronization (ES, NQ, YM, RTY) ──
-  const indexGroup = ['ES', 'NQ', 'YM', 'RTY'].filter(i => instruments.includes(i));
-  if (indexGroup.length > 0) {
-    const longCount = indexGroup.filter(i => rawBiases[i] === 'long').length;
-    const groupBias: Bias = longCount >= Math.ceil(indexGroup.length / 2) ? 'long' : 'short';
-    for (const inst of indexGroup) {
-      unifiedBiases[inst] = groupBias;
-    }
+  // ── 1. Equity Indices Group Synchronization (Anchor to ES - S&P 500 Benchmark) ──
+  if (instruments.includes('ES')) {
+    const equityMarketIsBullish = rawBiases['ES'] === 'long';
+    if (instruments.includes('NQ')) unifiedBiases['NQ'] = equityMarketIsBullish ? 'long' : 'short';
+    if (instruments.includes('YM')) unifiedBiases['YM'] = equityMarketIsBullish ? 'long' : 'short';
+    if (instruments.includes('RTY')) unifiedBiases['RTY'] = equityMarketIsBullish ? 'long' : 'short';
   }
 
-  // ── 2. Metals Group Synchronization (GC, SI) ──
-  const metalsGroup = ['GC', 'SI'].filter(i => instruments.includes(i));
-  if (metalsGroup.length > 0) {
-    const longCount = metalsGroup.filter(i => rawBiases[i] === 'long').length;
-    const groupBias: Bias = longCount >= Math.ceil(metalsGroup.length / 2) ? 'long' : 'short';
-    for (const inst of metalsGroup) {
-      unifiedBiases[inst] = groupBias;
-    }
+  // ── 2. Metals Group Synchronization (Anchor to GC - Gold Benchmark) ──
+  if (instruments.includes('GC')) {
+    const metalsAreBullish = rawBiases['GC'] === 'long';
+    if (instruments.includes('SI')) unifiedBiases['SI'] = metalsAreBullish ? 'long' : 'short';
   }
 
   // ── 3. Dollar Correlation Group (DXY vs EUR/USD, GBP/USD, AUD/USD, USD/JPY, USD/CAD) ──

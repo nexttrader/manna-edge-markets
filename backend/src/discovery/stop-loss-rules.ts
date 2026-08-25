@@ -5,15 +5,15 @@
  */
 
 export const MIN_STOP_FLOORS: Record<string, number> = {
-  // CME Futures (Index & Commodity Points)
-  'NQ': 18.0,        // Min 18 NQ points ($360/contract)
-  'ES': 4.5,         // Min 4.5 ES points ($225/contract)
-  'YM': 35.0,        // Min 35 YM points ($175/contract)
-  'RTY': 2.5,        // Min 2.5 RTY points ($125/contract)
-  'GC': 4.0,         // Min $4.00 Gold points ($400/contract)
-  'CL': 0.35,        // Min $0.35 Crude Oil points ($350/contract)
-  'SI': 0.18,        // Min $0.18 Silver points ($900/contract)
-  'ZN': 0.15,        // Min 0.15 10Y T-Note points ($150/contract)
+  // CME Futures (Index & Commodity Points - scaled to match 1.2x-1.5x 15M ATR like Forex)
+  'NQ': 35.0,        // Min 35 NQ points ($700/contract)
+  'ES': 10.0,        // Min 10 ES points ($500/contract)
+  'YM': 65.0,        // Min 65 YM points ($325/contract)
+  'RTY': 5.5,        // Min 5.5 RTY points ($275/contract)
+  'GC': 7.5,         // Min $7.50 Gold points ($750/contract)
+  'CL': 0.65,        // Min $0.65 Crude Oil points ($650/contract)
+  'SI': 0.35,        // Min $0.35 Silver points ($1750/contract)
+  'ZN': 0.25,        // Min 0.25 10Y T-Note points ($250/contract)
 
   // Forex Pairs (Pips / Quote Units)
   'EUR/USD': 0.0010, // Min 10 pips
