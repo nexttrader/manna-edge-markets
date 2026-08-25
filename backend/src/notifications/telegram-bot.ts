@@ -114,15 +114,54 @@ class TelegramBotService {
     }
   }
 
-  /** Checks DB feature toggle before sending. Defaults to enabled on cold start. */
-  private async sendIfEnabled(key: string, text: string): Promise<void> {
+  /** Checks DB feature toggle hierarchy before sending. Defaults to enabled on cold start. */
+  private async sendIfEnabled(
+    key: string,
+    text: string,
+    setup?: EdgeSetup | null,
+    category?: 'signal' | 'manage' | 'status' | 'report'
+  ): Promise<void> {
     try {
       const map = await getNotificationSettingsMap();
+
+      // 1. Global Master category check (e.g. notify_all_signal, notify_all_manage, notify_all_status)
+      if (category) {
+        const globalCatKey = `notify_all_${category}`;
+        if (globalCatKey in map && !map[globalCatKey]) {
+          logger.debug({ key, category, globalCatKey }, 'Notification suppressed by global category master toggle');
+          return;
+        }
+      }
+
+      // 2. Market-specific checks if setup has a market
+      if (setup?.market) {
+        const market = setup.market.toLowerCase().trim();
+
+        // Market Master (e.g. market_futures_all, market_forex_all, market_crypto_all)
+        const marketMasterKey = `market_${market}_all`;
+        if (marketMasterKey in map && !map[marketMasterKey]) {
+          logger.debug({ key, market, marketMasterKey }, 'Notification suppressed by market master toggle');
+          return;
+        }
+
+        // Market Category (e.g. futures_signals, futures_manage, futures_status)
+        if (category) {
+          const catSuffix = category === 'signal' ? 'signals' : category; // normalize 'signal' -> 'signals'
+          const marketCategoryKey = `${market}_${catSuffix}`;
+          if (marketCategoryKey in map && !map[marketCategoryKey]) {
+            logger.debug({ key, market, marketCategoryKey }, 'Notification suppressed by market category toggle');
+            return;
+          }
+        }
+      }
+
+      // 3. Granular Specific Feature Key (e.g. notify_invalidation, notify_tp1_hit, etc.)
       if (key in map && !map[key]) {
-        logger.debug({ key }, 'Notification suppressed by feature toggle');
+        logger.debug({ key }, 'Notification suppressed by granular feature toggle');
         return;
       }
     } catch { /* DB not ready yet — send anyway */ }
+
     await this.sendMessage(text);
   }
 
@@ -130,57 +169,57 @@ class TelegramBotService {
 
   private async handleSetupCreated(setup: EdgeSetup) {
     if (!setup) return;
-    await this.sendIfEnabled('notify_new_signal', this.formatSignal(setup));
+    await this.sendIfEnabled('notify_new_signal', this.formatSignal(setup), setup, 'signal');
   }
 
   private async handleSetupEntered(setup: EdgeSetup) {
     if (!setup) return;
-    await this.sendIfEnabled('notify_entry_triggered', this.formatEntryTriggeredStatus(setup));
+    await this.sendIfEnabled('notify_entry_triggered', this.formatEntryTriggeredStatus(setup), setup, 'status');
   }
 
   private async handleBreakevenReached(setup: EdgeSetup) {
     if (!setup) return;
-    await this.sendIfEnabled('notify_move_to_breakeven', this.formatBreakevenManage(setup));
+    await this.sendIfEnabled('notify_move_to_breakeven', this.formatBreakevenManage(setup), setup, 'manage');
   }
 
   private async handleRunnerStarted(payload: any) {
     const setup = payload?.setup || payload;
     if (!setup) return;
-    await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup));
+    await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup), setup, 'manage');
   }
 
   private async handleTarget1Hit(setup: EdgeSetup) {
     if (!setup) return;
-    await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup));
+    await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup), setup, 'manage');
   }
 
   private async handleTarget2Hit(setup: EdgeSetup) {
     if (!setup) return;
-    await this.sendIfEnabled('notify_tp2_hit', this.formatTp2Manage(setup));
+    await this.sendIfEnabled('notify_tp2_hit', this.formatTp2Manage(setup), setup, 'manage');
   }
 
   private async handleSetupResolved(payload: any) {
     const setup = payload?.setup || payload;
     const outcomeType: string = payload?.outcome?.outcome_type || payload?.outcome || '';
     if (!setup) return;
-    if      (outcomeType === 'tp1_hit') await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup));
-    else if (outcomeType === 'tp2_hit') await this.sendIfEnabled('notify_tp2_hit', this.formatTp2Manage(setup));
-    else if (outcomeType === 'sl_hit')  await this.sendIfEnabled('notify_sl_hit',  this.formatSlHitStatus(setup));
-    else if (outcomeType === 'be_hit')  await this.sendIfEnabled('notify_be_hit',  this.formatBeExitStatus(setup));
+    if      (outcomeType === 'tp1_hit') await this.sendIfEnabled('notify_tp1_hit', this.formatTp1Manage(setup), setup, 'manage');
+    else if (outcomeType === 'tp2_hit') await this.sendIfEnabled('notify_tp2_hit', this.formatTp2Manage(setup), setup, 'manage');
+    else if (outcomeType === 'sl_hit')  await this.sendIfEnabled('notify_sl_hit',  this.formatSlHitStatus(setup), setup, 'status');
+    else if (outcomeType === 'be_hit')  await this.sendIfEnabled('notify_be_hit',  this.formatBeExitStatus(setup), setup, 'status');
   }
 
   private async handleSetupInvalidated(payload: { setupId: string; reason: string; setup?: EdgeSetup; superseded?: boolean }) {
     if (!payload.setup) return;
     if (payload.superseded) {
-      await this.sendIfEnabled('notify_superseded_cancel', this.formatSupersededManage(payload.setup, payload.reason));
+      await this.sendIfEnabled('notify_superseded_cancel', this.formatSupersededManage(payload.setup, payload.reason), payload.setup, 'manage');
     } else {
-      await this.sendIfEnabled('notify_invalidation', this.formatInvalidatedStatus(payload.setup, payload.reason));
+      await this.sendIfEnabled('notify_invalidation', this.formatInvalidatedManage(payload.setup, payload.reason), payload.setup, 'manage');
     }
   }
 
   private async handleSetupSuperseded(payload: { setup: EdgeSetup; reason?: string }) {
     if (!payload?.setup) return;
-    await this.sendIfEnabled('notify_superseded_cancel', this.formatSupersededManage(payload.setup, payload.reason));
+    await this.sendIfEnabled('notify_superseded_cancel', this.formatSupersededManage(payload.setup, payload.reason), payload.setup, 'manage');
   }
 
   // ── Message Formatters ─────────────────────────────────────────────────────
@@ -257,23 +296,24 @@ class TelegramBotService {
 ━━━━━━━━━━━━━━━━━━━━━`;
   }
 
-  public formatInvalidatedStatus(setup: EdgeSetup, reason?: string): string {
+  // ── MANAGE ────────────────────────────────────────────────────────────────
+
+  public formatInvalidatedManage(setup: EdgeSetup, reason?: string): string {
     const p   = mktPrefix(setup);
     const id  = fmtId(setup);
     const sym = cleanSymbol(setup.instrument);
     const why = (reason || 'market_structure_breach').replace(/_/g, ' ');
-    return `<b>⛔ ${p} STATUS ⚡</b>
+    return `<b>⛔ ${p} MANAGE ⚡</b>
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 <b>Trade ID:</b> <code>${id}</code>
 📊 <b>Asset:</b> ${sym}
-📢 <b>Status:</b> SIGNAL INVALIDATED
+🎯 <b>Action:</b> DISCARD PENDING SETUP
+📢 <b>Status:</b> SIGNAL INVALIDATED (PRE-ENTRY)
 ⚠️ <b>Reason:</b> ${why}.
-👉 <b>Instruction:</b> Discard setup — do not enter.
+👉 <b>Instruction:</b> Discard setup — do not enter. Pending order cancelled.
 📅 <b>Date &amp; Time:</b> <code>${fmtTs()}</code>
 ━━━━━━━━━━━━━━━━━━━━━`;
   }
-
-  // ── MANAGE ────────────────────────────────────────────────────────────────
 
   public formatSupersededManage(setup: EdgeSetup, reason?: string): string {
     const p   = mktPrefix(setup);
@@ -348,7 +388,8 @@ class TelegramBotService {
   /** @deprecated */ public formatBreakevenMessage(s: EdgeSetup)               { return this.formatBreakevenManage(s); }
   /** @deprecated */ public formatTarget1HitMessage(s: EdgeSetup)              { return this.formatTp1Manage(s); }
   /** @deprecated */ public formatTarget2HitMessage(s: EdgeSetup)              { return this.formatTp2Manage(s); }
-  /** @deprecated */ public formatInvalidatedMessage(s: EdgeSetup, r?: string) { return this.formatInvalidatedStatus(s, r); }
+  /** @deprecated */ public formatInvalidatedMessage(s: EdgeSetup, r?: string) { return this.formatInvalidatedManage(s, r); }
+  /** @deprecated */ public formatInvalidatedStatus(s: EdgeSetup, r?: string)  { return this.formatInvalidatedManage(s, r); }
 }
 
 export const telegramBotService = new TelegramBotService();

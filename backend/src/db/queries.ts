@@ -577,45 +577,137 @@ export async function setMaintenanceState(enabled: boolean, message: string, est
   return state;
 }
 
-// ── Notification Feature Toggles ─────────────────────────────────────────────
+// ── Notification Feature Toggles & Multi-Market Governance ───────────────────
 
 export interface NotificationSetting {
   key: string;
   label: string;
   description: string;
+  category: 'master' | 'signal' | 'manage' | 'status' | 'report' | 'action';
+  market: string; // 'all' | 'futures' | 'forex' | custom market name
   enabled: boolean;
   updated_at: string;
 }
 
-const NOTIF_DEFAULTS: Array<{ key: string; label: string; description: string }> = [
-  { key: 'notify_new_signal',         label: 'New Signal',                    description: 'Send SIGNAL alert when a new high-conviction setup is published' },
-  { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',       description: 'Send STATUS when price enters zone and order is filled/live' },
-  { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',    description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE' },
-  { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',              description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction' },
-  { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',              description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction' },
-  { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',         description: 'Send STATUS when Stop Loss (-1.0R) is triggered' },
-  { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',        description: 'Send STATUS when trade exits at Breakeven (0.0R)' },
-  { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)',     description: 'Send MANAGE cancel instruction when a pending order is superseded' },
-  { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (STATUS)', description: 'Send STATUS when zone is invalidated before order fill' },
-  { key: 'notify_performance_report', label: 'Performance Reports',            description: 'Broadcast weekly/monthly performance recap summaries to Telegram' },
+export interface RegisteredMarket {
+  market: string;
+  label: string;
+  created_at: string;
+}
+
+const NOTIF_SNAPSHOT_PATH = path.resolve(__dirname, '../../../notification_settings_snapshot.json');
+
+const BASE_NOTIF_DEFAULTS: Array<{ key: string; label: string; description: string; category: NotificationSetting['category']; market: string }> = [
+  // ── Global Master Category Toggles ──
+  { key: 'notify_all_signal',         label: 'All Signals (Global Master)',          description: 'Master switch to toggle ON/OFF all SIGNAL notifications across all markets', category: 'master', market: 'all' },
+  { key: 'notify_all_manage',         label: 'All Trade Management (Global Master)',  description: 'Master switch to toggle ON/OFF all MANAGE instructions (Invalidations, BE, TP1, TP2, Cancels)', category: 'master', market: 'all' },
+  { key: 'notify_all_status',         label: 'All Status Updates (Global Master)',    description: 'Master switch to toggle ON/OFF all STATUS updates (Order Filled, SL Hit, BE Exit)', category: 'master', market: 'all' },
+
+  // ── Futures Market Category Toggles ──
+  { key: 'market_futures_all',        label: 'Futures Alerts Master',                 description: 'Master switch to toggle ON/OFF all notifications for Futures trades', category: 'master', market: 'futures' },
+  { key: 'futures_signals',           label: 'Futures Signals (SIGNAL)',              description: 'Send SIGNAL alerts for new Futures setups (NQ, ES, YM, GC, CL)', category: 'signal', market: 'futures' },
+  { key: 'futures_manage',            label: 'Futures Management (MANAGE)',           description: 'Send all MANAGE updates for Futures trades (Invalidations, BE, TP1, TP2, Superseded)', category: 'manage', market: 'futures' },
+  { key: 'futures_status',            label: 'Futures Status Updates (STATUS)',       description: 'Send STATUS lifecycle updates for Futures trades (Entry Filled, Stop Loss, BE Exit)', category: 'status', market: 'futures' },
+
+  // ── Forex Market Category Toggles ──
+  { key: 'market_forex_all',          label: 'Forex Alerts Master',                   description: 'Master switch to toggle ON/OFF all notifications for Forex trades', category: 'master', market: 'forex' },
+  { key: 'forex_signals',             label: 'Forex Signals (SIGNAL)',                description: 'Send SIGNAL alerts for new Forex setups (EURUSD, GBPUSD, USDJPY, AUDUSD)', category: 'signal', market: 'forex' },
+  { key: 'forex_manage',              label: 'Forex Management (MANAGE)',             description: 'Send all MANAGE updates for Forex trades (Invalidations, BE, TP1, TP2, Superseded)', category: 'manage', market: 'forex' },
+  { key: 'forex_status',              label: 'Forex Status Updates (STATUS)',         description: 'Send STATUS lifecycle updates for Forex trades (Entry Filled, Stop Loss, BE Exit)', category: 'status', market: 'forex' },
+
+  // ── Granular Event Action Toggles ──
+  { key: 'notify_new_signal',         label: 'New Signal Alert',                      description: 'Send SIGNAL alert when a new high-conviction setup is published', category: 'signal', market: 'all' },
+  { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (MANAGE)',       description: 'Send MANAGE instruction when zone is invalidated before order fill (price blows through)', category: 'manage', market: 'all' },
+  { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)',             description: 'Send MANAGE cancel instruction when a pending order is superseded by a fresher scan', category: 'manage', market: 'all' },
+  { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',            description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE', category: 'manage', market: 'all' },
+  { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',                      description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction', category: 'manage', market: 'all' },
+  { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',                      description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction', category: 'manage', market: 'all' },
+  { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',              description: 'Send STATUS when price enters zone and order is filled/live', category: 'status', market: 'all' },
+  { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',                description: 'Send STATUS when Stop Loss (-1.0R) is triggered', category: 'status', market: 'all' },
+  { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',               description: 'Send STATUS when trade exits at Breakeven (0.0R)', category: 'status', market: 'all' },
+  { key: 'notify_performance_report', label: 'Performance Reports',                   description: 'Broadcast weekly/monthly performance recap summaries to Telegram', category: 'report', market: 'all' },
 ];
+
+function saveSnapshotToDisk(settingsMap: Record<string, boolean>): void {
+  try {
+    fs.writeFileSync(NOTIF_SNAPSHOT_PATH, JSON.stringify(settingsMap, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save notification settings snapshot to disk:', err);
+  }
+}
+
+function loadSnapshotFromDisk(): Record<string, boolean> {
+  try {
+    if (fs.existsSync(NOTIF_SNAPSHOT_PATH)) {
+      const data = fs.readFileSync(NOTIF_SNAPSHOT_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Failed to load notification settings snapshot from disk:', err);
+  }
+  return {};
+}
 
 async function ensureNotifSettingsSeeded(): Promise<void> {
   try {
+    await queryDb(`CREATE TABLE IF NOT EXISTS registered_markets (
+      market TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+
     await queryDb(`CREATE TABLE IF NOT EXISTS notification_settings (
       key TEXT PRIMARY KEY,
       label TEXT NOT NULL,
       description TEXT NOT NULL,
+      category TEXT DEFAULT 'action',
+      market TEXT DEFAULT 'all',
       enabled INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
-    for (const d of NOTIF_DEFAULTS) {
+
+    try { await queryDb(`ALTER TABLE notification_settings ADD COLUMN category TEXT DEFAULT 'action'`); } catch {}
+    try { await queryDb(`ALTER TABLE notification_settings ADD COLUMN market TEXT DEFAULT 'all'`); } catch {}
+
+    // Seed default registered markets
+    await queryDb(`INSERT INTO registered_markets (market, label, created_at) VALUES ('futures', 'Futures', CURRENT_TIMESTAMP) ON CONFLICT (market) DO NOTHING`);
+    await queryDb(`INSERT INTO registered_markets (market, label, created_at) VALUES ('forex', 'Forex', CURRENT_TIMESTAMP) ON CONFLICT (market) DO NOTHING`);
+
+    // Fetch all registered markets to generate dynamic toggles for any custom markets
+    const markets = await queryDb<{ market: string; label: string }>(`SELECT market, label FROM registered_markets`);
+    const allDefaults = [...BASE_NOTIF_DEFAULTS];
+
+    for (const m of markets) {
+      const mKey = m.market.toLowerCase().trim();
+      if (mKey !== 'futures' && mKey !== 'forex') {
+        const mLabel = m.label || mKey.toUpperCase();
+        allDefaults.push(
+          { key: `market_${mKey}_all`, label: `${mLabel} Alerts Master`, description: `Master switch to toggle ON/OFF all notifications for ${mLabel} trades`, category: 'master', market: mKey },
+          { key: `${mKey}_signals`,    label: `${mLabel} Signals (SIGNAL)`, description: `Send SIGNAL alerts for new ${mLabel} setups`, category: 'signal', market: mKey },
+          { key: `${mKey}_manage`,     label: `${mLabel} Management (MANAGE)`, description: `Send all MANAGE updates for ${mLabel} trades`, category: 'manage', market: mKey },
+          { key: `${mKey}_status`,     label: `${mLabel} Status Updates (STATUS)`, description: `Send STATUS lifecycle updates for ${mLabel} trades`, category: 'status', market: mKey }
+        );
+      }
+    }
+
+    const snapshot = loadSnapshotFromDisk();
+
+    for (const d of allDefaults) {
+      const defaultVal = (d.key in snapshot) ? (snapshot[d.key] ? 1 : 0) : 1;
       await queryDb(
-        `INSERT INTO notification_settings (key, label, description, enabled, updated_at)
-         VALUES (?, ?, ?, 1, ?)
-         ON CONFLICT (key) DO NOTHING`,
-        [d.key, d.label, d.description, new Date().toISOString()]
+        `INSERT INTO notification_settings (key, label, description, category, market, enabled, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label, description = EXCLUDED.description, category = EXCLUDED.category, market = EXCLUDED.market`,
+        [d.key, d.label, d.description, d.category, d.market, defaultVal, new Date().toISOString()]
       );
+    }
+
+    // Sync current db values to disk snapshot
+    const currentRows = await queryDb<{ key: string; enabled: number }>(`SELECT key, enabled FROM notification_settings`);
+    if (currentRows && currentRows.length > 0) {
+      const map: Record<string, boolean> = {};
+      for (const r of currentRows) map[r.key] = Boolean(r.enabled);
+      saveSnapshotToDisk(map);
     }
   } catch (err) {
     console.error('Error seeding notification_settings table:', err);
@@ -623,27 +715,107 @@ async function ensureNotifSettingsSeeded(): Promise<void> {
 }
 
 /**
- * Returns all notification toggle settings as a flat array.
- * Self-seeds defaults on first call so the table is never empty after deploy.
+ * Returns all registered markets.
+ */
+export async function getRegisteredMarkets(): Promise<RegisteredMarket[]> {
+  try {
+    await ensureNotifSettingsSeeded();
+    const rows = await queryDb<RegisteredMarket>(`SELECT market, label, created_at FROM registered_markets ORDER BY created_at ASC`);
+    if (rows && rows.length > 0) return rows;
+  } catch (err) {
+    console.error('Error fetching registered markets:', err);
+  }
+  return [
+    { market: 'futures', label: 'Futures', created_at: new Date().toISOString() },
+    { market: 'forex', label: 'Forex', created_at: new Date().toISOString() }
+  ];
+}
+
+/**
+ * Registers a new market dynamically and creates its stream toggles.
+ */
+export async function registerMarket(marketName: string, customLabel?: string): Promise<{ markets: RegisteredMarket[]; settings: NotificationSetting[] }> {
+  await ensureNotifSettingsSeeded();
+  const cleanMarket = marketName.toLowerCase().replace(/[^a-z0-9_-]/g, '').trim();
+  if (!cleanMarket) throw new Error('Invalid market name');
+  const label = customLabel?.trim() || (cleanMarket.charAt(0).toUpperCase() + cleanMarket.slice(1));
+  const now = new Date().toISOString();
+
+  await queryDb(
+    `INSERT INTO registered_markets (market, label, created_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT (market) DO UPDATE SET label = ?`,
+    [cleanMarket, label, now, label]
+  );
+
+  const marketDefaults: Array<{ key: string; label: string; description: string; category: NotificationSetting['category']; market: string }> = [
+    { key: `market_${cleanMarket}_all`, label: `${label} Alerts Master`, description: `Master switch to toggle ON/OFF all notifications for ${label} trades`, category: 'master', market: cleanMarket },
+    { key: `${cleanMarket}_signals`,    label: `${label} Signals (SIGNAL)`, description: `Send SIGNAL alerts for new ${label} setups`, category: 'signal', market: cleanMarket },
+    { key: `${cleanMarket}_manage`,     label: `${label} Management (MANAGE)`, description: `Send all MANAGE updates for ${label} trades`, category: 'manage', market: cleanMarket },
+    { key: `${cleanMarket}_status`,     label: `${label} Status Updates (STATUS)`, description: `Send STATUS lifecycle updates for ${label} trades`, category: 'status', market: cleanMarket }
+  ];
+
+  for (const d of marketDefaults) {
+    await queryDb(
+      `INSERT INTO notification_settings (key, label, description, category, market, enabled, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label, description = EXCLUDED.description, category = EXCLUDED.category, market = EXCLUDED.market`,
+      [d.key, d.label, d.description, d.category, d.market, now]
+    );
+  }
+
+  const [markets, settings] = await Promise.all([getRegisteredMarkets(), getNotificationSettings()]);
+  return { markets, settings };
+}
+
+/**
+ * Removes a custom registered market.
+ */
+export async function deleteRegisteredMarket(marketName: string): Promise<{ markets: RegisteredMarket[]; settings: NotificationSetting[] }> {
+  const cleanMarket = marketName.toLowerCase().trim();
+  if (cleanMarket === 'futures' || cleanMarket === 'forex') {
+    throw new Error('Base markets (Futures and Forex) cannot be deleted');
+  }
+
+  await queryDb(`DELETE FROM registered_markets WHERE market = ?`, [cleanMarket]);
+  await queryDb(`DELETE FROM notification_settings WHERE market = ? OR key LIKE ?`, [cleanMarket, `${cleanMarket}_%`]);
+
+  const [markets, settings] = await Promise.all([getRegisteredMarkets(), getNotificationSettings()]);
+  const map: Record<string, boolean> = {};
+  for (const s of settings) map[s.key] = s.enabled;
+  saveSnapshotToDisk(map);
+
+  return { markets, settings };
+}
+
+/**
+ * Returns all notification toggle settings.
  */
 export async function getNotificationSettings(): Promise<NotificationSetting[]> {
   try {
     await ensureNotifSettingsSeeded();
-    const rows = await queryDb<{ key: string; label: string; description: string; enabled: number; updated_at: string }>(
-      `SELECT key, label, description, enabled, updated_at FROM notification_settings ORDER BY key ASC`
+    const rows = await queryDb<{ key: string; label: string; description: string; category: any; market: string; enabled: number; updated_at: string }>(
+      `SELECT key, label, description, category, market, enabled, updated_at FROM notification_settings ORDER BY market ASC, category ASC, key ASC`
     );
     if (rows && rows.length > 0) {
-      return rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
+      return rows.map(r => ({
+        ...r,
+        category: (r.category || 'action') as any,
+        market: r.market || 'all',
+        enabled: Boolean(r.enabled)
+      }));
     }
   } catch (err) {
     console.error('Error fetching notification_settings:', err);
   }
 
-  // Guaranteed fallback so the UI is never blank
-  return NOTIF_DEFAULTS.map(d => ({
+  // Guaranteed fallback
+  return BASE_NOTIF_DEFAULTS.map(d => ({
     key: d.key,
     label: d.label,
     description: d.description,
+    category: d.category,
+    market: d.market,
     enabled: true,
     updated_at: new Date().toISOString()
   }));
@@ -660,20 +832,60 @@ export async function getNotificationSettingsMap(): Promise<Record<string, boole
 }
 
 /**
- * Update a single notification toggle.
+ * Update a single notification toggle and persist to snapshot disk.
  */
 export async function setNotificationSetting(key: string, enabled: boolean): Promise<void> {
   await ensureNotifSettingsSeeded();
-  const def = NOTIF_DEFAULTS.find(d => d.key === key);
-  const label = def?.label || key;
-  const description = def?.description || '';
   const val = enabled ? 1 : 0;
   const now = new Date().toISOString();
 
   await queryDb(
-    `INSERT INTO notification_settings (key, label, description, enabled, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (key) DO UPDATE SET enabled = ?, updated_at = ?`,
-    [key, label, description, val, now, val, now]
+    `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE key = ?`,
+    [val, now, key]
   );
+
+  const map = await getNotificationSettingsMap();
+  map[key] = enabled;
+  saveSnapshotToDisk(map);
+}
+
+/**
+ * Bulk updates notification toggles by market, category, or key list.
+ */
+export async function bulkSetNotificationSettings(
+  filter: { market?: string; category?: string; keys?: string[] },
+  enabled: boolean
+): Promise<NotificationSetting[]> {
+  await ensureNotifSettingsSeeded();
+  const val = enabled ? 1 : 0;
+  const now = new Date().toISOString();
+
+  if (filter.keys && filter.keys.length > 0) {
+    const placeholders = filter.keys.map(() => '?').join(',');
+    await queryDb(
+      `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE key IN (${placeholders})`,
+      [val, now, ...filter.keys]
+    );
+  } else if (filter.market && filter.category) {
+    await queryDb(
+      `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE market = ? AND category = ?`,
+      [val, now, filter.market, filter.category]
+    );
+  } else if (filter.market) {
+    await queryDb(
+      `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE market = ?`,
+      [val, now, filter.market]
+    );
+  } else if (filter.category) {
+    await queryDb(
+      `UPDATE notification_settings SET enabled = ?, updated_at = ? WHERE category = ?`,
+      [val, now, filter.category]
+    );
+  }
+
+  const settings = await getNotificationSettings();
+  const map: Record<string, boolean> = {};
+  for (const s of settings) map[s.key] = s.enabled;
+  saveSnapshotToDisk(map);
+  return settings;
 }

@@ -355,7 +355,58 @@ async function runAllTests() {
     assert.strictEqual(outcomesCheck.length, 2, 'Should insert test outcomes for strategy analytics evaluation');
     console.log('✅ TEST 14: Strategy Analytics Comparison & Downloadable LLM Exporter Engine');
 
-    console.log('\n🎉 ALL 14 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 15. Pre-Entry Invalidation Reclassified as MANAGE
+    const { telegramBotService } = await import('../notifications/telegram-bot');
+    const testInvSetup: EdgeSetup = {
+      ...mockSetup,
+      id: 'test_inv_001',
+      instrument: 'NQ',
+      market: 'futures',
+      bias: 'long'
+    };
+    const invMsg = telegramBotService.formatInvalidatedManage(testInvSetup, 'market_structure_breach');
+    assert.ok(invMsg.includes('<b>⛔ SND FUTURES MANAGE ⚡</b>'), 'Invalidation header must be MANAGE');
+    assert.ok(invMsg.includes('DISCARD PENDING SETUP'), 'Invalidation action must be DISCARD PENDING SETUP');
+    assert.ok(invMsg.includes('SIGNAL INVALIDATED (PRE-ENTRY)'), 'Status must indicate PRE-ENTRY invalidation');
+
+    const notifSettings = await queries.getNotificationSettings();
+    const invSetting = notifSettings.find(s => s.key === 'notify_invalidation');
+    assert.ok(invSetting, 'notify_invalidation setting must exist');
+    assert.strictEqual(invSetting?.category, 'manage', 'notify_invalidation category must be manage');
+    assert.ok(invSetting?.label.includes('(MANAGE)'), 'notify_invalidation label must contain (MANAGE)');
+    console.log('✅ TEST 15: Pre-Entry Invalidation Formatted & Classified as MANAGE Instruction');
+
+    // 16. Multi-Market Category Notification Toggles, Dynamic Markets & Snapshot Persistence
+    // A. Register custom market (e.g. 'crypto')
+    const regResult = await queries.registerMarket('crypto', 'Crypto Majors');
+    const cryptoMarket = regResult.markets.find(m => m.market === 'crypto');
+    assert.ok(cryptoMarket, 'Registered market crypto must exist');
+    assert.strictEqual(cryptoMarket?.label, 'Crypto Majors');
+
+    const cryptoSignals = regResult.settings.find(s => s.key === 'crypto_signals');
+    const cryptoManage = regResult.settings.find(s => s.key === 'crypto_manage');
+    const cryptoStatus = regResult.settings.find(s => s.key === 'crypto_status');
+    assert.ok(cryptoSignals && cryptoManage && cryptoStatus, 'Custom market must generate signals, manage, and status toggles');
+
+    // B. Toggle specific market stream
+    await queries.setNotificationSetting('futures_signals', false);
+    const map1 = await queries.getNotificationSettingsMap();
+    assert.strictEqual(map1['futures_signals'], false, 'futures_signals should be toggled OFF');
+    assert.strictEqual(map1['forex_signals'], true, 'forex_signals should remain ON');
+
+    // C. Bulk toggle by category
+    await queries.bulkSetNotificationSettings({ category: 'manage' }, false);
+    const map2 = await queries.getNotificationSettingsMap();
+    assert.strictEqual(map2['futures_manage'], false, 'futures_manage should be OFF after bulk category toggle');
+    assert.strictEqual(map2['forex_manage'], false, 'forex_manage should be OFF after bulk category toggle');
+
+    // Restore for clean state
+    await queries.setNotificationSetting('futures_signals', true);
+    await queries.bulkSetNotificationSettings({ category: 'manage' }, true);
+    await queries.deleteRegisteredMarket('crypto');
+    console.log('✅ TEST 16: Multi-Market Category Notification Toggles, Dynamic Registration & Snapshot Persistence');
+
+    console.log('\n🎉 ALL 16 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

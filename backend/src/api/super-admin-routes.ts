@@ -1147,12 +1147,15 @@ function getLlmPromptTemplates(dataset: any) {
 
 /**
  * GET /api/super-admin/notification-settings
- * Returns all Telegram notification toggles with their current enabled state.
+ * Returns all Telegram notification toggles and registered markets.
  */
 router.get('/notification-settings', async (_req: Request, res: Response) => {
   try {
-    const settings = await queries.getNotificationSettings();
-    res.json({ settings });
+    const [settings, markets] = await Promise.all([
+      queries.getNotificationSettings(),
+      queries.getRegisteredMarkets()
+    ]);
+    res.json({ settings, markets });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch notification settings', details: error?.message || String(error) });
   }
@@ -1171,10 +1174,64 @@ router.put('/notification-settings/:key', async (req: Request, res: Response) =>
       return res.status(400).json({ error: 'Body must contain { enabled: boolean }' });
     }
     await queries.setNotificationSetting(key, enabled);
-    const settings = await queries.getNotificationSettings();
-    res.json({ success: true, settings });
+    const [settings, markets] = await Promise.all([
+      queries.getNotificationSettings(),
+      queries.getRegisteredMarkets()
+    ]);
+    res.json({ success: true, settings, markets });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to update notification setting', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * POST /api/super-admin/notification-settings/bulk
+ * Bulk toggle notification features by market, category, or specific keys.
+ * Body: { market?: string, category?: string, keys?: string[], enabled: boolean }
+ */
+router.post('/notification-settings/bulk', async (req: Request, res: Response) => {
+  try {
+    const { market, category, keys, enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { enabled: boolean }' });
+    }
+    const settings = await queries.bulkSetNotificationSettings({ market, category, keys }, enabled);
+    const markets = await queries.getRegisteredMarkets();
+    res.json({ success: true, settings, markets });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to bulk update notification settings', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * POST /api/super-admin/notification-settings/markets
+ * Register a new market dynamically with dedicated stream toggles.
+ * Body: { market: string, label?: string }
+ */
+router.post('/notification-settings/markets', async (req: Request, res: Response) => {
+  try {
+    const { market, label } = req.body;
+    if (!market || typeof market !== 'string') {
+      return res.status(400).json({ error: 'Body must contain a valid market string (e.g. crypto)' });
+    }
+    const result = await queries.registerMarket(market, label);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to register market', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * DELETE /api/super-admin/notification-settings/markets/:market
+ * Remove a custom registered market.
+ */
+router.delete('/notification-settings/markets/:market', async (req: Request, res: Response) => {
+  try {
+    const market = req.params.market as string;
+    const result = await queries.deleteRegisteredMarket(market);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to remove market', details: error?.message || String(error) });
   }
 });
 

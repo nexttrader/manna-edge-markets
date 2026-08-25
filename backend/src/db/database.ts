@@ -524,13 +524,24 @@ export async function initializeDatabase(): Promise<void> {
                         note TEXT
                     );
 
+                    CREATE TABLE IF NOT EXISTS registered_markets (
+                        market TEXT PRIMARY KEY,
+                        label TEXT NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+
                     CREATE TABLE IF NOT EXISTS notification_settings (
                         key TEXT PRIMARY KEY,
                         label TEXT NOT NULL,
                         description TEXT NOT NULL,
+                        category TEXT DEFAULT 'action',
+                        market TEXT DEFAULT 'all',
                         enabled INTEGER NOT NULL DEFAULT 1,
                         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
+
+                    ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'action';
+                    ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS market TEXT DEFAULT 'all';
 
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
@@ -653,31 +664,54 @@ export async function initializeDatabase(): Promise<void> {
 
     // ── Notification Feature Toggles ─────────────────────────────────────────
     try {
+      db.exec(`CREATE TABLE IF NOT EXISTS registered_markets (
+        market TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+
       db.exec(`CREATE TABLE IF NOT EXISTS notification_settings (
         key TEXT PRIMARY KEY,
         label TEXT NOT NULL,
         description TEXT NOT NULL,
+        category TEXT DEFAULT 'action',
+        market TEXT DEFAULT 'all',
         enabled INTEGER NOT NULL DEFAULT 1,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      try { db.exec(`ALTER TABLE notification_settings ADD COLUMN category TEXT DEFAULT 'action'`); } catch {}
+      try { db.exec(`ALTER TABLE notification_settings ADD COLUMN market TEXT DEFAULT 'all'`); } catch {}
+
       // Seed defaults — INSERT OR IGNORE so existing user overrides are preserved
-      const defaults: Array<{ key: string; label: string; description: string }> = [
-        { key: 'notify_new_signal',         label: 'New Signal',                description: 'Send SIGNAL alert when a new high-conviction setup is published' },
-        { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',  description: 'Send STATUS when price enters zone and order is filled/live' },
-        { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE' },
-        { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',          description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction' },
-        { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',          description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction' },
-        { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',     description: 'Send STATUS when Stop Loss (-1.0R) is triggered' },
-        { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',    description: 'Send STATUS when trade exits at Breakeven (0.0R)' },
-        { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)', description: 'Send MANAGE cancel instruction when a pending order is superseded by a fresher scan' },
-        { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (STATUS)', description: 'Send STATUS when zone is invalidated before order fill (price blows through)' },
-        { key: 'notify_performance_report', label: 'Performance Reports',       description: 'Broadcast weekly/monthly performance recap summaries to Telegram' },
+      const defaults: Array<{ key: string; label: string; description: string; category: string; market: string }> = [
+        { key: 'notify_all_signal',         label: 'All Signals (Global Master)',          description: 'Master switch to toggle ON/OFF all SIGNAL notifications across all markets', category: 'master', market: 'all' },
+        { key: 'notify_all_manage',         label: 'All Trade Management (Global Master)',  description: 'Master switch to toggle ON/OFF all MANAGE instructions (Invalidations, BE, TP1, TP2, Cancels)', category: 'master', market: 'all' },
+        { key: 'notify_all_status',         label: 'All Status Updates (Global Master)',    description: 'Master switch to toggle ON/OFF all STATUS updates (Order Filled, SL Hit, BE Exit)', category: 'master', market: 'all' },
+        { key: 'market_futures_all',        label: 'Futures Alerts Master',                 description: 'Master switch to toggle ON/OFF all notifications for Futures trades', category: 'master', market: 'futures' },
+        { key: 'futures_signals',           label: 'Futures Signals (SIGNAL)',              description: 'Send SIGNAL alerts for new Futures setups (NQ, ES, YM, GC, CL)', category: 'signal', market: 'futures' },
+        { key: 'futures_manage',            label: 'Futures Management (MANAGE)',           description: 'Send all MANAGE updates for Futures trades (Invalidations, BE, TP1, TP2, Superseded)', category: 'manage', market: 'futures' },
+        { key: 'futures_status',            label: 'Futures Status Updates (STATUS)',       description: 'Send STATUS lifecycle updates for Futures trades (Entry Filled, Stop Loss, BE Exit)', category: 'status', market: 'futures' },
+        { key: 'market_forex_all',          label: 'Forex Alerts Master',                   description: 'Master switch to toggle ON/OFF all notifications for Forex trades', category: 'master', market: 'forex' },
+        { key: 'forex_signals',             label: 'Forex Signals (SIGNAL)',                description: 'Send SIGNAL alerts for new Forex setups (EURUSD, GBPUSD, USDJPY, AUDUSD)', category: 'signal', market: 'forex' },
+        { key: 'forex_manage',              label: 'Forex Management (MANAGE)',             description: 'Send all MANAGE updates for Forex trades (Invalidations, BE, TP1, TP2, Superseded)', category: 'manage', market: 'forex' },
+        { key: 'forex_status',              label: 'Forex Status Updates (STATUS)',         description: 'Send STATUS lifecycle updates for Forex trades (Entry Filled, Stop Loss, BE Exit)', category: 'status', market: 'forex' },
+        { key: 'notify_new_signal',         label: 'New Signal Alert',                      description: 'Send SIGNAL alert when a new high-conviction setup is published', category: 'signal', market: 'all' },
+        { key: 'notify_entry_triggered',    label: 'Entry Triggered (STATUS)',              description: 'Send STATUS when price enters zone and order is filled/live', category: 'status', market: 'all' },
+        { key: 'notify_move_to_breakeven',  label: 'Move to Breakeven (MANAGE)',            description: 'Send MANAGE instruction when trade hits +1.0R to move SL to BE', category: 'manage', market: 'all' },
+        { key: 'notify_tp1_hit',            label: 'TP1 Hit (MANAGE)',                      description: 'Send MANAGE when TP1 (+2.0R) is achieved — partial close instruction', category: 'manage', market: 'all' },
+        { key: 'notify_tp2_hit',            label: 'TP2 Hit (MANAGE)',                      description: 'Send MANAGE when TP2 (+3.0R) runner is achieved — full close instruction', category: 'manage', market: 'all' },
+        { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',                description: 'Send STATUS when Stop Loss (-1.0R) is triggered', category: 'status', market: 'all' },
+        { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',               description: 'Send STATUS when trade exits at Breakeven (0.0R)', category: 'status', market: 'all' },
+        { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)',             description: 'Send MANAGE cancel instruction when a pending order is superseded by a fresher scan', category: 'manage', market: 'all' },
+        { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (MANAGE)',       description: 'Send MANAGE instruction when zone is invalidated before order fill (price blows through)', category: 'manage', market: 'all' },
+        { key: 'notify_performance_report', label: 'Performance Reports',                   description: 'Broadcast weekly/monthly performance recap summaries to Telegram', category: 'report', market: 'all' },
       ];
 
       for (const d of defaults) {
-        db.exec(`INSERT OR IGNORE INTO notification_settings (key, label, description, enabled, updated_at)
-          VALUES ('${d.key}', '${d.label.replace(/'/g, "''")}', '${d.description.replace(/'/g, "''")}', 1, CURRENT_TIMESTAMP)`);
+        db.exec(`INSERT INTO notification_settings (key, label, description, category, market, enabled, updated_at)
+          VALUES ('${d.key}', '${d.label.replace(/'/g, "''")}', '${d.description.replace(/'/g, "''")}', '${d.category}', '${d.market}', 1, CURRENT_TIMESTAMP)
+          ON CONFLICT (key) DO UPDATE SET label = '${d.label.replace(/'/g, "''")}', description = '${d.description.replace(/'/g, "''")}', category = '${d.category}', market = '${d.market}'`);
       }
     } catch {}
 

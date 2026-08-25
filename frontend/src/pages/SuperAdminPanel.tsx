@@ -19,10 +19,17 @@ export const SuperAdminPanel: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
-  // Notification toggles state
-  const [notifSettings, setNotifSettings] = useState<Array<{ key: string; label: string; description: string; enabled: boolean }>>([]);
+  // Notification toggles state & multi-market governance
+  const [notifSettings, setNotifSettings] = useState<Array<{ key: string; label: string; description: string; category?: string; market?: string; enabled: boolean }>>([]);
+  const [registeredMarkets, setRegisteredMarkets] = useState<Array<{ market: string; label: string }>>([
+    { market: 'futures', label: 'Futures' },
+    { market: 'forex', label: 'Forex' }
+  ]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifSaving, setNotifSaving] = useState<string | null>(null);
+  const [showAddMarketModal, setShowAddMarketModal] = useState(false);
+  const [newMarketName, setNewMarketName] = useState('');
+  const [newMarketLabel, setNewMarketLabel] = useState('');
 
   // Sentinel Specific State
   const [sentinelAnalytics, setSentinelAnalytics] = useState<any>(null);
@@ -54,6 +61,7 @@ export const SuperAdminPanel: React.FC = () => {
       if (res.ok) {
         const json = await res.json();
         setNotifSettings(json.settings || []);
+        if (json.markets) setRegisteredMarkets(json.markets);
       }
     } catch {} finally {
       setNotifLoading(false);
@@ -71,6 +79,70 @@ export const SuperAdminPanel: React.FC = () => {
       if (res.ok) {
         const json = await res.json();
         setNotifSettings(json.settings || []);
+        if (json.markets) setRegisteredMarkets(json.markets);
+      }
+    } catch {} finally {
+      setNotifSaving(null);
+    }
+  };
+
+  const handleBulkToggle = async (filter: { market?: string; category?: string; keys?: string[] }, enabled: boolean) => {
+    setNotifSaving('bulk');
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/notification-settings/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...filter, enabled })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifSettings(json.settings || []);
+        if (json.markets) setRegisteredMarkets(json.markets);
+      }
+    } catch {} finally {
+      setNotifSaving(null);
+    }
+  };
+
+  const handleRegisterMarket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMarketName.trim()) return;
+    setNotifSaving('new_market');
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/notification-settings/markets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ market: newMarketName.trim().toLowerCase(), label: newMarketLabel.trim() || undefined })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifSettings(json.settings || []);
+        if (json.markets) setRegisteredMarkets(json.markets);
+        setNewMarketName('');
+        setNewMarketLabel('');
+        setShowAddMarketModal(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to add market');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setNotifSaving(null);
+    }
+  };
+
+  const handleDeleteMarket = async (market: string) => {
+    if (!confirm(`Are you sure you want to remove the custom market "${market.toUpperCase()}" and its notification toggles?`)) return;
+    setNotifSaving(`del_${market}`);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/notification-settings/markets/${market}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifSettings(json.settings || []);
+        if (json.markets) setRegisteredMarkets(json.markets);
       }
     } catch {} finally {
       setNotifSaving(null);
@@ -554,76 +626,501 @@ export const SuperAdminPanel: React.FC = () => {
         {/* TAB: Telegram Feature Toggles */}
         {activeTab === 'notifications' && (
           <div id="notif-tab-section" className="font-mono">
-            <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+            {/* Header & Controls */}
+            <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.06)', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#29b6f6' }}>📡 TELEGRAM BROADCAST FEATURE TOGGLES</h2>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#aaa' }}>
-                    Control automated alert features and message categories dispatched to Telegram. Turning a feature toggle OFF silences that specific message category without interrupting engine analysis or trade lifecycle tracking.
+                  <h2 style={{ margin: 0, color: '#29b6f6', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span>📡</span> TELEGRAM MULTI-MARKET BROADCAST CONTROL CENTER
+                  </h2>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.82rem', color: '#aaa', lineHeight: '1.4' }}>
+                    Granularly toggle <b>Signals</b>, <b>Trade Management</b>, and <b>Status Updates</b> globally, per-market (<b>Futures</b>, <b>Forex</b>), or for <b>custom markets</b>. All toggle states are saved to persistent database &amp; disk snapshot and remembered across Render server reboots.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={fetchNotifSettings}
-                  style={{ padding: '6px 14px', background: 'rgba(41, 182, 246, 0.15)', border: '1px solid #29b6f6', color: '#29b6f6', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
-                >
-                  🔄 Refresh Toggles
-                </button>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMarketModal(true)}
+                    style={{ padding: '7px 16px', background: 'rgba(0, 230, 118, 0.15)', border: '1px solid #00e676', color: '#00e676', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.82rem' }}
+                  >
+                    ➕ Add New Market
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchNotifSettings}
+                    style={{ padding: '7px 16px', background: 'rgba(41, 182, 246, 0.15)', border: '1px solid #29b6f6', color: '#29b6f6', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.82rem' }}
+                  >
+                    🔄 Refresh Toggles
+                  </button>
+                </div>
               </div>
+            </div>
 
-              {notifLoading && (
-                <p style={{ color: '#888', textAlign: 'center' }}>Loading broadcast feature toggles…</p>
-              )}
-
-              {!notifLoading && notifSettings.length === 0 && (
-                <p style={{ color: '#888', textAlign: 'center' }}>Initializing broadcast toggles. Click Refresh to reload.</p>
-              )}
-
-              {!notifLoading && notifSettings.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {notifSettings.map(s => (
-                    <div
-                      key={s.key}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '14px 18px',
-                        borderRadius: '8px',
-                        border: s.enabled ? '1px solid rgba(0, 230, 118, 0.35)' : '1px solid rgba(255,255,255,0.08)',
-                        background: s.enabled ? 'rgba(0, 230, 118, 0.06)' : 'rgba(255,255,255,0.03)',
-                        gap: '16px',
-                        flexWrap: 'wrap'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: '220px' }}>
-                        <div style={{ fontWeight: 700, color: s.enabled ? '#e0e0e0' : '#888', fontSize: '0.9rem' }}>{s.label}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>{s.description}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#444', marginTop: '3px', fontFamily: 'monospace' }}>{s.key}</div>
-                      </div>
+            {/* Add Market Modal */}
+            {showAddMarketModal && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+                <div className="super-card font-mono" style={{ maxWidth: '480px', width: '100%', borderColor: '#00e676', background: '#0d061a', padding: '24px' }}>
+                  <h3 style={{ margin: '0 0 12px 0', color: '#00e676' }}>➕ Register New Market Stream</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '16px' }}>
+                    Adding a market automatically creates its dedicated <b>Signals</b>, <b>Manage</b>, and <b>Status</b> toggles in the database with reboot persistence.
+                  </p>
+                  <form onSubmit={handleRegisterMarket}>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', color: '#ccc', marginBottom: '6px' }}>Market Identifier (Code)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. crypto, indices, commodities"
+                        value={newMarketName}
+                        onChange={e => setNewMarketName(e.target.value)}
+                        required
+                        style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', color: '#fff', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', color: '#ccc', marginBottom: '6px' }}>Display Label (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Crypto Majors, US Indices"
+                        value={newMarketLabel}
+                        onChange={e => setNewMarketLabel(e.target.value)}
+                        style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', color: '#fff', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                       <button
                         type="button"
-                        disabled={notifSaving === s.key}
-                        onClick={() => toggleNotifSetting(s.key, !s.enabled)}
-                        style={{
-                          padding: '7px 18px',
-                          borderRadius: '6px',
-                          border: s.enabled ? '1px solid #00e676' : '1px solid #ff1744',
-                          background: s.enabled ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.15)',
-                          color: s.enabled ? '#00e676' : '#ff5252',
-                          fontWeight: 800,
-                          cursor: notifSaving === s.key ? 'wait' : 'pointer',
-                          fontSize: '0.8rem',
-                          minWidth: '90px'
-                        }}
+                        onClick={() => setShowAddMarketModal(false)}
+                        style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #666', color: '#ccc', borderRadius: '6px', cursor: 'pointer' }}
                       >
-                        {notifSaving === s.key ? '…' : s.enabled ? '🟢 ON' : '🔴 OFF'}
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={notifSaving === 'new_market'}
+                        style={{ padding: '8px 20px', background: '#00e676', border: 'none', color: '#000', borderRadius: '6px', fontWeight: 800, cursor: 'pointer' }}
+                      >
+                        {notifSaving === 'new_market' ? 'Saving…' : 'Register Market'}
                       </button>
                     </div>
-                  ))}
+                  </form>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {notifLoading && (
+              <p style={{ color: '#888', textAlign: 'center', padding: '30px' }}>Loading broadcast feature toggles…</p>
+            )}
+
+            {!notifLoading && (
+              <>
+                {/* ── SECTION 1: GLOBAL MASTER CATEGORY TOGGLES ── */}
+                <div className="super-card font-mono" style={{ borderColor: '#7c4dff', background: 'rgba(124, 77, 255, 0.05)', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                    <h3 style={{ margin: 0, color: '#b388ff', fontSize: '1rem' }}>🌐 GLOBAL MASTER CATEGORY SWITCHES</h3>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleBulkToggle({ category: 'master' }, true)}
+                        style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(0, 230, 118, 0.15)', border: '1px solid #00e676', color: '#00e676', borderRadius: '4px', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        Turn All ON
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBulkToggle({ category: 'master' }, false)}
+                        style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(255, 23, 68, 0.15)', border: '1px solid #ff1744', color: '#ff5252', borderRadius: '4px', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        Turn All OFF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                    {[
+                      { key: 'notify_all_signal', icon: '🟡', title: 'ALL SIGNALS (GLOBAL)', desc: 'Master toggle for all new trade alerts across every market', color: '#ffd54f' },
+                      { key: 'notify_all_manage', icon: '🛡️', title: 'ALL TRADE MANAGEMENT (GLOBAL)', desc: 'Master toggle for Invalidations, BE, TP1, TP2, and Superseded cancels', color: '#29b6f6' },
+                      { key: 'notify_all_status', icon: '⚡', title: 'ALL STATUS UPDATES (GLOBAL)', desc: 'Master toggle for Order Filled, Stop Loss Hit, and Breakeven Exits', color: '#00e676' },
+                    ].map(item => {
+                      const setting = notifSettings.find(s => s.key === item.key);
+                      const isEnabled = setting ? setting.enabled : true;
+                      return (
+                        <div
+                          key={item.key}
+                          style={{
+                            padding: '16px',
+                            borderRadius: '8px',
+                            border: isEnabled ? `1px solid ${item.color}55` : '1px solid rgba(255,255,255,0.08)',
+                            background: isEnabled ? `${item.color}10` : 'rgba(255,255,255,0.02)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: isEnabled ? item.color : '#888' }}>
+                              {item.icon} {item.title}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>{item.desc}</div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={notifSaving === item.key}
+                            onClick={() => toggleNotifSetting(item.key, !isEnabled)}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '6px',
+                              border: isEnabled ? '1px solid #00e676' : '1px solid #ff1744',
+                              background: isEnabled ? 'rgba(0, 230, 118, 0.2)' : 'rgba(255, 23, 68, 0.15)',
+                              color: isEnabled ? '#00e676' : '#ff5252',
+                              fontWeight: 800,
+                              cursor: notifSaving === item.key ? 'wait' : 'pointer',
+                              fontSize: '0.78rem',
+                              minWidth: '78px'
+                            }}
+                          >
+                            {notifSaving === item.key ? '…' : isEnabled ? '🟢 ON' : '🔴 OFF'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── SECTION 2: PER-MARKET STREAM MATRIX ── */}
+                <div className="super-card font-mono" style={{ borderColor: '#ffd54f', background: 'rgba(255, 213, 79, 0.04)', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                    <div>
+                      <h3 style={{ margin: 0, color: '#ffd54f', fontSize: '1rem' }}>📊 PER-MARKET CONTROL MATRIX</h3>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '0.76rem', color: '#aaa' }}>
+                        Independently toggle Signals, Management, and Status for Futures, Forex, and any dynamically added market.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                    {registeredMarkets.map(m => {
+                      const mKey = m.market.toLowerCase().trim();
+                      const masterKey = `market_${mKey}_all`;
+                      const sigKey = `${mKey}_signals`;
+                      const manKey = `${mKey}_manage`;
+                      const statKey = `${mKey}_status`;
+
+                      const masterSetting = notifSettings.find(s => s.key === masterKey);
+                      const isMasterOn = masterSetting ? masterSetting.enabled : true;
+
+                      const sigSetting = notifSettings.find(s => s.key === sigKey);
+                      const isSigOn = sigSetting ? sigSetting.enabled : true;
+
+                      const manSetting = notifSettings.find(s => s.key === manKey);
+                      const isManOn = manSetting ? manSetting.enabled : true;
+
+                      const statSetting = notifSettings.find(s => s.key === statKey);
+                      const isStatOn = statSetting ? statSetting.enabled : true;
+
+                      const isCustom = mKey !== 'futures' && mKey !== 'forex';
+
+                      return (
+                        <div
+                          key={mKey}
+                          style={{
+                            background: 'rgba(15, 6, 32, 0.85)',
+                            border: isMasterOn ? '1px solid rgba(255, 213, 79, 0.35)' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '10px',
+                            padding: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                          }}
+                        >
+                          {/* Market Card Header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', padding: '2px 8px', borderRadius: '4px', background: isCustom ? 'rgba(156, 39, 176, 0.2)' : 'rgba(41, 182, 246, 0.2)', color: isCustom ? '#ce93d8' : '#29b6f6', fontWeight: 800 }}>
+                                {isCustom ? 'CUSTOM MARKET' : 'CORE MARKET'}
+                              </span>
+                              <div style={{ fontWeight: 900, color: '#fff', fontSize: '1.05rem', marginTop: '4px' }}>
+                                {m.label || mKey.toUpperCase()}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {isCustom && (
+                                <button
+                                  type="button"
+                                  title="Delete Custom Market"
+                                  onClick={() => handleDeleteMarket(mKey)}
+                                  style={{ padding: '4px 8px', background: 'rgba(255,23,68,0.15)', border: '1px solid #ff1744', color: '#ff5252', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={notifSaving === masterKey}
+                                onClick={() => toggleNotifSetting(masterKey, !isMasterOn)}
+                                style={{
+                                  padding: '5px 12px',
+                                  borderRadius: '5px',
+                                  border: isMasterOn ? '1px solid #00e676' : '1px solid #ff1744',
+                                  background: isMasterOn ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 23, 68, 0.15)',
+                                  color: isMasterOn ? '#00e676' : '#ff5252',
+                                  fontWeight: 800,
+                                  fontSize: '0.75rem',
+                                  cursor: notifSaving === masterKey ? 'wait' : 'pointer'
+                                }}
+                              >
+                                {isMasterOn ? '🟢 MARKET ACTIVE' : '🔴 MUTED'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 3 Streams inside Market */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {/* Signals */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: isSigOn ? 'rgba(255, 213, 79, 0.06)' : 'rgba(255,255,255,0.02)', borderRadius: '6px', border: isSigOn ? '1px solid rgba(255, 213, 79, 0.2)' : '1px solid rgba(255,255,255,0.05)' }}>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: isSigOn ? '#ffd54f' : '#777' }}>🟡 Signals (SIGNAL)</div>
+                                <div style={{ fontSize: '0.68rem', color: '#666' }}>New setup alerts for {m.label}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === sigKey}
+                                onClick={() => toggleNotifSetting(sigKey, !isSigOn)}
+                                style={{ padding: '4px 10px', borderRadius: '4px', border: isSigOn ? '1px solid #00e676' : '1px solid #ff1744', background: isSigOn ? 'rgba(0,230,118,0.15)' : 'rgba(255,23,68,0.15)', color: isSigOn ? '#00e676' : '#ff5252', fontWeight: 800, fontSize: '0.72rem', cursor: notifSaving === sigKey ? 'wait' : 'pointer' }}
+                              >
+                                {isSigOn ? 'ON' : 'OFF'}
+                              </button>
+                            </div>
+
+                            {/* Management */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: isManOn ? 'rgba(41, 182, 246, 0.06)' : 'rgba(255,255,255,0.02)', borderRadius: '6px', border: isManOn ? '1px solid rgba(41, 182, 246, 0.2)' : '1px solid rgba(255,255,255,0.05)' }}>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: isManOn ? '#29b6f6' : '#777' }}>🛡️ Management (MANAGE)</div>
+                                <div style={{ fontSize: '0.68rem', color: '#666' }}>Invalidations, BE, TP1 &amp; TP2 for {m.label}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === manKey}
+                                onClick={() => toggleNotifSetting(manKey, !isManOn)}
+                                style={{ padding: '4px 10px', borderRadius: '4px', border: isManOn ? '1px solid #00e676' : '1px solid #ff1744', background: isManOn ? 'rgba(0,230,118,0.15)' : 'rgba(255,23,68,0.15)', color: isManOn ? '#00e676' : '#ff5252', fontWeight: 800, fontSize: '0.72rem', cursor: notifSaving === manKey ? 'wait' : 'pointer' }}
+                              >
+                                {isManOn ? 'ON' : 'OFF'}
+                              </button>
+                            </div>
+
+                            {/* Status */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: isStatOn ? 'rgba(0, 230, 118, 0.06)' : 'rgba(255,255,255,0.02)', borderRadius: '6px', border: isStatOn ? '1px solid rgba(0, 230, 118, 0.2)' : '1px solid rgba(255,255,255,0.05)' }}>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: isStatOn ? '#00e676' : '#777' }}>⚡ Status Updates (STATUS)</div>
+                                <div style={{ fontSize: '0.68rem', color: '#666' }}>Order Fill, Stop Loss &amp; BE exits for {m.label}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === statKey}
+                                onClick={() => toggleNotifSetting(statKey, !isStatOn)}
+                                style={{ padding: '4px 10px', borderRadius: '4px', border: isStatOn ? '1px solid #00e676' : '1px solid #ff1744', background: isStatOn ? 'rgba(0,230,118,0.15)' : 'rgba(255,23,68,0.15)', color: isStatOn ? '#00e676' : '#ff5252', fontWeight: 800, fontSize: '0.72rem', cursor: notifSaving === statKey ? 'wait' : 'pointer' }}
+                              >
+                                {isStatOn ? 'ON' : 'OFF'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick Market Actions */}
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkToggle({ market: mKey }, true)}
+                              style={{ flex: 1, padding: '4px', fontSize: '0.68rem', background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', color: '#00e676', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              Enable All {m.label}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkToggle({ market: mKey }, false)}
+                              style={{ flex: 1, padding: '4px', fontSize: '0.68rem', background: 'rgba(255,23,68,0.1)', border: '1px solid rgba(255,23,68,0.3)', color: '#ff5252', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              Mute All {m.label}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── SECTION 3: GRANULAR ACTION EVENT TOGGLES ── */}
+                <div className="super-card font-mono" style={{ borderColor: '#29b6f6', background: 'rgba(41, 182, 246, 0.04)' }}>
+                  <h3 style={{ margin: '0 0 16px 0', color: '#29b6f6', fontSize: '1rem' }}>⚙️ GRANULAR ACTION EVENT TOGGLES</h3>
+
+                  {/* Grouped Lists */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* MANAGE Group (Highlight Pre-Entry Invalidation) */}
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#29b6f6', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🛡️</span> TRADE MANAGEMENT ACTIONS (MANAGE)
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {notifSettings
+                          .filter(s => s.category === 'manage' && s.market === 'all')
+                          .map(s => (
+                            <div
+                              key={s.key}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '12px 16px',
+                                borderRadius: '8px',
+                                border: s.enabled ? '1px solid rgba(41, 182, 246, 0.35)' : '1px solid rgba(255,255,255,0.08)',
+                                background: s.key === 'notify_invalidation' ? (s.enabled ? 'rgba(41, 182, 246, 0.12)' : 'rgba(255,255,255,0.03)') : (s.enabled ? 'rgba(41, 182, 246, 0.06)' : 'rgba(255,255,255,0.03)'),
+                                gap: '16px',
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <div style={{ flex: 1, minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontWeight: 800, color: s.enabled ? '#e0e0e0' : '#888', fontSize: '0.88rem' }}>{s.label}</span>
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '3px', background: 'rgba(41, 182, 246, 0.2)', color: '#29b6f6', fontWeight: 800 }}>MANAGE</span>
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#888', marginTop: '3px' }}>{s.description}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#555', marginTop: '2px', fontFamily: 'monospace' }}>{s.key}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === s.key}
+                                onClick={() => toggleNotifSetting(s.key, !s.enabled)}
+                                style={{
+                                  padding: '6px 16px',
+                                  borderRadius: '6px',
+                                  border: s.enabled ? '1px solid #00e676' : '1px solid #ff1744',
+                                  background: s.enabled ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.15)',
+                                  color: s.enabled ? '#00e676' : '#ff5252',
+                                  fontWeight: 800,
+                                  cursor: notifSaving === s.key ? 'wait' : 'pointer',
+                                  fontSize: '0.78rem',
+                                  minWidth: '85px'
+                                }}
+                              >
+                                {notifSaving === s.key ? '…' : s.enabled ? '🟢 ON' : '🔴 OFF'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* STATUS Group */}
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#00e676', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>⚡</span> LIFECYCLE &amp; EXECUTION STATUS UPDATES (STATUS)
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {notifSettings
+                          .filter(s => s.category === 'status' && s.market === 'all')
+                          .map(s => (
+                            <div
+                              key={s.key}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '12px 16px',
+                                borderRadius: '8px',
+                                border: s.enabled ? '1px solid rgba(0, 230, 118, 0.35)' : '1px solid rgba(255,255,255,0.08)',
+                                background: s.enabled ? 'rgba(0, 230, 118, 0.06)' : 'rgba(255,255,255,0.03)',
+                                gap: '16px',
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <div style={{ flex: 1, minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontWeight: 800, color: s.enabled ? '#e0e0e0' : '#888', fontSize: '0.88rem' }}>{s.label}</span>
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '3px', background: 'rgba(0, 230, 118, 0.2)', color: '#00e676', fontWeight: 800 }}>STATUS</span>
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#888', marginTop: '3px' }}>{s.description}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#555', marginTop: '2px', fontFamily: 'monospace' }}>{s.key}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === s.key}
+                                onClick={() => toggleNotifSetting(s.key, !s.enabled)}
+                                style={{
+                                  padding: '6px 16px',
+                                  borderRadius: '6px',
+                                  border: s.enabled ? '1px solid #00e676' : '1px solid #ff1744',
+                                  background: s.enabled ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.15)',
+                                  color: s.enabled ? '#00e676' : '#ff5252',
+                                  fontWeight: 800,
+                                  cursor: notifSaving === s.key ? 'wait' : 'pointer',
+                                  fontSize: '0.78rem',
+                                  minWidth: '85px'
+                                }}
+                              >
+                                {notifSaving === s.key ? '…' : s.enabled ? '🟢 ON' : '🔴 OFF'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* SIGNAL & REPORT Group */}
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ffd54f', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🟡</span> SIGNALS &amp; REPORTS
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {notifSettings
+                          .filter(s => (s.category === 'signal' || s.category === 'report') && s.market === 'all')
+                          .map(s => (
+                            <div
+                              key={s.key}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '12px 16px',
+                                borderRadius: '8px',
+                                border: s.enabled ? '1px solid rgba(255, 213, 79, 0.35)' : '1px solid rgba(255,255,255,0.08)',
+                                background: s.enabled ? 'rgba(255, 213, 79, 0.06)' : 'rgba(255,255,255,0.03)',
+                                gap: '16px',
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <div style={{ flex: 1, minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontWeight: 800, color: s.enabled ? '#e0e0e0' : '#888', fontSize: '0.88rem' }}>{s.label}</span>
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '3px', background: s.category === 'signal' ? 'rgba(255, 213, 79, 0.2)' : 'rgba(156, 39, 176, 0.2)', color: s.category === 'signal' ? '#ffd54f' : '#ce93d8', fontWeight: 800 }}>
+                                    {(s.category || 'signal').toUpperCase()}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#888', marginTop: '3px' }}>{s.description}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#555', marginTop: '2px', fontFamily: 'monospace' }}>{s.key}</div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={notifSaving === s.key}
+                                onClick={() => toggleNotifSetting(s.key, !s.enabled)}
+                                style={{
+                                  padding: '6px 16px',
+                                  borderRadius: '6px',
+                                  border: s.enabled ? '1px solid #00e676' : '1px solid #ff1744',
+                                  background: s.enabled ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 23, 68, 0.15)',
+                                  color: s.enabled ? '#00e676' : '#ff5252',
+                                  fontWeight: 800,
+                                  cursor: notifSaving === s.key ? 'wait' : 'pointer',
+                                  fontSize: '0.78rem',
+                                  minWidth: '85px'
+                                }}
+                              >
+                                {notifSaving === s.key ? '…' : s.enabled ? '🟢 ON' : '🔴 OFF'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

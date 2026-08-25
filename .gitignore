@@ -27,3 +27,7 @@ npm-debug.log*
 
 # Build artifacts
 .cache/
+
+# Local snapshots
+*snapshot.json
+
