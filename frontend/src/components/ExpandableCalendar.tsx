@@ -42,6 +42,8 @@ interface DayData {
   dayNum: number;
   isCurrentMonth: boolean;
   totalR: number;
+  futuresR: number;
+  forexR: number;
   sessions: Record<SessionType, DaySessionData>;
   hasActivity: boolean;
 }
@@ -212,6 +214,8 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
         dayNum: day,
         isCurrentMonth: false,
         totalR: 0,
+        futuresR: 0,
+        forexR: 0,
         sessions: {
           asia: { trades: [], totalR: 0 },
           london: { trades: [], totalR: 0 },
@@ -235,6 +239,8 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
       };
 
       let dayTotalR = 0;
+      let dayFuturesR = 0;
+      let dayForexR = 0;
       let hasActivity = false;
 
       if (dayTradingData) {
@@ -248,6 +254,15 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
             totalR: sessionTotalR
           };
           dayTotalR += sessionTotalR;
+          trades.forEach(t => {
+            const r = t.realized_r ?? 0;
+            const mkt = t.market || t.setup_market || 'futures';
+            if (mkt === 'forex') {
+              dayForexR += r;
+            } else {
+              dayFuturesR += r;
+            }
+          });
         });
       }
 
@@ -256,6 +271,8 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
         dayNum: day,
         isCurrentMonth: true,
         totalR: dayTotalR,
+        futuresR: dayFuturesR,
+        forexR: dayForexR,
         sessions: sessionsData,
         hasActivity
       });
@@ -271,6 +288,8 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
         dayNum: day,
         isCurrentMonth: false,
         totalR: 0,
+        futuresR: 0,
+        forexR: 0,
         sessions: {
           asia: { trades: [], totalR: 0 },
           london: { trades: [], totalR: 0 },
@@ -455,12 +474,30 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
               
               {cell.hasActivity && (
                 <div className="day-pnl-summary">
-                  <span className={`r-pnl-pill ${pnlClass}`} style={{ fontWeight: 900 }}>
-                    {showR}
-                  </span>
-                  <span className="dollar-pnl-sub">
-                    {showPL}
-                  </span>
+                  <div className="day-combined-pnl">
+                    <span className={`r-pnl-pill ${pnlClass}`} style={{ fontWeight: 900 }}>
+                      {showR}
+                    </span>
+                    <span className="dollar-pnl-sub">
+                      {showPL}
+                    </span>
+                  </div>
+
+                  <div className="day-market-splits">
+                    <span className="day-split-tag" title="Futures Realized R">
+                      <span className="day-split-label">FUT</span>
+                      <span className={`day-split-val ${getPnlClass(cell.futuresR)}`}>
+                        {formatPNLString(cell.futuresR)}
+                      </span>
+                    </span>
+                    <span className="day-split-divider">•</span>
+                    <span className="day-split-tag" title="Forex Realized R">
+                      <span className="day-split-label">FX</span>
+                      <span className={`day-split-val ${getPnlClass(cell.forexR)}`}>
+                        {formatPNLString(cell.forexR)}
+                      </span>
+                    </span>
+                  </div>
                 </div>
               )}
 
