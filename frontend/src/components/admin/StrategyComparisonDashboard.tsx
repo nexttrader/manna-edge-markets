@@ -43,13 +43,19 @@ interface StrategyStat {
 
 interface ComparisonData {
   timestamp: string;
-  filters: { timeframe: string; market: string; session: string; strategyId?: string };
+  filters: { timeframe: string; market: string; session: string; strategyId?: string; assetVisibility?: string; instrument?: string };
   summary: {
     totalStrategiesTracked: number;
     totalCombinedTrades: number;
     totalCombinedR: number;
     bestWinRateStrategy: { id: string; name: string; winRate: number } | null;
     bestExpectancyStrategy: { id: string; name: string; expectancyR: number } | null;
+    assetScopeComparison?: {
+      currentScope: string;
+      displayedAssets: { totalTrades: number; wins: number; winRate: number; totalR: number; expectancyR: number };
+      hiddenAssets: { totalTrades: number; wins: number; winRate: number; totalR: number; expectancyR: number };
+      allAssets: { totalTrades: number; wins: number; winRate: number; totalR: number; expectancyR: number };
+    };
   };
   strategies: StrategyStat[];
   tradeLogs: any[];
@@ -60,6 +66,8 @@ export const StrategyComparisonDashboard: React.FC = () => {
   const [market, setMarket] = useState<'both' | 'futures' | 'forex'>('both');
   const [session, setSession] = useState<'all' | 'london' | 'ny_am' | 'ny_pm' | 'asia'>('all');
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('all');
+  const [assetVisibility, setAssetVisibility] = useState<'all' | 'displayed_only' | 'hidden_only'>('all');
+  const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
   
   const [data, setData] = useState<ComparisonData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -70,7 +78,7 @@ export const StrategyComparisonDashboard: React.FC = () => {
   const fetchComparisonData = async () => {
     setLoading(true);
     try {
-      const url = `${API_BASE}/api/super-admin/strategy-analytics/comparison?timeframe=${timeframe}&market=${market}&session=${session}&strategy_id=${selectedStrategyId}`;
+      const url = `${API_BASE}/api/super-admin/strategy-analytics/comparison?timeframe=${timeframe}&market=${market}&session=${session}&strategy_id=${selectedStrategyId}&asset_visibility=${assetVisibility}&instrument=${selectedInstrument}`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
@@ -85,10 +93,10 @@ export const StrategyComparisonDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchComparisonData();
-  }, [timeframe, market, session, selectedStrategyId]);
+  }, [timeframe, market, session, selectedStrategyId, assetVisibility, selectedInstrument]);
 
   const handleDownloadExport = (format: 'markdown' | 'json' | 'csv') => {
-    const url = `${API_BASE}/api/super-admin/strategy-analytics/export?format=${format}&timeframe=${timeframe}&market=${market}&session=${session}&strategy_id=${selectedStrategyId}`;
+    const url = `${API_BASE}/api/super-admin/strategy-analytics/export?format=${format}&timeframe=${timeframe}&market=${market}&session=${session}&strategy_id=${selectedStrategyId}&asset_visibility=${assetVisibility}&instrument=${selectedInstrument}`;
     window.open(url, '_blank');
   };
 
@@ -123,7 +131,7 @@ export const StrategyComparisonDashboard: React.FC = () => {
 
 ## 📊 DATASET OVERVIEW & SUMMARY METRICS
 - **Timestamp:** ${data.timestamp}
-- **Filters Applied:** Timeframe=${data.filters.timeframe}, Market=${data.filters.market}, Session=${data.filters.session}
+- **Filters Applied:** Timeframe=${data.filters.timeframe}, Market=${data.filters.market}, Session=${data.filters.session}, AssetScope=${data.filters.assetVisibility || 'all'}
 - **Total Combined Trades:** ${data.summary.totalCombinedTrades}
 - **Total Combined Realized R:** ${data.summary.totalCombinedR}R
 
@@ -150,13 +158,44 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
             <span className="scd-title-icon">⚔️</span>
             <div>
               <div className="scd-title-text">SUPER ADMIN STRATEGY SUCCESS &amp; COMPARISON MATRIX</div>
-              <div className="scd-subtitle">Real-time performance analytics, win-rate benchmarking &amp; LLM prompt data exporter</div>
+              <div className="scd-subtitle">Real-time performance analytics with turned-off vs active asset toggle &amp; LLM prompt exporter</div>
             </div>
           </div>
 
           <button type="button" className="scd-refresh-btn" onClick={fetchComparisonData}>
             🔄 {loading ? 'Computing...' : 'Refresh Analytics'}
           </button>
+        </div>
+
+        {/* ── Asset Scope Switcher Bar (Turned Off vs On) ── */}
+        <div className="scd-asset-scope-bar">
+          <span className="scd-scope-label">🎯 Asset Scope (Results View):</span>
+          <div className="scd-scope-pill-group">
+            <button
+              type="button"
+              className={`scd-scope-btn ${assetVisibility === 'all' ? 'active all' : ''}`}
+              onClick={() => setAssetVisibility('all')}
+              title="Show results including both publicly displayed and turned-off / stealth assets"
+            >
+              🌐 All Assets (Turned Off + On)
+            </button>
+            <button
+              type="button"
+              className={`scd-scope-btn ${assetVisibility === 'displayed_only' ? 'active displayed' : ''}`}
+              onClick={() => setAssetVisibility('displayed_only')}
+              title="Show results for publicly displayed assets only (what clients & admins see)"
+            >
+              🟢 Displayed Assets Only
+            </button>
+            <button
+              type="button"
+              className={`scd-scope-btn ${assetVisibility === 'hidden_only' ? 'active hidden' : ''}`}
+              onClick={() => setAssetVisibility('hidden_only')}
+              title="Show results for turned-off / stealth assets only (internal Super Admin research)"
+            >
+              🕶️ Turned-Off / Stealth Only
+            </button>
+          </div>
         </div>
 
         <div className="scd-filter-row">
@@ -203,8 +242,131 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
               ))}
             </select>
           </div>
+
+          {/* Target Instrument Filter */}
+          <div className="scd-filter-group">
+            <span className="scd-filter-label">Instrument Filter</span>
+            <select className="scd-select" value={selectedInstrument} onChange={(e) => setSelectedInstrument(e.target.value)}>
+              <option value="all">🌐 All Assets / Instruments</option>
+              <optgroup label="Futures">
+                <option value="ES">ES (E-mini S&P 500)</option>
+                <option value="NQ">NQ (E-mini Nasdaq 100)</option>
+                <option value="YM">YM (E-mini Dow)</option>
+                <option value="GC">GC (Gold Futures)</option>
+                <option value="CL">CL (Crude Oil)</option>
+                <option value="SI">SI (Silver)</option>
+                <option value="RTY">RTY (Russell 2000)</option>
+                <option value="ZN">ZN (10-Yr T-Note)</option>
+              </optgroup>
+              <optgroup label="Forex">
+                <option value="EUR/USD">EUR/USD</option>
+                <option value="GBP/USD">GBP/USD</option>
+                <option value="USD/JPY">USD/JPY</option>
+                <option value="AUD/USD">AUD/USD</option>
+                <option value="EUR/GBP">EUR/GBP</option>
+                <option value="GBP/JPY">GBP/JPY</option>
+                <option value="USD/CAD">USD/CAD</option>
+                <option value="EUR/JPY">EUR/JPY</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* ── Asset Scope Comparative Edge Banner ── */}
+      {data?.summary?.assetScopeComparison && (
+        <div className="scd-asset-comparison-card">
+          <div className="comparison-card-title">
+            <span>🔬 ASSET VISIBILITY SCOPE COMPARISON (DISPLAYED VS TURNED-OFF ASSETS)</span>
+            <span className="current-scope-badge">
+              Active View: {assetVisibility === 'all' ? 'All Assets' : assetVisibility === 'displayed_only' ? 'Displayed Assets Only' : 'Turned-Off Assets Only'}
+            </span>
+          </div>
+
+          <div className="comparison-columns-grid">
+            <div className={`scope-col ${assetVisibility === 'displayed_only' ? 'highlighted' : ''}`}>
+              <div className="col-header">
+                <span className="col-icon">🟢</span>
+                <span className="col-name">DISPLAYED ASSETS (CLIENT VISIBLE)</span>
+              </div>
+              <div className="col-metrics">
+                <div className="col-metric">
+                  <span className="c-label">Trades</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.displayedAssets.totalTrades}</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Win Rate</span>
+                  <span className="c-val text-emerald">{data.summary.assetScopeComparison.displayedAssets.winRate}%</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Net Realized R</span>
+                  <span className={`c-val ${data.summary.assetScopeComparison.displayedAssets.totalR >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                    {data.summary.assetScopeComparison.displayedAssets.totalR > 0 ? `+${data.summary.assetScopeComparison.displayedAssets.totalR}R` : `${data.summary.assetScopeComparison.displayedAssets.totalR}R`}
+                  </span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Expectancy</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.displayedAssets.expectancyR}R</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={`scope-col ${assetVisibility === 'hidden_only' ? 'highlighted' : ''}`}>
+              <div className="col-header">
+                <span className="col-icon">🕶️</span>
+                <span className="col-name">TURNED-OFF / STEALTH (SUPER ADMIN ONLY)</span>
+              </div>
+              <div className="col-metrics">
+                <div className="col-metric">
+                  <span className="c-label">Trades</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.hiddenAssets.totalTrades}</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Win Rate</span>
+                  <span className="c-val text-amber">{data.summary.assetScopeComparison.hiddenAssets.winRate}%</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Net Realized R</span>
+                  <span className={`c-val ${data.summary.assetScopeComparison.hiddenAssets.totalR >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                    {data.summary.assetScopeComparison.hiddenAssets.totalR > 0 ? `+${data.summary.assetScopeComparison.hiddenAssets.totalR}R` : `${data.summary.assetScopeComparison.hiddenAssets.totalR}R`}
+                  </span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Expectancy</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.hiddenAssets.expectancyR}R</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={`scope-col combined ${assetVisibility === 'all' ? 'highlighted' : ''}`}>
+              <div className="col-header">
+                <span className="col-icon">🌐</span>
+                <span className="col-name">COMBINED SYSTEM (ALL TRACKED)</span>
+              </div>
+              <div className="col-metrics">
+                <div className="col-metric">
+                  <span className="c-label">Trades</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.allAssets.totalTrades}</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Win Rate</span>
+                  <span className="c-val text-cyan">{data.summary.assetScopeComparison.allAssets.winRate}%</span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Net Realized R</span>
+                  <span className={`c-val ${data.summary.assetScopeComparison.allAssets.totalR >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                    {data.summary.assetScopeComparison.allAssets.totalR > 0 ? `+${data.summary.assetScopeComparison.allAssets.totalR}R` : `${data.summary.assetScopeComparison.allAssets.totalR}R`}
+                  </span>
+                </div>
+                <div className="col-metric">
+                  <span className="c-label">Expectancy</span>
+                  <span className="c-val">{data.summary.assetScopeComparison.allAssets.expectancyR}R</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Executive Summary Highlights Banner */}
       {data && (

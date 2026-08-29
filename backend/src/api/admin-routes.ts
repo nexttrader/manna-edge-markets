@@ -772,6 +772,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
     const role = (req.query.role as string) || 'admin';
     const email = (req.query.email as string) || (req.query.userEmail as string) || '';
     const hiddenStrategyIds = await queries.getHiddenStrategyIdsForRole(role, email);
+    const disabledAssets = await queries.getDisabledDisplayAssets();
+    const assetVisibility = (req.query.asset_visibility || req.query.asset_scope || 'all').toString();
 
     let futuresQuery = `SELECT * FROM edge_setups`;
     let forexQuery = `SELECT * FROM forex_edge_setups`;
@@ -800,17 +802,30 @@ router.get('/analytics', async (req: Request, res: Response) => {
       LEFT JOIN forex_edge_setups f ON o.setup_id = f.id
     `;
     
-    // We will do filtering in-memory to ensure hiddenStrategyIds are properly excluded
+    // We will do filtering in-memory to ensure hiddenStrategyIds and asset visibility are properly applied
     let allFutures = await queryDb(futuresQuery);
     let allForex = await queryDb(forexQuery);
     let allOutcomes = await queryDb(outcomesQuery);
 
-    allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2'));
-    allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2'));
-    allOutcomes = allOutcomes.filter((o: any) => {
-      const sId = o.strategy_id || 'sentinel_v2';
-      return !hiddenStrategyIds.includes(sId);
-    });
+    if (role !== 'super_admin') {
+      allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+      allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+      allOutcomes = allOutcomes.filter((o: any) => {
+        const sId = o.strategy_id || 'sentinel_v2';
+        const inst = o.instrument;
+        return !hiddenStrategyIds.includes(sId) && (!inst || !disabledAssets.includes(inst));
+      });
+    } else {
+      if (assetVisibility === 'displayed_only') {
+        allFutures = allFutures.filter((s: any) => !disabledAssets.includes(s.instrument));
+        allForex = allForex.filter((s: any) => !disabledAssets.includes(s.instrument));
+        allOutcomes = allOutcomes.filter((o: any) => !o.instrument || !disabledAssets.includes(o.instrument));
+      } else if (assetVisibility === 'hidden_only') {
+        allFutures = allFutures.filter((s: any) => disabledAssets.includes(s.instrument));
+        allForex = allForex.filter((s: any) => disabledAssets.includes(s.instrument));
+        allOutcomes = allOutcomes.filter((o: any) => o.instrument && disabledAssets.includes(o.instrument));
+      }
+    }
 
     if (selectedStrategy && selectedStrategy !== 'all') {
       allFutures = allFutures.filter((s: any) => (s.strategy_id || 'sentinel_v2') === selectedStrategy);
@@ -825,8 +840,21 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let forexActiveSetups = await queries.getActiveSetups('forex');
 
     const resolvedSetupIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
-    futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)));
-    forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)));
+    if (role !== 'super_admin') {
+      futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+      forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+    } else {
+      if (assetVisibility === 'displayed_only') {
+        futuresActiveSetups = futuresActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+        forexActiveSetups = forexActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+      } else if (assetVisibility === 'hidden_only') {
+        futuresActiveSetups = futuresActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)) && disabledAssets.includes(s.instrument));
+        forexActiveSetups = forexActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)) && disabledAssets.includes(s.instrument));
+      } else {
+        futuresActiveSetups = futuresActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)));
+        forexActiveSetups = forexActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)));
+      }
+    }
 
     let futuresActive = futuresActiveSetups.length;
     let forexActive = forexActiveSetups.length;

@@ -889,3 +889,207 @@ export async function bulkSetNotificationSettings(
   saveSnapshotToDisk(map);
   return settings;
 }
+
+// ── Asset Display & Tracking Controls (Super Admin Only) ─────────────────────
+
+export interface AssetSetting {
+  symbol: string;
+  market: string;
+  name: string;
+  display_enabled: boolean;
+  tracking_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const ASSET_SNAPSHOT_PATH = path.resolve(__dirname, '../../../asset_settings_snapshot.json');
+
+const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = [
+  { symbol: 'ES', market: 'futures', name: 'E-mini S&P 500' },
+  { symbol: 'NQ', market: 'futures', name: 'E-mini Nasdaq 100' },
+  { symbol: 'YM', market: 'futures', name: 'E-mini Dow Jones' },
+  { symbol: 'GC', market: 'futures', name: 'Gold Futures' },
+  { symbol: 'CL', market: 'futures', name: 'Crude Oil Futures' },
+  { symbol: 'SI', market: 'futures', name: 'Silver Futures' },
+  { symbol: 'RTY', market: 'futures', name: 'E-mini Russell 2000' },
+  { symbol: 'ZN', market: 'futures', name: '10-Year T-Note Futures' },
+  { symbol: 'EUR/USD', market: 'forex', name: 'Euro / US Dollar' },
+  { symbol: 'GBP/USD', market: 'forex', name: 'British Pound / US Dollar' },
+  { symbol: 'USD/JPY', market: 'forex', name: 'US Dollar / Japanese Yen' },
+  { symbol: 'AUD/USD', market: 'forex', name: 'Australian Dollar / US Dollar' },
+  { symbol: 'EUR/GBP', market: 'forex', name: 'Euro / British Pound' },
+  { symbol: 'GBP/JPY', market: 'forex', name: 'British Pound / Japanese Yen' },
+  { symbol: 'USD/CAD', market: 'forex', name: 'US Dollar / Canadian Dollar' },
+  { symbol: 'EUR/JPY', market: 'forex', name: 'Euro / Japanese Yen' },
+];
+
+function saveAssetSnapshotToDisk(assetMap: Record<string, boolean>): void {
+  try {
+    fs.writeFileSync(ASSET_SNAPSHOT_PATH, JSON.stringify(assetMap, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save asset settings snapshot to disk:', err);
+  }
+}
+
+function loadAssetSnapshotFromDisk(): Record<string, boolean> {
+  try {
+    if (fs.existsSync(ASSET_SNAPSHOT_PATH)) {
+      const data = fs.readFileSync(ASSET_SNAPSHOT_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Failed to load asset settings snapshot from disk:', err);
+  }
+  return {};
+}
+
+export async function ensureAssetSettingsSeeded(): Promise<void> {
+  try {
+    await queryDb(`CREATE TABLE IF NOT EXISTS asset_settings (
+      symbol TEXT PRIMARY KEY,
+      market TEXT NOT NULL,
+      name TEXT NOT NULL,
+      display_enabled INTEGER NOT NULL DEFAULT 1,
+      tracking_enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    const snapshot = loadAssetSnapshotFromDisk();
+
+    for (const a of DEFAULT_ASSETS) {
+      const isDisplay = a.symbol in snapshot ? (snapshot[a.symbol] ? 1 : 0) : 1;
+      await queryDb(
+        `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (symbol) DO NOTHING`,
+        [a.symbol, a.market, a.name, isDisplay]
+      );
+    }
+
+    // Apply snapshot state to any existing records if present
+    if (Object.keys(snapshot).length > 0) {
+      for (const [sym, disp] of Object.entries(snapshot)) {
+        await queryDb(`UPDATE asset_settings SET display_enabled = ? WHERE symbol = ?`, [disp ? 1 : 0, sym]);
+      }
+    }
+  } catch (err) {
+    console.error('Error seeding asset_settings table:', err);
+  }
+}
+
+export async function getAssetSettings(): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  try {
+    const rows = await queryDb<{
+      symbol: string;
+      market: string;
+      name: string;
+      display_enabled: number;
+      tracking_enabled: number;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `SELECT symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at
+       FROM asset_settings ORDER BY market ASC, symbol ASC`
+    );
+    return rows.map(r => ({
+      symbol: r.symbol,
+      market: r.market,
+      name: r.name,
+      display_enabled: r.display_enabled === 1 || Boolean(r.display_enabled),
+      tracking_enabled: r.tracking_enabled === 1 || Boolean(r.tracking_enabled),
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+  } catch (err) {
+    console.error('Error fetching asset_settings:', err);
+    return DEFAULT_ASSETS.map(a => ({
+      symbol: a.symbol,
+      market: a.market,
+      name: a.name,
+      display_enabled: true,
+      tracking_enabled: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+  }
+}
+
+export async function getDisabledDisplayAssets(): Promise<string[]> {
+  try {
+    await ensureAssetSettingsSeeded();
+    const rows = await queryDb<{ symbol: string }>(
+      `SELECT symbol FROM asset_settings WHERE display_enabled = 0 OR display_enabled = false`
+    );
+    return rows.map(r => r.symbol);
+  } catch {
+    return [];
+  }
+}
+
+export async function setAssetDisplay(symbol: string, displayEnabled: boolean): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const val = displayEnabled ? 1 : 0;
+  const now = new Date().toISOString();
+  await queryDb(
+    `UPDATE asset_settings SET display_enabled = ?, updated_at = ? WHERE symbol = ?`,
+    [val, now, symbol]
+  );
+  const all = await getAssetSettings();
+  const map: Record<string, boolean> = {};
+  for (const a of all) map[a.symbol] = a.display_enabled;
+  saveAssetSnapshotToDisk(map);
+  return all;
+}
+
+export async function bulkSetAssetDisplay(
+  filter: { market?: string; symbols?: string[] },
+  displayEnabled: boolean
+): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const val = displayEnabled ? 1 : 0;
+  const now = new Date().toISOString();
+
+  if (filter.symbols && filter.symbols.length > 0) {
+    const placeholders = filter.symbols.map(() => '?').join(',');
+    await queryDb(
+      `UPDATE asset_settings SET display_enabled = ?, updated_at = ? WHERE symbol IN (${placeholders})`,
+      [val, now, ...filter.symbols]
+    );
+  } else if (filter.market) {
+    await queryDb(
+      `UPDATE asset_settings SET display_enabled = ?, updated_at = ? WHERE LOWER(market) = LOWER(?)`,
+      [val, now, filter.market.trim()]
+    );
+  } else {
+    await queryDb(
+      `UPDATE asset_settings SET display_enabled = ?, updated_at = ?`,
+      [val, now]
+    );
+  }
+
+  const all = await getAssetSettings();
+  const map: Record<string, boolean> = {};
+  for (const a of all) map[a.symbol] = a.display_enabled;
+  saveAssetSnapshotToDisk(map);
+  return all;
+}
+
+export async function registerCustomAsset(symbol: string, market: string, name: string): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const cleanSym = symbol.trim().toUpperCase();
+  const cleanMarket = market.trim().toLowerCase();
+  const cleanName = (name || cleanSym).trim();
+  const now = new Date().toISOString();
+
+  await queryDb(
+    `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, 1, 1, ?, ?)
+     ON CONFLICT (symbol) DO UPDATE SET name = ?, market = ?, updated_at = ?`,
+    [cleanSym, cleanMarket, cleanName, now, now, cleanName, cleanMarket, now]
+  );
+
+  return getAssetSettings();
+}
+

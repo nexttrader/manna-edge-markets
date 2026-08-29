@@ -19,9 +19,10 @@ import { EdgeSetup, CandidateSetup, Candle, KillzoneInfo } from '../discovery/ty
 async function runAllTests() {
     console.log('🧪 Starting Killzone Discovery Engine Test Suite...\n');
 
-    // Remove old test db if exists
+    // Remove old test db & snapshots if exists
     const testDbPath = path.resolve(__dirname, '../../../killzone.db');
-    for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+    const snapshotPath = path.resolve(__dirname, '../../../asset_settings_snapshot.json');
+    for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`, snapshotPath]) {
         if (fs.existsSync(f)) {
             try { fs.unlinkSync(f); } catch (e) {}
         }
@@ -405,9 +406,43 @@ async function runAllTests() {
     await queries.setNotificationSetting('futures_signals', true);
     await queries.bulkSetNotificationSettings({ category: 'manage' }, true);
     await queries.deleteRegisteredMarket('crypto');
-    console.log('✅ TEST 16: Multi-Market Category Notification Toggles, Dynamic Registration & Snapshot Persistence');
+    // 17. Asset Display Visibility, Continuous Background Tracking, and Super Admin Dual-View Scope
+    const assetSettings = await queries.getAssetSettings();
+    assert.ok(assetSettings.length >= 16, `Expected at least 16 seeded assets, got ${assetSettings.length}`);
 
-    console.log('\n🎉 ALL 16 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    const esAsset = assetSettings.find(a => a.symbol === 'ES');
+    assert.ok(esAsset, 'ES asset must exist');
+    assert.strictEqual(esAsset.display_enabled, true, 'Default display should be true');
+    assert.strictEqual(esAsset.tracking_enabled, true, 'Default tracking should be true');
+
+    // Super Admin toggles individual asset display to FALSE (Stealth Mode)
+    await queries.setAssetDisplay('ES', false);
+    const disabledAfterToggle = await queries.getDisabledDisplayAssets();
+    assert.ok(disabledAfterToggle.includes('ES'), 'Disabled display assets must include ES');
+
+    // Verify background tracking continues uninterrupted
+    const stealthSetupId = `test_stealth_${Date.now()}`;
+    await queryDb(
+      `INSERT INTO edge_setups (id, instrument, market, created_at, killzone_origin, bias, entry_zone_low, entry_zone_high, entry_zone_mid, entry_price_recorded, stop, tp1, signal_state, conviction_score, strategy_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [stealthSetupId, 'ES', 'futures', new Date().toISOString(), 'kz_test', 'bullish', 4995.0, 5005.0, 5000.0, 5000.0, 4980.0, 5040.0, 'awaiting_entry', 88, 'sentinel_v2']
+    );
+    const savedStealth = await queries.getSetupById(stealthSetupId);
+    assert.ok(savedStealth, 'Setup must be recorded and tracked even when display is turned off');
+
+    // Test Bulk Toggle for Forex
+    await queries.bulkSetAssetDisplay({ market: 'forex' }, false);
+    const forexDisabled = await queries.getDisabledDisplayAssets();
+    assert.ok(forexDisabled.includes('EUR/USD') && forexDisabled.includes('GBP/USD'), 'All forex assets should be disabled after bulk toggle');
+
+    // Re-enable Forex and ES for clean state
+    await queries.bulkSetAssetDisplay({ market: 'forex' }, true);
+    await queries.setAssetDisplay('ES', true);
+    const cleanedDisabled = await queries.getDisabledDisplayAssets();
+    assert.strictEqual(cleanedDisabled.includes('ES'), false, 'ES should be re-enabled');
+    console.log('✅ TEST 17: Individual Asset Display Toggles, Continuous Background Tracking & Bulk Governance');
+
+    console.log('\n🎉 ALL 17 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

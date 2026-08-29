@@ -69,12 +69,24 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
     const resolvedIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
 
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedIds.has(String(s.id)));
+    const disabledAssets = await queries.getDisabledDisplayAssets();
 
+    const assetVisibility = (req.query.asset_visibility || req.query.asset_filter || 'all').toString();
 
+    if (role === 'super_admin') {
+      rawSetups = rawSetups.filter(s => !resolvedIds.has(String(s.id)));
+      if (assetVisibility === 'displayed_only') {
+        rawSetups = rawSetups.filter(s => !disabledAssets.includes(s.instrument));
+      } else if (assetVisibility === 'hidden_only') {
+        rawSetups = rawSetups.filter(s => disabledAssets.includes(s.instrument));
+      }
+    } else {
+      rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+    }
 
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
+        const isAssetDisplayEnabled = !disabledAssets.includes(setup.instrument);
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
@@ -136,7 +148,8 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,
           distance_to_entry_r: distanceToEntryR,
-          is_breakeven: isBreakeven ? 1 : 0
+          is_breakeven: isBreakeven ? 1 : 0,
+          asset_display_enabled: isAssetDisplayEnabled
         };
       })
     );
@@ -227,7 +240,13 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
 
     let rawSetups = await queries.getSetupsByState('runner');
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    const disabledAssets = await queries.getDisabledDisplayAssets();
+
+    if (role !== 'super_admin') {
+      rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+    } else {
+      rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    }
 
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
@@ -253,7 +272,8 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
           is_ibkr_fresh: isIbkrFresh,
           unrealized_pl: unrealizedPL,
           unrealizedR: unrealizedR,
-          is_breakeven: 1
+          is_breakeven: 1,
+          asset_display_enabled: !disabledAssets.includes(setup.instrument)
         };
       })
     );
@@ -282,7 +302,12 @@ router.get('/accelerate/past-setups', async (req: Request, res: Response) => {
     }
     
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    const disabledAssets = await queries.getDisabledDisplayAssets();
+    if (role !== 'super_admin') {
+      setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+    } else {
+      setups = setups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    }
     
     res.json({ setups, count: setups.length });
   } catch (error) {
@@ -336,7 +361,12 @@ router.get('/accelerate/decision-matrix', async (req: Request, res: Response) =>
     }
 
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    const disabledAssets = await queries.getDisabledDisplayAssets();
+    if (role !== 'super_admin') {
+      rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+    } else {
+      rawSetups = rawSetups.filter(s => !hiddenIds.includes(s.strategy_id || 'sentinel_v2'));
+    }
 
     const priceMap: Record<string, number> = {};
     const enrichedSetups = await Promise.all(

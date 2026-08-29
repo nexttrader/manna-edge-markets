@@ -1,7 +1,7 @@
 import { publishEvents } from '../publish-gate/publish-gate';
 import { EdgeSetup } from '../discovery/types';
 import { createLogger } from '../telemetry/logger';
-import { getNotificationSettingsMap } from '../db/queries';
+import { getNotificationSettingsMap, getDisabledDisplayAssets } from '../db/queries';
 
 const logger = createLogger('TelegramBotService');
 
@@ -123,6 +123,15 @@ class TelegramBotService {
   ): Promise<void> {
     try {
       const map = await getNotificationSettingsMap();
+
+      // Check if asset display is turned off for clients & admins
+      if (setup?.instrument) {
+        const disabledAssets = await getDisabledDisplayAssets();
+        if (disabledAssets.includes(setup.instrument)) {
+          logger.debug({ key, instrument: setup.instrument }, 'Telegram notification suppressed: Asset display is turned OFF for public/clients');
+          return;
+        }
+      }
 
       // 1. Global Master category check (e.g. notify_all_signal, notify_all_manage, notify_all_status)
       if (category) {

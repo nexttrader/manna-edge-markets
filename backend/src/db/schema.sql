@@ -405,3 +405,14 @@ CREATE TABLE IF NOT EXISTS client_signal_tags (
 
 CREATE INDEX IF NOT EXISTS idx_client_signal_tags_user ON client_signal_tags(user_id);
 CREATE INDEX IF NOT EXISTS idx_client_signal_tags_setup ON client_signal_tags(setup_id);
+
+CREATE TABLE IF NOT EXISTS asset_settings (
+    symbol TEXT PRIMARY KEY,
+    market TEXT NOT NULL,
+    name TEXT NOT NULL,
+    display_enabled INTEGER NOT NULL DEFAULT 1,
+    tracking_enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+

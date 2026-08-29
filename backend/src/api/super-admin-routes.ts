@@ -639,6 +639,175 @@ router.delete('/strategies/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ── 4B. ASSET DISPLAY & TRACKING GOVERNANCE ENDPOINTS ─────────────────────────
+
+router.get('/assets', async (_req: Request, res: Response) => {
+  try {
+    await outcomeDetector.evaluateAllSetups(true);
+    const assetSettings = await queries.getAssetSettings();
+    const futuresSetups = await queryDb<any>(`SELECT * FROM edge_setups`);
+    const forexSetups = await queryDb<any>(`SELECT * FROM forex_edge_setups`);
+    const allSetups = [...futuresSetups, ...forexSetups];
+    const outcomes = await queryDb<any>(`SELECT * FROM outcomes`);
+    const setupMap = new Map<string, any>();
+    allSetups.forEach(s => setupMap.set(s.id, s));
+
+    const assetStatsMap: Record<string, {
+      totalSetups: number;
+      activeSetups: number;
+      resolvedSetups: number;
+      invalidatedSetups: number;
+      totalTrades: number;
+      wins: number;
+      losses: number;
+      breakevens: number;
+      totalRealizedR: number;
+      winRate: number;
+      lastSignalAt: string | null;
+    }> = {};
+
+    for (const a of assetSettings) {
+      assetStatsMap[a.symbol] = {
+        totalSetups: 0,
+        activeSetups: 0,
+        resolvedSetups: 0,
+        invalidatedSetups: 0,
+        totalTrades: 0,
+        wins: 0,
+        losses: 0,
+        breakevens: 0,
+        totalRealizedR: 0,
+        winRate: 0,
+        lastSignalAt: null
+      };
+    }
+
+    for (const s of allSetups) {
+      const sym = s.instrument;
+      if (!assetStatsMap[sym]) {
+        assetStatsMap[sym] = {
+          totalSetups: 0, activeSetups: 0, resolvedSetups: 0, invalidatedSetups: 0,
+          totalTrades: 0, wins: 0, losses: 0, breakevens: 0, totalRealizedR: 0, winRate: 0, lastSignalAt: null
+        };
+      }
+      const st = assetStatsMap[sym];
+      st.totalSetups++;
+      if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) st.activeSetups++;
+      else if (s.signal_state === 'resolved') st.resolvedSetups++;
+      else if (s.signal_state === 'invalidated') st.invalidatedSetups++;
+
+      if (s.created_at) {
+        if (!st.lastSignalAt || new Date(s.created_at).getTime() > new Date(st.lastSignalAt).getTime()) {
+          st.lastSignalAt = s.created_at;
+        }
+      }
+    }
+
+    for (const o of outcomes) {
+      const parent = setupMap.get(o.setup_id);
+      const sym = o.instrument || parent?.instrument;
+      if (!sym || !assetStatsMap[sym]) continue;
+      const st = assetStatsMap[sym];
+      st.totalTrades++;
+      const typeStr = String(o.outcome_type || '').toLowerCase();
+      let rVal = 0;
+      if (typeStr.includes('tp2')) {
+        st.wins++;
+        rVal = parent?.r_multiple_2 || 3.0;
+      } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
+        st.wins++;
+        rVal = parent?.r_multiple_1 || 2.0;
+      } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
+        st.losses++;
+        rVal = -1.0;
+      } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
+        st.breakevens++;
+        rVal = 0.0;
+      } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
+        rVal = Math.max(-1.0, o.realized_pl);
+        if (rVal > 0) st.wins++;
+        else if (rVal < 0) st.losses++;
+        else st.breakevens++;
+      }
+      st.totalRealizedR += rVal;
+    }
+
+    const assets = assetSettings.map(a => {
+      const st = assetStatsMap[a.symbol] || {
+        totalSetups: 0, activeSetups: 0, resolvedSetups: 0, invalidatedSetups: 0,
+        totalTrades: 0, wins: 0, losses: 0, breakevens: 0, totalRealizedR: 0, winRate: 0, lastSignalAt: null
+      };
+      const totalResolved = st.wins + st.losses;
+      const winRate = totalResolved > 0 ? Number(((st.wins / totalResolved) * 100).toFixed(1)) : 0;
+      return {
+        ...a,
+        stats: {
+          ...st,
+          winRate,
+          totalRealizedR: Number(st.totalRealizedR.toFixed(2))
+        }
+      };
+    });
+
+    const displayedCount = assets.filter(a => a.display_enabled).length;
+    const hiddenCount = assets.filter(a => !a.display_enabled).length;
+
+    res.json({
+      success: true,
+      assets,
+      summary: {
+        totalAssets: assets.length,
+        displayedCount,
+        hiddenCount,
+        allTrackingActive: true
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch asset controls', details: err.message });
+  }
+});
+
+router.put('/assets/:symbol/toggle-display', async (req: Request, res: Response) => {
+  try {
+    const rawSym = req.params.symbol;
+    const symbol = decodeURIComponent(Array.isArray(rawSym) ? rawSym[0] : rawSym);
+    const { display_enabled } = req.body;
+    if (typeof display_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { display_enabled: boolean }' });
+    }
+    const updated = await queries.setAssetDisplay(symbol, display_enabled);
+    res.json({ success: true, symbol, display_enabled, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update asset display setting', details: err.message });
+  }
+});
+
+router.post('/assets/bulk-toggle', async (req: Request, res: Response) => {
+  try {
+    const { market, symbols, display_enabled } = req.body;
+    if (typeof display_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { display_enabled: boolean }' });
+    }
+    const updated = await queries.bulkSetAssetDisplay({ market, symbols }, display_enabled);
+    res.json({ success: true, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk update asset display settings', details: err.message });
+  }
+});
+
+router.post('/assets', async (req: Request, res: Response) => {
+  try {
+    const { symbol, market = 'futures', name } = req.body || {};
+    if (!symbol || typeof symbol !== 'string') {
+      return res.status(400).json({ error: 'Symbol is required' });
+    }
+    const updated = await queries.registerCustomAsset(symbol, market, name || symbol);
+    res.json({ success: true, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to register custom asset', details: err.message });
+  }
+});
+
 // 5. STRATEGY SUCCESS COMPARISON & LLM DATA EXPORTER ENDPOINTS
 
 async function calculateStrategyComparisonData(filters?: {
@@ -646,10 +815,13 @@ async function calculateStrategyComparisonData(filters?: {
   market?: string;
   session?: string;
   strategyId?: string;
+  assetVisibility?: string;
+  instrument?: string;
 }) {
   await outcomeDetector.evaluateAllSetups(true);
 
   const registeredStrategies = await queries.getStrategySettings('super_admin');
+  const disabledAssets = await queries.getDisabledDisplayAssets();
   const futuresSetups = await queryDb<any>(`SELECT * FROM edge_setups`);
   const forexSetups = await queryDb<any>(`SELECT * FROM forex_edge_setups`);
   const allSetups = [...futuresSetups, ...forexSetups];
@@ -662,8 +834,8 @@ async function calculateStrategyComparisonData(filters?: {
   else if (filters?.timeframe === '7d') minTimeMs = now - 7 * 24 * 60 * 60 * 1000;
   else if (filters?.timeframe === '30d') minTimeMs = now - 30 * 24 * 60 * 60 * 1000;
 
-  // Filter setups & outcomes
-  const filterSetups = (s: any) => {
+  // Base filter (time, market, session, strategy, instrument)
+  const baseFilter = (s: any) => {
     if (minTimeMs > 0 && new Date(s.created_at).getTime() < minTimeMs) return false;
     if (filters?.market && filters.market !== 'both' && s.market !== filters.market) return false;
     if (filters?.session && filters.session !== 'all') {
@@ -675,12 +847,72 @@ async function calculateStrategyComparisonData(filters?: {
       const sid = s.strategy_id || 'sentinel_v2';
       if (sid !== filters.strategyId) return false;
     }
+    if (filters?.instrument && filters.instrument !== 'all') {
+      if (s.instrument !== filters.instrument) return false;
+    }
+    return true;
+  };
+
+  // Scope filter (includes or excludes turned-off assets)
+  const filterSetups = (s: any) => {
+    if (!baseFilter(s)) return false;
+    if (filters?.assetVisibility === 'displayed_only' && disabledAssets.includes(s.instrument)) return false;
+    if (filters?.assetVisibility === 'hidden_only' && !disabledAssets.includes(s.instrument)) return false;
     return true;
   };
 
   const filteredSetups = allSetups.filter(filterSetups);
   const setupMap = new Map<string, any>();
   allSetups.forEach(s => setupMap.set(s.id, s));
+
+  // Compute comparative side-by-side totals (Displayed vs Hidden)
+  let displayedTrades = 0, displayedWins = 0, displayedR = 0;
+  let hiddenTrades = 0, hiddenWins = 0, hiddenR = 0;
+
+  for (const o of outcomes) {
+    if (minTimeMs > 0 && new Date(o.created_at).getTime() < minTimeMs) continue;
+    const parentSetup = setupMap.get(o.setup_id);
+    if (!parentSetup || !baseFilter(parentSetup)) continue;
+
+    const isDisplayed = !disabledAssets.includes(parentSetup.instrument);
+    const typeStr = String(o.outcome_type || '').toLowerCase();
+    let isWin = false;
+    let rVal = 0;
+    if (typeStr.includes('tp2')) { isWin = true; rVal = parentSetup?.r_multiple_2 || 3.0; }
+    else if (typeStr.includes('tp1') || typeStr.includes('tp')) { isWin = true; rVal = parentSetup?.r_multiple_1 || 2.0; }
+    else if (typeStr.includes('sl') || typeStr.includes('stop')) { rVal = -1.0; }
+    else if (typeStr.includes('be') || typeStr.includes('breakeven')) { rVal = 0.0; }
+    else if (o.realized_pl !== undefined && o.realized_pl !== null) {
+      rVal = Math.max(-1.0, o.realized_pl);
+      if (rVal > 0) isWin = true;
+    }
+
+    if (isDisplayed) {
+      displayedTrades++;
+      if (isWin) displayedWins++;
+      displayedR += rVal;
+    } else {
+      hiddenTrades++;
+      if (isWin) hiddenWins++;
+      hiddenR += rVal;
+    }
+  }
+
+  const displayedSummary = {
+    totalTrades: displayedTrades,
+    wins: displayedWins,
+    winRate: displayedTrades > 0 ? Number(((displayedWins / displayedTrades) * 100).toFixed(1)) : 0,
+    totalR: Number(displayedR.toFixed(2)),
+    expectancyR: displayedTrades > 0 ? Number((displayedR / displayedTrades).toFixed(2)) : 0
+  };
+
+  const hiddenSummary = {
+    totalTrades: hiddenTrades,
+    wins: hiddenWins,
+    winRate: hiddenTrades > 0 ? Number(((hiddenWins / hiddenTrades) * 100).toFixed(1)) : 0,
+    totalR: Number(hiddenR.toFixed(2)),
+    expectancyR: hiddenTrades > 0 ? Number((hiddenR / hiddenTrades).toFixed(2)) : 0
+  };
 
   const filteredOutcomes = outcomes.filter(o => {
     if (minTimeMs > 0 && new Date(o.created_at).getTime() < minTimeMs) return false;
@@ -966,7 +1198,19 @@ async function calculateStrategyComparisonData(filters?: {
       totalCombinedTrades,
       totalCombinedR: Number(totalCombinedR.toFixed(2)),
       bestWinRateStrategy: bestWinRateStrategy ? { id: bestWinRateStrategy.strategyId, name: bestWinRateStrategy.strategyName, winRate: bestWinRateStrategy.winRate } : null,
-      bestExpectancyStrategy: bestExpectancyStrategy ? { id: bestExpectancyStrategy.strategyId, name: bestExpectancyStrategy.strategyName, expectancyR: bestExpectancyStrategy.expectancyR } : null
+      bestExpectancyStrategy: bestExpectancyStrategy ? { id: bestExpectancyStrategy.strategyId, name: bestExpectancyStrategy.strategyName, expectancyR: bestExpectancyStrategy.expectancyR } : null,
+      assetScopeComparison: {
+        currentScope: filters?.assetVisibility || 'all',
+        displayedAssets: displayedSummary,
+        hiddenAssets: hiddenSummary,
+        allAssets: {
+          totalTrades: displayedTrades + hiddenTrades,
+          wins: displayedWins + hiddenWins,
+          winRate: (displayedTrades + hiddenTrades) > 0 ? Number((((displayedWins + hiddenWins) / (displayedTrades + hiddenTrades)) * 100).toFixed(1)) : 0,
+          totalR: Number((displayedR + hiddenR).toFixed(2)),
+          expectancyR: (displayedTrades + hiddenTrades) > 0 ? Number(((displayedR + hiddenR) / (displayedTrades + hiddenTrades)).toFixed(2)) : 0
+        }
+      }
     },
     strategies: strategyList,
     tradeLogs
@@ -979,8 +1223,10 @@ router.get('/strategy-analytics/comparison', async (req: Request, res: Response)
     const market = (req.query.market || 'both').toString();
     const session = (req.query.session || 'all').toString();
     const strategyId = (req.query.strategy_id || 'all').toString();
+    const assetVisibility = (req.query.asset_visibility || req.query.asset_scope || 'all').toString();
+    const instrument = (req.query.instrument || 'all').toString();
 
-    const data = await calculateStrategyComparisonData({ timeframe, market, session, strategyId });
+    const data = await calculateStrategyComparisonData({ timeframe, market, session, strategyId, assetVisibility, instrument });
     res.json({ success: true, ...data });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to compute strategy comparison data', details: err.message });
@@ -994,8 +1240,10 @@ router.get('/strategy-analytics/export', async (req: Request, res: Response) => 
     const market = (req.query.market || 'both').toString();
     const session = (req.query.session || 'all').toString();
     const strategyId = (req.query.strategy_id || 'all').toString();
+    const assetVisibility = (req.query.asset_visibility || req.query.asset_scope || 'all').toString();
+    const instrument = (req.query.instrument || 'all').toString();
 
-    const dataset = await calculateStrategyComparisonData({ timeframe, market, session, strategyId });
+    const dataset = await calculateStrategyComparisonData({ timeframe, market, session, strategyId, assetVisibility, instrument });
 
     if (format === 'json') {
       const exportJson = {

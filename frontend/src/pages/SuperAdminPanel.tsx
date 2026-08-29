@@ -6,6 +6,7 @@ import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 import { StrategyComparisonDashboard } from '../components/admin/StrategyComparisonDashboard';
+import { AssetControlHub } from '../components/admin/AssetControlHub';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout } = useAuth();
@@ -15,7 +16,7 @@ export const SuperAdminPanel: React.FC = () => {
     navigate('/admin');
   };
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'strategy_comparison' | 'admin_audit' | 'health' | 'sentinel' | 'client_accuracy' | 'notifications'>('sentinel');
+  const [activeTab, setActiveTab] = useState<'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'notifications'>('assets');
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
@@ -509,39 +510,41 @@ export const SuperAdminPanel: React.FC = () => {
             type="button"
             className="super-tab-btn"
             style={{
+              border: activeTab === 'assets' ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'assets' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+              color: activeTab === 'assets' ? '#a5b4fc' : '#ccc',
+              fontWeight: activeTab === 'assets' ? 800 : 600
+            }}
+            onClick={() => setActiveTab('assets')}
+          >
+            🎯 Asset &amp; Signal Visibility
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'strategy_comparison' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'strategy_comparison' ? 'rgba(255, 171, 0, 0.25)' : 'transparent',
+              color: activeTab === 'strategy_comparison' ? '#ffab00' : '#ccc',
+              fontWeight: activeTab === 'strategy_comparison' ? 800 : 600
+            }}
+            onClick={() => setActiveTab('strategy_comparison')}
+          >
+            ⚔️ Strategy Analytics &amp; Results
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
               border: activeTab === 'sentinel' ? '1px solid #ce93d8' : '1px solid rgba(255,255,255,0.1)',
               background: activeTab === 'sentinel' ? 'rgba(156, 39, 176, 0.2)' : 'transparent',
               color: activeTab === 'sentinel' ? '#ce93d8' : '#ccc'
             }}
             onClick={() => setActiveTab('sentinel')}
           >
-            🎯 Sentinel V2 Intelligence ({sentinelSetups.length})
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'marketing' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'marketing' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
-              color: activeTab === 'marketing' ? '#00e676' : '#ccc'
-            }}
-            onClick={() => setActiveTab('marketing')}
-          >
-            📈 Marketing &amp; Conversion Funnel
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'heatmap' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'heatmap' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
-              color: activeTab === 'heatmap' ? '#00e5ff' : '#ccc'
-            }}
-            onClick={() => setActiveTab('heatmap')}
-          >
-            📊 Website Usage &amp; Feature Heatmap
+            🤖 Sentinel Engine Tuning ({sentinelSetups.length})
           </button>
 
           <button
@@ -554,7 +557,20 @@ export const SuperAdminPanel: React.FC = () => {
             }}
             onClick={() => setActiveTab('roster')}
           >
-            👥 User Governance Roster ({roster.length})
+            👥 User &amp; Admin Roster ({roster.length})
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'notifications' ? '1px solid #29b6f6' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'notifications' ? 'rgba(41, 182, 246, 0.2)' : 'transparent',
+              color: activeTab === 'notifications' ? '#29b6f6' : '#ccc'
+            }}
+            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); }}
+          >
+            📡 Notification Governance
           </button>
 
           <button
@@ -574,13 +590,26 @@ export const SuperAdminPanel: React.FC = () => {
             type="button"
             className="super-tab-btn"
             style={{
-              border: activeTab === 'strategy_comparison' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'strategy_comparison' ? 'rgba(255, 171, 0, 0.25)' : 'transparent',
-              color: activeTab === 'strategy_comparison' ? '#ffab00' : '#ccc'
+              border: activeTab === 'marketing' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'marketing' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
+              color: activeTab === 'marketing' ? '#00e676' : '#ccc'
             }}
-            onClick={() => setActiveTab('strategy_comparison')}
+            onClick={() => setActiveTab('marketing')}
           >
-            ⚔️ Strategy Analytics &amp; LLM Export
+            📈 Marketing &amp; Conversion
+          </button>
+
+          <button
+            type="button"
+            className="super-tab-btn"
+            style={{
+              border: activeTab === 'heatmap' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
+              background: activeTab === 'heatmap' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+              color: activeTab === 'heatmap' ? '#00e5ff' : '#ccc'
+            }}
+            onClick={() => setActiveTab('heatmap')}
+          >
+            📊 Usage Heatmap
           </button>
 
           <button
@@ -606,22 +635,16 @@ export const SuperAdminPanel: React.FC = () => {
             }}
             onClick={() => { setActiveTab('client_accuracy'); fetchClientAccuracy(); }}
           >
-            🏷️ Client Accuracy Intelligence
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'notifications' ? '1px solid #29b6f6' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'notifications' ? 'rgba(41, 182, 246, 0.2)' : 'transparent',
-              color: activeTab === 'notifications' ? '#29b6f6' : '#ccc'
-            }}
-            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); }}
-          >
-            📡 Telegram Feature Toggles
+            🏷️ Client Accuracy
           </button>
         </div>
+
+        {/* TAB: Asset & Signal Visibility Hub */}
+        {activeTab === 'assets' && (
+          <div style={{ marginBottom: '24px' }}>
+            <AssetControlHub />
+          </div>
+        )}
 
         {/* TAB: Telegram Feature Toggles */}
         {activeTab === 'notifications' && (

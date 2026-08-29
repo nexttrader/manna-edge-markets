@@ -543,6 +543,16 @@ export async function initializeDatabase(): Promise<void> {
                     ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'action';
                     ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS market TEXT DEFAULT 'all';
 
+                    CREATE TABLE IF NOT EXISTS asset_settings (
+                        symbol TEXT PRIMARY KEY,
+                        market TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        display_enabled INTEGER NOT NULL DEFAULT 1,
+                        tracking_enabled INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna SnD';
@@ -715,6 +725,45 @@ export async function initializeDatabase(): Promise<void> {
       }
     } catch {}
 
+    // ── Asset Display & Tracking Settings ───────────────────────────────────────
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS asset_settings (
+        symbol TEXT PRIMARY KEY,
+        market TEXT NOT NULL,
+        name TEXT NOT NULL,
+        display_enabled INTEGER NOT NULL DEFAULT 1,
+        tracking_enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      const defaultAssets = [
+        { symbol: 'ES', market: 'futures', name: 'E-mini S&P 500' },
+        { symbol: 'NQ', market: 'futures', name: 'E-mini Nasdaq 100' },
+        { symbol: 'YM', market: 'futures', name: 'E-mini Dow Jones' },
+        { symbol: 'GC', market: 'futures', name: 'Gold Futures' },
+        { symbol: 'CL', market: 'futures', name: 'Crude Oil Futures' },
+        { symbol: 'SI', market: 'futures', name: 'Silver Futures' },
+        { symbol: 'RTY', market: 'futures', name: 'E-mini Russell 2000' },
+        { symbol: 'ZN', market: 'futures', name: '10-Year T-Note Futures' },
+        { symbol: 'EUR/USD', market: 'forex', name: 'Euro / US Dollar' },
+        { symbol: 'GBP/USD', market: 'forex', name: 'British Pound / US Dollar' },
+        { symbol: 'USD/JPY', market: 'forex', name: 'US Dollar / Japanese Yen' },
+        { symbol: 'AUD/USD', market: 'forex', name: 'Australian Dollar / US Dollar' },
+        { symbol: 'EUR/GBP', market: 'forex', name: 'Euro / British Pound' },
+        { symbol: 'GBP/JPY', market: 'forex', name: 'British Pound / Japanese Yen' },
+        { symbol: 'USD/CAD', market: 'forex', name: 'US Dollar / Canadian Dollar' },
+        { symbol: 'EUR/JPY', market: 'forex', name: 'Euro / Japanese Yen' },
+      ];
+
+      for (const a of defaultAssets) {
+        db.exec(`INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
+          VALUES ('${a.symbol}', '${a.market}', '${a.name.replace(/'/g, "''")}', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (symbol) DO NOTHING`);
+      }
+    } catch {}
+
     console.log('Database initialized successfully.');
     await ensureActiveSignalsRestored();
 }
+
