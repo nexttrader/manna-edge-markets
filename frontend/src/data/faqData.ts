@@ -115,47 +115,47 @@ export const FAQ_DATA: FaqItem[] = [
   },
   {
     id: 'sentinel-1',
-    category: '🟣 Sentinel V2 Guide',
-    question: 'What is the Sentinel V2 strategy?',
-    answer: 'Sentinel V2 is an Elite Frameworks Fractal Swing Points 4-stage system. It tracks HTF expansions and looks for multi-timeframe swing confirmations down to the 1M chart for extreme precision.',
+    category: '🟣 Manna Elite v1.2 Guide',
+    question: 'What is the Manna Elite v1.2 strategy?',
+    answer: 'Manna Elite v1.2 (Trade Sentinel Elite Framework) is an institutional 4-stage state machine system. It identifies 1H institutional expansion, locates Points of Interest (FVG, Order Candle, Reversal, Consolidation), confirms intermediate 15M swing structure, and executes on closed 1-minute order-flow shifts with extreme precision.',
     roleRequired: 'all',
     strategyRequired: 'all',
     tierRequired: 'futures_forex',
-    tags: ['sentinel', 'sentinel_v2', 'fractal'],
-    updatedAt: '2026-08-03'
+    tags: ['manna_elite', 'manna_elite_v1_2', 'sentinel_v2', 'fractal'],
+    updatedAt: '2026-08-29'
   },
   {
     id: 'sentinel-2',
-    category: '🟣 Sentinel V2 Guide',
-    question: 'What do the POI types mean (FVG, OC, Reversal, Consolidation)?',
-    answer: '• FVG (Fair Value Gap): A price gap where the market moved too fast.\n• OC (Order Block / Open Close): A price zone where big money placed trades.\n• Reversal: A shift in market direction after a liquidity grab.\n• Consolidation: A tight price range before a big breakout.',
+    category: '🟣 Manna Elite v1.2 Guide',
+    question: 'What do the POI types mean in Manna Elite v1.2 (FVG, OC, Reversal, Consolidation)?',
+    answer: '• FVG (Fair Value Gap): An unmitigated institutional price imbalance.\n• OC (Order Candle / Block): The institutional baseline formed immediately before expansion.\n• REV (Liquidity Reversal Sweep): A confirmed liquidity hunt and reclamation.\n• CON (Consolidation Breakout): The high-probability re-entry base of a breakout channel.',
     roleRequired: 'all',
     strategyRequired: 'all',
     tierRequired: 'futures_forex',
     tags: ['poi', 'fvg', 'oc', 'reversal'],
-    updatedAt: '2026-08-03'
+    updatedAt: '2026-08-29'
   },
   {
     id: 'sentinel-3',
-    category: '🟣 Sentinel V2 Guide',
-    question: 'What is Cycle Priority?',
-    answer: 'Cycle Priority highlights an elite candle 3-4 re-entry window, signaling a high-probability continuation based on precise time and price fractal alignment.',
+    category: '🟣 Manna Elite v1.2 Guide',
+    question: 'What is Cycle Priority in Manna Elite v1.2?',
+    answer: 'Cycle Priority highlights an elite candle 3-4 re-entry window after 1H expansion, signaling a high-probability continuation based on deterministic time and price alignment.',
     roleRequired: 'all',
     strategyRequired: 'all',
     tierRequired: 'futures_forex',
-    tags: ['cycle_priority', 'sentinel', 'entry'],
-    updatedAt: '2026-08-03'
+    tags: ['cycle_priority', 'entry', 'manna_elite'],
+    updatedAt: '2026-08-29'
   },
   {
     id: 'sentinel-4',
-    category: '🟣 Sentinel V2 Guide',
-    question: 'How does Sentinel V2 differ from Manna Basic and Manna SnD?',
-    answer: 'While Manna Basic and SnD rely heavily on 15M and 1H zones, Sentinel V2 acts as a state machine tracking price across 4 distinct phases (HTF Expansion -> POI Detected -> POI Mitigated -> MTF/LTF Confirmed), enabling micro-entries that aren\'t apparent on single timeframes.',
+    category: '🟣 Manna Elite v1.2 Guide',
+    question: 'How does Manna Elite v1.2 differ from Manna Basic and Manna SnD?',
+    answer: 'While Manna Basic and SnD rely heavily on static 15M and 1H zones, Manna Elite v1.2 acts as a strict multi-timeframe state machine tracking price across 4 distinct phases (HTF Expansion -> POI Discovery -> 15M Swing Confirmation -> Closed 1M BOS Entry Trigger), offering precise risk anchoring and exact +2.0R broker targets.',
     roleRequired: 'all',
     strategyRequired: 'all',
     tierRequired: 'futures_forex',
-    tags: ['sentinel', 'manna_basic', 'manna_snd', 'comparison'],
-    updatedAt: '2026-08-03'
+    tags: ['manna_elite', 'manna_basic', 'manna_snd', 'comparison'],
+    updatedAt: '2026-08-29'
   },
 
   // --- ADMIN-ONLY FAQS ---

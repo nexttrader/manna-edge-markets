@@ -194,7 +194,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   );
 
   const strategyId = setup.strategy_id || 'sentinel_v2';
-  const displayStrategyName = strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1';
+  const displayStrategyName = strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1.2';
     
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }

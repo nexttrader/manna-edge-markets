@@ -359,7 +359,7 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
 
     const defaults = [
       { id: 'manna_snd', name: 'Manna SnD' },
-      { id: 'sentinel_v2', name: 'Manna Elite V1' }
+      { id: 'sentinel_v2', name: 'Manna Elite v1.2' }
     ];
 
     for (const d of defaults) {
@@ -371,7 +371,7 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       await queryDb(
         `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
         [d.id, d.name, enabledVal, adminVal, traderVal]
       );
     }
@@ -389,7 +389,7 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         
         const mapped = rows.map(r => ({
             id: r.id,
-            name: r.name,
+            name: r.id === 'sentinel_v2' ? 'Manna Elite v1.2' : r.name,
             enabled: r.enabled === 1 || r.enabled === true || r.enabled === '1' || r.enabled === 't',
             visibleToAdmins: r.visible_to_admins === undefined || r.visible_to_admins === null ? true : (r.visible_to_admins === 1 || r.visible_to_admins === true || r.visible_to_admins === '1' || r.visible_to_admins === 't'),
             visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't')
@@ -404,7 +404,7 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
     } catch {
         return [
             { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true },
-            { id: 'sentinel_v2', name: 'Manna Elite V1', enabled: true, visibleToAdmins: true, visibleToTraders: true }
+            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true }
         ];
     }
 }
@@ -426,8 +426,8 @@ export async function updateStrategyEnabled(id: string, enabled: boolean): Promi
     await queryDb(
       `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
        VALUES (?, ?, ?, 1, 1, ?)
-       ON CONFLICT (id) DO UPDATE SET enabled = ?, updated_at = ?`,
-      [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now, val, now]
+       ON CONFLICT (id) DO UPDATE SET enabled = ?, name = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, now, val, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now]
     );
     syncStrategySnapshot();
 }
@@ -439,8 +439,8 @@ export async function updateStrategyVisibility(id: string, visibleToAdmins: bool
     await queryDb(
       `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
        VALUES (?, ?, 1, ?, 1, ?)
-       ON CONFLICT (id) DO UPDATE SET visible_to_admins = ?, updated_at = ?`,
-      [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now, val, now]
+       ON CONFLICT (id) DO UPDATE SET visible_to_admins = ?, name = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, now, val, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now]
     );
     syncStrategySnapshot();
 }
@@ -558,7 +558,7 @@ export async function updateStrategyTuning(
     if (!rows || rows.length === 0) {
         await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, super_admin_max_signals, super_admin_min_conviction, public_max_signals, public_min_conviction, updated_at) VALUES (?, ?, 1, 1, 1, ?, ?, ?, ?, CURRENT_TIMESTAMP)`, [
             strategyId,
-            strategyId === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD',
+            strategyId === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD',
             superAdminMaxSignals,
             superAdminMinConviction,
             publicMaxSignals,
@@ -580,9 +580,9 @@ export async function updateStrategyTraderVisibility(id: string, visibleToTrader
     const val = visibleToTraders ? 1 : 0;
     const now = new Date().toISOString();
     try {
-        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES (?, ?, 1, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET visible_to_traders = EXCLUDED.visible_to_traders, updated_at = EXCLUDED.updated_at`, [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now]);
+        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES (?, ?, 1, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET visible_to_traders = EXCLUDED.visible_to_traders, name = EXCLUDED.name, updated_at = EXCLUDED.updated_at`, [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, now]);
     } catch {
-        await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, updated_at = ? WHERE id = ?`, [val, now, id]);
+        await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, name = ?, updated_at = ? WHERE id = ?`, [val, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now, id]);
     }
     syncStrategySnapshot();
 }

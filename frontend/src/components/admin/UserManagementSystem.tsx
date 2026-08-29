@@ -1286,8 +1286,8 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                   onChange={e => setCtStrategyAccess(e.target.value as any)}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
                 >
-                  <option value="all">All Strategies (Sentinel V2 & Manna SnD)</option>
-                  <option value="sentinel_v2">Sentinel V2 / Manna Elite V1 Only</option>
+                  <option value="all">All Strategies (Manna Elite v1.2 & Manna SnD)</option>
+                  <option value="sentinel_v2">Manna Elite v1.2 Only</option>
                   <option value="manna_snd">Manna SnD Only</option>
                 </select>
               </div>

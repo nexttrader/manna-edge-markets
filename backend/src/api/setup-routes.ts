@@ -29,7 +29,7 @@ async function getIbkrPriceInfo(instrument: string): Promise<{ ibkrPrice: number
 
 function isStrategyVisible(rawStrategyId: string | undefined, hiddenIds: string[]): boolean {
   const sId = (rawStrategyId || 'sentinel_v2').trim().toLowerCase();
-  const normalized = (sId === 'sentinel_v2' || sId === 'sentinel' || sId === 'manna_basic' || sId === 'sentinel_v1')
+  const normalized = (sId === 'sentinel_v2' || sId === 'sentinel' || sId === 'manna_basic' || sId === 'sentinel_v1' || sId === 'manna_elite' || sId === 'manna_elite_v1_2')
     ? 'sentinel_v2'
     : sId;
   return !hiddenIds.includes(normalized) && !hiddenIds.includes(sId);
@@ -192,7 +192,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
 
       let opposingStrategyWarning: string | null = null;
       if (oppSetup) {
-        const oppStratName = oppSetup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1';
+        const oppStratName = oppSetup.strategy_id === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1.2';
         opposingStrategyWarning = `⚠️ STRATEGY DIVERGENCE: ${oppStratName} currently has an opposing ${oppSetup.bias.toUpperCase()} setup on ${oppSetup.instrument}.`;
       }
 

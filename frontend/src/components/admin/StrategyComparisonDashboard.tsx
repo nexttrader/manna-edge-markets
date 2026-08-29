@@ -400,7 +400,7 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
             <span className="scd-highlight-value" style={{ color: '#ce93d8' }}>
               {data.summary.totalStrategiesTracked}
             </span>
-            <span className="scd-highlight-sub">Sentinel V2 &amp; Custom Engines</span>
+            <span className="scd-highlight-sub">Manna Elite v1.2 &amp; Custom Engines</span>
           </div>
         </div>
       )}

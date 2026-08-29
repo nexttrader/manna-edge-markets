@@ -120,7 +120,14 @@ export const Dashboard: React.FC = () => {
     if (orderTypeFilter !== 'all' && orderTypeStr !== orderTypeFilter) return false;
 
     // 5. Strategy Tier Filter
-    if (strategyFilter !== 'all' && stratId !== strategyFilter) return false;
+    if (strategyFilter !== 'all') {
+      if (strategyFilter === 'sentinel_v2') {
+        const isEliteSetup = stratId === 'sentinel_v2' || stratId === 'manna_elite' || stratId === 'manna_elite_v1_2' || stratId === 'manna_basic';
+        if (!isEliteSetup) return false;
+      } else if (strategyFilter === 'manna_snd') {
+        if (stratId !== 'manna_snd') return false;
+      }
+    }
 
     return true;
   });
@@ -247,6 +254,15 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="filter-group">
+              <label>Strategy:</label>
+              <select value={strategyFilter} onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}>
+                <option value="all">⚡ All Strategies</option>
+                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
+                <option value="manna_snd">🟡 Manna SnD</option>
+              </select>
+            </div>
+
+            <div className="filter-group">
               <label>Sort By:</label>
               <select value={sortBy} onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}>
                 <option value="conviction">🔥 Highest Conviction</option>
@@ -277,18 +293,9 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Advanced Filters: Strategy Tier + Order Type (hidden by default) */}
+          {/* Advanced Filters: Order Type (hidden by default) */}
           {showAdvancedFilters && (
             <div className="filter-controls-row filter-advanced-row">
-              <div className="filter-group">
-                <label>Strategy Tier:</label>
-                <select value={strategyFilter} onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}>
-                  <option value="all">⚡ All Strategies</option>
-                  <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : 'Manna Elite V1'}</option>
-                  <option value="manna_snd">🟡 Manna SnD</option>
-                </select>
-              </div>
-
               <div className="filter-group">
                 <label>Order Type:</label>
                 <select value={orderTypeFilter} onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}>

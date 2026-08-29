@@ -417,7 +417,7 @@ export const SuperAdminPanel: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link to="/" className="back-btn" style={{ color: '#b388ff' }}>← Back to Public Home</Link>
             <h1 className="super-title">
-              👁️ MANNA EDGE — SENTINEL V2 &amp; MASTER SUPER ADMIN DESK
+              👁️ MANNA EDGE — MANNA ELITE V1.2 &amp; MASTER SUPER ADMIN DESK
             </h1>
           </div>
 
@@ -457,12 +457,12 @@ export const SuperAdminPanel: React.FC = () => {
         {/* High-Level Executive Summary Cards */}
         <div className="stat-grid-4 font-mono">
           <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-            <div className="stat-box-title">🎯 Sentinel V2 Signals</div>
+            <div className="stat-box-title">🎯 Manna Elite v1.2 Signals</div>
             <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelSetups.length}</div>
           </div>
 
           <div className="stat-box" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.05)' }}>
-            <div className="stat-box-title">🏆 Sentinel Win Rate</div>
+            <div className="stat-box-title">🏆 Manna Elite v1.2 Win Rate</div>
             <div className="stat-box-value" style={{ color: '#00e676' }}>{sentinelAnalytics?.winRate || 0}%</div>
           </div>
 
@@ -544,7 +544,7 @@ export const SuperAdminPanel: React.FC = () => {
             }}
             onClick={() => setActiveTab('sentinel')}
           >
-            🤖 Sentinel Engine Tuning ({sentinelSetups.length})
+            🤖 Manna Elite v1.2 Engine Tuning ({sentinelSetups.length})
           </button>
 
           <button
@@ -1154,9 +1154,9 @@ export const SuperAdminPanel: React.FC = () => {
             <div className="super-card font-mono" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                  <h2 style={{ margin: 0, color: '#ce93d8' }}>🎯 SENTINEL V2 — STAGED ROLLOUT GOVERNANCE</h2>
+                  <h2 style={{ margin: 0, color: '#ce93d8' }}>🎯 MANNA ELITE V1.2 — STAGED ROLLOUT GOVERNANCE</h2>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#aaa' }}>
-                    Control where Sentinel V2 trade cards appear across the platform.
+                    Control where Manna Elite v1.2 trade cards appear across the platform.
                   </p>
                 </div>
 
@@ -1234,10 +1234,10 @@ export const SuperAdminPanel: React.FC = () => {
 
             {/* Sentinel Signal Cards Grid */}
             <div className="super-card font-mono">
-              <h2 style={{ margin: '0 0 16px 0', color: '#ce93d8' }}>🎯 Sentinel V2 Live Trade Cards ({sentinelSetups.length})</h2>
+              <h2 style={{ margin: '0 0 16px 0', color: '#ce93d8' }}>🎯 Manna Elite v1.2 Live Trade Cards ({sentinelSetups.length})</h2>
               {sentinelSetups.length === 0 ? (
                 <div style={{ padding: '24px', textAlign: 'center', color: '#aaa' }}>
-                  No active Sentinel V2 setups at this moment. Trigger a manual scan or wait for the automatic killzone scanner.
+                  No active Manna Elite v1.2 setups at this moment. Trigger a manual scan or wait for the automatic killzone scanner.
                 </div>
               ) : (
                 <div className="powerhouse-grid">
@@ -1405,7 +1405,7 @@ export const SuperAdminPanel: React.FC = () => {
                 <tbody>
                   {strategiesList.map((s: any) => {
                     const stratId = s.id || s.strategyId;
-                    const stratName = stratId === 'sentinel_v2' ? 'Chadwin Sentinel V2 Elite Framework (Manna Elite V1)' : (stratId === 'manna_basic' ? 'Manna Basic' : s.name);
+                    const stratName = (stratId === 'sentinel_v2' || stratId === 'manna_elite' || stratId === 'manna_elite_v1_2') ? 'Manna Elite v1.2' : (stratId === 'manna_basic' ? 'Manna Basic' : s.name);
                     const isEnabled = s.enabled !== undefined ? Boolean(s.enabled) : true;
                     return (
                       <tr key={stratId}>

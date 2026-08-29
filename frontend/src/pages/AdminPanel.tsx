@@ -831,6 +831,7 @@ export const AdminPanel: React.FC = () => {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
                   }}
                 >
+                  {strat.enabled ? '🛑 Turn OFF' : '⚡ Turn ON'}
                 </button>
               </div>
             ))}
@@ -928,7 +929,7 @@ export const AdminPanel: React.FC = () => {
                 </thead>
                 <tbody>
                   {activeSetupsList.map((setup: any) => {
-                    const stratName = setup.strategy_id === 'sentinel_v2' ? 'Manna Elite V1' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic');
+                    const stratName = (setup.strategy_id === 'sentinel_v2' || setup.strategy_id === 'manna_elite' || setup.strategy_id === 'manna_elite_v1_2') ? 'Manna Elite v1.2' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic');
                     const isDisabling = disablingId === setup.id;
                     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -1181,7 +1182,7 @@ export const AdminPanel: React.FC = () => {
           <div className="action-bar-left">
             <span className="bar-title">📊 ANALYTICS TRACKING ENGINE</span>
             <span className="bar-desc">
-              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'sentinel_v2' ? 'Manna Elite V1 Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
+              Currently viewing: <strong>{strategyFilter === 'all' ? 'All Strategies (Unified)' : strategyFilter === 'sentinel_v2' ? 'Manna Elite v1.2 Strategy' : 'Manna SnD Strategy'}</strong>. Export raw CSV or reset epoch tracking.
             </span>
           </div>
           <div className="action-bar-btns">
@@ -1214,7 +1215,7 @@ export const AdminPanel: React.FC = () => {
                     onClick={() => executeCsvExport('public')}
                   >
                     <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>👥 Client & Admin Delivered Signals Dataset</div>
-                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports trades delivered to clients/admins under the Manna Elite V1 public profile.</div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports trades delivered to clients/admins under the Manna Elite v1.2 public profile.</div>
                   </button>
 
                   <button
@@ -1224,7 +1225,7 @@ export const AdminPanel: React.FC = () => {
                     onClick={() => executeCsvExport('super_admin')}
                   >
                     <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>👑 Super Admin Master Signals Dataset</div>
-                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports signals generated under Chadwin Sentinel V2 Elite Framework master profile.</div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '3px' }}>Exports signals generated under Manna Elite v1.2 master profile.</div>
                   </button>
 
                   <button

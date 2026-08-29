@@ -963,7 +963,7 @@ async function calculateStrategyComparisonData(filters?: {
   allSetups.forEach(s => {
     const id = s.strategy_id || 'sentinel_v2';
     if (!stratMap.has(id)) {
-      stratMap.set(id, id === 'manna_snd' ? 'Manna SnD' : id === 'sentinel_v2' ? 'Manna Elite V1' : id);
+      stratMap.set(id, id === 'manna_snd' ? 'Manna SnD' : (id === 'sentinel_v2' || id === 'manna_elite' || id === 'manna_elite_v1_2') ? 'Manna Elite v1.2' : id);
     }
   });
 
