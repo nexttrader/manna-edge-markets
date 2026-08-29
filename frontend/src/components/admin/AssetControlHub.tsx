@@ -75,21 +75,39 @@ export const AssetControlHub: React.FC = () => {
   }, []);
 
   const handleToggleDisplay = async (symbol: string, currentDisplay: boolean) => {
+    const nextDisplay = !currentDisplay;
     setSavingSymbol(symbol);
+
+    // Optimistic UI update
+    setAssets(prev => prev.map(a => a.symbol === symbol ? { ...a, display_enabled: nextDisplay } : a));
+    setSummary(prev => prev ? {
+      ...prev,
+      displayedCount: prev.displayedCount + (nextDisplay ? 1 : -1),
+      hiddenCount: prev.hiddenCount + (nextDisplay ? -1 : 1)
+    } : null);
+
     try {
-      const res = await fetch(`${API_BASE}/api/super-admin/assets/${encodeURIComponent(symbol)}/toggle-display`, {
+      const res = await fetch(`${API_BASE}/api/super-admin/assets/toggle-display`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_enabled: !currentDisplay })
+        body: JSON.stringify({ symbol, display_enabled: nextDisplay })
       });
       if (res.ok) {
-        // Re-fetch to update all stats and counts
-        await fetchAssets();
+        const json = await res.json();
+        if (json.assets) {
+          setAssets(json.assets);
+        } else {
+          await fetchAssets();
+        }
       } else {
+        // Revert on failure
+        setAssets(prev => prev.map(a => a.symbol === symbol ? { ...a, display_enabled: currentDisplay } : a));
         const err = await res.json().catch(() => ({}));
         alert(err.error || 'Failed to update asset visibility');
       }
     } catch (err: any) {
+      // Revert on network failure
+      setAssets(prev => prev.map(a => a.symbol === symbol ? { ...a, display_enabled: currentDisplay } : a));
       alert(`Error updating asset: ${err.message}`);
     } finally {
       setSavingSymbol(null);
@@ -98,6 +116,15 @@ export const AssetControlHub: React.FC = () => {
 
   const handleBulkToggle = async (market: string | undefined, display_enabled: boolean) => {
     setSavingSymbol('bulk');
+
+    // Optimistic update
+    setAssets(prev => prev.map(a => {
+      if (!market || a.market.toLowerCase() === market.toLowerCase()) {
+        return { ...a, display_enabled };
+      }
+      return a;
+    }));
+
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/assets/bulk-toggle`, {
         method: 'POST',
@@ -105,12 +132,19 @@ export const AssetControlHub: React.FC = () => {
         body: JSON.stringify({ market, display_enabled })
       });
       if (res.ok) {
-        await fetchAssets();
+        const json = await res.json();
+        if (json.assets) {
+          setAssets(json.assets);
+        } else {
+          await fetchAssets();
+        }
       } else {
+        await fetchAssets();
         const err = await res.json().catch(() => ({}));
         alert(err.error || 'Failed to execute bulk update');
       }
     } catch (err: any) {
+      await fetchAssets();
       alert(`Error in bulk update: ${err.message}`);
     } finally {
       setSavingSymbol(null);

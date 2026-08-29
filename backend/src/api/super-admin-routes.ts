@@ -767,6 +767,38 @@ router.get('/assets', async (_req: Request, res: Response) => {
   }
 });
 
+router.put('/assets/toggle-display', async (req: Request, res: Response) => {
+  try {
+    const { symbol, display_enabled } = req.body || {};
+    if (!symbol || typeof symbol !== 'string') {
+      return res.status(400).json({ error: 'Body must contain { symbol: string, display_enabled: boolean }' });
+    }
+    if (typeof display_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { display_enabled: boolean }' });
+    }
+    const cleanSym = decodeURIComponent(symbol).trim();
+    const updated = await queries.setAssetDisplay(cleanSym, display_enabled);
+    res.json({ success: true, symbol: cleanSym, display_enabled, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update asset display setting', details: err.message });
+  }
+});
+
+router.put('/assets/:symbol(*)/toggle-display', async (req: Request, res: Response) => {
+  try {
+    const rawSym = req.params.symbol;
+    const symbol = decodeURIComponent(Array.isArray(rawSym) ? rawSym[0] : rawSym);
+    const { display_enabled } = req.body;
+    if (typeof display_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Body must contain { display_enabled: boolean }' });
+    }
+    const updated = await queries.setAssetDisplay(symbol, display_enabled);
+    res.json({ success: true, symbol, display_enabled, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update asset display setting', details: err.message });
+  }
+});
+
 router.put('/assets/:symbol/toggle-display', async (req: Request, res: Response) => {
   try {
     const rawSym = req.params.symbol;

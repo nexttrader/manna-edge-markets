@@ -902,7 +902,7 @@ export interface AssetSetting {
   updated_at: string;
 }
 
-const ASSET_SNAPSHOT_PATH = path.resolve(__dirname, '../../../asset_settings_snapshot.json');
+const ASSET_SNAPSHOT_PATH = path.resolve(process.cwd(), 'asset_settings_snapshot.json');
 
 const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = [
   { symbol: 'ES', market: 'futures', name: 'E-mini S&P 500' },
@@ -943,7 +943,10 @@ function loadAssetSnapshotFromDisk(): Record<string, boolean> {
   return {};
 }
 
+let isAssetSettingsTableSeeded = false;
+
 export async function ensureAssetSettingsSeeded(): Promise<void> {
+  if (isAssetSettingsTableSeeded) return;
   try {
     await queryDb(`CREATE TABLE IF NOT EXISTS asset_settings (
       symbol TEXT PRIMARY KEY,
@@ -957,22 +960,33 @@ export async function ensureAssetSettingsSeeded(): Promise<void> {
 
     const snapshot = loadAssetSnapshotFromDisk();
 
-    for (const a of DEFAULT_ASSETS) {
-      const isDisplay = a.symbol in snapshot ? (snapshot[a.symbol] ? 1 : 0) : 1;
-      await queryDb(
-        `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         ON CONFLICT (symbol) DO NOTHING`,
-        [a.symbol, a.market, a.name, isDisplay]
-      );
-    }
+    // Check if table has existing records
+    const existing = await queryDb<{ symbol: string }>(`SELECT symbol FROM asset_settings`);
+    const existingSymbols = new Set((existing || []).map(r => r.symbol));
 
-    // Apply snapshot state to any existing records if present
-    if (Object.keys(snapshot).length > 0) {
-      for (const [sym, disp] of Object.entries(snapshot)) {
-        await queryDb(`UPDATE asset_settings SET display_enabled = ? WHERE symbol = ?`, [disp ? 1 : 0, sym]);
+    for (const a of DEFAULT_ASSETS) {
+      if (!existingSymbols.has(a.symbol)) {
+        const isDisplay = a.symbol in snapshot ? (snapshot[a.symbol] ? 1 : 0) : 1;
+        await queryDb(
+          `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT (symbol) DO NOTHING`,
+          [a.symbol, a.market, a.name, isDisplay]
+        );
       }
     }
+
+    // If snapshot had items and we are initializing, sync db to snapshot
+    const currentRows = await queryDb<{ symbol: string; display_enabled: any }>(`SELECT symbol, display_enabled FROM asset_settings`);
+    if (currentRows && currentRows.length > 0) {
+      const map: Record<string, boolean> = {};
+      for (const r of currentRows) {
+        map[r.symbol] = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
+      }
+      saveAssetSnapshotToDisk(map);
+    }
+
+    isAssetSettingsTableSeeded = true;
   } catch (err) {
     console.error('Error seeding asset_settings table:', err);
   }
@@ -985,8 +999,8 @@ export async function getAssetSettings(): Promise<AssetSetting[]> {
       symbol: string;
       market: string;
       name: string;
-      display_enabled: number;
-      tracking_enabled: number;
+      display_enabled: number | boolean | string;
+      tracking_enabled: number | boolean | string;
       created_at: string;
       updated_at: string;
     }>(
@@ -997,8 +1011,8 @@ export async function getAssetSettings(): Promise<AssetSetting[]> {
       symbol: r.symbol,
       market: r.market,
       name: r.name,
-      display_enabled: r.display_enabled === 1 || Boolean(r.display_enabled),
-      tracking_enabled: r.tracking_enabled === 1 || Boolean(r.tracking_enabled),
+      display_enabled: r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't',
+      tracking_enabled: r.tracking_enabled === 1 || r.tracking_enabled === true || r.tracking_enabled === '1' || r.tracking_enabled === 't',
       created_at: r.created_at,
       updated_at: r.updated_at,
     }));
@@ -1019,10 +1033,12 @@ export async function getAssetSettings(): Promise<AssetSetting[]> {
 export async function getDisabledDisplayAssets(): Promise<string[]> {
   try {
     await ensureAssetSettingsSeeded();
-    const rows = await queryDb<{ symbol: string }>(
-      `SELECT symbol FROM asset_settings WHERE display_enabled = 0 OR display_enabled = false`
+    const rows = await queryDb<{ symbol: string; display_enabled: any }>(
+      `SELECT symbol, display_enabled FROM asset_settings`
     );
-    return rows.map(r => r.symbol);
+    return rows
+      .filter(r => r.display_enabled === 0 || r.display_enabled === false || r.display_enabled === '0' || r.display_enabled === 'f')
+      .map(r => r.symbol);
   } catch {
     return [];
   }
@@ -1034,7 +1050,7 @@ export async function setAssetDisplay(symbol: string, displayEnabled: boolean): 
   const now = new Date().toISOString();
   await queryDb(
     `UPDATE asset_settings SET display_enabled = ?, updated_at = ? WHERE symbol = ?`,
-    [val, now, symbol]
+    [val, now, symbol.trim()]
   );
   const all = await getAssetSettings();
   const map: Record<string, boolean> = {};
@@ -1090,6 +1106,10 @@ export async function registerCustomAsset(symbol: string, market: string, name: 
     [cleanSym, cleanMarket, cleanName, now, now, cleanName, cleanMarket, now]
   );
 
-  return getAssetSettings();
+  const all = await getAssetSettings();
+  const map: Record<string, boolean> = {};
+  for (const a of all) map[a.symbol] = a.display_enabled;
+  saveAssetSnapshotToDisk(map);
+  return all;
 }
 
