@@ -316,7 +316,7 @@ class TelegramBotService {
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 <b>Trade ID:</b> <code>${id}</code>
 📊 <b>Asset:</b> ${sym}
-🎯 <b>Action:</b> DISCARD PENDING SETUP
+🎯 <b>Action:</b> CANCEL PENDING ORDER
 📢 <b>Status:</b> SIGNAL INVALIDATED (PRE-ENTRY)
 ⚠️ <b>Reason:</b> ${why}.
 👉 <b>Instruction:</b> Discard setup — do not enter. Pending order cancelled.

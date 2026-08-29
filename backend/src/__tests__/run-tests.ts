@@ -368,7 +368,7 @@ async function runAllTests() {
     };
     const invMsg = telegramBotService.formatInvalidatedManage(testInvSetup, 'market_structure_breach');
     assert.ok(invMsg.includes('<b>⛔ SND FUTURES MANAGE ⚡</b>'), 'Invalidation header must be MANAGE');
-    assert.ok(invMsg.includes('DISCARD PENDING SETUP'), 'Invalidation action must be DISCARD PENDING SETUP');
+    assert.ok(invMsg.includes('CANCEL PENDING ORDER'), 'Invalidation action must be CANCEL PENDING ORDER');
     assert.ok(invMsg.includes('SIGNAL INVALIDATED (PRE-ENTRY)'), 'Status must indicate PRE-ENTRY invalidation');
 
     const notifSettings = await queries.getNotificationSettings();
