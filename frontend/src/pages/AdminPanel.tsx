@@ -1025,25 +1025,22 @@ export const AdminPanel: React.FC = () => {
             {/* Strategy Filter Tabs */}
             <div className="strategy-filter-tabs glass-card font-mono">
               <span className="filter-title">STRATEGY ANALYTICS FILTER:</span>
-          <button 
-            className={`strat-tab ${strategyFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStrategyFilter('all')}
-          >
-            ⚡ All Strategies
-          </button>
-          <button 
-            className={`strat-tab strat-basic ${strategyFilter === 'sentinel_v2' ? 'active' : ''}`}
-            onClick={() => setStrategyFilter('sentinel_v2')}
-          >
-            🟣 Manna Elite V1
-          </button>
-          <button 
-            className={`strat-tab strat-snd ${strategyFilter === 'manna_snd' ? 'active' : ''}`}
-            onClick={() => setStrategyFilter('manna_snd')}
-          >
-            🟡 Manna SnD
-          </button>
-        </div>
+              <button 
+                className={`strat-tab ${strategyFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setStrategyFilter('all')}
+              >
+                ⚡ All Strategies
+              </button>
+              {dbStrategies.map(strat => (
+                <button 
+                  key={strat.id}
+                  className={`strat-tab ${strat.id === 'sentinel_v2' ? 'strat-basic' : 'strat-snd'} ${strategyFilter === strat.id ? 'active' : ''}`}
+                  onClick={() => setStrategyFilter(strat.id as any)}
+                >
+                  {strat.id === 'sentinel_v2' ? '🟣' : '🟡'} {strat.name}
+                </button>
+              ))}
+            </div>
 
         <ExpandableCalendar outcomes={recentOutcomes} strategyFilter={strategyFilter} />
 
@@ -1994,8 +1991,11 @@ export const AdminPanel: React.FC = () => {
               <label>Strategy Scope</label>
               <select value={triggerStrategy} onChange={e => setTriggerStrategy(e.target.value as any)}>
                 <option value="all">⚡ All Strategies</option>
-                <option value="sentinel_v2">🟣 Manna Elite V1 Strategy</option>
-                <option value="manna_snd">🟡 Manna SnD Strategy</option>
+                {dbStrategies.map(strat => (
+                  <option key={strat.id} value={strat.id}>
+                    {strat.id === 'sentinel_v2' ? '🟣' : '🟡'} {strat.name} Strategy Only
+                  </option>
+                ))}
               </select>
             </div>
             

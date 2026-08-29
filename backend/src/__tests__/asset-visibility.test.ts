@@ -1,12 +1,12 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as queries from '../db/queries';
-import { queryDb, initDatabase } from '../db/database';
+import { queryDb, initializeDatabase } from '../db/database';
 import { TelegramBot } from '../notifications/telegram-bot';
 
 describe('Asset Display Visibility & Background Tracking Engine Tests', () => {
   before(async () => {
-    await initDatabase();
+    await initializeDatabase();
   });
 
   it('TEST 1: Initializes default asset settings with 8 Futures and 8 Forex assets', async () => {
@@ -38,10 +38,11 @@ describe('Asset Display Visibility & Background Tracking Engine Tests', () => {
 
   it('TEST 3: Background tracking & setup creation continues regardless of display state', async () => {
     const setupId = `test_es_stealth_${Date.now()}`;
+    const now = new Date().toISOString();
     await queryDb(
-      `INSERT INTO edge_setups (id, instrument, market, timeframe, bias, entry_price_recorded, signal_state, conviction_score, strategy_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [setupId, 'ES', 'futures', '5m', 'bullish', 5000.0, 'awaiting_entry', 88, 'sentinel_v2']
+      `INSERT INTO edge_setups (id, instrument, market, created_at, killzone_origin, bias, entry_zone_low, entry_zone_high, entry_zone_mid, entry_price_recorded, stop, tp1, signal_state, conviction_score, strategy_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [setupId, 'ES', 'futures', now, 'ny_am', 'long', 5000, 5010, 5005, 5005, 4980, 5055, 'awaiting_entry', 88, 'sentinel_v2']
     );
 
     // Verify setup exists in DB
@@ -51,7 +52,6 @@ describe('Asset Display Visibility & Background Tracking Engine Tests', () => {
   });
 
   it('TEST 4: Telegram alert gate suppresses notifications for turned-off assets', async () => {
-    const bot = new TelegramBot();
     const disabledAssets = await queries.getDisabledDisplayAssets();
     assert.ok(disabledAssets.includes('ES'));
 
@@ -60,7 +60,7 @@ describe('Asset Display Visibility & Background Tracking Engine Tests', () => {
       id: 'test_es_alert',
       instrument: 'ES',
       market: 'futures',
-      bias: 'bullish',
+      bias: 'long',
       strategy_id: 'sentinel_v2'
     };
 
@@ -95,8 +95,45 @@ describe('Asset Display Visibility & Background Tracking Engine Tests', () => {
     assert.equal(btc.tracking_enabled, true);
   });
 
+  it('TEST 7: Hiding sentinel_v2 from admins excludes it from getHiddenStrategyIdsForRole and getStrategySettings', async () => {
+    // Hide sentinel_v2 from admins
+    await queries.updateStrategyVisibility('sentinel_v2', false);
+
+    const hiddenForAdmin = await queries.getHiddenStrategyIdsForRole('admin', 'admin@example.com');
+    assert.ok(hiddenForAdmin.includes('sentinel_v2'), 'sentinel_v2 must be in hidden strategy IDs for admin');
+
+    const adminSettings = await queries.getStrategySettings('admin', 'admin@example.com');
+    assert.ok(!adminSettings.some(s => s.id === 'sentinel_v2'), 'admin must NOT see sentinel_v2 when hidden');
+
+    const superAdminSettings = await queries.getStrategySettings('super_admin');
+    assert.ok(superAdminSettings.some(s => s.id === 'sentinel_v2'), 'super admin MUST see sentinel_v2');
+
+    // Re-enable for admins
+    await queries.updateStrategyVisibility('sentinel_v2', true);
+    const hiddenAfter = await queries.getHiddenStrategyIdsForRole('admin', 'admin@example.com');
+    assert.ok(!hiddenAfter.includes('sentinel_v2'), 'sentinel_v2 must not be hidden once re-enabled for admins');
+  });
+
+  it('TEST 8: Hiding sentinel_v2 from clients excludes it for traders', async () => {
+    // Hide sentinel_v2 from clients/traders
+    await queries.updateStrategyTraderVisibility('sentinel_v2', false);
+
+    const hiddenForTrader = await queries.getHiddenStrategyIdsForRole('trader', 'trader@example.com');
+    assert.ok(hiddenForTrader.includes('sentinel_v2'), 'sentinel_v2 must be in hidden strategy IDs for trader');
+
+    const traderSettings = await queries.getStrategySettings('trader', 'trader@example.com');
+    assert.ok(!traderSettings.some(s => s.id === 'sentinel_v2'), 'trader must NOT see sentinel_v2 when hidden');
+
+    // Re-enable for traders
+    await queries.updateStrategyTraderVisibility('sentinel_v2', true);
+    const hiddenAfter = await queries.getHiddenStrategyIdsForRole('trader', 'trader@example.com');
+    assert.ok(!hiddenAfter.includes('sentinel_v2'), 'sentinel_v2 must not be hidden once re-enabled for traders');
+  });
+
   after(async () => {
     // Reset ES to true for clean test state
     await queries.setAssetDisplay('ES', true);
+    await queries.updateStrategyVisibility('sentinel_v2', true);
+    await queries.updateStrategyTraderVisibility('sentinel_v2', true);
   });
 });

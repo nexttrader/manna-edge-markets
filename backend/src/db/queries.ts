@@ -315,26 +315,84 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 // ── Strategy Settings ──
 
-export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
-    try {
-        let rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
-        
-        if (!rows || rows.length === 0) {
-            try {
-                await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES
-                    ('manna_snd', 'Manna SnD', 1, 1, 1, CURRENT_TIMESTAMP),
-                    ('sentinel_v2', 'Manna Elite V1', 1, 1, 1, CURRENT_TIMESTAMP)
-                    ON CONFLICT (id) DO NOTHING`);
-                rows = await queryDb<{ id: string, name: string, enabled: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
-            } catch {}
-        }
+const STRATEGY_SNAPSHOT_PATH = path.resolve(process.cwd(), 'strategy_settings_snapshot.json');
 
+function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }>): void {
+  try {
+    fs.writeFileSync(STRATEGY_SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save strategy settings snapshot to disk:', err);
+  }
+}
+
+function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }> {
+  try {
+    if (fs.existsSync(STRATEGY_SNAPSHOT_PATH)) {
+      const data = fs.readFileSync(STRATEGY_SNAPSHOT_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Failed to load strategy settings snapshot from disk:', err);
+  }
+  return {};
+}
+
+let isStrategySettingsSeeded = false;
+
+export async function ensureStrategySettingsSeeded(): Promise<void> {
+  if (isStrategySettingsSeeded) return;
+  try {
+    await queryDb(`CREATE TABLE IF NOT EXISTS strategy_settings (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      visible_to_admins INTEGER DEFAULT 1,
+      visible_to_traders INTEGER DEFAULT 1,
+      super_admin_max_signals INTEGER DEFAULT 6,
+      super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0,
+      public_max_signals INTEGER DEFAULT 6,
+      public_min_conviction DOUBLE PRECISION DEFAULT 70.0,
+      updated_at TEXT NOT NULL
+    )`);
+
+    const snapshot = loadStrategySnapshotFromDisk();
+
+    const defaults = [
+      { id: 'manna_snd', name: 'Manna SnD' },
+      { id: 'sentinel_v2', name: 'Manna Elite V1' }
+    ];
+
+    for (const d of defaults) {
+      const snap = snapshot[d.id] || {};
+      const enabledVal = snap.enabled !== undefined ? (snap.enabled ? 1 : 0) : 1;
+      const adminVal = snap.visibleToAdmins !== undefined ? (snap.visibleToAdmins ? 1 : 0) : 1;
+      const traderVal = snap.visibleToTraders !== undefined ? (snap.visibleToTraders ? 1 : 0) : 1;
+
+      await queryDb(
+        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO NOTHING`,
+        [d.id, d.name, enabledVal, adminVal, traderVal]
+      );
+    }
+
+    isStrategySettingsSeeded = true;
+  } catch (err) {
+    console.error('Error seeding strategy_settings:', err);
+  }
+}
+
+export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
+    await ensureStrategySettingsSeeded();
+    try {
+        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
+        
         const mapped = rows.map(r => ({
             id: r.id,
             name: r.name,
-            enabled: Boolean(r.enabled),
-            visibleToAdmins: r.visible_to_admins !== undefined ? Boolean(r.visible_to_admins) : true,
-            visibleToTraders: r.visible_to_traders !== undefined ? Boolean(r.visible_to_traders) : true
+            enabled: r.enabled === 1 || r.enabled === true || r.enabled === '1' || r.enabled === 't',
+            visibleToAdmins: r.visible_to_admins === undefined || r.visible_to_admins === null ? true : (r.visible_to_admins === 1 || r.visible_to_admins === true || r.visible_to_admins === '1' || r.visible_to_admins === 't'),
+            visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't')
         }));
 
         if (role === 'super_admin') {
@@ -351,18 +409,45 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
     }
 }
 
+function syncStrategySnapshot(): void {
+  getStrategySettings('super_admin').then(strats => {
+    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }> = {};
+    for (const s of strats) {
+      snap[s.id] = { enabled: s.enabled, visibleToAdmins: s.visibleToAdmins, visibleToTraders: s.visibleToTraders };
+    }
+    saveStrategySnapshotToDisk(snap);
+  }).catch(() => {});
+}
+
 export async function updateStrategyEnabled(id: string, enabled: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
     const val = enabled ? 1 : 0;
-    await queryDb(`UPDATE strategy_settings SET enabled = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
+    const now = new Date().toISOString();
+    await queryDb(
+      `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
+       VALUES (?, ?, ?, 1, 1, ?)
+       ON CONFLICT (id) DO UPDATE SET enabled = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now, val, now]
+    );
+    syncStrategySnapshot();
 }
 
 export async function updateStrategyVisibility(id: string, visibleToAdmins: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
     const val = visibleToAdmins ? 1 : 0;
-    await queryDb(`UPDATE strategy_settings SET visible_to_admins = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
+    const now = new Date().toISOString();
+    await queryDb(
+      `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
+       VALUES (?, ?, 1, ?, 1, ?)
+       ON CONFLICT (id) DO UPDATE SET visible_to_admins = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now, val, now]
+    );
+    syncStrategySnapshot();
 }
 
 export async function deleteStrategy(id: string): Promise<void> {
     await queryDb(`DELETE FROM strategy_settings WHERE id = ?`, [id]);
+    syncStrategySnapshot();
 }
 
 export async function getAdminStrategyAccess(strategyId: string): Promise<string[]> {
@@ -399,10 +484,11 @@ export async function revokeAdminStrategyAccess(userEmail: string, strategyId: s
 
 export async function getHiddenStrategyIdsForRole(role: string, userEmail?: string): Promise<string[]> {
     try {
-        let rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
+        await ensureStrategySettingsSeeded();
+        let rows = await queryDb<{ id: string, enabled?: any, visible_to_admins?: any, visible_to_traders?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
         if (!rows || rows.length === 0) {
             await getStrategySettings('super_admin');
-            rows = await queryDb<{ id: string, enabled?: number, visible_to_admins?: number, visible_to_traders?: number }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
+            rows = await queryDb<{ id: string, enabled?: any, visible_to_admins?: any, visible_to_traders?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic'`);
         }
         const emailLower = userEmail ? userEmail.trim().toLowerCase() : '';
         
@@ -416,18 +502,22 @@ export async function getHiddenStrategyIdsForRole(role: string, userEmail?: stri
         }
 
         const hiddenRows = rows.filter(r => {
+            const isEnabled = r.enabled === 1 || r.enabled === true || r.enabled === '1' || r.enabled === 't';
             // Disabled strategies are hidden for all non-super-admin users
-            if (r.enabled === 0 || (r.enabled as any) === false) return true;
+            if (!isEnabled) return true;
             if (role === 'super_admin') return false; // super admin sees all enabled strategies
+            
             if (role === 'admin') {
-                const isGloballyVisibleToAdmins = r.visible_to_admins === undefined ? true : Boolean(r.visible_to_admins);
+                const isGloballyVisibleToAdmins = r.visible_to_admins === 1 || r.visible_to_admins === true || r.visible_to_admins === '1' || r.visible_to_admins === 't';
                 if (isGloballyVisibleToAdmins) return false;
                 // If not globally visible to all admins, check if this specific admin was granted explicit access
                 const allowedAdmins = grantedAccessMap[r.id] || [];
                 return !allowedAdmins.includes(emailLower);
             }
-            // trader or default
-            return !(r.visible_to_traders === undefined ? true : Boolean(r.visible_to_traders));
+            
+            // trader or default client
+            const isVisibleToTraders = r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't';
+            return !isVisibleToTraders;
         });
 
         return hiddenRows.map(r => r.id);
@@ -486,12 +576,15 @@ export async function updateStrategyTuning(
 }
 
 export async function updateStrategyTraderVisibility(id: string, visibleToTraders: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
     const val = visibleToTraders ? 1 : 0;
+    const now = new Date().toISOString();
     try {
-        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_traders, updated_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET visible_to_traders = EXCLUDED.visible_to_traders, updated_at = EXCLUDED.updated_at`, [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, new Date().toISOString()]);
+        await queryDb(`INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at) VALUES (?, ?, 1, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET visible_to_traders = EXCLUDED.visible_to_traders, updated_at = EXCLUDED.updated_at`, [id, id === 'sentinel_v2' ? 'Manna Elite V1' : 'Manna SnD', val, now]);
     } catch {
-        await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, updated_at = ? WHERE id = ?`, [val, new Date().toISOString(), id]);
+        await queryDb(`UPDATE strategy_settings SET visible_to_traders = ?, updated_at = ? WHERE id = ?`, [val, now, id]);
     }
+    syncStrategySnapshot();
 }
 
 export interface MaintenanceState {

@@ -15,6 +15,14 @@ import { hawkeyeService } from '../hawkeye/hawkeye-service';
 
 const router = express.Router();
 
+function isStrategyVisible(rawStrategyId: string | undefined, hiddenIds: string[]): boolean {
+  const sId = (rawStrategyId || 'sentinel_v2').trim().toLowerCase();
+  const normalized = (sId === 'sentinel_v2' || sId === 'sentinel' || sId === 'manna_basic' || sId === 'sentinel_v1')
+    ? 'sentinel_v2'
+    : sId;
+  return !hiddenIds.includes(normalized) && !hiddenIds.includes(sId);
+}
+
 router.get('/strategies/status', async (req: Request, res: Response) => {
   try {
     const role = (req.query.role as string) || 'admin';
@@ -808,12 +816,12 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let allOutcomes = await queryDb(outcomesQuery);
 
     if (role !== 'super_admin') {
-      allFutures = allFutures.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
-      allForex = allForex.filter((s: any) => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !disabledAssets.includes(s.instrument));
+      allFutures = allFutures.filter((s: any) => isStrategyVisible(s.strategy_id, hiddenStrategyIds) && !disabledAssets.includes(s.instrument));
+      allForex = allForex.filter((s: any) => isStrategyVisible(s.strategy_id, hiddenStrategyIds) && !disabledAssets.includes(s.instrument));
       allOutcomes = allOutcomes.filter((o: any) => {
         const sId = o.strategy_id || 'sentinel_v2';
         const inst = o.instrument;
-        return !hiddenStrategyIds.includes(sId) && (!inst || !disabledAssets.includes(inst));
+        return isStrategyVisible(sId, hiddenStrategyIds) && (!inst || !disabledAssets.includes(inst));
       });
     } else {
       if (assetVisibility === 'displayed_only') {
@@ -841,8 +849,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
     const resolvedSetupIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
     if (role !== 'super_admin') {
-      futuresActiveSetups = futuresActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
-      forexActiveSetups = forexActiveSetups.filter(s => !hiddenStrategyIds.includes(s.strategy_id || 'sentinel_v2') && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+      futuresActiveSetups = futuresActiveSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenStrategyIds) && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
+      forexActiveSetups = forexActiveSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenStrategyIds) && !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
     } else {
       if (assetVisibility === 'displayed_only') {
         futuresActiveSetups = futuresActiveSetups.filter(s => !resolvedSetupIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
