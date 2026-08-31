@@ -12,6 +12,7 @@ import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/heal
 import { outcomeDetector } from '../outcomes/outcome-detector';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
+import { saveSignalsSnapshot } from '../db/signal-snapshot-restore';
 
 const router = express.Router();
 
@@ -508,6 +509,14 @@ router.post('/confirm-replace-signal', async (req: Request, res: Response) => {
       createdBy: 'admin_panel'
     });
 
+    // Dispatch Telegram MANAGE cancellation for the superseded pending order
+    publishEvents.emit('setup_invalidated', {
+      setupId: existingSetup.id,
+      reason: 'manual_rescan_replaced',
+      setup: existingSetup,
+      superseded: true
+    });
+
     // 2. Insert new setup into database
     const runId = `manual_replace_${Date.now()}`;
     const newSetup: any = {
@@ -539,6 +548,9 @@ router.post('/confirm-replace-signal', async (req: Request, res: Response) => {
 
     await queries.insertSetup(newSetup, targetMarket);
 
+    // Dispatch Telegram SIGNAL notification for the new replacement setup
+    publishEvents.emit('setup_created', newSetup);
+
     // 3. Emit replacement event for Watchlist & Toast notifications
     publishEvents.emit('setup_replaced', {
       previousSetupId: existingSetupId,
@@ -546,6 +558,13 @@ router.post('/confirm-replace-signal', async (req: Request, res: Response) => {
       instrument: candidate.instrument,
       replacedAt: new Date().toISOString()
     });
+
+    // Update persistent signals snapshot to reflect current active signals
+    try {
+      const activeFutures = await queries.getActiveSetups('futures');
+      const activeForex = await queries.getActiveSetups('forex');
+      await saveSignalsSnapshot([...activeFutures, ...activeForex]);
+    } catch {}
 
     res.json({
       success: true,

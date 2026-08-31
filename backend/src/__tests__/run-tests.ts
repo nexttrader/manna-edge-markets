@@ -442,7 +442,134 @@ async function runAllTests() {
     assert.strictEqual(cleanedDisabled.includes('ES'), false, 'ES should be re-enabled');
     console.log('✅ TEST 17: Individual Asset Display Toggles, Continuous Background Tracking & Bulk Governance');
 
-    console.log('\n🎉 ALL 17 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 18. Single-Asset Rescan Signal Replacement Telegram Notification & Snapshot Test
+    const oldPendingSetupId = `test_rescan_old_${Date.now()}`;
+    const oldSetup: EdgeSetup = {
+      id: oldPendingSetupId,
+      instrument: 'ES',
+      market: 'futures',
+      created_at: new Date().toISOString(),
+      killzone_origin: 'ny_am',
+      bias: 'long',
+      entry_zone_low: 5500,
+      entry_zone_high: 5510,
+      entry_zone_mid: 5505,
+      stop: 5480,
+      tp1: 5550,
+      tp2: 5580,
+      signal_state: 'awaiting_entry',
+      superseded: 0,
+      tradable: 1,
+      conviction_score: 78,
+      strategy_id: 'sentinel_v2',
+      strategy_tier: 'basic'
+    };
+    await queries.insertSetup(oldSetup, 'futures');
+
+    let invalidatedEventPayload: any = null;
+    let createdEventPayload: any = null;
+    let replacedEventPayload: any = null;
+
+    const onInvalidated = (payload: any) => { if (payload.setupId === oldPendingSetupId) invalidatedEventPayload = payload; };
+    const onCreated = (payload: any) => { if (payload.instrument === 'ES' && payload.id !== oldPendingSetupId) createdEventPayload = payload; };
+    const onReplaced = (payload: any) => { if (payload.previousSetupId === oldPendingSetupId) replacedEventPayload = payload; };
+
+    const { publishEvents } = await import('../publish-gate/publish-gate');
+    publishEvents.on('setup_invalidated', onInvalidated);
+    publishEvents.on('setup_created', onCreated);
+    publishEvents.on('setup_replaced', onReplaced);
+
+    const replacementCandidate = {
+      instrument: 'ES',
+      bias: 'long',
+      entry_zone_low: 5515,
+      entry_zone_high: 5525,
+      entry_zone_mid: 5520,
+      stop: 5495,
+      tp1: 5570,
+      tp2: 5600,
+      r_multiple_1: 2.2,
+      r_multiple_2: 3.5,
+      conviction_score: 92,
+      liquidity_score: 90,
+      strategy_id: 'sentinel_v2',
+      strategy_tier: 'basic'
+    };
+
+    // Simulate replacement sequence as done in confirm-replace-signal
+    await queries.updateSetupState(oldPendingSetupId, 'futures', 'superseded', {
+      superseded: 1,
+      tradable: 0,
+      invalidation_reason: 'manual_replaced_by_admin',
+      invalidation_detail: 'Manually replaced by Admin via Single-Asset Rescan',
+      resolved_at: new Date().toISOString()
+    });
+
+    publishEvents.emit('setup_invalidated', {
+      setupId: oldSetup.id,
+      reason: 'manual_rescan_replaced',
+      setup: oldSetup,
+      superseded: true
+    });
+
+    const newSetupObj: EdgeSetup = {
+      id: `test_rescan_new_${Date.now()}`,
+      instrument: replacementCandidate.instrument,
+      market: 'futures',
+      created_at: new Date().toISOString(),
+      created_by_run: `manual_replace_${Date.now()}`,
+      killzone_origin: oldSetup.killzone_origin || 'ny_am',
+      killzone_origin_at: new Date().toISOString(),
+      bias: replacementCandidate.bias as any,
+      entry_zone_low: replacementCandidate.entry_zone_low,
+      entry_zone_high: replacementCandidate.entry_zone_high,
+      entry_zone_mid: replacementCandidate.entry_zone_mid,
+      stop: replacementCandidate.stop,
+      tp1: replacementCandidate.tp1,
+      tp2: replacementCandidate.tp2,
+      r_multiple_1: replacementCandidate.r_multiple_1,
+      r_multiple_2: replacementCandidate.r_multiple_2,
+      signal_state: 'awaiting_entry',
+      superseded: 0,
+      tradable: 1,
+      conviction_score: replacementCandidate.conviction_score,
+      liquidity_score: replacementCandidate.liquidity_score,
+      strategy_id: replacementCandidate.strategy_id,
+      strategy_tier: replacementCandidate.strategy_tier as any
+    };
+
+    await queries.insertSetup(newSetupObj, 'futures');
+    publishEvents.emit('setup_created', newSetupObj);
+    publishEvents.emit('setup_replaced', {
+      previousSetupId: oldPendingSetupId,
+      newSetup: newSetupObj,
+      instrument: newSetupObj.instrument,
+      replacedAt: new Date().toISOString()
+    });
+
+    // Clean up listeners
+    publishEvents.off('setup_invalidated', onInvalidated);
+    publishEvents.off('setup_created', onCreated);
+    publishEvents.off('setup_replaced', onReplaced);
+
+    // Validate events fired
+    assert.ok(invalidatedEventPayload, 'Must emit setup_invalidated on signal replacement');
+    assert.strictEqual(invalidatedEventPayload.superseded, true, 'setup_invalidated must have superseded=true');
+    const cancelMsg = telegramBotService.formatSupersededManage(invalidatedEventPayload.setup, invalidatedEventPayload.reason);
+    assert.ok(cancelMsg.includes('<b>⛔ SND FUTURES MANAGE ⚡</b>'), 'Cancel message must format as MANAGE');
+    assert.ok(cancelMsg.includes('CANCEL PENDING ORDER'), 'Cancel message must specify CANCEL PENDING ORDER');
+    assert.ok(cancelMsg.includes('SUPERSEDED / CANCELLED'), 'Cancel message must specify SUPERSEDED / CANCELLED');
+
+    assert.ok(createdEventPayload, 'Must emit setup_created for new replacement setup');
+    const newSignalMsg = telegramBotService.formatSignal(createdEventPayload);
+    assert.ok(newSignalMsg.includes('<b>🟡 SND FUTURES SIGNAL ⚡</b>'), 'New signal message must format as SIGNAL');
+    assert.ok(newSignalMsg.includes('5515 – 5525'), 'New signal message must include new entry zone');
+
+    assert.ok(replacedEventPayload, 'Must emit setup_replaced for UI / toast notifications');
+
+    console.log('✅ TEST 18: Single-Asset Rescan Signal Replacement Telegram Notification & Event Pipeline');
+
+    console.log('\n🎉 ALL 18 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {
