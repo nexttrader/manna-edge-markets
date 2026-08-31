@@ -13,8 +13,10 @@ import { outcomeDetector } from '../outcomes/outcome-detector';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 import { saveSignalsSnapshot } from '../db/signal-snapshot-restore';
+import { telegramBotService } from '../notifications/telegram-bot';
 
 const router = express.Router();
+
 
 function isStrategyVisible(rawStrategyId: string | undefined, hiddenIds: string[]): boolean {
   const sId = (rawStrategyId || 'sentinel_v2').trim().toLowerCase();
@@ -355,11 +357,101 @@ router.post('/signals/:id/invalidate', async (req: Request, res: Response) => {
       createdBy: 'admin_panel'
     });
 
-    res.json({ success: true, message: `Signal ${id} disabled and invalidated successfully.` });
+    // 1. Dispatch event & direct Telegram CANCEL alert
+    publishEvents.emit('setup_invalidated', {
+      setupId: id,
+      reason,
+      setup,
+      superseded: false
+    });
+    try {
+      await telegramBotService.sendMessage(telegramBotService.formatInvalidatedManage(setup, reason));
+    } catch (tgErr) {
+      console.warn('Could not dispatch Telegram cancel message:', tgErr);
+    }
+
+    // 2. Persist updated active signals snapshot
+    const active = await queries.getAllActiveSetups();
+    await saveSignalsSnapshot(active);
+
+    res.json({ success: true, message: `Signal ${id} (${setup.instrument}) disabled, invalidated, and Telegram cancel dispatched successfully.` });
   } catch (error) {
     res.status(500).json({ error: 'Failed to disable signal', details: String(error) });
   }
 });
+
+router.post('/signals/cancel-unwanted-batch', async (req: Request, res: Response) => {
+  try {
+    const { ids, reason = 'unwanted_rescan_cancelled', detail = 'Cancelled by administrator due to unexpected rescan' } = req.body || {};
+    
+    let targets: any[] = [];
+    if (Array.isArray(ids) && ids.length > 0) {
+      for (const id of ids) {
+        let s = await queries.getSetupById(id, 'futures');
+        if (!s) s = await queries.getSetupById(id, 'forex');
+        if (s && s.superseded === 0) targets.push(s);
+      }
+    } else {
+      // Cancel all currently awaiting_entry signals
+      const allActive = await queries.getAllActiveSetups();
+      targets = allActive.filter(s => s && s.superseded === 0 && s.signal_state === 'awaiting_entry');
+    }
+
+    const cancelled: string[] = [];
+
+    for (const setup of targets) {
+      const targetMarket = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+      await queries.updateSetupState(setup.id, targetMarket, 'invalidated', {
+        invalidation_reason: reason,
+        invalidation_detail: detail,
+        tradable: 0,
+        resolved_at: new Date().toISOString()
+      });
+
+      await hawkeyeService.logInvalidation({
+        setupId: setup.id,
+        instrument: setup.instrument,
+        setupMarket: targetMarket,
+        runId: `batch_cancel_${Date.now()}`,
+        reasonCode: reason,
+        detail: detail,
+        previousState: setup.signal_state,
+        newState: 'invalidated',
+        createdBy: 'admin_panel'
+      });
+
+      // Dispatch Telegram CANCEL notice
+      publishEvents.emit('setup_invalidated', {
+        setupId: setup.id,
+        reason,
+        setup,
+        superseded: false
+      });
+
+      try {
+        await telegramBotService.sendMessage(telegramBotService.formatInvalidatedManage(setup, reason));
+      } catch (tgErr) {
+        console.warn('Could not dispatch Telegram cancel message:', tgErr);
+      }
+
+      cancelled.push(`${setup.instrument} (${setup.id})`);
+    }
+
+    // Persist updated snapshot
+    const remaining = await queries.getAllActiveSetups();
+    await saveSignalsSnapshot(remaining);
+
+    res.json({
+      success: true,
+      message: `Cancelled ${targets.length} trade setup(s) and dispatched Telegram cancel notices.`,
+      cancelledCount: targets.length,
+      cancelled
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to batch cancel signals', details: error.message });
+  }
+});
+
 
 let isSingleRescanActive = false;
 

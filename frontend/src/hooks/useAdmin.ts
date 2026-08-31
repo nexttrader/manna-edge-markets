@@ -31,8 +31,22 @@ export function useAdmin() {
     }
   };
 
-  return { triggerRun, disableSignal };
+  const cancelUnwantedBatch = async (ids?: string[], reason?: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/signals/cancel-unwanted-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, reason })
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  return { triggerRun, disableSignal, cancelUnwantedBatch };
 }
+
 
 export function useStrategies() {
   const [strategies, setStrategies] = useState<{ id: string; name: string; enabled: boolean }[]>([]);

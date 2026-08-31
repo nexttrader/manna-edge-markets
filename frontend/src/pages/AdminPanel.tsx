@@ -17,7 +17,8 @@ import { ExpandableCalendar } from '../components/ExpandableCalendar';
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
   const navigate = useNavigate();
-  const { triggerRun, disableSignal } = useAdmin();
+  const { triggerRun, disableSignal, cancelUnwantedBatch } = useAdmin();
+  const [isCancellingAll, setIsCancellingAll] = useState(false);
   const { runs } = usePublishRuns(15);
   const { resetCircuitBreaker, status } = useSystemStatus();
   const { strategies: dbStrategies, toggleStrategy } = useStrategies();
@@ -375,7 +376,33 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const handleCancelAllUnwanted = async () => {
+    const confirmed = window.confirm(
+      `🚨 CANCEL ALL PENDING SIGNALS & BROADCAST TO TELEGRAM:\n\n` +
+      `Are you sure you want to cancel all currently pending ('awaiting_entry') signals?\n\n` +
+      `This will immediately:\n` +
+      `1. Mark all pending setups as invalidated\n` +
+      `2. Remove them from client setup cards\n` +
+      `3. Dispatch official CANCEL PENDING ORDER alerts to Telegram.`
+    );
+    if (!confirmed) return;
+    setIsCancellingAll(true);
+    try {
+      const ok = await cancelUnwantedBatch(undefined, 'unwanted_rescan_cancelled');
+      if (ok) {
+        alert('✅ All pending signals have been cancelled and Telegram cancel alerts dispatched.');
+        await refetchActiveSetups();
+        await refetchAnalytics();
+      } else {
+        alert('❌ Failed to batch cancel signals.');
+      }
+    } finally {
+      setIsCancellingAll(false);
+    }
+  };
+
   const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+
 
   const [showCsvExportModal, setShowCsvExportModal] = useState(false);
 
@@ -903,14 +930,38 @@ export const AdminPanel: React.FC = () => {
 
         {/* Active Signals Control Desk (Manual Signal Invalidation) */}
         <div className="admin-signal-control-desk glass-card font-mono" style={{ padding: '20px', marginBottom: '24px', borderRadius: '10px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--kdt-gold)', margin: 0 }}>
-              📡 ACTIVE SIGNALS CONTROL DESK ({activeSetupsList.length} ACTIVE)
-            </h2>
-            <span style={{ fontSize: '0.8rem', color: 'var(--kdt-white-muted)' }}>
-              Manually disable or invalidate individual active signals across Futures & Forex.
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <h2 className="section-title" style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--kdt-gold)', margin: 0 }}>
+                📡 ACTIVE SIGNALS CONTROL DESK ({activeSetupsList.length} ACTIVE)
+              </h2>
+              <span style={{ fontSize: '0.8rem', color: 'var(--kdt-white-muted)' }}>
+                Manually disable or invalidate active signals across Futures & Forex.
+              </span>
+            </div>
+            {activeSetupsList.some((s: any) => (s.signal_state || s.state || '').toLowerCase() === 'awaiting_entry') && (
+              <button
+                className="font-mono"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 23, 68, 0.3) 0%, rgba(183, 28, 28, 0.5) 100%)',
+                  border: '1px solid #ff1744',
+                  color: '#ffffff',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  boxShadow: '0 2px 10px rgba(255, 23, 68, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+                onClick={handleCancelAllUnwanted}
+                disabled={isCancellingAll}
+              >
+                {isCancellingAll ? '⏳ CANCELLING & BROADCASTING...' : '⛔ CANCEL ALL PENDING SIGNALS (DISPATCH TELEGRAM CANCEL)'}
+              </button>
+            )}
           </div>
+
 
           {activeSetupsList.length > 0 ? (
             <div className="table-responsive">
