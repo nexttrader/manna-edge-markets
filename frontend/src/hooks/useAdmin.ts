@@ -44,8 +44,25 @@ export function useAdmin() {
     }
   };
 
-  return { triggerRun, disableSignal, cancelUnwantedBatch };
+  const cancelRebootSignals = async (sinceTimestamp?: string, reason?: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/signals/cancel-reboot-signals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sinceTimestamp, reason })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  return { triggerRun, disableSignal, cancelUnwantedBatch, cancelRebootSignals };
 }
+
 
 
 export function useStrategies() {

@@ -17,8 +17,10 @@ import { ExpandableCalendar } from '../components/ExpandableCalendar';
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
   const navigate = useNavigate();
-  const { triggerRun, disableSignal, cancelUnwantedBatch } = useAdmin();
+  const { triggerRun, disableSignal, cancelUnwantedBatch, cancelRebootSignals } = useAdmin();
   const [isCancellingAll, setIsCancellingAll] = useState(false);
+  const [isCancellingReboot, setIsCancellingReboot] = useState(false);
+
   const { runs } = usePublishRuns(15);
   const { resetCircuitBreaker, status } = useSystemStatus();
   const { strategies: dbStrategies, toggleStrategy } = useStrategies();
@@ -401,7 +403,33 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const handleCancelRebootSignals = async () => {
+    const confirmed = window.confirm(
+      `🚨 CANCEL REBOOT SIGNALS ONLY & BROADCAST TO TELEGRAM:\n\n` +
+      `Are you sure you want to cancel the pending signals that were generated during the recent server reboot?\n\n` +
+      `This will:\n` +
+      `1. Cancel only signals created during the recent reboot rescan (mid_run / recent)\n` +
+      `2. Keep intact any earlier legitimate signals\n` +
+      `3. Dispatch official CANCEL PENDING ORDER alerts to Telegram.`
+    );
+    if (!confirmed) return;
+    setIsCancellingReboot(true);
+    try {
+      const res = await cancelRebootSignals();
+      if (res && res.success) {
+        alert(`✅ Cancelled ${res.cancelledCount} reboot signal(s):\n${(res.cancelled || []).join('\n')}\n\nTelegram cancel notices dispatched.`);
+        await refetchActiveSetups();
+        await refetchAnalytics();
+      } else {
+        alert('❌ No reboot signals found or failed to cancel.');
+      }
+    } finally {
+      setIsCancellingReboot(false);
+    }
+  };
+
   const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+
 
 
   const [showCsvExportModal, setShowCsvExportModal] = useState(false);
@@ -940,25 +968,47 @@ export const AdminPanel: React.FC = () => {
               </span>
             </div>
             {activeSetupsList.some((s: any) => (s.signal_state || s.state || '').toLowerCase() === 'awaiting_entry') && (
-              <button
-                className="font-mono"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 23, 68, 0.3) 0%, rgba(183, 28, 28, 0.5) 100%)',
-                  border: '1px solid #ff1744',
-                  color: '#ffffff',
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 900,
-                  fontSize: '0.78rem',
-                  boxShadow: '0 2px 10px rgba(255, 23, 68, 0.3)',
-                  transition: 'all 0.2s ease'
-                }}
-                onClick={handleCancelAllUnwanted}
-                disabled={isCancellingAll}
-              >
-                {isCancellingAll ? '⏳ CANCELLING & BROADCASTING...' : '⛔ CANCEL ALL PENDING SIGNALS (DISPATCH TELEGRAM CANCEL)'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  className="font-mono"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(124, 77, 255, 0.4) 100%)',
+                    border: '1px solid #00e5ff',
+                    color: '#ffffff',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 900,
+                    fontSize: '0.78rem',
+                    boxShadow: '0 2px 10px rgba(0, 229, 255, 0.3)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onClick={handleCancelRebootSignals}
+                  disabled={isCancellingReboot || isCancellingAll}
+                  title="Cancels only setups generated during the recent reboot rescan while preserving earlier legitimate signals"
+                >
+                  {isCancellingReboot ? '⏳ CANCELLING REBOOT SIGNALS...' : '⛔ CANCEL REBOOT SIGNALS ONLY (TELEGRAM CANCEL)'}
+                </button>
+                <button
+                  className="font-mono"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 23, 68, 0.3) 0%, rgba(183, 28, 28, 0.5) 100%)',
+                    border: '1px solid #ff1744',
+                    color: '#ffffff',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 900,
+                    fontSize: '0.78rem',
+                    boxShadow: '0 2px 10px rgba(255, 23, 68, 0.3)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onClick={handleCancelAllUnwanted}
+                  disabled={isCancellingAll || isCancellingReboot}
+                >
+                  {isCancellingAll ? '⏳ CANCELLING ALL...' : '⛔ CANCEL ALL PENDING SIGNALS'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -971,6 +1021,7 @@ export const AdminPanel: React.FC = () => {
                     <th>Symbol & Market</th>
                     <th>Strategy</th>
                     <th>Bias</th>
+                    <th>Created Time</th>
                     <th>Entry Zone</th>
                     <th>Stop Loss</th>
                     <th>TP1 / TP2</th>
@@ -983,6 +1034,7 @@ export const AdminPanel: React.FC = () => {
                     const stratName = (setup.strategy_id === 'sentinel_v2' || setup.strategy_id === 'manna_elite' || setup.strategy_id === 'manna_elite_v1_2') ? 'Manna Elite v1.2' : (setup.strategy_id === 'manna_snd' ? 'Manna SnD' : 'Manna Basic');
                     const isDisabling = disablingId === setup.id;
                     const isLong = (setup.bias || 'long').toLowerCase() === 'long';
+                    const createdTimeStr = setup.created_at ? new Date(setup.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' }) + ' UTC' : '--';
 
                     return (
                       <tr key={setup.id}>
@@ -999,6 +1051,12 @@ export const AdminPanel: React.FC = () => {
                           <span className={isLong ? 'text-green' : 'text-red'}>
                             {isLong ? '▲ LONG' : '▼ SHORT'}
                           </span>
+                        </td>
+                        <td style={{ fontSize: '0.78rem', color: 'var(--kdt-white-muted)' }}>
+                          <div>{createdTimeStr}</div>
+                          {setup.created_by_run && (
+                            <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{setup.created_by_run.substring(0, 16)}</div>
+                          )}
                         </td>
                         <td>{setup.entry_zone_mid || setup.entryMin}</td>
                         <td className="text-red">{setup.stop || setup.levels?.stopLoss}</td>
@@ -1045,7 +1103,7 @@ export const AdminPanel: React.FC = () => {
                                 fontSize: '0.75rem'
                               }}
                               onClick={() => {
-                                const confirmed = window.confirm(`⚠️ CONFIRMATION REQUIRED:\n\nAre you sure you want to disable and invalidate the signal for ${setup.instrument}? This will mark it as non-tradable.`);
+                                const confirmed = window.confirm(`⚠️ CONFIRMATION REQUIRED:\n\nAre you sure you want to disable and invalidate the signal for ${setup.instrument}? This will dispatch a Telegram CANCEL notice and remove it from client cards.`);
                                 if (confirmed) {
                                   handleDisableSignal(setup.id, setup.market);
                                 }
@@ -1063,6 +1121,7 @@ export const AdminPanel: React.FC = () => {
               </table>
             </div>
           ) : (
+
             <div style={{ color: 'var(--kdt-white-muted)', padding: '16px 0' }}>
               No active signals currently open in the database.
             </div>

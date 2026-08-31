@@ -452,6 +452,80 @@ router.post('/signals/cancel-unwanted-batch', async (req: Request, res: Response
   }
 });
 
+router.post('/signals/cancel-reboot-signals', async (req: Request, res: Response) => {
+  try {
+    const { sinceTimestamp, reason = 'unwanted_reboot_rescan_cancelled', detail = 'Cancelled by admin: Signal created during reboot rescan' } = req.body || {};
+
+    const allActive = await queries.getAllActiveSetups();
+    // Identify setups created by reboot scan: created_by_run starting with 'mid_run_' OR created in the recent window
+    const threshold = sinceTimestamp ? new Date(sinceTimestamp).getTime() : (Date.now() - 3 * 60 * 60 * 1000);
+
+    const rebootTargets = allActive.filter(s => {
+      if (!s || s.superseded !== 0) return false;
+      const isAwaiting = s.signal_state === 'awaiting_entry';
+      const isMidRun = typeof s.created_by_run === 'string' && s.created_by_run.startsWith('mid_run_');
+      const createdAtTime = s.created_at ? new Date(s.created_at).getTime() : 0;
+      const isRecent = createdAtTime >= threshold;
+      return isAwaiting && (isMidRun || isRecent);
+    });
+
+    const cancelled: string[] = [];
+
+    for (const setup of rebootTargets) {
+      const targetMarket = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+      await queries.updateSetupState(setup.id, targetMarket, 'invalidated', {
+        invalidation_reason: reason,
+        invalidation_detail: detail,
+        tradable: 0,
+        resolved_at: new Date().toISOString()
+      });
+
+      await hawkeyeService.logInvalidation({
+        setupId: setup.id,
+        instrument: setup.instrument,
+        setupMarket: targetMarket,
+        runId: `reboot_cancel_${Date.now()}`,
+        reasonCode: reason,
+        detail: detail,
+        previousState: setup.signal_state,
+        newState: 'invalidated',
+        createdBy: 'admin_panel'
+      });
+
+      // Dispatch Telegram CANCEL notice
+      publishEvents.emit('setup_invalidated', {
+        setupId: setup.id,
+        reason,
+        setup,
+        superseded: false
+      });
+
+      try {
+        await telegramBotService.sendMessage(telegramBotService.formatInvalidatedManage(setup, reason));
+      } catch (tgErr) {
+        console.warn('Could not dispatch Telegram cancel message:', tgErr);
+      }
+
+      cancelled.push(`${setup.instrument} (${setup.id})`);
+    }
+
+    // Persist updated snapshot
+    const remaining = await queries.getAllActiveSetups();
+    await saveSignalsSnapshot(remaining);
+
+    res.json({
+      success: true,
+      message: `Cancelled ${rebootTargets.length} reboot trade setup(s) and dispatched Telegram cancel notices.`,
+      cancelledCount: rebootTargets.length,
+      cancelled,
+      preservedCount: remaining.length
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to cancel reboot signals', details: error.message });
+  }
+});
+
+
 
 let isSingleRescanActive = false;
 
