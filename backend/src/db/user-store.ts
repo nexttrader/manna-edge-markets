@@ -383,16 +383,29 @@ export const updateUserStatus = async (userId: string, status: 'active' | 'suspe
 
 export const updateUserFull = async (
   userId: string, 
-  updates: Partial<Pick<UserProfile, 'name' | 'tier' | 'role' | 'status' | 'preferredMarket' | 'riskLimit'>>
+  updates: Partial<Pick<UserProfile, 'name' | 'tier' | 'role' | 'status' | 'preferredMarket' | 'riskLimit' | 'isTrial'>>
 ): Promise<UserProfile | null> => {
   const user = await findUserById(userId);
   if (!user) return null;
-  if (updates.name) user.name = updates.name;
-  if (updates.tier) user.tier = updates.tier;
-  if (updates.role) user.role = updates.role;
-  if (updates.status) user.status = updates.status;
-  if (updates.preferredMarket) user.preferredMarket = updates.preferredMarket;
-  if (updates.riskLimit) user.riskLimit = updates.riskLimit;
+  if (updates.name !== undefined) user.name = updates.name;
+  if (updates.tier !== undefined) user.tier = updates.tier;
+  if (updates.role !== undefined) user.role = updates.role;
+  if (updates.status !== undefined) user.status = updates.status;
+  if (updates.preferredMarket !== undefined) user.preferredMarket = updates.preferredMarket;
+  if (updates.riskLimit !== undefined) user.riskLimit = updates.riskLimit;
+  if (updates.isTrial !== undefined) {
+    user.isTrial = updates.isTrial;
+    if (!updates.isTrial) {
+      user.trialExpired = false;
+      user.trialExpiresAt = undefined;
+      user.trialDaysRemaining = undefined;
+      user.trialStartedAt = undefined;
+      user.trialExtendedCount = 0;
+      if (user.subscriptionStatus === 'trialing') {
+        user.subscriptionStatus = 'active';
+      }
+    }
+  }
   await upsertUser(user);
   return user;
 };
@@ -454,6 +467,14 @@ export const setCustomSubscriptionDates = async (
   user.billingCycle = billingCycle;
   user.status = 'active';
   user.subscriptionStatus = 'active';
+
+  // Automatically remove trial status and clean up trial metadata
+  user.isTrial = false;
+  user.trialExpired = false;
+  user.trialExpiresAt = undefined;
+  user.trialDaysRemaining = undefined;
+  user.trialStartedAt = undefined;
+  user.trialExtendedCount = 0;
 
   await upsertUser(user);
   return { success: true, user };

@@ -192,6 +192,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   // Custom Dates / Pause form inside User Modal
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [savingCustomDates, setSavingCustomDates] = useState<boolean>(false);
   const [autoResumeDate, setAutoResumeDate] = useState<string>('');
   const [applyCouponCode, setApplyCouponCode] = useState<string>('');
 
@@ -318,6 +319,7 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
       showNotification('Please select both Start Date and End Date', true);
       return;
     }
+    setSavingCustomDates(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/system/users/${userId}/custom-dates`, {
         method: 'POST',
@@ -326,14 +328,16 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        showNotification(`Subscription dates updated for ${data.user.name}`);
+        showNotification(`🎉 Subscription dates updated & converted from trial to active subscription for ${data.user.name}`);
         setSelectedUser(data.user);
         fetchAllData();
       } else {
-        showNotification(data.error, true);
+        showNotification(data.error || 'Failed to update custom subscription dates', true);
       }
     } catch (e: any) {
       showNotification(e.message, true);
+    } finally {
+      setSavingCustomDates(false);
     }
   };
 
@@ -833,8 +837,10 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                             onClick={() => {
                               setSelectedUser(user);
                               setActiveTab('subscriptions');
-                              setCustomStartDate(user.subscriptionStart ? user.subscriptionStart.split('T')[0] : '');
-                              setCustomEndDate(user.subscriptionEnd ? user.subscriptionEnd.split('T')[0] : '');
+                              const defaultStart = user.subscriptionStart ? user.subscriptionStart.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const defaultEnd = user.subscriptionEnd ? user.subscriptionEnd.split('T')[0] : new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0];
+                              setCustomStartDate(defaultStart);
+                              setCustomEndDate(defaultEnd);
                               setAutoResumeDate(user.pauseResumeDate ? user.pauseResumeDate.split('T')[0] : '');
                             }}
                           >
@@ -906,8 +912,10 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                           setSelectedUser(u);
                           setControlSearchQuery('');
                           setShowControlSearchResults(false);
-                          setCustomStartDate(u.subscriptionStart ? u.subscriptionStart.split('T')[0] : '');
-                          setCustomEndDate(u.subscriptionEnd ? u.subscriptionEnd.split('T')[0] : '');
+                          const defaultStart = u.subscriptionStart ? u.subscriptionStart.split('T')[0] : new Date().toISOString().split('T')[0];
+                          const defaultEnd = u.subscriptionEnd ? u.subscriptionEnd.split('T')[0] : new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0];
+                          setCustomStartDate(defaultStart);
+                          setCustomEndDate(defaultEnd);
                           setAutoResumeDate(u.pauseResumeDate ? u.pauseResumeDate.split('T')[0] : '');
                           setCtSelectedUserIds([u.id]);
                         }}
@@ -986,11 +994,20 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                       <span style={{ color: '#64748b' }}>Access Tier:</span>{' '}
                       <span style={{ color: '#38bdf8', fontWeight: 700, marginLeft: '4px' }}>{selectedUser.tier}</span>
                     </div>
-                    {selectedUser.isTrial && (
-                      <div style={{ background: 'rgba(255, 215, 0, 0.08)', border: '1px solid rgba(255,215,0,0.15)', padding: '8px 12px', borderRadius: '6px', marginTop: '8px' }}>
+                    {selectedUser.isTrial ? (
+                      <div style={{ background: 'rgba(255, 215, 0, 0.08)', border: '1px solid rgba(255,215,0,0.18)', padding: '10px 12px', borderRadius: '6px', marginTop: '8px' }}>
                         <div style={{ color: '#ffd700', fontSize: '0.78rem', fontWeight: 800 }}>⭐ Trial Active:</div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600, marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, marginTop: '2px', color: '#fef08a' }}>
                           Expires: {selectedUser.trialExpiresAt ? new Date(selectedUser.trialExpiresAt).toLocaleString() : 'N/A'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '10px 12px', borderRadius: '6px', marginTop: '8px' }}>
+                        <div style={{ color: '#38bdf8', fontSize: '0.78rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          📅 Full Membership Active
+                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, marginTop: '2px', color: '#e0f2fe' }}>
+                          {selectedUser.subscriptionStart ? selectedUser.subscriptionStart.split('T')[0] : 'Active'} &rarr; {selectedUser.subscriptionEnd ? selectedUser.subscriptionEnd.split('T')[0] : 'No Expiration Set'}
                         </div>
                       </div>
                     )}
@@ -1062,8 +1079,21 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                   </div>
 
                   {/* Form B: Custom Dates */}
-                  <div style={{ background: 'rgba(30,41,59,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#ffd700', fontWeight: 800 }}>📅 Custom Subscription Dates</h5>
+                  <div style={{
+                    background: 'rgba(30,41,59,0.3)',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: customStartDate && customEndDate ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                    boxShadow: customStartDate && customEndDate ? '0 0 20px rgba(255, 215, 0, 0.06)' : 'none'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h5 style={{ margin: 0, fontSize: '0.9rem', color: '#ffd700', fontWeight: 800 }}>📅 Custom Subscription Dates</h5>
+                      {customStartDate && customEndDate && (
+                        <span style={{ fontSize: '0.72rem', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                          ✓ Ready to Save
+                        </span>
+                      )}
+                    </div>
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
                       <div style={{ flex: 1 }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Start Date</label>
@@ -1071,7 +1101,15 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                           type="date"
                           value={customStartDate}
                           onChange={e => setCustomStartDate(e.target.value)}
-                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            background: '#0f172a',
+                            border: customStartDate ? '1px solid #ffd700' : '1px solid #334155',
+                            color: '#fff',
+                            fontSize: '0.85rem'
+                          }}
                         />
                       </div>
                       <div style={{ flex: 1 }}>
@@ -1080,17 +1118,47 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                           type="date"
                           value={customEndDate}
                           onChange={e => setCustomEndDate(e.target.value)}
-                          style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '0.85rem' }}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            background: '#0f172a',
+                            border: customEndDate ? '1px solid #ffd700' : '1px solid #334155',
+                            color: '#fff',
+                            fontSize: '0.85rem'
+                          }}
                         />
                       </div>
                     </div>
                     <button
-                      className="ums-btn-secondary"
+                      className="ums-btn-primary"
                       onClick={() => handleCustomDates(selectedUser.id)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                      disabled={savingCustomDates || !customStartDate || !customEndDate}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '6px',
+                        fontWeight: 800,
+                        fontSize: '0.85rem',
+                        cursor: (savingCustomDates || !customStartDate || !customEndDate) ? 'not-allowed' : 'pointer',
+                        border: 'none',
+                        background: customStartDate && customEndDate
+                          ? 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)'
+                          : 'rgba(51, 65, 85, 0.5)',
+                        color: customStartDate && customEndDate ? '#0f172a' : '#94a3b8',
+                        boxShadow: customStartDate && customEndDate ? '0 0 16px rgba(234, 179, 8, 0.45)' : 'none',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
                     >
-                      💾 Save Custom Subscription Dates
+                      {savingCustomDates ? '⏳ Saving Custom Subscription Dates...' : '💾 Save Custom Subscription Dates'}
                     </button>
+                    <span style={{ fontSize: '0.72rem', color: '#38bdf8', display: 'block', marginTop: '8px', textAlign: 'center', fontWeight: 600 }}>
+                      ⚡ Setting custom dates automatically clears trial status &amp; activates membership.
+                    </span>
                   </div>
 
                 </div>
