@@ -861,3 +861,44 @@
   font-size: 0.78rem;
   letter-spacing: 0.05em;
 }
+
+@media (max-width: 768px) {
+  .strategy-filter-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 14px;
+  }
+  .strategy-filter-tabs .filter-title {
+    display: none;
+  }
+  .strat-tab {
+    white-space: nowrap;
+    padding: 5px 10px;
+    font-size: 0.76rem;
+  }
+  .strategy-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .analytics-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+  .action-bar-btns {
+    flex-direction: column;
+  }
+  .btn-export-csv, .btn-reset-analytics {
+    width: 100%;
+    text-align: center;
+  }
+  .cb-status-large {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+    padding: 14px;
+  }
+}
+

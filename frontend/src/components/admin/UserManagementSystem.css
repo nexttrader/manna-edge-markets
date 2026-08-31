@@ -459,3 +459,36 @@
   gap: 0.3rem;
   font-size: 0.85rem;
 }
+
+@media (max-width: 768px) {
+  .ums-container {
+    padding: 1rem;
+    gap: 1rem;
+    border-radius: 12px;
+  }
+  .ums-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ums-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .ums-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ums-search-input {
+    min-width: 100%;
+  }
+  .ums-form-row {
+    grid-template-columns: 1fr;
+  }
+  .ums-modal-overlay {
+    padding: 10px;
+  }
+  .ums-modal-card {
+    max-height: 94vh;
+  }
+}
+

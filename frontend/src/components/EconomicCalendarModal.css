@@ -301,3 +301,51 @@
   flex-direction: column;
   gap: 8px;
 }
+
+@media (max-width: 640px) {
+  .econ-modal-backdrop {
+    padding: 10px;
+  }
+  .econ-modal-card {
+    padding: 16px;
+    max-height: 92vh;
+  }
+  .econ-filters-row {
+    padding: 8px;
+    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .econ-filter-group {
+    justify-content: space-between;
+  }
+  .econ-filter-group select {
+    flex: 1;
+    max-width: 60%;
+  }
+  .econ-refresh-btn {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+  }
+  .econ-event-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .econ-event-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .econ-event-right {
+    width: 100%;
+    justify-content: flex-start;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-top: 6px;
+  }
+  .ev-meta {
+    align-items: flex-start;
+  }
+}
+

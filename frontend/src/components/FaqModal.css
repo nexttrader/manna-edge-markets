@@ -516,3 +516,50 @@
 .btn-close-bottom:hover {
   background: rgba(255, 255, 255, 0.18);
 }
+
+@media (max-width: 640px) {
+  .faq-modal-backdrop {
+    padding: 8px;
+  }
+  .faq-modal-content {
+    padding: 14px 12px;
+    height: 94vh;
+    border-radius: 12px;
+  }
+  .faq-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .faq-search-wrapper {
+    min-width: 100%;
+  }
+  .faq-role-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+  .role-tab {
+    flex: 1;
+    text-align: center;
+  }
+  .faq-question-btn {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .question-text {
+    font-size: 0.85rem;
+  }
+  .answer-text {
+    font-size: 0.82rem;
+  }
+  .faq-modal-footer {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn-close-bottom {
+    width: 100%;
+    text-align: center;
+  }
+}
+

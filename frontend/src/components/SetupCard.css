@@ -794,3 +794,43 @@
   border-color: rgba(156, 39, 176, 0.5);
   box-shadow: 0 0 6px rgba(156, 39, 176, 0.2);
 }
+
+@media (max-width: 480px) {
+  .setup-card {
+    padding: 16px 14px;
+    gap: 12px;
+  }
+  .sc-instrument {
+    font-size: 1.35rem;
+  }
+  .level-row {
+    grid-template-columns: 80px 1fr auto;
+    padding: 5px 8px;
+    gap: 6px;
+  }
+  .level-label {
+    font-size: 0.72rem;
+  }
+  .level-val {
+    font-size: 0.88rem;
+  }
+  .level-pips {
+    font-size: 0.72rem;
+  }
+  .btn-action {
+    min-width: 55px;
+    padding: 7px 6px;
+    font-size: 0.78rem;
+  }
+  .sc-unrealized-banner {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+  .unrealized-r-val {
+    font-size: 0.88rem;
+  }
+  .sc-in-zone-opportunity {
+    padding: 6px 10px;
+  }
+}
+

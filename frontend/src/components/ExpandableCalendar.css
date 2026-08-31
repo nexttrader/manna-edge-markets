@@ -458,20 +458,53 @@
 
 /* Responsive fixes */
 @media (max-width: 768px) {
+  .calendar-header-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .calendar-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
   .calendar-grid {
-    gap: 4px;
+    gap: 3px;
   }
-  
+  .weekday-header {
+    padding: 6px 2px;
+    font-size: 0.7rem;
+  }
   .calendar-day-cell {
-    min-height: 65px;
-    padding: 4px;
+    min-height: 58px;
+    padding: 3px;
+    border-radius: 4px;
   }
-  
+  .day-number {
+    font-size: 0.75rem;
+  }
   .r-pnl-pill {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
-  
+  .day-market-splits {
+    display: none;
+  }
   .dollar-pnl-sub {
     display: none;
   }
+  .sessions-details-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 10px;
+  }
+  .drawer-header {
+    padding: 10px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .drawer-summary-stats {
+    gap: 8px;
+    font-size: 0.75rem;
+  }
 }
+

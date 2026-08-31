@@ -673,3 +673,32 @@ input:checked + .slider:before {
 .modal-btn.submit:hover {
   background: #4f46e5;
 }
+
+@media (max-width: 768px) {
+  .asset-hub-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .asset-hub-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+  .toolbar-left, .toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .search-box {
+    min-width: 100%;
+  }
+  .asset-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+

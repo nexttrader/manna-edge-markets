@@ -354,7 +354,66 @@
 }
 
 @media (max-width: 768px) {
-  .hero-title { font-size: 2.6rem; }
-  .hero-subtitle { font-size: 1.05rem; }
-  .nav-container { flex-direction: column; gap: 12px; }
+  .hero-section {
+    padding: 50px 16px 40px;
+  }
+  .hero-title {
+    font-size: 2.4rem;
+    line-height: 1.1;
+  }
+  .hero-subtitle {
+    font-size: 1rem;
+    margin-bottom: 28px;
+  }
+  .nav-container {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  .market-ticker-bar {
+    padding: 10px 16px;
+    gap: 14px;
+    margin-bottom: 32px;
+    font-size: 0.8rem;
+  }
+  .hero-cta-group {
+    flex-direction: column;
+    width: 100%;
+    max-width: 360px;
+    gap: 12px;
+  }
+  .btn-hero-main,
+  .btn-hero-secondary,
+  .btn-hero-outline {
+    width: 100%;
+    text-align: center;
+    padding: 14px 20px;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .features-section {
+    padding: 40px 16px;
+  }
+  .section-title {
+    font-size: 1.7rem;
+    margin-bottom: 28px;
+  }
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .home-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    padding: 20px 16px;
+  }
 }
+
+@media (max-width: 420px) {
+  .hero-title {
+    font-size: 2rem;
+  }
+}
+

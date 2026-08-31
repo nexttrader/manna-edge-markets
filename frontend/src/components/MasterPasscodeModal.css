@@ -66,3 +66,13 @@
 .btn-passcode-submit:hover {
   background: #651fff;
 }
+
+.btn-passcode-cancel:hover {
+  color: #fff;
+}
+
+@media (max-width: 480px) {
+  .master-passcode-card {
+    padding: 20px 16px;
+  }
+}

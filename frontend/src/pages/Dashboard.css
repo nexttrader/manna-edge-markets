@@ -185,7 +185,7 @@
 
 .setups-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr));
   gap: 24px;
 }
 
@@ -232,3 +232,51 @@
   letter-spacing: 0.05em;
   color: var(--kdt-white-muted);
 }
+
+@media (max-width: 768px) {
+  .dashboard-main {
+    padding-top: 16px;
+    padding-bottom: 60px;
+  }
+  .filter-bar {
+    padding: 12px;
+    margin-bottom: 16px;
+    gap: 12px;
+  }
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    width: 100%;
+  }
+  .tab {
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .filter-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .filter-group {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .filter-group select {
+    flex: 1;
+    max-width: 60%;
+  }
+  .reset-filters-btn {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+    padding: 8px;
+  }
+  .setups-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+

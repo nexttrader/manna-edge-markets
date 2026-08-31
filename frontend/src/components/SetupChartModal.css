@@ -505,19 +505,48 @@
 @media (max-width: 768px) {
   .chart-modal-header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 14px;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .header-left {
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+  }
+  .chart-symbol {
+    font-size: 1.3rem;
+  }
+  .bias-tag, .state-status-tag {
+    padding: 2px 8px;
+    font-size: 0.75rem;
   }
   .header-right {
     width: 100%;
     flex-wrap: wrap;
+    gap: 6px;
     justify-content: space-between;
   }
-  .level-legend-bar {
-    gap: 10px;
-    padding: 8px 14px;
+  .tf-selector button {
+    padding: 4px 8px;
     font-size: 0.78rem;
   }
+  .level-legend-bar {
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .manna-snd-legend-bar {
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
 }
+
 

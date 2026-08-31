@@ -229,3 +229,22 @@
   text-align: center;
   padding: 24px 0;
 }
+
+@media (max-width: 768px) {
+  .outcome-stats {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sd-title {
+    font-size: 1.1rem;
+    margin-left: 8px;
+  }
+  .outcome-section, .history-card {
+    padding: 16px;
+  }
+  .timeline-item {
+    padding-left: 20px;
+    padding-bottom: 18px;
+  }
+}
+

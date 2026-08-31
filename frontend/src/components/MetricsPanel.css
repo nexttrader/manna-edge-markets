@@ -50,3 +50,25 @@
   font-size: 0.8rem;
   color: var(--kdt-white-muted);
 }
+
+@media (max-width: 600px) {
+  .metrics-panel {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .metric-card {
+    padding: 12px;
+    gap: 4px;
+  }
+  .metric-title {
+    font-size: 0.75rem;
+  }
+  .metric-val {
+    font-size: 1.6rem;
+  }
+  .metric-sub {
+    font-size: 0.7rem;
+  }
+}
+

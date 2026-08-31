@@ -163,3 +163,33 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+@media (max-width: 768px) {
+  .replace-modal-backdrop {
+    padding: 10px;
+  }
+  .replace-modal-content {
+    padding: 16px;
+    max-height: 94vh;
+  }
+  .comparison-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .vs-divider {
+    padding: 4px 0;
+  }
+  .replace-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .right-actions {
+    flex-direction: column;
+  }
+  .action-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+

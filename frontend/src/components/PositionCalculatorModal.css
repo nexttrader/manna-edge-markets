@@ -188,3 +188,21 @@
   font-family: var(--font-label);
   color: var(--kdt-white-muted);
 }
+
+@media (max-width: 480px) {
+  .calc-modal-backdrop {
+    padding: 12px;
+  }
+  .calc-modal-card {
+    padding: 18px 14px;
+  }
+  .calc-inputs-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .calc-price-levels {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+}
+

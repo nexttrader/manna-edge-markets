@@ -364,3 +364,23 @@
   font-size: 1.1rem;
 }
 
+@media (max-width: 768px) {
+  .runners-panel {
+    padding: 12px 14px;
+  }
+  .runners-title {
+    font-size: 0.95rem;
+  }
+  .runners-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .runner-card {
+    padding: 14px;
+  }
+  .runner-metric-grid {
+    gap: 8px 12px;
+  }
+}
+
+

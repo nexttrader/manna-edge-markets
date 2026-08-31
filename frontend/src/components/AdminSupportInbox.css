@@ -498,3 +498,40 @@
 .asi-list::-webkit-scrollbar-thumb,
 .asi-detail::-webkit-scrollbar-thumb,
 .asi-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+@media (max-width: 768px) {
+  .asi-tabs {
+    gap: 6px;
+  }
+  .asi-tab {
+    padding: 6px 10px;
+    font-size: 0.76rem;
+  }
+  .asi-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .asi-list {
+    width: 100%;
+    min-width: 100%;
+    max-height: 220px;
+    padding-right: 0;
+  }
+  .asi-detail {
+    width: 100%;
+    overflow-y: visible;
+  }
+  .asi-action-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .asi-btn {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+  .asi-reply-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+

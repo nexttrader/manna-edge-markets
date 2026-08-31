@@ -73,7 +73,13 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
   }, [fetchUnread]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [myNewPass, setMyNewPass] = useState('');
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleChangeMyPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,12 +128,26 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
       <header className="dashboard-header glass-card">
         <div className="container header-container">
           <div className="header-left">
+            <button 
+              className="mobile-menu-toggle-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+              title="Menu"
+            >
+              <span className="hamburger-bar"></span>
+              <span className="hamburger-bar"></span>
+              <span className="hamburger-bar"></span>
+              {(inboxUnread > 0 || activityLogs.length > 0) && (
+                <span className="mobile-badge-indicator"></span>
+              )}
+            </button>
+
             <Link to="/" className="header-logo font-mono" title="Manna Edge Markets — Click for Home">
               <span className="logo-emblem">⚡</span>
               <span className="logo-title-text">MANNA EDGE</span>
             </Link>
             
-            <nav className="header-nav font-mono">
+            <nav className="header-nav font-mono desktop-only-nav">
               <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
                 📊 Dashboard
               </Link>
@@ -195,7 +215,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
           
           <div className="header-actions">
             {/* Voice Announcements Toggle & Settings */}
-            <div className="voice-control-box font-mono">
+            <div className="voice-control-box font-mono desktop-voice-controls">
               <button 
                 className={`voice-toggle-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
                 onClick={toggleVoice}
@@ -223,7 +243,9 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
               )}
             </div>
 
-            <CircuitBreakerIndicator />
+            <div className="header-circuit-breaker-wrap">
+              <CircuitBreakerIndicator />
+            </div>
 
             {/* Account Dropdown Menu */}
             {user ? (
@@ -294,6 +316,112 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             )}
           </div>
         </div>
+
+        {/* Mobile Navigation Slide-Down Drawer */}
+        {mobileMenuOpen && (
+          <div className="mobile-nav-drawer font-mono animate-slide-up">
+            <div className="mobile-nav-links">
+              <Link 
+                to="/dashboard" 
+                className={`mobile-nav-item ${location.pathname === '/dashboard' ? 'active' : ''}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                📊 Dashboard
+              </Link>
+              
+              <button 
+                className="mobile-nav-item"
+                onClick={() => { setShowInbox(true); setMobileMenuOpen(false); }}
+              >
+                <span>📬 Support Desk</span>
+                {inboxUnread > 0 && <span className="mobile-pill-badge red">{inboxUnread} new</span>}
+              </button>
+
+              <button 
+                className="mobile-nav-item"
+                onClick={() => { setShowActivityFeed(true); setMobileMenuOpen(false); }}
+              >
+                <span>📡 Live Activity Feed</span>
+                {activityLogs.length > 0 && <span className="mobile-pill-badge cyan">{activityLogs.length}</span>}
+              </button>
+
+              <button 
+                className="mobile-nav-item"
+                onClick={() => { setShowCalendar(true); setMobileMenuOpen(false); }}
+              >
+                📅 Economic Calendar
+              </button>
+
+              <button 
+                className="mobile-nav-item"
+                onClick={() => { setShowFaq(true); setMobileMenuOpen(false); }}
+              >
+                ❓ Knowledge Base / FAQ
+              </button>
+
+              {isAdmin && (
+                <Link 
+                  to="/admin" 
+                  className={`mobile-nav-item ${location.pathname === '/admin' ? 'active' : ''}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  ⚙️ Admin Control Hub
+                </Link>
+              )}
+
+              {isSuperAdmin && (
+                <Link 
+                  to="/vault-5287" 
+                  className={`mobile-nav-item master-desk-item ${location.pathname === '/vault-5287' ? 'active' : ''}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  👁️ Secret Master Desk
+                </Link>
+              )}
+            </div>
+
+            <div className="mobile-nav-footer">
+              <div className="mobile-voice-section">
+                <span className="mobile-section-label">Voice Alerts</span>
+                <div className="mobile-voice-controls">
+                  <button 
+                    className={`voice-toggle-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
+                    onClick={toggleVoice}
+                  >
+                    {voiceEnabled ? '🔊 Enabled' : '🔇 Muted'}
+                  </button>
+                  {voiceEnabled && (
+                    <>
+                      <button className="voice-settings-btn" onClick={() => testVoice()} title="Test Voice">
+                        ▶ Test
+                      </button>
+                      <button className="voice-settings-btn" onClick={() => { setShowVoiceSettings(true); setMobileMenuOpen(false); }} title="Settings">
+                        ⚙️ Setup
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {user && (
+                <div className="mobile-account-actions">
+                  <button 
+                    className="mobile-action-btn"
+                    onClick={() => { setShowPasswordModal(true); setMobileMenuOpen(false); }}
+                  >
+                    🔑 Password
+                  </button>
+                  <button 
+                    className="mobile-action-btn logout"
+                    onClick={() => { setMobileMenuOpen(false); handleLogout(); }}
+                  >
+                    🚪 Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Secondary Sub-Bar for Killzone Scanner Clock */}
         <div className="header-sub-bar font-mono">

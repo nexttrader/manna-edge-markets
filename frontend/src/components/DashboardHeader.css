@@ -360,15 +360,211 @@
   width: 100%;
 }
 
-@media (max-width: 768px) {
+/* Mobile Hamburger Menu Button */
+.mobile-menu-toggle-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--kdt-purple-border);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.mobile-menu-toggle-btn:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: var(--kdt-gold);
+}
+
+.hamburger-bar {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background-color: var(--kdt-gold);
+  border-radius: 1px;
+  transition: all 0.2s ease;
+}
+
+.mobile-badge-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ff3b3b;
+  box-shadow: 0 0 6px #ff3b3b;
+}
+
+/* Mobile Nav Drawer */
+.mobile-nav-drawer {
+  display: none;
+  background: #0f0620;
+  border-top: 1px solid var(--kdt-purple-border);
+  border-bottom: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.9);
+}
+
+.mobile-nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--kdt-white-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--kdt-purple-border);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.mobile-nav-item:hover,
+.mobile-nav-item.active {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: var(--kdt-gold);
+  color: var(--kdt-gold);
+}
+
+.mobile-nav-item.master-desk-item {
+  color: #b388ff;
+  border-color: rgba(179, 136, 255, 0.3);
+}
+
+.mobile-pill-badge {
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.mobile-pill-badge.red {
+  background: #ff3b3b;
+  color: #fff;
+}
+
+.mobile-pill-badge.cyan {
+  background: #00e5ff;
+  color: #090314;
+}
+
+.mobile-nav-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-voice-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--kdt-white-muted);
+  text-transform: uppercase;
+}
+
+.mobile-voice-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.mobile-account-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-action-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border: 1px solid var(--kdt-purple-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--kdt-white-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.mobile-action-btn:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: var(--kdt-gold);
+  color: var(--kdt-gold);
+}
+
+.mobile-action-btn.logout {
+  color: var(--red);
+  border-color: rgba(255, 82, 82, 0.3);
+  background: rgba(255, 82, 82, 0.1);
+}
+
+.mobile-action-btn.logout:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Breakpoint rules */
+@media (max-width: 900px) {
+  .desktop-only-nav {
+    display: none !important;
+  }
+  .desktop-voice-controls {
+    display: none !important;
+  }
+  .mobile-menu-toggle-btn {
+    display: flex;
+  }
+  .mobile-nav-drawer {
+    display: block;
+  }
+  .header-actions {
+    gap: 6px;
+  }
+  .header-container {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 600px) {
   .logo-title-text {
     display: none;
   }
-  .nav-link {
-    padding: 5px 8px;
-    font-size: 0.78rem;
+  .user-name-short {
+    max-width: 70px;
   }
-  .header-user-btn {
-    padding: 4px 8px;
+  .header-circuit-breaker-wrap {
+    display: none;
+  }
+  .header-dropdown-menu {
+    min-width: 230px;
+    right: -10px;
   }
 }
+

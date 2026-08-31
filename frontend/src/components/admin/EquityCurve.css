@@ -81,3 +81,16 @@
   font-size: 0.82rem;
   font-style: italic;
 }
+
+@media (max-width: 600px) {
+  .ec-wrapper {
+    padding: 14px 16px 12px;
+    border-radius: 10px;
+  }
+  .ec-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+

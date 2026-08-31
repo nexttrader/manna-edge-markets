@@ -108,3 +108,29 @@
 .animate-rescan-flash {
   animation: rescan-flash 1.8s infinite ease-in-out;
 }
+
+@media (max-width: 640px) {
+  .killzone-clock {
+    gap: 8px;
+    padding: 4px 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .kz-name {
+    font-size: 0.85rem;
+  }
+  .clock-time {
+    font-size: 0.85rem;
+  }
+  .clock-divider {
+    display: none;
+  }
+  .clock-next-scan {
+    font-size: 0.75rem;
+  }
+  .scan-countdown, .rescan-countdown-amber {
+    padding: 1px 6px;
+    font-size: 0.75rem;
+  }
+}
+

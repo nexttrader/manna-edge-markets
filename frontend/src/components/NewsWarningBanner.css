@@ -69,3 +69,17 @@
   font-size: 0.78rem;
   opacity: 0.85;
 }
+
+@media (max-width: 600px) {
+  .news-warning-banner {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+  .news-banner-content {
+    gap: 6px;
+  }
+  .news-title {
+    font-size: 0.82rem;
+  }
+}
+

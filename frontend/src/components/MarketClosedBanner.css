@@ -312,3 +312,18 @@
   background: rgba(255, 64, 129, 0.25);
   color: #fff;
 }
+
+@media (max-width: 600px) {
+  .market-closed-banner {
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+  .market-cards-container {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .market-status-card {
+    padding: 12px;
+  }
+}
+
