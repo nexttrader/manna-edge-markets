@@ -180,6 +180,7 @@ export const AdminPanel: React.FC = () => {
   // Performance Reports Approval Pipeline State
   const [perfReports, setPerfReports] = useState<any[]>([]);
   const [reportTab, setReportTab] = useState<'drafts' | 'published' | 'recalled'>('drafts');
+  const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
   const [isReportActionLoading, setIsReportActionLoading] = useState(false);
   const [selectedReportSession, setSelectedReportSession] = useState<'asia' | 'london' | 'ny_am' | 'ny_pm' | 'all'>('asia');
@@ -196,6 +197,22 @@ export const AdminPanel: React.FC = () => {
   useEffect(() => {
     fetchPerfReports();
   }, [fetchPerfReports]);
+
+  const handleToggleSelectReport = (reportId: string) => {
+    setSelectedReportIds(prev =>
+      prev.includes(reportId) ? prev.filter(id => id !== reportId) : [...prev, reportId]
+    );
+  };
+
+  const handleSelectAllInTab = (tabReports: any[]) => {
+    const tabReportIds = tabReports.map(r => r.id);
+    const allSelected = tabReportIds.length > 0 && tabReportIds.every(id => selectedReportIds.includes(id));
+    if (allSelected) {
+      setSelectedReportIds(prev => prev.filter(id => !tabReportIds.includes(id)));
+    } else {
+      setSelectedReportIds(prev => Array.from(new Set([...prev, ...tabReportIds])));
+    }
+  };
 
   const handleGenerateReport = async (periodType: 'daily' | 'weekly' | 'monthly' | 'session', sessionName?: string) => {
     try {
@@ -309,9 +326,58 @@ export const AdminPanel: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete report');
       alert('🗑️ Report deleted.');
+      setSelectedReportIds(prev => prev.filter(id => id !== reportId));
       fetchPerfReports();
     } catch (err: any) {
       alert(`⚠️ ${err.message || 'Failed to delete report'}`);
+    }
+  };
+
+  const handleDeleteSelectedReports = async () => {
+    if (selectedReportIds.length === 0) return;
+    if (!window.confirm(`⚠️ Are you sure you want to permanently delete the ${selectedReportIds.length} selected performance report(s)?`)) return;
+    try {
+      setIsReportActionLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/delete-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedReportIds })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete selected reports');
+      alert(`🗑️ ${data.message || 'Selected reports deleted.'}`);
+      setSelectedReportIds(prev => prev.filter(id => !selectedReportIds.includes(id)));
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Failed to delete selected reports'}`);
+    } finally {
+      setIsReportActionLoading(false);
+    }
+  };
+
+  const handleDeleteAllReports = async (currentTabOnly: boolean = false) => {
+    const targetLabel = currentTabOnly 
+      ? (reportTab === 'drafts' ? 'Draft Pending Approval' : reportTab === 'published' ? 'Published' : 'Recalled')
+      : 'ALL';
+    
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to permanently delete ALL ${targetLabel} performance reports? This action cannot be undone.`)) return;
+    
+    try {
+      setIsReportActionLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/performance-reports/delete-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true, status: currentTabOnly ? reportTab : 'all' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete reports');
+      alert(`🗑️ ${data.message || 'Reports deleted.'}`);
+      setSelectedReportIds([]);
+      fetchPerfReports();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || 'Failed to delete reports'}`);
+    } finally {
+      setIsReportActionLoading(false);
     }
   };
   
@@ -1509,125 +1575,212 @@ export const AdminPanel: React.FC = () => {
           </div>
 
           {/* List of Reports */}
-          {perfReports.filter(r => (reportTab === 'drafts' ? r.status === 'draft_pending_approval' : reportTab === 'published' ? r.status === 'published' : r.status === 'recalled')).length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: '#666', fontSize: '0.85rem' }}>
-              No {reportTab} performance reports found. Click a button above to generate a draft report manually!
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {perfReports
-                .filter(r => (reportTab === 'drafts' ? r.status === 'draft_pending_approval' : reportTab === 'published' ? r.status === 'published' : r.status === 'recalled'))
-                .map(r => {
-                  let summary: any = {};
-                  try { summary = typeof r.summary_json === 'string' ? JSON.parse(r.summary_json) : r.summary_json; } catch {}
-                  const notesVal = editingNotes[r.id] !== undefined ? editingNotes[r.id] : (r.admin_notes || '');
+          {(() => {
+            const filteredReports = perfReports.filter(r => (reportTab === 'drafts' ? r.status === 'draft_pending_approval' : reportTab === 'published' ? r.status === 'published' : r.status === 'recalled'));
+            const selectedInTabCount = selectedReportIds.filter(id => filteredReports.some(r => r.id === id)).length;
+            const isAllSelectedInTab = filteredReports.length > 0 && filteredReports.every(r => selectedReportIds.includes(r.id));
 
-                  const isSessionType = r.period_type === 'session';
-                  let sessionTitleStr = (r.period_type || 'daily').toUpperCase();
-                  if (isSessionType) {
-                    const sessName = (summary.sessionName || 'session').toLowerCase();
-                    const sMap: Record<string, string> = { asia: 'ASIA', london: 'LONDON', ny_am: 'NY AM', ny_pm: 'NY PM', all: 'PER-SESSION' };
-                    sessionTitleStr = `${sMap[sessName] || sessName.toUpperCase()} SESSION`;
-                  }
-
-                  return (
-                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
-                            📊 {sessionTitleStr} PERFORMANCE REPORT
-                          </strong>
-                          <span style={{ fontSize: '0.78rem', color: '#aaa', marginLeft: '10px' }}>
-                            Period: {r.period_start?.slice(0, 10)} to {r.period_end?.slice(0, 10)}
-                          </span>
-                        </div>
-                        <span className={`state-badge ${r.status === 'published' ? 'committed' : r.status === 'recalled' ? 'rolled_back' : ''}`}>
-                          {r.status === 'published' ? '🚀 PUBLISHED' : r.status === 'recalled' ? '🛡️ RECALLED' : '⏳ DRAFT PENDING APPROVAL'}
-                        </span>
-                      </div>
-
-                      {/* Metrics Bar */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px', marginBottom: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px' }}>
-                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Total Trades:</span> <strong style={{ color: '#fff' }}>{summary.totalTrades ?? 0}</strong></div>
-                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Wins / Losses / BE:</span> <strong style={{ color: '#00e676' }}>{summary.wins ?? 0}W</strong> / <strong style={{ color: '#ff1744' }}>{summary.losses ?? 0}L</strong> / <strong style={{ color: '#ffd700' }}>{summary.breakevens ?? 0}BE</strong></div>
-                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Target Hits:</span> <strong style={{ color: '#00e676' }}>TP1: {summary.tp1Hits ?? 0}</strong> | <strong style={{ color: '#00e676' }}>TP2: {summary.tp2Hits ?? 0}</strong></div>
-                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Win Rate:</span> <strong style={{ color: '#00e676' }}>{summary.winRate ?? 0}%</strong></div>
-                        <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Net Realized R:</span> <strong className={(summary.totalRealizedR ?? 0) >= 0 ? 'text-green' : 'text-red'}>{(summary.totalRealizedR ?? 0) >= 0 ? '+' : ''}{summary.totalRealizedR ?? 0}R</strong></div>
-                      </div>
-
-                      {/* Admin Notes Box */}
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontSize: '0.78rem', color: '#ffd700', fontWeight: 800, marginBottom: '4px' }}>
-                          ✏️ Admin Commentary / Corrections (Visible to Traders in Mailbox):
-                        </div>
-                        <textarea
-                          rows={2}
-                          placeholder="Add notes, error corrections, or market context before approving..."
-                          value={notesVal}
-                          onChange={e => setEditingNotes({ ...editingNotes, [r.id]: e.target.value })}
-                          style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid rgba(255,215,0,0.3)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem' }}
+            return (
+              <>
+                {/* Bulk Actions Toolbar */}
+                {filteredReports.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: 'rgba(0,0,0,0.3)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', color: '#eee', userSelect: 'none', fontWeight: 700 }}>
+                        <input
+                          type="checkbox"
+                          checked={isAllSelectedInTab}
+                          onChange={() => handleSelectAllInTab(filteredReports)}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#00e5ff' }}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveReportNotes(r.id, notesVal)}
-                            style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid #ffd700', color: '#ffd700', padding: '3px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 800 }}
-                          >
-                            💾 Save Notes
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#888' }}>
-                          Created: {r.created_at?.slice(0, 16)} {r.published_at ? `| Approved & Pushed by: ${r.published_by || 'Admin'}${r.published_by_email ? ` (${r.published_by_email})` : ''} on ${r.published_at?.slice(0, 16)}` : ''}
+                        <span>
+                          Select All in {reportTab === 'drafts' ? 'Drafts' : reportTab === 'published' ? 'Published' : 'Recalled'} ({filteredReports.length})
                         </span>
+                      </label>
+                      {selectedInTabCount > 0 && (
+                        <span style={{ fontSize: '0.78rem', color: '#00e5ff', background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.3)', padding: '2px 8px', borderRadius: '4px', fontWeight: 800 }}>
+                          {selectedInTabCount} Selected
+                        </span>
+                      )}
+                    </div>
 
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {r.status !== 'published' ? (
-                            <button
-                              type="button"
-                              onClick={() => handleApproveReport(r.id, notesVal)}
-                              disabled={isReportActionLoading}
-                              style={{ background: '#00e676', border: 'none', color: '#090314', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '0.8rem' }}
-                            >
-                              🚀 APPROVE &amp; PUSH TO TRADERS
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleApproveReport(r.id, notesVal)}
-                                disabled={isReportActionLoading}
-                                style={{ background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00e676', color: '#00e676', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
-                              >
-                                🔄 RESEND REPORT
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRecallReport(r.id)}
-                                disabled={isReportActionLoading}
-                                style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
-                              >
-                                🛡️ RECALL REPORT
-                              </button>
-                            </>
-                          )}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {selectedInTabCount > 0 && (
+                        <>
                           <button
                             type="button"
-                            onClick={() => handleDeleteReport(r.id)}
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', color: '#888', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem' }}
+                            className="font-mono"
+                            onClick={handleDeleteSelectedReports}
+                            disabled={isReportActionLoading}
+                            style={{ background: 'rgba(255, 23, 68, 0.25)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 900 }}
                           >
-                            🗑️ Delete
+                            🗑️ Delete Selected ({selectedInTabCount})
                           </button>
-                        </div>
-                      </div>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            onClick={() => {
+                              const tabIds = filteredReports.map(r => r.id);
+                              setSelectedReportIds(prev => prev.filter(id => !tabIds.includes(id)));
+                            }}
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', color: '#aaa', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem' }}
+                          >
+                            Clear Selection
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="font-mono"
+                        onClick={() => handleDeleteAllReports(true)}
+                        disabled={isReportActionLoading || filteredReports.length === 0}
+                        style={{ background: 'rgba(255, 23, 68, 0.12)', border: '1px solid rgba(255, 23, 68, 0.4)', color: '#ff5252', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800 }}
+                      >
+                        ⚠️ Delete All {reportTab === 'drafts' ? 'Drafts' : reportTab === 'published' ? 'Published' : 'Recalled'} ({filteredReports.length})
+                      </button>
                     </div>
-                  );
-                })}
-            </div>
-          )}
+                  </div>
+                )}
+
+                {filteredReports.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#666', fontSize: '0.85rem' }}>
+                    No {reportTab} performance reports found. Click a button above to generate a draft report manually!
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {filteredReports.map(r => {
+                      let summary: any = {};
+                      try { summary = typeof r.summary_json === 'string' ? JSON.parse(r.summary_json) : r.summary_json; } catch {}
+                      const notesVal = editingNotes[r.id] !== undefined ? editingNotes[r.id] : (r.admin_notes || '');
+                      const isSelected = selectedReportIds.includes(r.id);
+
+                      const isSessionType = r.period_type === 'session';
+                      let sessionTitleStr = (r.period_type || 'daily').toUpperCase();
+                      if (isSessionType) {
+                        const sessName = (summary.sessionName || 'session').toLowerCase();
+                        const sMap: Record<string, string> = { asia: 'ASIA', london: 'LONDON', ny_am: 'NY AM', ny_pm: 'NY PM', all: 'PER-SESSION' };
+                        sessionTitleStr = `${sMap[sessName] || sessName.toUpperCase()} SESSION`;
+                      }
+
+                      return (
+                        <div
+                          key={r.id}
+                          style={{
+                            background: isSelected ? 'rgba(0, 229, 255, 0.04)' : 'rgba(255,255,255,0.02)',
+                            border: isSelected ? '1px solid rgba(0, 229, 255, 0.45)' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '8px',
+                            padding: '16px',
+                            transition: 'border 0.2s, background 0.2s'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSelectReport(r.id)}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#00e5ff' }}
+                                title="Select report"
+                              />
+                              <div>
+                                <strong style={{ fontSize: '0.95rem', color: isSelected ? '#00e5ff' : '#fff' }}>
+                                  📊 {sessionTitleStr} PERFORMANCE REPORT
+                                </strong>
+                                <span style={{ fontSize: '0.78rem', color: '#aaa', marginLeft: '10px' }}>
+                                  Period: {r.period_start?.slice(0, 10)} to {r.period_end?.slice(0, 10)}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`state-badge ${r.status === 'published' ? 'committed' : r.status === 'recalled' ? 'rolled_back' : ''}`}>
+                              {r.status === 'published' ? '🚀 PUBLISHED' : r.status === 'recalled' ? '🛡️ RECALLED' : '⏳ DRAFT PENDING APPROVAL'}
+                            </span>
+                          </div>
+
+                          {/* Metrics Bar */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px', marginBottom: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px' }}>
+                            <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Total Trades:</span> <strong style={{ color: '#fff' }}>{summary.totalTrades ?? 0}</strong></div>
+                            <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Wins / Losses / BE:</span> <strong style={{ color: '#00e676' }}>{summary.wins ?? 0}W</strong> / <strong style={{ color: '#ff1744' }}>{summary.losses ?? 0}L</strong> / <strong style={{ color: '#ffd700' }}>{summary.breakevens ?? 0}BE</strong></div>
+                            <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Target Hits:</span> <strong style={{ color: '#00e676' }}>TP1: {summary.tp1Hits ?? 0}</strong> | <strong style={{ color: '#00e676' }}>TP2: {summary.tp2Hits ?? 0}</strong></div>
+                            <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Win Rate:</span> <strong style={{ color: '#00e676' }}>{summary.winRate ?? 0}%</strong></div>
+                            <div><span style={{ color: '#888', fontSize: '0.72rem' }}>Net Realized R:</span> <strong className={(summary.totalRealizedR ?? 0) >= 0 ? 'text-green' : 'text-red'}>{(summary.totalRealizedR ?? 0) >= 0 ? '+' : ''}{summary.totalRealizedR ?? 0}R</strong></div>
+                          </div>
+
+                          {/* Admin Notes Box */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '0.78rem', color: '#ffd700', fontWeight: 800, marginBottom: '4px' }}>
+                              ✏️ Admin Commentary / Corrections (Visible to Traders in Mailbox):
+                            </div>
+                            <textarea
+                              rows={2}
+                              placeholder="Add notes, error corrections, or market context before approving..."
+                              value={notesVal}
+                              onChange={e => setEditingNotes({ ...editingNotes, [r.id]: e.target.value })}
+                              style={{ width: '100%', padding: '8px', background: '#090314', border: '1px solid rgba(255,215,0,0.3)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem' }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveReportNotes(r.id, notesVal)}
+                                style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid #ffd700', color: '#ffd700', padding: '3px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 800 }}
+                              >
+                                💾 Save Notes
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#888' }}>
+                              Created: {r.created_at?.slice(0, 16)} {r.published_at ? `| Approved & Pushed by: ${r.published_by || 'Admin'}${r.published_by_email ? ` (${r.published_by_email})` : ''} on ${r.published_at?.slice(0, 16)}` : ''}
+                            </span>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {r.status !== 'published' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveReport(r.id, notesVal)}
+                                  disabled={isReportActionLoading}
+                                  style={{ background: '#00e676', border: 'none', color: '#090314', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '0.8rem' }}
+                                >
+                                  🚀 APPROVE &amp; PUSH TO TRADERS
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveReport(r.id, notesVal)}
+                                    disabled={isReportActionLoading}
+                                    style={{ background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00e676', color: '#00e676', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
+                                  >
+                                    🔄 RESEND REPORT
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRecallReport(r.id)}
+                                    disabled={isReportActionLoading}
+                                    style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.78rem' }}
+                                  >
+                                    🛡️ RECALL REPORT
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReport(r.id)}
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', color: '#888', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem' }}
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Archived Datasets History Table */}

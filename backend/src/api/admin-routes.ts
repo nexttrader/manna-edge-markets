@@ -2214,7 +2214,39 @@ router.post('/performance-reports/:id/update-notes', async (req: Request, res: R
   }
 });
 
-// 6. Delete a Performance Report
+// 6. Delete Performance Reports (Single, Bulk, or All)
+router.post('/performance-reports/delete-bulk', async (req: Request, res: Response) => {
+  try {
+    const { ids, all, status } = req.body || {};
+    if (all) {
+      if (status && status !== 'all') {
+        const statusMap: Record<string, string> = {
+          drafts: 'draft_pending_approval',
+          published: 'published',
+          recalled: 'recalled',
+          draft_pending_approval: 'draft_pending_approval'
+        };
+        const dbStatus = statusMap[status] || status;
+        await queryDb(`DELETE FROM performance_reports WHERE status = ?`, [dbStatus]);
+        return res.json({ success: true, message: `All ${status} performance reports deleted.` });
+      } else {
+        await queryDb(`DELETE FROM performance_reports`);
+        return res.json({ success: true, message: 'All performance reports deleted.' });
+      }
+    }
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      const placeholders = ids.map(() => '?').join(',');
+      await queryDb(`DELETE FROM performance_reports WHERE id IN (${placeholders})`, ids);
+      return res.json({ success: true, message: `${ids.length} performance report(s) deleted.` });
+    }
+
+    return res.status(400).json({ error: 'No report IDs or all flag provided.' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete performance reports', details: error?.message || String(error) });
+  }
+});
+
 router.delete('/performance-reports/:id', async (req: Request, res: Response) => {
   try {
     const reportId = req.params.id;
