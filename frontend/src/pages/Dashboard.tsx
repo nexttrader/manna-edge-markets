@@ -83,10 +83,14 @@ export const Dashboard: React.FC = () => {
   };
 
   const safeSetups = Array.isArray(setups) ? setups : [];
+  const safeRunners = Array.isArray(runnerSetups) ? runnerSetups : [];
+  const allAvailableSetups = stateFilter === 'runner'
+    ? [...safeSetups, ...safeRunners.filter(r => !safeSetups.some(s => s.id === r.id))]
+    : safeSetups;
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
 
   // Filter Logic
-  const filteredSetups = safeSetups.filter(setup => {
+  const filteredSetups = allAvailableSetups.filter(setup => {
     if (!setup) return false;
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
@@ -194,7 +198,11 @@ export const Dashboard: React.FC = () => {
 
         {/* Active Runners Desk */}
         {!showMaintenanceLock && (
-          <RunnersPanel runnerSetups={runnerSetups} loading={loading} />
+          <RunnersPanel 
+            runnerSetups={runnerSetups} 
+            loading={loading} 
+            autoExpand={stateFilter === 'runner'} 
+          />
         )}
 
         {/* Main Filter & Control Panel */}

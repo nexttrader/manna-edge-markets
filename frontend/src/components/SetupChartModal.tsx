@@ -96,11 +96,86 @@ const parseNum = (val: any): number => {
   return isNaN(n) ? 0 : n;
 };
 
+export function getBidAskData(
+  instrument: string,
+  price: number,
+  quote?: { bid?: number; ask?: number; spread?: number } | null
+) {
+  const sym = instrument.toUpperCase();
+  const isForex = instrument.includes('/');
+
+  let decimals = 2;
+  let unit = 'pts';
+  let spread = 0.25;
+
+  if (isForex) {
+    unit = 'pips';
+    if (sym.includes('JPY')) {
+      decimals = 3;
+      spread = 0.015;
+    } else {
+      decimals = 5;
+      spread = 0.00012;
+    }
+  } else {
+    switch (sym) {
+      case 'ES':
+      case 'NQ':
+        spread = 0.25;
+        decimals = 2;
+        break;
+      case 'YM':
+        spread = 1.0;
+        decimals = 0;
+        break;
+      case 'RTY':
+      case 'GC':
+        spread = 0.10;
+        decimals = 2;
+        break;
+      case 'SI':
+        spread = 0.005;
+        decimals = 3;
+        break;
+      case 'CL':
+        spread = 0.01;
+        decimals = 2;
+        break;
+      case 'ZN':
+        spread = 0.0156;
+        decimals = 4;
+        break;
+      default:
+        spread = price > 1000 ? 0.25 : 0.01;
+        decimals = 2;
+        break;
+    }
+  }
+
+  let bid = 0;
+  let ask = 0;
+
+  if (quote?.bid && quote?.ask && quote.bid > 0 && quote.ask > quote.bid) {
+    bid = Number(quote.bid.toFixed(decimals));
+    ask = Number(quote.ask.toFixed(decimals));
+    spread = Number((ask - bid).toFixed(decimals));
+  } else {
+    const half = spread / 2;
+    bid = Number((price - half).toFixed(decimals));
+    ask = Number((price + half).toFixed(decimals));
+    spread = Number(spread.toFixed(decimals));
+  }
+
+  return { bid, ask, spread, decimals, unit };
+}
+
 export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const priceLinesRef = useRef<any[]>([]);
+  const bidLineRef = useRef<any>(null);
+  const askLineRef = useRef<any>(null);
   const lastFittedTimeframeRef = useRef<string | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const liveCandleRef = useRef<any>(null);
@@ -116,6 +191,24 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('manna_chart_theme') as 'dark' | 'light') || 'dark';
   });
+
+  // Bid & Ask toggle with persistent localStorage
+  const [showBidAsk, setShowBidAsk] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('manna_chart_show_bid_ask') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [serverQuote, setServerQuote] = useState<{ bid?: number; ask?: number; spread?: number; price?: number } | null>(null);
+
+  const toggleBidAsk = () => {
+    setShowBidAsk(prev => {
+      const next = !prev;
+      try { localStorage.setItem('manna_chart_show_bid_ask', String(next)); } catch {}
+      return next;
+    });
+  };
 
   const isLong = (setup.bias || 'long').toLowerCase() === 'long';
 
@@ -134,9 +227,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
   const isPending = setup.signal_state === 'awaiting_entry';
   const isActive = setup.signal_state === 'active';
+  const isRunner = setup.signal_state === 'runner';
   const isResolved = setup.signal_state === 'resolved' || setup.signal_state === 'invalidated';
 
-  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (isActive || isResolved ? setup.validatedAt || setup.created_at : undefined);
+  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (isActive || isRunner || isResolved ? setup.validatedAt || setup.created_at : undefined);
   const resolvedTimestamp = setup.resolved_at;
   const execPrice = parseNum(setup.entry_price_recorded ?? setup.entry_price_executed ?? entryMid);
 
@@ -448,6 +542,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           throw new Error('No candle data available for ' + setup.instrument);
         }
 
+        if (data.quote) {
+          setServerQuote(data.quote);
+        }
+
         const formattedCandles = data.candles.map((c: any) => ({
           time: Math.floor(new Date(c.timestamp).getTime() / 1000) as any,
           open: Number(c.open),
@@ -458,9 +556,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         candleSeries.setData(formattedCandles);
 
-        // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, resolved)
+        // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, runner, resolved)
         const lines: any[] = [];
-        const statusPrefix = isPending ? '⏳ PENDING ' : isActive ? '🔥 ACTIVE ' : '';
+        const statusPrefix = isPending ? '⏳ PENDING ' : isRunner ? '🏃 RUNNER ' : isActive ? '🔥 ACTIVE ' : '';
 
         if (entryHigh > 0) {
           lines.push(candleSeries.createPriceLine({
@@ -498,11 +596,11 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         if (stopVal > 0) {
           lines.push(candleSeries.createPriceLine({
             price: stopVal,
-            color: '#ff1744',
+            color: isRunner ? '#ffd700' : '#ff1744',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🛑 ${statusPrefix}STOP LOSS (${stopVal})`,
+            title: isRunner ? `🛡️ BREAK EVEN STOP (${stopVal})` : `🛑 ${statusPrefix}STOP LOSS (${stopVal})`,
           }));
         }
 
@@ -513,7 +611,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🟢 ${statusPrefix}TP1 TARGET (+${setup.r_multiple_1 || 2.0}R)`,
+            title: isRunner ? `✓ TP1 REACHED (+${setup.r_multiple_1 || 2.0}R)` : `🟢 ${statusPrefix}TP1 TARGET (+${setup.r_multiple_1 || 2.0}R)`,
           }));
         }
 
@@ -524,7 +622,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🟢 ${statusPrefix}TP2 TARGET (+${setup.r_multiple_2 || 3.0}R)`,
+            title: isRunner ? `🎯 RUNNER TARGET TP2 (+${setup.r_multiple_2 || 3.0}R)` : `🟢 ${statusPrefix}TP2 TARGET (+${setup.r_multiple_2 || 3.0}R)`,
           }));
         }
 
@@ -617,7 +715,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive, selectedTz]);
+  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, selectedTz]);
 
   // 3. Dynamic Real-Time Candle Drawing
   useEffect(() => {
@@ -648,6 +746,63 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       console.warn('Failed to update live candle on chart:', err);
     }
   }, [setup.current_price, timeframe]);
+
+  // 4. Dynamic Real-Time Bid & Ask Price Lines
+  useEffect(() => {
+    if (!candleSeriesRef.current) return;
+    const candleSeries = candleSeriesRef.current;
+
+    // Remove existing bid and ask lines
+    if (bidLineRef.current) {
+      try { candleSeries.removePriceLine(bidLineRef.current); } catch {}
+      bidLineRef.current = null;
+    }
+    if (askLineRef.current) {
+      try { candleSeries.removePriceLine(askLineRef.current); } catch {}
+      askLineRef.current = null;
+    }
+
+    const price = currentPrice && currentPrice > 0 
+      ? currentPrice 
+      : (serverQuote?.price && serverQuote.price > 0 ? serverQuote.price : 0);
+
+    if (!showBidAsk || price <= 0) return;
+
+    const { bid, ask, decimals } = getBidAskData(setup.instrument, price, serverQuote);
+
+    try {
+      bidLineRef.current = candleSeries.createPriceLine({
+        price: bid,
+        color: '#00e5ff',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `🔵 BID (${bid.toFixed(decimals)})`,
+      });
+
+      askLineRef.current = candleSeries.createPriceLine({
+        price: ask,
+        color: '#ff5252',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `🔴 ASK (${ask.toFixed(decimals)})`,
+      });
+    } catch (err) {
+      console.warn('Failed to draw bid/ask lines:', err);
+    }
+
+    return () => {
+      if (bidLineRef.current && candleSeriesRef.current) {
+        try { candleSeriesRef.current.removePriceLine(bidLineRef.current); } catch {}
+        bidLineRef.current = null;
+      }
+      if (askLineRef.current && candleSeriesRef.current) {
+        try { candleSeriesRef.current.removePriceLine(askLineRef.current); } catch {}
+        askLineRef.current = null;
+      }
+    };
+  }, [showBidAsk, currentPrice, serverQuote, setup.instrument, timeframe]);
 
   const drawZones = useCallback(() => {
     if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
@@ -881,6 +1036,11 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     };
   }, [drawZones]);
 
+  const effectivePrice = currentPrice && currentPrice > 0 
+    ? currentPrice 
+    : (serverQuote?.price && serverQuote.price > 0 ? serverQuote.price : 0);
+  const liveBidAsk = getBidAskData(setup.instrument, effectivePrice, serverQuote);
+
   return createPortal(
     <div className="chart-modal-backdrop font-sans">
       <div className={`chart-modal-content animate-fade-in theme-${theme}`}>
@@ -896,6 +1056,11 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             {isPending && (
               <span className="state-status-tag pending font-mono">
                 ⏳ PENDING ENTRY (NOT ENTERED YET)
+              </span>
+            )}
+            {isRunner && (
+              <span className="state-status-tag runner font-mono">
+                🏃 ACTIVE RUNNER (TP1 +2R LOGGED · TRACKING TP2)
               </span>
             )}
             {isActive && (
@@ -966,6 +1131,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               <button className={timeframe === '1d' ? 'active' : ''} onClick={() => setTimeframe('1d')} title="Daily Macro View">1D</button>
             </div>
 
+            {/* Bid / Ask Price Lines Toggle Button */}
+            <button
+              type="button"
+              className={`bid-ask-toggle-btn font-mono ${showBidAsk ? 'active' : ''}`}
+              onClick={toggleBidAsk}
+              title={showBidAsk ? 'Turn off Bid & Ask price lines' : 'Turn on Bid & Ask price lines on chart'}
+            >
+              <span className="bid-ask-icon">⚖️</span>
+              <span>BID / ASK: {showBidAsk ? 'ON' : 'OFF'}</span>
+            </button>
+
             <button className="close-btn font-mono" onClick={onClose}>
               ✕ CLOSE (ESC)
             </button>
@@ -985,6 +1161,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           <span className="legend-item tp">🎯 Target 1: {tp1Val} (+{setup.r_multiple_1 || 2.0}R)</span>
           {tp2Val && tp2Val > 0 && <span className="legend-item tp">🎯 Target 2: {tp2Val} (+{setup.r_multiple_2 || 3.0}R)</span>}
           {currentPrice > 0 && <span className="legend-item live">🌐 Live Price: {currentPrice}</span>}
+          {showBidAsk && (
+            <span className="legend-item bid-ask-legend animate-fade-in">
+              <span className="legend-bid">🔵 BID: <strong>{liveBidAsk.bid.toFixed(liveBidAsk.decimals)}</strong></span>
+              <span className="legend-sep">│</span>
+              <span className="legend-ask">🔴 ASK: <strong>{liveBidAsk.ask.toFixed(liveBidAsk.decimals)}</strong></span>
+              <span className="legend-sep">│</span>
+              <span className="legend-spread">SPREAD: <strong>{liveBidAsk.spread} {liveBidAsk.unit}</strong></span>
+            </span>
+          )}
         </div>
 
         {/* MANNA SND Specific Visual Indicator Overlay Bar */}

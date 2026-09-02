@@ -20,6 +20,13 @@
   box-shadow: 0 0 10px rgba(0, 230, 118, 0.15);
 }
 
+.status-runner {
+  background-color: rgba(255, 171, 0, 0.15);
+  color: #ffab00;
+  border: 1px solid rgba(255, 171, 0, 0.4);
+  box-shadow: 0 0 10px rgba(255, 171, 0, 0.15);
+}
+
 .status-awaiting {
   background-color: var(--amber-dim);
   color: var(--amber);

@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { EdgeSetup } from '../types';
 import { formatETTime, formatETDate } from '../utils/time';
 import { formatTelegramTradeId } from '../utils/tradeId';
+import { SetupChartModal } from './SetupChartModal';
 import './RunnersPanel.css';
 
 interface RunnersPanelProps {
   runnerSetups: EdgeSetup[];
   loading?: boolean;
+  autoExpand?: boolean;
 }
 
-export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loading }) => {
-  // Default to minimized/collapsed state
+export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loading, autoExpand }) => {
+  // Default to minimized/collapsed state unless autoExpand is requested
   const [isExpanded, setIsExpanded] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedChartSetup, setSelectedChartSetup] = useState<EdgeSetup | null>(null);
+
+  // Auto expand when autoExpand prop changes to true
+  useEffect(() => {
+    if (autoExpand && runnerSetups.length > 0) {
+      setIsExpanded(true);
+    }
+  }, [autoExpand, runnerSetups.length]);
+
+  // Keep selectedChartSetup reactive to latest live price ticks in runnerSetups
+  const activeChartSetup = selectedChartSetup
+    ? runnerSetups.find((s) => s.id === selectedChartSetup.id) || selectedChartSetup
+    : null;
 
   if (loading) {
     return (
@@ -109,7 +124,20 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                           {copiedId === setup.id ? '✓ COPIED' : telegramId}
                         </span>
                       </div>
-                      <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
+                      <div className="runner-header-right">
+                        <button
+                          type="button"
+                          className="runner-btn-chart font-mono"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedChartSetup(setup);
+                          }}
+                          title={`View interactive ${setup.instrument} chart`}
+                        >
+                          📈 Chart
+                        </button>
+                        <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
+                      </div>
                     </div>
 
                     <div className="runner-card-body">
@@ -138,8 +166,12 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                           <span className="runner-metric-val font-mono">{entryPrice.toFixed(decimals)}</span>
                         </div>
 
-                        <div className="runner-metric highlight-metric">
-                          <span className="runner-metric-label font-mono">CURRENT</span>
+                        <div 
+                          className="runner-metric highlight-metric"
+                          onClick={() => setSelectedChartSetup(setup)}
+                          title="Click to open live interactive chart"
+                        >
+                          <span className="runner-metric-label font-mono">CURRENT 📈</span>
                           <span className="runner-metric-val font-mono price-val">{currentPrice ? currentPrice.toFixed(decimals) : '---'}</span>
                         </div>
 
@@ -195,6 +227,20 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                           {telegramId} {copiedId === setup.id ? '✓ Copied' : '📋'}
                         </span>
                       </div>
+
+                      <div className="runner-actions-row font-mono">
+                        <button
+                          type="button"
+                          className="runner-action-btn runner-action-chart font-mono"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedChartSetup(setup);
+                          }}
+                        >
+                          📈 View Interactive Chart
+                        </button>
+                      </div>
+
                       <div className="runner-tracking-note font-mono">
                         Tracking for TP2 upgrade from 2R to 3R • New scans on {setup.instrument} UNBLOCKED
                       </div>
@@ -205,6 +251,13 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
             </div>
           )}
         </div>
+      )}
+
+      {activeChartSetup && (
+        <SetupChartModal
+          setup={activeChartSetup}
+          onClose={() => setSelectedChartSetup(null)}
+        />
       )}
     </div>
   );

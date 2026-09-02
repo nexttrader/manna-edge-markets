@@ -218,3 +218,95 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     inFlightPrices.set(instrument, fetchPromise);
     return fetchPromise;
 }
+
+export interface LiveQuoteDetails {
+    price: number;
+    bid: number;
+    ask: number;
+    spread: number;
+    timestamp: string;
+}
+
+export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuoteDetails | null> {
+    const isForex = instrument.includes('/');
+    const yahooSymbol = SYMBOL_MAP[instrument];
+    const price = await getLiveCurrentPrice(instrument);
+    if (!price || price <= 0) return null;
+
+    let bid = 0;
+    let ask = 0;
+
+    if (yahooSymbol) {
+        try {
+            await acquireYahooRateLimit();
+            const quote: any = await yahooFinance.quote(yahooSymbol).catch(() => null);
+            if (quote?.bid && quote?.ask && quote.bid > 0 && quote.ask > 0) {
+                bid = quote.bid;
+                ask = quote.ask;
+            }
+        } catch {
+            // Fall back to spread model
+        }
+    }
+
+    const sym = instrument.toUpperCase();
+    let spread = 0.25;
+    let decimals = 2;
+
+    if (isForex) {
+        if (sym.includes('JPY')) {
+            decimals = 3;
+            spread = 0.015;
+        } else {
+            decimals = 5;
+            spread = 0.00012;
+        }
+    } else {
+        switch (sym) {
+            case 'ES':
+            case 'NQ':
+                spread = 0.25;
+                decimals = 2;
+                break;
+            case 'YM':
+                spread = 1.0;
+                decimals = 0;
+                break;
+            case 'RTY':
+            case 'GC':
+                spread = 0.10;
+                decimals = 2;
+                break;
+            case 'SI':
+                spread = 0.005;
+                decimals = 3;
+                break;
+            case 'CL':
+                spread = 0.01;
+                decimals = 2;
+                break;
+            case 'ZN':
+                spread = 0.0156;
+                decimals = 4;
+                break;
+            default:
+                spread = price > 1000 ? 0.25 : 0.01;
+                decimals = 2;
+                break;
+        }
+    }
+
+    if (bid <= 0 || ask <= 0 || ask <= bid) {
+        const halfSpread = spread / 2;
+        bid = Number((price - halfSpread).toFixed(decimals));
+        ask = Number((price + halfSpread).toFixed(decimals));
+    }
+
+    return {
+        price,
+        bid,
+        ask,
+        spread: Number((ask - bid).toFixed(decimals)),
+        timestamp: new Date().toISOString()
+    };
+}

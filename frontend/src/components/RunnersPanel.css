@@ -201,6 +201,36 @@
   color: #00e5ff;
 }
 
+.runner-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runner-btn-chart {
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  color: #00e5ff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.runner-btn-chart:hover {
+  background: rgba(0, 229, 255, 0.22);
+  border-color: #00e5ff;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
 .runner-logged-badge {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(0, 176, 255, 0.15) 100%);
   border: 1px solid rgba(0, 229, 255, 0.4);
@@ -318,6 +348,21 @@
   font-size: 0.95rem;
   font-weight: 800;
   color: #e2e8f0;
+}
+
+.runner-metric.highlight-metric {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  background: rgba(255, 214, 0, 0.04);
+  border: 1px solid rgba(255, 214, 0, 0.15);
+}
+
+.runner-metric.highlight-metric:hover {
+  background: rgba(255, 214, 0, 0.12);
+  border-color: rgba(255, 214, 0, 0.4);
+  transform: translateY(-1px);
 }
 
 .runner-metric.highlight-metric .runner-metric-val {
@@ -477,6 +522,40 @@
 .runner-id-footer .id-val:hover {
   color: #ffffff;
   text-decoration: underline;
+}
+
+.runner-actions-row {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 2px 0;
+}
+
+.runner-action-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: #00e5ff;
+}
+
+.runner-action-btn:hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: #00e5ff;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
 }
 
 .runner-tracking-note {

@@ -549,4 +549,70 @@
   }
 }
 
+/* Bid / Ask Toggle Button */
+.bid-ask-toggle-btn {
+  background: var(--kdt-purple-card);
+  border: 1px solid var(--kdt-purple-border);
+  color: var(--kdt-white-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: var(--font-headline);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bid-ask-toggle-btn:hover {
+  border-color: #00e5ff;
+  color: #00e5ff;
+}
+
+.bid-ask-toggle-btn.active {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: #00e5ff;
+  color: #00e5ff;
+  font-weight: 800;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+/* Bid / Ask Ticker in Level Legend Bar */
+.legend-item.bid-ask-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  padding: 3px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.legend-item.bid-ask-legend .legend-bid {
+  color: #00e5ff;
+}
+
+.legend-item.bid-ask-legend .legend-ask {
+  color: #ff5252;
+}
+
+.legend-item.bid-ask-legend .legend-sep {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.legend-item.bid-ask-legend .legend-spread {
+  color: #ffd700;
+}
+
+.state-status-tag.runner {
+  background: rgba(255, 171, 0, 0.15);
+  color: #ffab00;
+  border: 1px solid rgba(255, 171, 0, 0.4);
+}
+
 

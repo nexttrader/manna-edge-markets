@@ -12,6 +12,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     switch (st) {
       case 'active':
         return 'status-active';
+      case 'runner':
+        return 'status-runner';
       case 'awaiting_entry':
         return 'status-awaiting';
       case 'invalidated':
@@ -29,6 +31,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     switch (st) {
       case 'active':
         return 'Active';
+      case 'runner':
+        return '🏃 Runner';
       case 'awaiting_entry':
         return 'Awaiting Entry';
       case 'invalidated':

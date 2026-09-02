@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { getCurrentKillzone } from '../scheduler/killzone-mapper';
-import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { getIBKRGatewayStatus } from '../discovery/ib-provider';
@@ -349,7 +349,8 @@ router.get('/candles/:instrument', async (req: Request, res: Response) => {
     const timeframe = (req.query.timeframe as any) || '15m';
     const count = parseInt(req.query.count as string) || 150;
     const candles = await getLiveCandles(instrument, timeframe, count);
-    res.json({ instrument, timeframe, candles });
+    const quote = await getLiveQuoteDetails(instrument).catch(() => null);
+    res.json({ instrument, timeframe, candles, quote });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candles', details: error instanceof Error ? error.message : String(error) });
   }
