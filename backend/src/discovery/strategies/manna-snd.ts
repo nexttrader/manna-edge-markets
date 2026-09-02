@@ -360,7 +360,9 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const bias: Bias = 'long';
           const entry_zone_mid = zone.proximal;
-          const rawStop = zone.distal - (market === 'futures' ? atr14 * 0.4 : atr14 * 0.25);
+          const isJpy = instrument.includes('JPY');
+          const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
+          const rawStop = zone.distal - distalBuffer;
           const rawRisk = Math.abs(entry_zone_mid - rawStop);
           const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
           const stop = entry_zone_mid - risk;
@@ -493,7 +495,9 @@ export class MannaSndStrategy implements IStrategyEngine {
 
           const bias: Bias = 'short';
           const entry_zone_mid = zone.proximal;
-          const rawStop = zone.distal + (market === 'futures' ? atr14 * 0.4 : atr14 * 0.25);
+          const isJpy = instrument.includes('JPY');
+          const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
+          const rawStop = zone.distal + distalBuffer;
           const rawRisk = Math.abs(rawStop - entry_zone_mid);
           const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
           const stop = entry_zone_mid + risk;
