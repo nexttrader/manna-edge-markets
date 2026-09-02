@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { EdgeSetup } from '../types';
 import { formatETTime, formatETDate } from '../utils/time';
+import { formatTelegramTradeId } from '../utils/tradeId';
 import './RunnersPanel.css';
 
 interface RunnersPanelProps {
@@ -85,7 +86,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
 
                 const tp1Percent = 66.6;
                 const entryTimestamp = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
-                const shortId = setup.id ? (setup.id.length > 8 ? setup.id.slice(0, 8) : setup.id) : '';
+                const telegramId = formatTelegramTradeId(setup);
 
                 return (
                   <div key={setup.id} className={`runner-card glass-card ${isLong ? 'is-long' : 'is-short'}`}>
@@ -95,20 +96,18 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                         <span className={`runner-bias-badge font-mono ${isLong ? 'bias-long' : 'bias-short'}`}>
                           {isLong ? '▲ LONG' : '▼ SHORT'}
                         </span>
-                        {shortId && (
-                          <span 
-                            className="runner-id-badge font-mono"
-                            title={`Trade ID: ${setup.id}\nClick to copy full ID`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigator.clipboard.writeText(setup.id);
-                              setCopiedId(setup.id);
-                              setTimeout(() => setCopiedId(null), 2000);
-                            }}
-                          >
-                            {copiedId === setup.id ? '✓ COPIED' : `ID: #${shortId}`}
-                          </span>
-                        )}
+                        <span 
+                          className="runner-id-badge font-mono"
+                          title={`Telegram Trade ID: ${telegramId}\nClick to copy`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(telegramId);
+                            setCopiedId(setup.id);
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {copiedId === setup.id ? '✓ COPIED' : telegramId}
+                        </span>
                       </div>
                       <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
                     </div>
@@ -185,15 +184,15 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                         <span className="id-label">TRADE ID:</span>
                         <span 
                           className="id-val font-mono"
-                          title={`Trade ID: ${setup.id}\nClick to copy`}
+                          title={`Telegram Trade ID: ${telegramId}\nClick to copy`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigator.clipboard.writeText(setup.id);
+                            navigator.clipboard.writeText(telegramId);
                             setCopiedId(setup.id);
                             setTimeout(() => setCopiedId(null), 2000);
                           }}
                         >
-                          {setup.id} {copiedId === setup.id ? '✓ Copied' : '📋'}
+                          {telegramId} {copiedId === setup.id ? '✓ Copied' : '📋'}
                         </span>
                       </div>
                       <div className="runner-tracking-note font-mono">

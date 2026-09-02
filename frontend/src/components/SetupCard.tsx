@@ -3,6 +3,7 @@ import './SetupCard.css';
 import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { formatETTime, formatETDate, formatETDateTime, formatDuration } from '../utils/time';
+import { formatTelegramTradeId } from '../utils/tradeId';
 import { SetupChartModal } from './SetupChartModal';
 
 function getSelectionRationale(setup: EdgeSetup): string {
@@ -140,8 +141,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const r1 = setup.r_multiple_1 ?? 2.0;
   const r2 = setup.r_multiple_2 ?? 3.0;
 
+  const telegramId = formatTelegramTradeId(setup);
+
   const handleCopy = () => {
-    const text = `Trade ID: ${setup.id}\n${setup.instrument} ${biasRaw.toUpperCase()}\nEntry: ${entryLow} - ${entryHigh}\nStop: ${stopVal}\nTP1: ${tp1Val} (${r1}R)${tp2Val ? `\nTP2: ${tp2Val} (${r2}R)` : ''}`;
+    const text = `Trade ID: ${telegramId}\n${setup.instrument} ${biasRaw.toUpperCase()}\nEntry: ${entryLow} - ${entryHigh}\nStop: ${stopVal}\nTP1: ${tp1Val} (${r1}R)${tp2Val ? `\nTP2: ${tp2Val} (${r2}R)` : ''}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -213,15 +216,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             {setup.id && (
               <span 
                 className="sc-trade-id-badge font-mono"
-                title={`Trade ID: ${setup.id}\nClick to copy full ID`}
+                title={`Telegram Trade ID: ${telegramId}\nClick to copy`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigator.clipboard.writeText(setup.id);
+                  navigator.clipboard.writeText(telegramId);
                   setCopiedId(true);
                   setTimeout(() => setCopiedId(false), 2000);
                 }}
               >
-                {copiedId ? '✓ COPIED' : `ID: #${setup.id.length > 8 ? setup.id.slice(0, 8) : setup.id}`}
+                {copiedId ? '✓ COPIED' : telegramId}
               </span>
             )}
           </div>
@@ -624,13 +627,13 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               className="font-mono text-gold copyable-id"
               style={{ cursor: 'pointer', fontSize: '0.82rem', wordBreak: 'break-all' }}
               onClick={() => {
-                navigator.clipboard.writeText(setup.id);
+                navigator.clipboard.writeText(telegramId);
                 setCopiedId(true);
                 setTimeout(() => setCopiedId(false), 2000);
               }}
-              title="Click to copy full Trade ID"
+              title={`Telegram Trade ID: ${telegramId}\nClick to copy`}
             >
-              {setup.id} {copiedId ? '✓ Copied' : '📋'}
+              {telegramId} {copiedId ? '✓ Copied' : '📋'}
             </span>
           </div>
 
