@@ -11,6 +11,7 @@ interface RunnersPanelProps {
 export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loading }) => {
   // Default to minimized/collapsed state
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -84,6 +85,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
 
                 const tp1Percent = 66.6;
                 const entryTimestamp = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
+                const shortId = setup.id ? (setup.id.length > 8 ? setup.id.slice(0, 8) : setup.id) : '';
 
                 return (
                   <div key={setup.id} className={`runner-card glass-card ${isLong ? 'is-long' : 'is-short'}`}>
@@ -93,6 +95,20 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                         <span className={`runner-bias-badge font-mono ${isLong ? 'bias-long' : 'bias-short'}`}>
                           {isLong ? '▲ LONG' : '▼ SHORT'}
                         </span>
+                        {shortId && (
+                          <span 
+                            className="runner-id-badge font-mono"
+                            title={`Trade ID: ${setup.id}\nClick to copy full ID`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(setup.id);
+                              setCopiedId(setup.id);
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === setup.id ? '✓ COPIED' : `ID: #${shortId}`}
+                          </span>
+                        )}
                       </div>
                       <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
                     </div>
@@ -164,6 +180,21 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                       <div className="runner-status-line font-mono">
                         <span className="status-label">DISTANCE TO TP2:</span>
                         <span className="text-gold font-bold">{distToTp2} pts</span>
+                      </div>
+                      <div className="runner-id-footer font-mono">
+                        <span className="id-label">TRADE ID:</span>
+                        <span 
+                          className="id-val font-mono"
+                          title={`Trade ID: ${setup.id}\nClick to copy`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(setup.id);
+                            setCopiedId(setup.id);
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {setup.id} {copiedId === setup.id ? '✓ Copied' : '📋'}
+                        </span>
                       </div>
                       <div className="runner-tracking-note font-mono">
                         Tracking for TP2 upgrade from 2R to 3R • New scans on {setup.instrument} UNBLOCKED

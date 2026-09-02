@@ -44,6 +44,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
@@ -140,7 +141,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const r2 = setup.r_multiple_2 ?? 3.0;
 
   const handleCopy = () => {
-    const text = `${setup.instrument} ${biasRaw.toUpperCase()}\nEntry: ${entryLow} - ${entryHigh}\nStop: ${stopVal}\nTP1: ${tp1Val} (${r1}R)${tp2Val ? `\nTP2: ${tp2Val} (${r2}R)` : ''}`;
+    const text = `Trade ID: ${setup.id}\n${setup.instrument} ${biasRaw.toUpperCase()}\nEntry: ${entryLow} - ${entryHigh}\nStop: ${stopVal}\nTP1: ${tp1Val} (${r1}R)${tp2Val ? `\nTP2: ${tp2Val} (${r2}R)` : ''}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -209,6 +210,20 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           <div className="sc-symbol-row">
             <span className="sc-instrument">{setup.instrument}</span>
             <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
+            {setup.id && (
+              <span 
+                className="sc-trade-id-badge font-mono"
+                title={`Trade ID: ${setup.id}\nClick to copy full ID`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(setup.id);
+                  setCopiedId(true);
+                  setTimeout(() => setCopiedId(false), 2000);
+                }}
+              >
+                {copiedId ? '✓ COPIED' : `ID: #${setup.id.length > 8 ? setup.id.slice(0, 8) : setup.id}`}
+              </span>
+            )}
           </div>
           <div className="sc-badges-row">
             <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
@@ -601,6 +616,22 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="detail-row">
+            <span>Trade ID:</span>
+            <span 
+              className="font-mono text-gold copyable-id"
+              style={{ cursor: 'pointer', fontSize: '0.82rem', wordBreak: 'break-all' }}
+              onClick={() => {
+                navigator.clipboard.writeText(setup.id);
+                setCopiedId(true);
+                setTimeout(() => setCopiedId(false), 2000);
+              }}
+              title="Click to copy full Trade ID"
+            >
+              {setup.id} {copiedId ? '✓ Copied' : '📋'}
+            </span>
           </div>
 
           <div className="detail-row">

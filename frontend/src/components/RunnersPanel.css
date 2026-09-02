@@ -181,6 +181,26 @@
   border: 1px solid rgba(255, 23, 68, 0.25);
 }
 
+.runner-id-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.runner-id-badge:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: #00e5ff;
+  color: #00e5ff;
+}
+
 .runner-logged-badge {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(0, 176, 255, 0.15) 100%);
   border: 1px solid rgba(0, 229, 255, 0.4);
@@ -422,6 +442,41 @@
 .runner-status-line .text-gold {
   color: #ffd600;
   text-shadow: 0 0 8px rgba(255, 214, 0, 0.1);
+}
+
+.runner-id-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.runner-id-footer .id-label {
+  color: #64748b;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.runner-id-footer .id-val {
+  color: #ffd700;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.runner-id-footer .id-val:hover {
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 .runner-tracking-note {

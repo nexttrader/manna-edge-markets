@@ -121,6 +121,36 @@
   flex-wrap: wrap;
 }
 
+.sc-trade-id-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--kdt-white-muted);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.sc-trade-id-badge:hover {
+  background: rgba(201, 168, 76, 0.18);
+  border-color: var(--kdt-gold);
+  color: var(--kdt-gold);
+}
+
+.copyable-id {
+  transition: all 0.2s ease;
+}
+
+.copyable-id:hover {
+  color: #ffffff !important;
+  text-decoration: underline;
+}
+
 .sc-live-price-chip {
   display: inline-flex;
   align-items: center;
