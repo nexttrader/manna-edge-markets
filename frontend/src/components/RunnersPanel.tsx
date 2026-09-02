@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { EdgeSetup } from '../types';
+import { formatETTime, formatETDate } from '../utils/time';
 import './RunnersPanel.css';
 
 interface RunnersPanelProps {
@@ -82,6 +83,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                   : 0;
 
                 const tp1Percent = 66.6;
+                const entryTimestamp = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
 
                 return (
                   <div key={setup.id} className={`runner-card glass-card ${isLong ? 'is-long' : 'is-short'}`}>
@@ -96,6 +98,25 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                     </div>
 
                     <div className="runner-card-body">
+                      <div className="runner-entry-bar font-mono">
+                        <div className="runner-entry-bar-left">
+                          <span className="runner-entry-icon">📥</span>
+                          <span className="runner-entry-label">ENTRY:</span>
+                          <span className="runner-entry-datetime">
+                            {entryTimestamp ? (
+                              <>
+                                <span className="entry-date">{formatETDate(entryTimestamp)}</span>
+                                <span className="entry-dot"> · </span>
+                                <span className="entry-time">{formatETTime(entryTimestamp)}</span>
+                              </>
+                            ) : (
+                              '--'
+                            )}
+                          </span>
+                        </div>
+                        <span className="runner-entry-pill font-mono">FILLED</span>
+                      </div>
+
                       <div className="runner-metric-grid">
                         <div className="runner-metric">
                           <span className="runner-metric-label font-mono">ENTRY</span>

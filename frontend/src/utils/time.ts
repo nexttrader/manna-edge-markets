@@ -15,6 +15,35 @@ export function formatETTime(isoString?: string | null): string {
   }
 }
 
+export function formatETDate(isoString?: string | null): string {
+  if (!isoString) return '--/--/----';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '--/--/----';
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(date);
+  } catch (e) {
+    return '--/--/----';
+  }
+}
+
+export function formatETDateTime(isoString?: string | null): string {
+  if (!isoString) return '--:--:-- ET';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '--:--:-- ET';
+    const datePart = formatETDate(isoString);
+    const timePart = formatETTime(isoString);
+    return `${datePart} · ${timePart}`;
+  } catch (e) {
+    return '--:--:-- ET';
+  }
+}
+
 export function formatLocalTime(isoString?: string | null): string {
   if (!isoString) return '--:--:--';
   try {

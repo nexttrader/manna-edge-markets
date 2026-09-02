@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import './SetupCard.css';
 import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { formatETTime, formatDuration } from '../utils/time';
+import { formatETTime, formatETDate, formatETDateTime, formatDuration } from '../utils/time';
 import { SetupChartModal } from './SetupChartModal';
 
 function getSelectionRationale(setup: EdgeSetup): string {
@@ -185,6 +185,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
       ? setup.entry_price_recorded || setup.entry_price_executed
       : null;
 
+  const entryTimestamp = setup.entry_triggered_at || (stateStr === 'active' || stateStr === 'resolved' || stateStr === 'runner' ? (setup.entryAt || setup.created_at || setup.createdAt) : null);
+
   const currentPrice = setup.current_price;
   const isStillInZone = Boolean(
     currentPrice &&
@@ -323,15 +325,30 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="level-pips text-gold">⚡ FILLED</span>
           </div>
         )}
-        {setup.entry_triggered_at && (
+        {entryTimestamp ? (
           <div className="level-row entry-session-row">
-            <span className="level-label text-green font-bold">Fill Session</span>
-            <span className="level-val text-green font-bold">
-              {getEntrySessionName()} · {formatETTime(setup.entry_triggered_at)}
+            <span className="level-label text-green font-bold">Entry Fill</span>
+            <span className="level-val text-green font-bold entry-datetime-val">
+              <span className="entry-val-date">{formatETDate(entryTimestamp)}</span>
+              <span className="entry-val-sep"> · </span>
+              <span className="entry-val-time">{formatETTime(entryTimestamp)}</span>
+              {getEntrySessionName() && (
+                <span className="entry-val-session"> ({getEntrySessionName()})</span>
+              )}
             </span>
-            <span className="level-pips text-green font-bold">📥 FILL TIME</span>
+            <span className="level-pips text-green font-bold">📥 ENTRY TIME</span>
           </div>
-        )}
+        ) : stateStr === 'awaiting_entry' ? (
+          <div className="level-row entry-session-row awaiting-signal-row">
+            <span className="level-label text-muted font-bold">Signal Time</span>
+            <span className="level-val text-muted font-bold entry-datetime-val">
+              <span className="entry-val-date">{formatETDate(createdTime)}</span>
+              <span className="entry-val-sep"> · </span>
+              <span className="entry-val-time">{formatETTime(createdTime)}</span>
+            </span>
+            <span className="level-pips text-muted font-bold">📡 SIGNAL</span>
+          </div>
+        ) : null}
         <div className="level-row">
           <span className="level-label">Stop Loss</span>
           <span className="level-val">
@@ -557,18 +574,18 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <div className="timeline-grid font-mono">
               <div className="timeline-item">
                 <span className="t-label">📡 Discovered:</span>
-                <span className="t-val">{formatETTime(createdTime)}</span>
+                <span className="t-val">{formatETDateTime(createdTime)}</span>
               </div>
               <div className="timeline-item">
                 <span className="t-label">⚡ Entry Triggered:</span>
                 <span className="t-val text-gold">
-                  {setup.entry_triggered_at ? formatETTime(setup.entry_triggered_at) : 'Awaiting Entry'}
+                  {setup.entry_triggered_at ? formatETDateTime(setup.entry_triggered_at) : 'Awaiting Entry'}
                 </span>
               </div>
               {setup.resolved_at && (
                 <div className="timeline-item">
                   <span className="t-label">🏁 Exited / Resolved:</span>
-                  <span className="t-val text-green">{formatETTime(setup.resolved_at)}</span>
+                  <span className="t-val text-green">{formatETDateTime(setup.resolved_at)}</span>
                 </div>
               )}
               {setup.entry_triggered_at && (

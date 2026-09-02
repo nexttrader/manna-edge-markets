@@ -195,8 +195,83 @@
 .runner-card-body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 16px;
+}
+
+/* Runner Entry Timestamp Bar */
+.runner-entry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0, 230, 118, 0.06);
+  border: 1px solid rgba(0, 230, 118, 0.22);
+  border-radius: 8px;
+  gap: 8px;
+  font-size: 0.76rem;
+  transition: all 0.2s ease;
+}
+
+.runner-card.is-short .runner-entry-bar {
+  background: rgba(255, 23, 68, 0.06);
+  border-color: rgba(255, 23, 68, 0.22);
+}
+
+.runner-entry-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.runner-entry-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.runner-entry-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #7a8c9e;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.runner-entry-datetime {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #00e676;
+  white-space: nowrap;
+}
+
+.runner-card.is-short .runner-entry-datetime {
+  color: #ff5252;
+}
+
+.runner-entry-datetime .entry-dot {
+  color: #64748b;
+  margin: 0 1px;
+}
+
+.runner-entry-pill {
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 230, 118, 0.15);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  color: #00e676;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.runner-card.is-short .runner-entry-pill {
+  background: rgba(255, 23, 68, 0.15);
+  border-color: rgba(255, 23, 68, 0.35);
+  color: #ff5252;
 }
 
 .runner-metric-grid {
