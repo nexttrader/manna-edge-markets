@@ -247,6 +247,35 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
     }
 
     let rawSetups = await queries.getSetupsByState('runner');
+
+    // Auto-resolve any runners older than 5 days
+    const nowMs = Date.now();
+    const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+    const activeRunners: any[] = [];
+
+    for (const setup of rawSetups) {
+      let runnerStart = (setup as any).entryAt || setup.entry_triggered_at || setup.created_at;
+      try {
+        const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
+        if (meta?.runner_started_at) runnerStart = meta.runner_started_at;
+      } catch {}
+
+      const startMs = runnerStart ? new Date(runnerStart).getTime() : 0;
+      const isExpired = startMs > 0 && (nowMs - startMs) >= FIVE_DAYS_MS;
+
+      if (isExpired) {
+        await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+          tradable: 0,
+          resolved_at: new Date().toISOString(),
+          invalidation_reason: 'runner_closed_5d'
+        });
+      } else {
+        activeRunners.push(setup);
+      }
+    }
+
+    rawSetups = activeRunners;
+
     const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
     const disabledAssets = await queries.getDisabledDisplayAssets();
 

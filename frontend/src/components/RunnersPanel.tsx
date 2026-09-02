@@ -24,9 +24,21 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
     }
   }, [autoExpand, runnerSetups.length]);
 
-  // Keep selectedChartSetup reactive to latest live price ticks in runnerSetups
+  // Filter out any runner older than 5 days (auto-closed policy)
+  const activeRunners = runnerSetups.filter(setup => {
+    let runnerStart = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
+    try {
+      const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
+      if (meta?.runner_started_at) runnerStart = meta.runner_started_at;
+    } catch {}
+    if (!runnerStart) return true;
+    const ageMs = Date.now() - new Date(runnerStart).getTime();
+    return ageMs < 5 * 24 * 60 * 60 * 1000;
+  });
+
+  // Keep selectedChartSetup reactive to latest live price ticks in activeRunners
   const activeChartSetup = selectedChartSetup
-    ? runnerSetups.find((s) => s.id === selectedChartSetup.id) || selectedChartSetup
+    ? activeRunners.find((s) => s.id === selectedChartSetup.id) || selectedChartSetup
     : null;
 
   if (loading) {
@@ -50,11 +62,11 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
           <div className="runners-title font-mono">
             <span className="runners-icon">🏃</span>
             <span>ACTIVE RUNNERS DESK</span>
-            <span className="runners-badge font-mono">{runnerSetups.length} RUNNING</span>
+            <span className="runners-badge font-mono">{activeRunners.length} RUNNING</span>
           </div>
           {isExpanded && (
             <p className="runners-subtitle font-mono">
-              Setups that reached TP1 (2R Logged). Tracking strictly for TP2 (3R) without blocking new discovery scans on these assets.
+              Setups that reached TP1 (2R Logged). Tracking strictly for TP2 (3R) for up to 5 days (auto-closes if TP2 or BE not reached) without blocking new discovery scans.
             </p>
           )}
         </div>
@@ -66,7 +78,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
 
       {isExpanded && (
         <div className="runners-panel-body animate-fade-in">
-          {runnerSetups.length === 0 ? (
+          {activeRunners.length === 0 ? (
             <div className="runners-empty font-mono">
               <div className="runners-empty-icon">🛡️</div>
               <div style={{ color: '#00e5ff', fontWeight: 700, fontSize: '0.95rem', marginBottom: '4px' }}>
@@ -78,7 +90,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
             </div>
           ) : (
             <div className="runners-grid">
-               {runnerSetups.map((setup) => {
+               {activeRunners.map((setup) => {
                 const currentPrice = setup.current_price || 0;
                 const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid || 0;
                 const isLong = (setup.bias || 'long').toLowerCase() === 'long';
@@ -242,7 +254,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                       </div>
 
                       <div className="runner-tracking-note font-mono">
-                        Tracking for TP2 upgrade from 2R to 3R • New scans on {setup.instrument} UNBLOCKED
+                        Tracking for TP2 upgrade from 2R to 3R (Max 5 days) • New scans on {setup.instrument} UNBLOCKED
                       </div>
                     </div>
                   </div>

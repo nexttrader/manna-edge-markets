@@ -235,10 +235,33 @@ export class OutcomeDetector {
         }
       }
 
-      // 3. PROCESS RUNNER SETUPS
+      // 3. PROCESS RUNNER SETUPS (Auto-close after 5 days duration)
       const runnerSetups = await queries.getSetupsByState('runner');
+      const nowMs = Date.now();
+      const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
       
       for (const setup of runnerSetups) {
+        let runnerStart = (setup as any).entryAt || setup.entry_triggered_at || setup.created_at;
+        try {
+          const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
+          if (meta?.runner_started_at) runnerStart = meta.runner_started_at;
+        } catch {}
+
+        const startMs = runnerStart ? new Date(runnerStart).getTime() : 0;
+        const isExpired = startMs > 0 && (nowMs - startMs) >= FIVE_DAYS_MS;
+
+        if (isExpired) {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: new Date().toISOString(),
+            invalidation_reason: 'runner_closed_5d'
+          });
+          
+          logger.info({ setupId: setup.id, instrument: setup.instrument, durationDays: ((nowMs - startMs) / (24 * 3600 * 1000)).toFixed(1) }, 'Runner auto-closed after 5 days duration. Initial 2R TP1 log retained.');
+          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: setup.r_multiple_1 || 2.0 } });
+          continue;
+        }
+
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         if (!currentPrice || currentPrice <= 0) continue;
         
