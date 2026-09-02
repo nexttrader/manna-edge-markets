@@ -3,7 +3,8 @@ import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
 import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
 import { computeATR } from '../atr';
 import { 
-  computeConvictionScore, 
+  computeConvictionScore,
+  computeMannaSndConvictionScore,
   computeLiquidityScore, 
   computeRMultiple,
   computeKillzoneTimingScore,
@@ -409,17 +410,18 @@ export class MannaSndStrategy implements IStrategyEngine {
           const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
           const newsProximityModifier = computeNewsProximityModifier(now);
 
-          const conviction_score = computeConvictionScore({
-            supportResistanceStrength,
-            structureAlignment,
-            volumeProfile,
-            killzoneTiming,
-            multiTimeframeAlignment,
-            liquidityPoolMagnet,
-            fvgDisbalance,
-            relativeStrength,
-            atrAlignment,
-            newsProximityModifier
+          const conviction_score = computeMannaSndConvictionScore({
+            curveLocation,
+            trend15m,
+            bias,
+            instrument,
+            market,
+            hourET,
+            formation: zone.formation,
+            tp1,
+            candles1h,
+            candles15m,
+            now
           });
 
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
@@ -534,17 +536,18 @@ export class MannaSndStrategy implements IStrategyEngine {
           const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
           const newsProximityModifier = computeNewsProximityModifier(now);
 
-          const conviction_score = computeConvictionScore({
-            supportResistanceStrength,
-            structureAlignment,
-            volumeProfile,
-            killzoneTiming,
-            multiTimeframeAlignment,
-            liquidityPoolMagnet,
-            fvgDisbalance,
-            relativeStrength,
-            atrAlignment,
-            newsProximityModifier
+          const conviction_score = computeMannaSndConvictionScore({
+            curveLocation,
+            trend15m,
+            bias,
+            instrument,
+            market,
+            hourET,
+            formation: zone.formation,
+            tp1,
+            candles1h,
+            candles15m,
+            now
           });
 
           const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
