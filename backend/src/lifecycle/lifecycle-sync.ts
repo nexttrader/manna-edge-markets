@@ -122,6 +122,7 @@ export class LifecycleSync {
           metaObj.entry_matrix_rank = entryRank;
           metaObj.entry_priority_score = entryPriorityScore;
           metaObj.is_best_trade_at_entry = entryRank === 1;
+          metaObj.matrix_engine_version = 'v2_strategy_differentiated';
 
           const market = setup.market || 'futures';
           await queries.updateSetupState(setup.id, market, 'active', {

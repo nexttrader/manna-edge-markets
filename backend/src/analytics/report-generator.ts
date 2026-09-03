@@ -17,6 +17,7 @@ export interface ReportSummary {
   avgFillTimeMin: number;
   avgHoldDurationMin: number;
   strategyBreakdown: Record<string, { trades: number; wins: number; tp1Hits?: number; tp2Hits?: number; winRate: number; totalR: number }>;
+  topFocusMetrics?: { trades: number; wins: number; losses: number; winRate: number; totalR: number };
   plainEnglishSummary: string;
 }
 
@@ -59,6 +60,10 @@ export async function generateReportMetrics(
   let fillCount = 0;
   let totalHoldMs = 0;
   let holdCount = 0;
+  let topFocusTrades = 0;
+  let topFocusWins = 0;
+  let topFocusLosses = 0;
+  let topFocusR = 0;
 
   const stratStats: Record<string, { trades: number; wins: number; tp1Hits?: number; tp2Hits?: number; winRate: number; totalR: number }> = {
     sentinel_v2: { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 },
@@ -122,6 +127,19 @@ export async function generateReportMetrics(
     stratStats[stratKey].trades++;
     stratStats[stratKey].totalR += rVal;
 
+    // Track Decision Matrix #1 Focus Selection Efficacy
+    let metaObj: any = {};
+    try {
+      metaObj = typeof setup?.metadata === 'string' ? JSON.parse(setup.metadata) : (setup?.metadata || {});
+    } catch {}
+    const isTopFocus = metaObj.is_best_trade_at_entry === true || metaObj.entry_matrix_rank === 1;
+    if (isTopFocus) {
+      topFocusTrades++;
+      topFocusR += rVal;
+      if (rVal > 0) topFocusWins++;
+      else if (rVal < 0) topFocusLosses++;
+    }
+
     if (setup?.created_at && setup?.entry_triggered_at) {
       const fillDiff = new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime();
       if (fillDiff > 0) {
@@ -178,6 +196,13 @@ export async function generateReportMetrics(
     avgFillTimeMin,
     avgHoldDurationMin,
     strategyBreakdown: stratStats,
+    topFocusMetrics: {
+      trades: topFocusTrades,
+      wins: topFocusWins,
+      losses: topFocusLosses,
+      winRate: topFocusTrades > 0 ? Number(((topFocusWins / topFocusTrades) * 100).toFixed(1)) : 0,
+      totalR: Number(topFocusR.toFixed(2))
+    },
     plainEnglishSummary
   };
 }
