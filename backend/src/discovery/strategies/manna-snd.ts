@@ -140,21 +140,29 @@ export class MannaSndStrategy implements IStrategyEngine {
         : { type: 'supply', formation: 'Rally-Base-Drop', proximal: lastPrice + atr * 0.4, distal: lastPrice + atr * 0.7 };
     }
 
-    // 1. Scan for any historical 3-candle Leg-In -> Base -> Leg-Out zones
-    const allZones = this.findZonesWithIndex(candles).filter(z => z.type === type);
+    const currentPrice = candles[candles.length - 1].close;
+
+    // 1. Scan for any historical 3-candle Leg-In -> Base -> Leg-Out zones on the correct side of price
+    const allZones = this.findZonesWithIndex(candles).filter(z => {
+      if (z.type !== type) return false;
+      return type === 'demand' ? z.proximal <= currentPrice : z.proximal >= currentPrice;
+    });
+
     if (allZones.length > 0) {
-      const latest = allZones[allZones.length - 1];
+      const closest = type === 'demand'
+        ? allZones.reduce((best, z) => z.proximal > best.proximal ? z : best, allZones[0])
+        : allZones.reduce((best, z) => z.proximal < best.proximal ? z : best, allZones[0]);
+
       return {
-        type: latest.type,
-        formation: latest.formation,
-        proximal: latest.proximal,
-        distal: latest.distal,
-        timestamp: latest.timestamp
+        type: closest.type,
+        formation: closest.formation,
+        proximal: closest.proximal,
+        distal: closest.distal,
+        timestamp: closest.timestamp
       };
     }
 
     // 2. Construct explicit Leg-In -> Base -> Leg-Out zone around unmitigated swing extreme
-    const currentPrice = candles[candles.length - 1].close;
     if (type === 'demand') {
       for (let i = candles.length - 2; i >= 1; i--) {
         const c = candles[i];
@@ -176,13 +184,14 @@ export class MannaSndStrategy implements IStrategyEngine {
           }
         }
       }
-      const last = candles[candles.length - 1];
+      const lowest = candles.reduce((min, c) => c.low < min.low ? c : min, candles[0]);
+      const prox = Math.min(currentPrice * 0.998, Math.max(lowest.open, lowest.close));
       return {
         type: 'demand',
         formation: 'Drop-Base-Rally',
-        proximal: last.low,
-        distal: last.low - (atr * 0.5),
-        timestamp: last.timestamp
+        proximal: prox,
+        distal: Math.min(prox - (atr * 0.5), lowest.low),
+        timestamp: lowest.timestamp
       };
     } else {
       // Supply: Find nearest unmitigated high ABOVE current price (Rally-Base-Drop preference)
