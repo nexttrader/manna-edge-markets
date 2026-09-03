@@ -107,26 +107,33 @@ export function calculateAssetMatrixItem(
   let S_conviction = Math.max(0, Math.min(100, rawConviction));
   try {
     const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata || {};
+    const strat = (setup.strategy_id || '').toLowerCase();
+    const isMannaSnd = strat === 'manna_snd';
     const trend15m = meta.trend15m;
     const curveLocation = meta.curveLocation;
-    
-    if (trend15m) {
-      if (bias === 'long') {
-        if (trend15m === 'up') S_conviction += 5;
-        else if (trend15m === 'down') S_conviction -= 10;
-      } else {
-        if (trend15m === 'down') S_conviction += 5;
-        else if (trend15m === 'up') S_conviction -= 10;
+
+    // For non-Manna SnD strategies (Sentinel / Manna Elite), apply trend & curve adjustments if available.
+    // For Manna SnD, computeMannaSndConvictionScore already natively and rigorously integrates Curve Location (25%)
+    // and Trend Structure (5%) into rawConviction, so we preserve the calibrated institutional score.
+    if (!isMannaSnd) {
+      if (trend15m) {
+        if (bias === 'long') {
+          if (trend15m === 'up') S_conviction += 5;
+          else if (trend15m === 'down') S_conviction -= 10;
+        } else {
+          if (trend15m === 'down') S_conviction += 5;
+          else if (trend15m === 'up') S_conviction -= 10;
+        }
       }
-    }
-    
-    if (curveLocation) {
-      if (bias === 'long') {
-        if (curveLocation === 'low') S_conviction += 5;
-        else if (curveLocation === 'high') S_conviction -= 15;
-      } else {
-        if (curveLocation === 'high') S_conviction += 5;
-        else if (curveLocation === 'low') S_conviction -= 15;
+      
+      if (curveLocation) {
+        if (bias === 'long') {
+          if (curveLocation === 'low') S_conviction += 5;
+          else if (curveLocation === 'high') S_conviction -= 15;
+        } else {
+          if (curveLocation === 'high') S_conviction += 5;
+          else if (curveLocation === 'low') S_conviction -= 15;
+        }
       }
     }
     S_conviction = Math.max(0, Math.min(100, S_conviction));

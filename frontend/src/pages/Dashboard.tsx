@@ -58,7 +58,7 @@ export const Dashboard: React.FC = () => {
 
   const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
 
-  const { setups, runnerSetups, loading } = useSetups();
+  const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
 
@@ -365,6 +365,7 @@ export const Dashboard: React.FC = () => {
                   onToggleWatchlist={toggleWatchlist}
                   isTagged={isTagged(setup.id)}
                   onToggleTag={toggleTag}
+                  onInvalidate={refetch}
                 />
               ))}
             </div>

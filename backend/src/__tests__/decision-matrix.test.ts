@@ -10,6 +10,7 @@ const setupInZone = {
   market: 'futures',
   bias: 'long',
   conviction_score: 92,
+  historical_winrate: 80,
   entry_zone_low: 5400,
   entry_zone_high: 5410,
   entry_zone_mid: 5405,

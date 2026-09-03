@@ -703,6 +703,19 @@
   box-shadow: 0 0 8px rgba(255, 171, 0, 0.2);
 }
 
+/* Super Admin Invalidate / Remove Button */
+.btn-invalidate {
+  transition: all 0.2s ease;
+}
+
+.btn-invalidate:hover {
+  background: rgba(255, 23, 68, 0.35) !important;
+  border-color: #ff1744 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(255, 23, 68, 0.4);
+  transform: translateY(-1px);
+}
+
 
 /* Expanded Details Drawer */
 .sc-details {

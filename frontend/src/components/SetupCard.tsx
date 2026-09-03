@@ -36,11 +36,12 @@ interface SetupCardProps {
   onToggleWatchlist?: (id: string) => void;
   isTagged?: boolean;
   onToggleTag?: (setupId: string, setup: EdgeSetup) => void;
+  onInvalidate?: (id: string) => void;
 }
 
-export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist, isTagged = false, onToggleTag }) => {
+export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist, isTagged = false, onToggleTag, onInvalidate }) => {
   const { user, originalAdmin, isImpersonating } = useAuth();
-  const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
+  const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
 
   const [expanded, setExpanded] = useState(false);
@@ -48,6 +49,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [copiedId, setCopiedId] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [invalidating, setInvalidating] = useState(false);
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
   const [rescanMessage, setRescanMessage] = useState<string | null>(null);
   const [showPriceDropdown, setShowPriceDropdown] = useState(false);
@@ -123,6 +125,39 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
       setTimeout(() => setRescanMessage(null), 4000);
     } finally {
       setRescanning(false);
+    }
+  };
+
+  const handleInvalidateSignal = async () => {
+    const confirmed = window.confirm(
+      `🚨 SUPERADMIN CONFIRMATION:\n\nAre you sure you want to remove and invalidate the signal for ${setup.instrument}?\n\nThis will:\n1. Invalidate this setup in the database\n2. Dispatch an official Telegram CANCEL notice\n3. Remove it immediately from all client cards.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setInvalidating(true);
+      const targetMarket = setup.market || (setup.instrument.includes('/') ? 'forex' : 'futures');
+      const res = await fetch(`${API_BASE}/api/admin/signals/${setup.id}/invalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          market: targetMarket,
+          reason: 'superadmin_client_dash_removed',
+          detail: 'Removed directly from client dashboard by superadmin'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to remove signal');
+
+      if (onInvalidate) {
+        onInvalidate(setup.id);
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err: any) {
+      alert(`⚠️ Failed to remove signal: ${err?.message || String(err)}`);
+      setInvalidating(false);
     }
   };
 
@@ -550,6 +585,17 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             title="Run single-asset rescan for this pending setup (Admin Only)"
           >
             {rescanning ? '⏳ Scanning...' : '🔍 Rescan'}
+          </button>
+        )}
+        {isSuperAdmin && stateStr !== 'resolved' && stateStr !== 'invalidated' && (
+          <button
+            className="btn-action btn-invalidate"
+            onClick={handleInvalidateSignal}
+            disabled={invalidating}
+            style={{ background: 'rgba(255, 23, 68, 0.16)', color: '#ff1744', border: '1px solid rgba(255, 23, 68, 0.5)', fontWeight: 800 }}
+            title="Super Admin Only: Invalidate and remove this signal from client dashboard"
+          >
+            {invalidating ? '⏳ Removing...' : '⛔ Remove'}
           </button>
         )}
         <button className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
