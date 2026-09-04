@@ -8,7 +8,7 @@ import { saveSignalsSnapshot } from './signal-snapshot-restore';
 
 export async function getActiveSetups(market: string): Promise<EdgeSetup[]> {
     const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
-    return await queryDb<EdgeSetup>(`SELECT * FROM ${table} WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
+    return await queryDb<EdgeSetup>(`SELECT * FROM ${table} WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active') AND id NOT IN (SELECT setup_id FROM outcomes)`);
 }
 
 export async function getAllActiveSetups(): Promise<EdgeSetup[]> {

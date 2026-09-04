@@ -113,6 +113,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
         let expansionIdx = -1;
         let expansionCandle: Candle | null = null;
         const walkLimit = Math.max(0, closed1h.length - 20);
+        const forcedBias = preCalculatedBiases && preCalculatedBiases[instrument];
 
         for (let i = closed1h.length - 1; i >= walkLimit; i--) {
           const c = closed1h[i];
@@ -121,9 +122,13 @@ export class SentinelV2Strategy implements IStrategyEngine {
           
           // Rule: Body / Range >= 0.60 (60% solid body) and Range >= avgRange * 1.0
           if (range > 0 && (body / range) >= 0.60 && range >= avgRange * 1.0) {
+            const candleBias: Bias = c.close > c.open ? 'long' : 'short';
+            if (forcedBias && candleBias !== forcedBias) {
+              continue; // Skip expansion candle if it does not match enforced bias
+            }
             expansionIdx = i;
             expansionCandle = c;
-            break; // First passing candle walking backwards = most recent
+            break; // First passing candle walking backwards = most recent matching
           }
         }
 

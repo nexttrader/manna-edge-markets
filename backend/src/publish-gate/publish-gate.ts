@@ -54,9 +54,38 @@ export async function executePublishRun(
   });
   
   try {
+    // ── EUR/USD LEADER PRE-PUBLISH GATE ──
+    // Absolute guarantee: Drop any Dollar follower setup that contradicts EUR/USD
+    let filteredForexCandidates = [...forexCandidates];
+    const eurInCandidates = filteredForexCandidates.find(c => c.instrument.toUpperCase() === 'EUR/USD');
+    let eurLeaderBias = eurInCandidates ? eurInCandidates.bias : null;
+
+    if (!eurLeaderBias) {
+      const activeForex = await queries.getActiveSetups('forex');
+      const activeEur = activeForex.find(s => s.instrument.toUpperCase() === 'EUR/USD');
+      if (activeEur) eurLeaderBias = activeEur.bias;
+    }
+
+    if (eurLeaderBias) {
+      const positivePairs = ['GBP/USD', 'AUD/USD', 'NZD/USD'];
+      const inversePairs = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
+      filteredForexCandidates = filteredForexCandidates.filter(c => {
+        const inst = c.instrument.toUpperCase();
+        if (positivePairs.includes(inst) && c.bias !== eurLeaderBias) {
+          logger.warn({ instrument: c.instrument, bias: c.bias, eurLeaderBias }, 'PublishGate Pre-Insertion: Blocking divergent positive Dollar pair candidate.');
+          return false;
+        }
+        if (inversePairs.includes(inst) && c.bias === eurLeaderBias) {
+          logger.warn({ instrument: c.instrument, bias: c.bias, eurLeaderBias }, 'PublishGate Pre-Insertion: Blocking divergent inverse Dollar pair candidate.');
+          return false;
+        }
+        return true;
+      });
+    }
+
     const markets = [
       { name: 'futures', candidates: futuresCandidates },
-      { name: 'forex', candidates: forexCandidates }
+      { name: 'forex', candidates: filteredForexCandidates }
     ];
     
     for (const market of markets) {
@@ -216,16 +245,12 @@ export async function executePublishRun(
       }
     }
 
-    // ── CORRELATED OUTLIER CONVICTION PENALTY PASS ──
-    for (const marketName of ['futures', 'forex']) {
+    // ── CORRELATED OUTLIER CONVICTION PENALTY PASS (FUTURES INDICES) ──
+    for (const marketName of ['futures']) {
       try {
         const activeSetups = await queries.getActiveSetups(marketName);
         const groups: Record<string, typeof activeSetups> = {};
-        if (marketName === 'futures') {
-          groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM', 'RTY'].includes(s.instrument.toUpperCase()));
-        } else {
-          groups['forex_dollar'] = activeSetups.filter(s => ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY', 'USD/CAD'].includes(s.instrument.toUpperCase()));
-        }
+        groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM', 'RTY'].includes(s.instrument.toUpperCase()));
 
         for (const [groupName, groupSetups] of Object.entries(groups)) {
           if (groupSetups.length < 2) continue;

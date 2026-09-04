@@ -301,7 +301,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     runId: string,
     market: 'futures' | 'forex',
     instruments: string[],
-    _preCalculatedBiases: Record<string, Bias>
+    preCalculatedBiases: Record<string, Bias>
   ): Promise<CandidateSetup[]> {
     const candidates: CandidateSetup[] = [];
 
@@ -328,10 +328,12 @@ export class MannaSndStrategy implements IStrategyEngine {
           continue;
         }
 
-        // 2. Decision Matrix Lookup
-        let allowedAction: 'BUY' | 'SELL' = 'BUY'; // Default fallback
+        // 2. Decision Matrix Lookup (with Precalculated / Forced Direction support)
+        let allowedAction: 'BUY' | 'SELL';
 
-        if (curveLocation === 'low' && (trend15m === 'up' || trend15m === 'sideways')) {
+        if (preCalculatedBiases && preCalculatedBiases[instrument]) {
+          allowedAction = preCalculatedBiases[instrument] === 'long' ? 'BUY' : 'SELL';
+        } else if (curveLocation === 'low' && (trend15m === 'up' || trend15m === 'sideways')) {
           allowedAction = 'BUY';
         } else if (curveLocation === 'high' && (trend15m === 'down' || trend15m === 'sideways')) {
           allowedAction = 'SELL';
