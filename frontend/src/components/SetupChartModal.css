@@ -615,4 +615,164 @@
   border: 1px solid rgba(255, 171, 0, 0.4);
 }
 
+/* Trade ID Badge in Chart Header */
+.chart-trade-id-badge {
+  background: rgba(224, 86, 253, 0.15);
+  color: #e056fd;
+  border: 1px solid rgba(224, 86, 253, 0.4);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.chart-trade-id-badge:hover {
+  background: rgba(224, 86, 253, 0.28);
+  border-color: #e056fd;
+  transform: translateY(-1px);
+}
+
+/* Trade Review Audit Strip for Past Closed Trades */
+.trade-review-audit-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 10px 24px;
+  background: rgba(10, 4, 20, 0.96);
+  border-bottom: 1px solid var(--kdt-purple-border);
+}
+
+.audit-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.2s;
+}
+
+.audit-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.audit-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--kdt-text-muted, #888);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.audit-card-badge {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}
+
+.audit-card-badge.stop-badge {
+  background: rgba(255, 82, 82, 0.2);
+  color: #ff5252;
+}
+
+.audit-card-badge.tp-badge {
+  background: rgba(0, 230, 118, 0.2);
+  color: #00e676;
+}
+
+.audit-card-main {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.audit-card-main .r-pill {
+  font-size: 0.75rem;
+  color: #00e676;
+  font-weight: 700;
+}
+
+.audit-card-sub {
+  font-size: 0.76rem;
+  color: var(--kdt-text-muted, #aaa);
+}
+
+.audit-card-time {
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 2px;
+}
+
+.result-card.is-win {
+  border-color: rgba(0, 230, 118, 0.35);
+  background: rgba(0, 230, 118, 0.06);
+}
+
+.result-card.is-loss {
+  border-color: rgba(255, 82, 82, 0.35);
+  background: rgba(255, 82, 82, 0.06);
+}
+
+.result-card.is-be {
+  border-color: rgba(201, 168, 76, 0.35);
+  background: rgba(201, 168, 76, 0.06);
+}
+
+.result-pill.win {
+  background: rgba(0, 230, 118, 0.2);
+  color: #00e676;
+}
+
+.result-pill.loss {
+  background: rgba(255, 82, 82, 0.2);
+  color: #ff5252;
+}
+
+.result-pill.be {
+  background: rgba(201, 168, 76, 0.2);
+  color: #ffd700;
+}
+
+.result-val {
+  color: #fff;
+}
+
+.result-card.is-win .result-val {
+  color: #00e676;
+}
+
+.result-card.is-loss .result-val {
+  color: #ff5252;
+}
+
+.result-card.is-be .result-val {
+  color: #ffd700;
+}
+
+.dollar-val {
+  font-size: 0.88rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+@media (max-width: 900px) {
+  .trade-review-audit-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 

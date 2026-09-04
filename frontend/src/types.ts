@@ -98,6 +98,17 @@ export interface EdgeSetup {
   opposing_strategy_warning?: string;
   correlation_note?: string;
   correlation_penalty_applied?: boolean;
+  trade_id?: string;
+  execution_price?: number;
+  outcome_type?: string;
+  exit_reason?: string;
+  realized_r?: number;
+  realized_pl?: number;
+  time_to_fill_min?: number;
+  holding_duration_min?: number;
+  duration_min?: number;
+  mae?: number;
+  mfe?: number;
 }
 
 export interface InvalidationAudit {

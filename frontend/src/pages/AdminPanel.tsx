@@ -13,6 +13,57 @@ import { AdminSupportInbox } from '../components/AdminSupportInbox';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 import { ExpandableCalendar } from '../components/ExpandableCalendar';
+import { SetupChartModal } from '../components/SetupChartModal';
+import { formatTelegramTradeId } from '../utils/tradeId';
+import type { EdgeSetup } from '../types';
+
+function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
+  const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
+  const initialStop = trade.initial_stop || trade.stop || 0;
+  const currentStop = trade.stop || initialStop;
+  const exitPrice = trade.execution_price || (
+    trade.outcome_type?.includes('tp1') ? trade.tp1 :
+    trade.outcome_type?.includes('tp2') ? (trade.tp2 || trade.tp1) :
+    trade.outcome_type?.includes('sl') ? initialStop :
+    trade.outcome_type?.includes('be') ? entryPrice : undefined
+  );
+
+  return {
+    id: trade.setup_id || trade.id,
+    instrument: trade.instrument || 'UNKNOWN',
+    market: trade.market || trade.setup_market || 'futures',
+    bias: trade.bias || 'long',
+    conviction_score: trade.conviction_score || 85,
+    conviction: trade.conviction_score || 85,
+    strategy_id: trade.strategy_id || 'manna_snd',
+    signal_state: 'resolved',
+    entry_zone_low: trade.entry_zone_low || (entryPrice ? entryPrice * 0.999 : 0),
+    entry_zone_high: trade.entry_zone_high || (entryPrice ? entryPrice * 1.001 : 0),
+    entry_zone_mid: trade.entry_zone_mid || entryPrice,
+    entry_price_recorded: trade.entry_price_recorded || entryPrice,
+    entry_price_executed: trade.entry_price_executed || entryPrice,
+    initial_stop: initialStop,
+    stop: currentStop,
+    tp1: trade.tp1,
+    tp2: trade.tp2,
+    r_multiple_1: trade.r_multiple_1 || 2.0,
+    r_multiple_2: trade.r_multiple_2 || 3.0,
+    created_at: trade.time_signaled || trade.created_at,
+    entry_triggered_at: trade.time_entered || trade.time_signaled,
+    resolved_at: trade.time_exited || trade.execution_time || trade.created_at,
+    invalidation_reason: trade.outcome_type || trade.invalidation_reason || 'resolved',
+    invalidation_detail: trade.invalidation_detail,
+    killzone_origin: trade.killzone_origin,
+    execution_price: exitPrice,
+    realized_r: trade.realized_r,
+    realized_pl: trade.realized_pl,
+    time_to_fill_min: trade.time_to_fill_min,
+    holding_duration_min: trade.holding_duration_min || trade.duration_min,
+    duration_min: trade.duration_min || trade.holding_duration_min,
+    trade_id: trade.setup_id,
+    metadata: typeof trade.metadata === 'object' ? JSON.stringify(trade.metadata) : trade.metadata,
+  };
+}
 
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
@@ -28,6 +79,8 @@ export const AdminPanel: React.FC = () => {
 
   const [usersList, setUsersList] = useState<any[]>([]);
   const [selectedUserProfile, setSelectedUserProfile] = useState<any | null>(null);
+  const [chartReviewSetup, setChartReviewSetup] = useState<EdgeSetup | null>(null);
+  const [copiedOutcomeTradeId, setCopiedOutcomeTradeId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -2070,6 +2123,7 @@ export const AdminPanel: React.FC = () => {
               <table className="runs-table">
                 <thead>
                   <tr>
+                    <th>Trade ID</th>
                     <th>Symbol & Market</th>
                     <th>🎯 Conviction</th>
                     <th>📡 Discovered (ET)</th>
@@ -2079,14 +2133,32 @@ export const AdminPanel: React.FC = () => {
                     <th>⏳ Duration</th>
                     <th>Outcome</th>
                     <th>Result (R)</th>
+                    <th>Chart</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedOutcomes.map((o: any) => {
                     const isWin = o.outcome_type?.includes('tp');
                     const rVal = o.realized_r ?? 0;
+                    const telegramId = formatTelegramTradeId({ id: o.setup_id || o.id, instrument: o.instrument });
+                    const isCopied = copiedOutcomeTradeId === o.id || copiedOutcomeTradeId === o.setup_id;
+
                     return (
-                      <tr key={o.id}>
+                      <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => setChartReviewSetup(convertOutcomeToReviewSetup(o))}>
+                        <td>
+                          <span 
+                            className="trade-card-id-badge font-mono"
+                            title={`Trade ID: ${o.setup_id || o.id}\nClick to copy Trade ID`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(telegramId);
+                              setCopiedOutcomeTradeId(o.id);
+                              setTimeout(() => setCopiedOutcomeTradeId(null), 2000);
+                            }}
+                          >
+                            {isCopied ? '✓ COPIED' : telegramId}
+                          </span>
+                        </td>
                         <td>
                           <strong>{o.instrument || 'SETUP'}</strong>{' '}
                           <span className="market-tag font-mono">{(o.market || o.setup_market || 'futures').toUpperCase()}</span>
@@ -2106,6 +2178,27 @@ export const AdminPanel: React.FC = () => {
                         </td>
                         <td className={rVal >= 0 ? 'text-green font-mono' : 'text-red font-mono'}>
                           {rVal > 0 ? '+' : ''}{rVal.toFixed(2)}R
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              background: 'rgba(0, 229, 255, 0.1)',
+                              border: '1px solid rgba(0, 229, 255, 0.35)',
+                              color: '#00e5ff',
+                              borderRadius: '4px',
+                              padding: '3px 8px',
+                              fontSize: '0.74rem',
+                              cursor: 'pointer'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChartReviewSetup(convertOutcomeToReviewSetup(o));
+                            }}
+                          >
+                            📊 Chart
+                          </button>
                         </td>
                       </tr>
                     );
@@ -2329,6 +2422,12 @@ export const AdminPanel: React.FC = () => {
                 refetchAnalytics();
               }, 800);
             }}
+          />
+        )}
+        {chartReviewSetup && (
+          <SetupChartModal
+            setup={chartReviewSetup}
+            onClose={() => setChartReviewSetup(null)}
           />
         )}
       </main>

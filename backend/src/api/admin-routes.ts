@@ -981,14 +981,21 @@ router.get('/analytics', async (req: Request, res: Response) => {
         COALESCE(e.r_multiple_1, f.r_multiple_1) as r_multiple_1,
         COALESCE(e.r_multiple_2, f.r_multiple_2) as r_multiple_2,
         COALESCE(e.entry_price_recorded, f.entry_price_recorded) as entry_price_recorded,
+        COALESCE(e.entry_price_executed, f.entry_price_executed) as entry_price_executed,
+        COALESCE(e.entry_zone_low, f.entry_zone_low) as entry_zone_low,
+        COALESCE(e.entry_zone_high, f.entry_zone_high) as entry_zone_high,
         COALESCE(e.entry_zone_mid, f.entry_zone_mid) as entry_zone_mid,
-        COALESCE(e.initial_stop, f.initial_stop) as initial_stop,
+        COALESCE(e.initial_stop, f.initial_stop, e.stop, f.stop) as initial_stop,
         COALESCE(e.stop, f.stop) as stop,
         COALESCE(e.tp1, f.tp1) as tp1,
+        COALESCE(e.tp2, f.tp2) as tp2,
+        COALESCE(e.invalidation_reason, f.invalidation_reason, o.exit_reason, o.outcome_type) as invalidation_reason,
+        COALESCE(e.invalidation_detail, f.invalidation_detail) as invalidation_detail,
+        COALESCE(e.signal_state, f.signal_state, 'resolved') as signal_state,
         COALESCE(e.metadata, f.metadata) as metadata,
         COALESCE(e.created_at, f.created_at) as time_signaled,
         COALESCE(e.entry_triggered_at, f.entry_triggered_at) as time_entered,
-        COALESCE(e.resolved_at, f.resolved_at) as time_exited,
+        COALESCE(e.resolved_at, f.resolved_at, o.execution_time, o.created_at) as time_exited,
         COALESCE(e.killzone_origin, f.killzone_origin) as killzone_origin
       FROM outcomes o
       LEFT JOIN edge_setups e ON o.setup_id = e.id
@@ -1126,17 +1133,33 @@ router.get('/analytics', async (req: Request, res: Response) => {
         }
       }
 
+      const entryPrice = o.entry_price_executed || o.entry_price_recorded || o.entry_zone_mid || 0;
+      const initialStop = o.initial_stop || o.stop || 0;
+      const currentStop = o.stop || initialStop;
+      const exitPrice = o.execution_price || (o.outcome_type === 'tp1_hit' ? o.tp1 : o.outcome_type === 'tp2_hit' ? (o.tp2 || o.tp1) : o.outcome_type === 'sl_hit' ? initialStop : (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') ? entryPrice : undefined);
+
       return {
         ...o,
+        trade_id: o.setup_id,
         instrument: o.instrument || 'UNKNOWN',
         market: o.market || 'futures',
         bias: o.bias || 'long',
-        conviction_score: o.conviction_score || o.conviction_score || 85,
+        conviction_score: o.conviction_score || 85,
+        entry_price: entryPrice,
+        entry_zone_low: o.entry_zone_low,
+        entry_zone_high: o.entry_zone_high,
+        entry_zone_mid: o.entry_zone_mid,
+        initial_stop: initialStop,
+        stop: currentStop,
+        tp1: o.tp1,
+        tp2: o.tp2,
+        execution_price: exitPrice,
         time_signaled: signalTime,
         time_entered: entryTime,
         time_exited: exitTime,
         time_to_fill_min: timeToFillMin,
-        holding_duration_min: holdingDurationMin,
+        holding_duration_min: holdingDurationMin || o.duration_min,
+        duration_min: o.duration_min || holdingDurationMin,
         realized_r: tradeR
       };
     });

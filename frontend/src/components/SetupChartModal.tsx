@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { createChart, ColorType, LineStyle, CrosshairMode, CandlestickSeries, type IChartApi } from 'lightweight-charts';
 import type { EdgeSetup } from '../types';
 import { API_BASE } from '../config';
+import { formatTelegramTradeId } from '../utils/tradeId';
 import './SetupChartModal.css';
 
 interface SetupChartModalProps {
@@ -219,6 +220,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const entryHigh = parseNum(setup.entry_zone_high ?? (setup as any).entry_high ?? levels.entryMax ?? levels.entry_high);
   const entryMid = parseNum(setup.entry_zone_mid ?? (setup as any).entry_mid ?? (setup as any).entry_price ?? levels.entryMid) || (entryLow && entryHigh ? (entryLow + entryHigh) / 2 : 0);
   const stopVal = parseNum(setup.stop ?? (setup as any).stop_loss ?? levels.stopLoss ?? levels.stop);
+  const initialStopVal = parseNum(setup.initial_stop ?? (setup as any).initialStop ?? stopVal);
   const tp1Val = parseNum(setup.tp1 ?? (setup as any).target1 ?? levels.takeProfit1 ?? levels.tp1);
   const tp2Val = (setup.tp2 || (setup as any).target2 || levels.takeProfit2 || levels.tp2)
     ? parseNum(setup.tp2 ?? (setup as any).target2 ?? levels.takeProfit2 ?? levels.tp2)
@@ -233,6 +235,26 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (isActive || isRunner || isResolved ? setup.validatedAt || setup.created_at : undefined);
   const resolvedTimestamp = setup.resolved_at;
   const execPrice = parseNum(setup.entry_price_recorded ?? setup.entry_price_executed ?? entryMid);
+
+  const exitPriceVal = parseNum(
+    setup.execution_price ?? (setup as any).exit_price ?? (
+      isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('tp1') ? tp1Val :
+      isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('tp2') ? (tp2Val || tp1Val) :
+      isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('sl') ? initialStopVal :
+      isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('be') ? execPrice : 0
+    )
+  );
+
+  const outcomeR = setup.realized_r !== undefined ? setup.realized_r : (
+    (setup.outcome_type || setup.invalidation_reason)?.includes('tp2') ? (setup.r_multiple_2 || 3.0) :
+    (setup.outcome_type || setup.invalidation_reason)?.includes('tp1') ? (setup.r_multiple_1 || 2.0) :
+    (setup.outcome_type || setup.invalidation_reason)?.includes('sl') ? -1.0 :
+    (setup.outcome_type || setup.invalidation_reason)?.includes('be') ? 0.0 : undefined
+  );
+  const outcomePl = setup.realized_pl !== undefined ? setup.realized_pl : (outcomeR !== undefined ? outcomeR * 100 : undefined);
+
+  const [copiedTradeId, setCopiedTradeId] = useState(false);
+  const tradeTelegramId = formatTelegramTradeId(setup);
 
   const isMannaSnd = setup.strategy_id === 'manna_snd';
 
@@ -593,14 +615,27 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           }));
         }
 
-        if (stopVal > 0) {
+        const effectiveInitialStop = initialStopVal > 0 ? initialStopVal : stopVal;
+        if (effectiveInitialStop > 0) {
           lines.push(candleSeries.createPriceLine({
-            price: stopVal,
-            color: isRunner ? '#ffd700' : '#ff1744',
+            price: effectiveInitialStop,
+            color: '#ff1744',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: isRunner ? `🛡️ BREAK EVEN STOP (${stopVal})` : `🛑 ${statusPrefix}STOP LOSS (${stopVal})`,
+            title: isResolved ? `🛑 INITIAL STOP (${effectiveInitialStop})` : `🛑 ${statusPrefix}INITIAL STOP (${effectiveInitialStop})`,
+          }));
+        }
+
+        // If stop was moved to BE or trailed and differs from initial stop:
+        if (stopVal > 0 && Math.abs(stopVal - effectiveInitialStop) > 0.0001) {
+          lines.push(candleSeries.createPriceLine({
+            price: stopVal,
+            color: '#ffd700',
+            lineWidth: 2,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: isRunner ? `🛡️ BREAK EVEN STOP (${stopVal})` : `🛡️ TRAILED / BE STOP (${stopVal})`,
           }));
         }
 
@@ -623,6 +658,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
             title: isRunner ? `🎯 RUNNER TARGET TP2 (+${setup.r_multiple_2 || 3.0}R)` : `🟢 ${statusPrefix}TP2 TARGET (+${setup.r_multiple_2 || 3.0}R)`,
+          }));
+        }
+
+        if (exitPriceVal > 0 && isResolved) {
+          lines.push(candleSeries.createPriceLine({
+            price: exitPriceVal,
+            color: '#00e5ff',
+            lineWidth: 2,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `🏁 EXIT PRICE (${exitPriceVal})`,
           }));
         }
 
@@ -674,14 +720,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             }
             if (closestRes) {
               const resTimeStr = formatTzTime(resUnix, selectedTz);
-              const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
+              const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
               const isWin = reason.includes('TP');
+              const exitPriceLabel = exitPriceVal > 0 ? ` @ ${exitPriceVal}` : '';
               markers.push({
                 time: closestRes.time,
                 position: isWin ? 'aboveBar' : 'belowBar',
                 color: isWin ? '#00e676' : '#ff1744',
                 shape: 'circle',
-                text: `🏁 ${reason} @ ${resTimeStr} ${tzBadge}`,
+                text: `🏁 ${reason}${exitPriceLabel} (${resTimeStr} ${tzBadge})`,
                 size: 2,
               });
             }
@@ -700,7 +747,43 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         // Auto Scale to fit candles ONCE per timeframe selection
         if (lastFittedTimeframeRef.current !== timeframe) {
           chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-          chartRef.current?.timeScale().fitContent();
+
+          if (isResolved && (entryTimestamp || resolvedTimestamp)) {
+            try {
+              const entryUnix = entryTimestamp ? Math.floor(new Date(entryTimestamp).getTime() / 1000) : null;
+              const exitUnix = resolvedTimestamp ? Math.floor(new Date(resolvedTimestamp).getTime() / 1000) : null;
+
+              let minIdx = -1;
+              let maxIdx = -1;
+
+              formattedCandles.forEach((c: any, idx: number) => {
+                const t = c.time as number;
+                if (entryUnix && Math.abs(t - entryUnix) < 86400) {
+                  if (minIdx === -1 || idx < minIdx) minIdx = idx;
+                  if (idx > maxIdx) maxIdx = idx;
+                }
+                if (exitUnix && Math.abs(t - exitUnix) < 86400) {
+                  if (minIdx === -1 || idx < minIdx) minIdx = idx;
+                  if (idx > maxIdx) maxIdx = idx;
+                }
+              });
+
+              if (minIdx !== -1 && maxIdx !== -1) {
+                const pad = 20;
+                chartRef.current?.timeScale().setVisibleLogicalRange({
+                  from: Math.max(0, minIdx - pad),
+                  to: Math.min(formattedCandles.length - 1, maxIdx + pad)
+                });
+              } else {
+                chartRef.current?.timeScale().fitContent();
+              }
+            } catch {
+              chartRef.current?.timeScale().fitContent();
+            }
+          } else {
+            chartRef.current?.timeScale().fitContent();
+          }
+
           lastFittedTimeframeRef.current = timeframe;
         }
 
@@ -715,7 +798,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, selectedTz]);
+  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, initialStopVal, exitPriceVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, isResolved, selectedTz]);
 
   // 3. Dynamic Real-Time Candle Drawing
   useEffect(() => {
@@ -1052,6 +1135,19 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               {isLong ? '⬆ LONG' : '⬇ SHORT'}
             </span>
 
+            {/* Trade ID Badge */}
+            <span 
+              className="chart-trade-id-badge font-mono" 
+              title={`Trade ID: ${setup.id}\nClick to copy Trade ID`}
+              onClick={() => {
+                navigator.clipboard.writeText(tradeTelegramId);
+                setCopiedTradeId(true);
+                setTimeout(() => setCopiedTradeId(false), 2000);
+              }}
+            >
+              {copiedTradeId ? '✓ COPIED' : tradeTelegramId}
+            </span>
+
             {/* Status Badge */}
             {isPending && (
               <span className="state-status-tag pending font-mono">
@@ -1148,6 +1244,83 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           </div>
         </div>
 
+        {/* Trade Review Audit Strip for Resolved Closed Trades */}
+        {isResolved && (
+          <div className="trade-review-audit-strip font-mono animate-fade-in">
+            {/* Card 1: ENTRY */}
+            <div className="audit-card entry-card">
+              <div className="audit-card-title">
+                <span>🎯 ENTRY</span>
+                <span className="audit-card-badge">{setup.time_to_fill_min !== undefined ? `${setup.time_to_fill_min}m fill` : 'FILLED'}</span>
+              </div>
+              <div className="audit-card-main">
+                {execPrice > 0 ? execPrice : entryMid}
+              </div>
+              <div className="audit-card-sub">
+                Zone: {entryLow} – {entryHigh}
+              </div>
+              <div className="audit-card-time">
+                {entryTimestamp ? formatTzTime(Math.floor(new Date(entryTimestamp).getTime() / 1000), selectedTz, true) + ` ${getTimezoneBadge(selectedTz)}` : '--'}
+              </div>
+            </div>
+
+            {/* Card 2: INITIAL STOP */}
+            <div className="audit-card stop-card">
+              <div className="audit-card-title">
+                <span>🛑 INITIAL STOP</span>
+                <span className="audit-card-badge stop-badge">-1.00R</span>
+              </div>
+              <div className="audit-card-main">
+                {initialStopVal > 0 ? initialStopVal : stopVal}
+              </div>
+              <div className="audit-card-sub">
+                Risk: {(execPrice > 0 && initialStopVal > 0) ? Math.abs(execPrice - initialStopVal).toFixed(setup.instrument.includes('/') ? 4 : 2) : '--'}
+              </div>
+              <div className="audit-card-time">
+                {Math.abs(stopVal - initialStopVal) > 0.0001 ? `BE Stop: ${stopVal}` : 'Initial Stop'}
+              </div>
+            </div>
+
+            {/* Card 3: TARGETS */}
+            <div className="audit-card targets-card">
+              <div className="audit-card-title">
+                <span>🟢 TARGETS</span>
+                <span className="audit-card-badge tp-badge">TP1 / TP2</span>
+              </div>
+              <div className="audit-card-main">
+                TP1: {tp1Val > 0 ? tp1Val : '--'} <span className="r-pill">+{setup.r_multiple_1 || 2.0}R</span>
+              </div>
+              <div className="audit-card-sub">
+                TP2: {tp2Val && tp2Val > 0 ? `${tp2Val} (+${setup.r_multiple_2 || 3.0}R)` : 'None'}
+              </div>
+              <div className="audit-card-time">
+                Strategy: {setup.strategy_id || 'manna_snd'} ({setup.conviction_score || 85}%)
+              </div>
+            </div>
+
+            {/* Card 4: EXIT & END RESULT */}
+            <div className={`audit-card result-card ${outcomeR !== undefined && outcomeR > 0 ? 'is-win' : outcomeR !== undefined && outcomeR < 0 ? 'is-loss' : 'is-be'}`}>
+              <div className="audit-card-title">
+                <span>🏁 END RESULT</span>
+                <span className={`audit-card-badge result-pill ${outcomeR !== undefined && outcomeR > 0 ? 'win' : outcomeR !== undefined && outcomeR < 0 ? 'loss' : 'be'}`}>
+                  {(setup.outcome_type || setup.invalidation_reason || 'RESOLVED').toUpperCase()}
+                </span>
+              </div>
+              <div className="audit-card-main result-val">
+                {outcomeR !== undefined ? `${outcomeR > 0 ? '+' : ''}${outcomeR.toFixed(2)}R` : '--'}
+                {outcomePl !== undefined && (
+                  <span className="dollar-val">({outcomePl >= 0 ? '+$' : '-$'}{Math.abs(outcomePl).toFixed(2)})</span>
+                )}
+              </div>
+              <div className="audit-card-sub">
+                Exit Price: {exitPriceVal > 0 ? exitPriceVal : '--'}
+              </div>
+              <div className="audit-card-time">
+                Held: {setup.holding_duration_min !== undefined ? `${setup.holding_duration_min}m` : setup.duration_min !== undefined ? `${setup.duration_min}m` : '--'} │ {resolvedTimestamp ? formatTzTime(Math.floor(new Date(resolvedTimestamp).getTime() / 1000), selectedTz, true) + ` ${getTimezoneBadge(selectedTz)}` : '--'}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Level Legend Bar */}
         <div className="level-legend-bar font-mono">

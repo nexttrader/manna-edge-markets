@@ -1,4 +1,7 @@
 import { useState, useMemo } from 'react';
+import type { EdgeSetup } from '../types';
+import { SetupChartModal } from './SetupChartModal';
+import { formatTelegramTradeId } from '../utils/tradeId';
 import './ExpandableCalendar.css';
 
 interface Outcome {
@@ -12,6 +15,18 @@ interface Outcome {
   outcome_type: string;
   realized_r?: number;
   realized_pl?: number;
+  entry_price?: number;
+  entry_price_recorded?: number;
+  entry_price_executed?: number;
+  entry_zone_low?: number;
+  entry_zone_high?: number;
+  entry_zone_mid?: number;
+  initial_stop?: number;
+  stop?: number;
+  tp1?: number;
+  tp2?: number;
+  r_multiple_1?: number;
+  r_multiple_2?: number;
   execution_price?: number;
   execution_time?: string;
   time_signaled?: string;
@@ -19,9 +34,62 @@ interface Outcome {
   time_exited?: string;
   time_to_fill_min?: number;
   holding_duration_min?: number;
+  duration_min?: number;
   killzone_origin?: string;
   created_at?: string;
   setup_market?: string;
+  invalidation_reason?: string;
+  invalidation_detail?: string;
+  trade_id?: string;
+  metadata?: any;
+}
+
+function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
+  const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
+  const initialStop = trade.initial_stop || trade.stop || 0;
+  const currentStop = trade.stop || initialStop;
+  const exitPrice = trade.execution_price || (
+    trade.outcome_type?.includes('tp1') ? trade.tp1 :
+    trade.outcome_type?.includes('tp2') ? (trade.tp2 || trade.tp1) :
+    trade.outcome_type?.includes('sl') ? initialStop :
+    trade.outcome_type?.includes('be') ? entryPrice : undefined
+  );
+
+  return {
+    id: trade.setup_id || trade.id,
+    instrument: trade.instrument || 'UNKNOWN',
+    market: trade.market || trade.setup_market || 'futures',
+    bias: trade.bias || 'long',
+    conviction_score: trade.conviction_score || 85,
+    conviction: trade.conviction_score || 85,
+    strategy_id: trade.strategy_id || 'manna_snd',
+    signal_state: 'resolved',
+    entry_zone_low: trade.entry_zone_low || (entryPrice ? entryPrice * 0.999 : 0),
+    entry_zone_high: trade.entry_zone_high || (entryPrice ? entryPrice * 1.001 : 0),
+    entry_zone_mid: trade.entry_zone_mid || entryPrice,
+    entry_price_recorded: trade.entry_price_recorded || entryPrice,
+    entry_price_executed: trade.entry_price_executed || entryPrice,
+    initial_stop: initialStop,
+    stop: currentStop,
+    tp1: trade.tp1,
+    tp2: trade.tp2,
+    r_multiple_1: trade.r_multiple_1 || 2.0,
+    r_multiple_2: trade.r_multiple_2 || 3.0,
+    created_at: trade.time_signaled || trade.created_at,
+    entry_triggered_at: trade.time_entered || trade.time_signaled,
+    resolved_at: trade.time_exited || trade.execution_time || trade.created_at,
+    invalidation_reason: trade.outcome_type || trade.invalidation_reason || 'resolved',
+    invalidation_detail: trade.invalidation_detail,
+    killzone_origin: trade.killzone_origin,
+    execution_price: exitPrice,
+    realized_r: trade.realized_r,
+    realized_pl: trade.realized_pl,
+    time_to_fill_min: trade.time_to_fill_min,
+    holding_duration_min: trade.holding_duration_min || trade.duration_min,
+    duration_min: trade.duration_min || trade.holding_duration_min,
+    trade_id: trade.setup_id,
+    metadata: typeof trade.metadata === 'object' ? JSON.stringify(trade.metadata) : trade.metadata,
+  };
 }
 
 interface ExpandableCalendarProps {
@@ -115,6 +183,8 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
+  const [selectedReviewSetup, setSelectedReviewSetup] = useState<EdgeSetup | null>(null);
+  const [copiedTradeId, setCopiedTradeId] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
 
   const currentYear = currentDate.getFullYear();
@@ -565,14 +635,42 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
                         const isLoss = trade.outcome_type?.includes('sl');
                         const tradeR = trade.realized_r ?? 0;
                         const tradePnlClass = getPnlClass(tradeR);
+                        const telegramId = formatTelegramTradeId({ id: trade.setup_id || trade.id, instrument: trade.instrument });
+                        const isCopied = copiedTradeId === trade.id || copiedTradeId === trade.setup_id;
+
+                        const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || 0;
+                        const initialStop = trade.initial_stop || trade.stop || 0;
+                        const exitPrice = trade.execution_price || (
+                          trade.outcome_type?.includes('tp1') ? trade.tp1 :
+                          trade.outcome_type?.includes('tp2') ? (trade.tp2 || trade.tp1) :
+                          trade.outcome_type?.includes('sl') ? initialStop :
+                          trade.outcome_type?.includes('be') ? entryPrice : undefined
+                        );
 
                         return (
-                          <div key={trade.id} className="session-trade-item">
+                          <div 
+                            key={trade.id} 
+                            className="session-trade-item"
+                            onClick={() => setSelectedReviewSetup(convertOutcomeToSetup(trade))}
+                            title="Click to review trade audit and open chart view"
+                          >
                             <div className="trade-item-header">
                               <span className="trade-symbol-bias">
                                 {trade.instrument || 'SETUP'}
                                 <span className={`trade-strat-badge ${trade.bias}`}>
                                   {trade.bias?.toUpperCase()}
+                                </span>
+                                <span 
+                                  className="trade-card-id-badge font-mono"
+                                  title={`Trade ID: ${trade.setup_id || trade.id}\nClick to copy Trade ID`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(telegramId);
+                                    setCopiedTradeId(trade.id);
+                                    setTimeout(() => setCopiedTradeId(null), 2000);
+                                  }}
+                                >
+                                  {isCopied ? '✓ COPIED' : telegramId}
                                 </span>
                               </span>
                               <span 
@@ -585,22 +683,62 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
                                 {trade.outcome_type?.toUpperCase()}
                               </span>
                             </div>
+
+                            {/* Execution & Levels Grid */}
+                            <div className="trade-levels-grid font-mono">
+                              <div className="trade-level-col">
+                                <span className="trade-level-label">Entry → Exit</span>
+                                <span className="trade-level-val">
+                                  {entryPrice > 0 ? entryPrice : '--'} → {exitPrice !== undefined && exitPrice > 0 ? exitPrice : '--'}
+                                </span>
+                              </div>
+                              <div className="trade-level-col">
+                                <span className="trade-level-label">Initial Stop</span>
+                                <span className="trade-level-val" style={{ color: '#ff5252' }}>
+                                  {initialStop > 0 ? initialStop : '--'}
+                                </span>
+                              </div>
+                              <div className="trade-level-col">
+                                <span className="trade-level-label">Target 1</span>
+                                <span className="trade-level-val" style={{ color: '#00e676' }}>
+                                  {trade.tp1 ? `${trade.tp1} (+${trade.r_multiple_1 || 2}R)` : '--'}
+                                </span>
+                              </div>
+                              <div className="trade-level-col">
+                                <span className="trade-level-label">Target 2</span>
+                                <span className="trade-level-val" style={{ color: '#ffd700' }}>
+                                  {trade.tp2 ? `${trade.tp2} (+${trade.r_multiple_2 || 3}R)` : '--'}
+                                </span>
+                              </div>
+                            </div>
                             
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '0.78rem' }}>
                               <span style={{ color: 'var(--kdt-text-muted, #888)' }}>
-                                Strategy: <span style={{ color: '#fff' }}>{trade.strategy_id || 'sentinel_v2'}</span>
+                                Strategy: <span style={{ color: '#fff' }}>{trade.strategy_id || 'manna_snd'}</span>
                               </span>
                               <span className={`trade-pnl-value ${tradePnlClass}`}>
-                                {formatPNLString(tradeR)}
+                                {formatPNLString(tradeR)} ({formatCurrency(tradeR)})
                               </span>
                             </div>
 
                             <div className="trade-item-footer">
                               <span>Conviction: {trade.conviction_score || 85}%</span>
                               <span>
+                                {trade.holding_duration_min !== undefined ? `${trade.holding_duration_min}m · ` : ''}
                                 {trade.time_exited ? new Date(trade.time_exited).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) + ' ET' : ''}
                               </span>
                             </div>
+
+                            <button
+                              type="button"
+                              className="trade-review-btn font-mono"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedReviewSetup(convertOutcomeToSetup(trade));
+                              }}
+                            >
+                              📊 Review Trade & Chart View
+                            </button>
                           </div>
                         );
                       })
@@ -613,6 +751,14 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
             })}
           </div>
         </div>
+      )}
+
+      {/* Full Trade Review & Interactive Chart View Modal */}
+      {selectedReviewSetup && (
+        <SetupChartModal
+          setup={selectedReviewSetup}
+          onClose={() => setSelectedReviewSetup(null)}
+        />
       )}
     </div>
   );
