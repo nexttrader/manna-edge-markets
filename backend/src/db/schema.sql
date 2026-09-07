@@ -416,3 +416,38 @@ CREATE TABLE IF NOT EXISTS asset_settings (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- SND Signal-by-Signal Processing Audit Reports
+CREATE TABLE IF NOT EXISTS signal_audit_reports (
+    id TEXT PRIMARY KEY,
+    report_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    session_name TEXT,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    signals_count INTEGER DEFAULT 0,
+    active_count INTEGER DEFAULT 0,
+    closed_count INTEGER DEFAULT 0,
+    pdf_path TEXT,
+    summary_json TEXT,
+    telegram_sent INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_num ON signal_audit_reports(report_number);
+CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_created ON signal_audit_reports(created_at);
+
+-- VPS / MT4 / MT5 Trade Execution Telemetry & Overrides
+CREATE TABLE IF NOT EXISTS vps_trade_sync (
+    id TEXT PRIMARY KEY,
+    setup_id TEXT NOT NULL,
+    ticket_number TEXT,
+    lots REAL,
+    executed_action TEXT,
+    outcome_status TEXT,
+    root_cause_notes TEXT,
+    vps_timestamp TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vps_trade_sync_setup ON vps_trade_sync(setup_id);
+

@@ -553,6 +553,37 @@ export async function initializeDatabase(): Promise<void> {
                         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
 
+                    CREATE TABLE IF NOT EXISTS signal_audit_reports (
+                        id TEXT PRIMARY KEY,
+                        report_number INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        session_name TEXT,
+                        period_start TEXT NOT NULL,
+                        period_end TEXT NOT NULL,
+                        signals_count INTEGER DEFAULT 0,
+                        active_count INTEGER DEFAULT 0,
+                        closed_count INTEGER DEFAULT 0,
+                        pdf_path TEXT,
+                        summary_json TEXT,
+                        telegram_sent INTEGER DEFAULT 0,
+                        created_at TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_num ON signal_audit_reports(report_number);
+                    CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_created ON signal_audit_reports(created_at);
+
+                    CREATE TABLE IF NOT EXISTS vps_trade_sync (
+                        id TEXT PRIMARY KEY,
+                        setup_id TEXT NOT NULL,
+                        ticket_number TEXT,
+                        lots DOUBLE PRECISION,
+                        executed_action TEXT,
+                        outcome_status TEXT,
+                        root_cause_notes TEXT,
+                        vps_timestamp TEXT,
+                        created_at TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_vps_trade_sync_setup ON vps_trade_sync(setup_id);
+
                     INSERT INTO strategy_settings (id, name, enabled, updated_at) VALUES
                     ('manna_snd', 'Manna SnD', 1, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO UPDATE SET name = 'Manna SnD';
@@ -667,7 +698,36 @@ export async function initializeDatabase(): Promise<void> {
         was_correct INTEGER DEFAULT 0
       )`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_client_signal_tags_user ON client_signal_tags(user_id)`);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_client_signal_tags_setup ON client_signal_tags(setup_id)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS signal_audit_reports (
+        id TEXT PRIMARY KEY,
+        report_number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        session_name TEXT,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        signals_count INTEGER DEFAULT 0,
+        active_count INTEGER DEFAULT 0,
+        closed_count INTEGER DEFAULT 0,
+        pdf_path TEXT,
+        summary_json TEXT,
+        telegram_sent INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_num ON signal_audit_reports(report_number)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_signal_audit_reports_created ON signal_audit_reports(created_at)`);
+
+      db.exec(`CREATE TABLE IF NOT EXISTS vps_trade_sync (
+        id TEXT PRIMARY KEY,
+        setup_id TEXT NOT NULL,
+        ticket_number TEXT,
+        lots REAL,
+        executed_action TEXT,
+        outcome_status TEXT,
+        root_cause_notes TEXT,
+        vps_timestamp TEXT,
+        created_at TEXT NOT NULL
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_vps_trade_sync_setup ON vps_trade_sync(setup_id)`);
     } catch {}
 
     // ── Notification Feature Toggles ─────────────────────────────────────────
@@ -714,6 +774,7 @@ export async function initializeDatabase(): Promise<void> {
         { key: 'notify_superseded_cancel',  label: 'Signal Cancelled (MANAGE)',             description: 'Send MANAGE cancel instruction when a pending order is superseded by a fresher scan', category: 'manage', market: 'all' },
         { key: 'notify_invalidation',       label: 'Pre-Entry Invalidation (MANAGE)',       description: 'Send MANAGE instruction when zone is invalidated before order fill (price blows through)', category: 'manage', market: 'all' },
         { key: 'notify_performance_report', label: 'Performance Reports',                   description: 'Broadcast weekly/monthly performance recap summaries to Telegram', category: 'report', market: 'all' },
+        { key: 'notify_signal_audit_report', label: 'Signal Audit Report (Pre-Scan PDF)',   description: 'Broadcast signal-by-signal audit report PDF & summary to Telegram 30 mins before every session scan', category: 'report', market: 'all' },
       ];
 
       for (const d of defaults) {

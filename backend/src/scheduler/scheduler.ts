@@ -2,6 +2,7 @@ import cron = require('node-cron');
 import { mapTimestampToKillzone, KillzoneInfo } from './killzone-mapper';
 import { Killzone } from '../discovery/types';
 import { autoGenerateSessionPerformanceReports } from '../analytics/report-generator';
+import { signalAuditService } from '../analytics/signal-audit-service';
 
 let scheduledTasks: cron.ScheduledTask[] = [];
 
@@ -65,8 +66,36 @@ export function startScheduler(
         
         scheduledTasks.push(task);
     });
+
+    // 3. 30 Minutes Prior to Every Session Scan: Signal-by-Signal Processing Audit Report
+    // London: 01:30 ET (scan at 02:00)
+    // NY AM:  07:30 ET (scan at 08:00)
+    // NY PM:  13:30 ET (scan at 14:00)
+    // Asia:   19:30 ET (scan at 20:00)
+    const preScanAudits: Array<{ cron: string; targetSession: string; label: string }> = [
+        { cron: '30 1 * * *', targetSession: 'london', label: '01:30 ET (30m Pre-London Scan)' },
+        { cron: '30 7 * * *', targetSession: 'ny_am',  label: '07:30 ET (30m Pre-NY AM Scan)' },
+        { cron: '30 13 * * *', targetSession: 'ny_pm', label: '13:30 ET (30m Pre-NY PM Scan)' },
+        { cron: '30 19 * * *', targetSession: 'asia',  label: '19:30 ET (30m Pre-Asia Scan)' }
+    ];
+
+    preScanAudits.forEach(audit => {
+        const task = cron.schedule(audit.cron, async () => {
+            const now = new Date();
+            console.log(`📋 30-Minute Pre-Scan Signal Audit triggered for ${audit.targetSession.toUpperCase()} (${audit.label}) at ${now.toISOString()}`);
+            try {
+                await signalAuditService.runScheduledPreScanAudit(audit.targetSession);
+            } catch (error) {
+                console.error(`Error in 30-minute pre-scan audit for ${audit.targetSession}:`, error);
+            }
+        }, {
+            timezone: 'America/New_York'
+        });
+
+        scheduledTasks.push(task);
+    });
     
-    console.log(`Scheduler started with ${scheduledTasks.length} America/New_York boundary & midpoint jobs registered.`);
+    console.log(`Scheduler started with ${scheduledTasks.length} America/New_York boundary, midpoint & pre-scan audit jobs registered.`);
 }
 
 export function stopScheduler(): void {

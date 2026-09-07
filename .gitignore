@@ -31,3 +31,5 @@ npm-debug.log*
 # Local snapshots
 *snapshot.json
 
+# Generated audit reports
+backend/reports/

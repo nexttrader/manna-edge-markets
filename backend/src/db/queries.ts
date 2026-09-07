@@ -719,6 +719,7 @@ const BASE_NOTIF_DEFAULTS: Array<{ key: string; label: string; description: stri
   { key: 'notify_sl_hit',             label: 'Stop Loss Hit (STATUS)',                description: 'Send STATUS when Stop Loss (-1.0R) is triggered', category: 'status', market: 'all' },
   { key: 'notify_be_hit',             label: 'Breakeven Exit (STATUS)',               description: 'Send STATUS when trade exits at Breakeven (0.0R)', category: 'status', market: 'all' },
   { key: 'notify_performance_report', label: 'Performance Reports',                   description: 'Broadcast weekly/monthly performance recap summaries to Telegram', category: 'report', market: 'all' },
+  { key: 'notify_signal_audit_report', label: 'Signal Audit Report (Pre-Scan PDF)',   description: 'Broadcast signal-by-signal audit report PDF & summary to Telegram 30 mins before every session scan', category: 'report', market: 'all' },
 ];
 
 function saveSnapshotToDisk(settingsMap: Record<string, boolean>): void {
@@ -1204,5 +1205,142 @@ export async function registerCustomAsset(symbol: string, market: string, name: 
   for (const a of all) map[a.symbol] = a.display_enabled;
   saveAssetSnapshotToDisk(map);
   return all;
+}
+
+// ── SND Signal-by-Signal Processing Audit Reports ────────────────────────────
+
+export interface SignalAuditReportRecord {
+  id: string;
+  report_number: number;
+  title: string;
+  session_name?: string;
+  period_start: string;
+  period_end: string;
+  signals_count: number;
+  active_count: number;
+  closed_count: number;
+  pdf_path?: string;
+  summary_json?: string;
+  telegram_sent: number;
+  created_at: string;
+}
+
+export interface VpsTradeSyncRecord {
+  id: string;
+  setup_id: string;
+  ticket_number?: string;
+  lots?: number;
+  executed_action?: string;
+  outcome_status?: string;
+  root_cause_notes?: string;
+  vps_timestamp?: string;
+  created_at: string;
+}
+
+export async function getNextAuditReportNumber(): Promise<number> {
+  const rows = await queryDb<{ max_num: number | string | null }>(
+    `SELECT MAX(report_number) as max_num FROM signal_audit_reports`
+  );
+  const currentMax = rows.length > 0 && rows[0].max_num ? Number(rows[0].max_num) : 0;
+  return currentMax + 1;
+}
+
+export async function saveSignalAuditReport(report: SignalAuditReportRecord): Promise<void> {
+  await queryDb(
+    `INSERT INTO signal_audit_reports (
+      id, report_number, title, session_name, period_start, period_end,
+      signals_count, active_count, closed_count, pdf_path, summary_json,
+      telegram_sent, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET
+      report_number = ?, title = ?, session_name = ?, period_start = ?,
+      period_end = ?, signals_count = ?, active_count = ?, closed_count = ?,
+      pdf_path = ?, summary_json = ?, telegram_sent = ?`,
+    [
+      report.id, report.report_number, report.title, report.session_name || null,
+      report.period_start, report.period_end, report.signals_count || 0,
+      report.active_count || 0, report.closed_count || 0, report.pdf_path || null,
+      report.summary_json || null, report.telegram_sent || 0, report.created_at,
+      report.report_number, report.title, report.session_name || null,
+      report.period_start, report.period_end, report.signals_count || 0,
+      report.active_count || 0, report.closed_count || 0, report.pdf_path || null,
+      report.summary_json || null, report.telegram_sent || 0
+    ]
+  );
+}
+
+export async function getLatestSignalAuditReport(): Promise<SignalAuditReportRecord | null> {
+  const rows = await queryDb<SignalAuditReportRecord>(
+    `SELECT * FROM signal_audit_reports ORDER BY report_number DESC, created_at DESC LIMIT 1`
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function getSignalAuditReportById(id: string): Promise<SignalAuditReportRecord | null> {
+  const rows = await queryDb<SignalAuditReportRecord>(
+    `SELECT * FROM signal_audit_reports WHERE id = ? LIMIT 1`, [id]
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function listSignalAuditReports(limit = 30): Promise<SignalAuditReportRecord[]> {
+  return await queryDb<SignalAuditReportRecord>(
+    `SELECT * FROM signal_audit_reports ORDER BY report_number DESC, created_at DESC LIMIT ?`, [limit]
+  );
+}
+
+export async function getSignalsForTradingDay(startUtcIso: string, endUtcIso: string): Promise<EdgeSetup[]> {
+  // Query all setups created within the trading day window across forex and futures
+  const forex = await queryDb<EdgeSetup>(
+    `SELECT *, COALESCE(market, 'forex') AS market FROM forex_edge_setups 
+     WHERE created_at >= ? AND created_at <= ? 
+     ORDER BY created_at ASC`,
+    [startUtcIso, endUtcIso]
+  );
+
+  const futures = await queryDb<EdgeSetup>(
+    `SELECT *, COALESCE(market, 'futures') AS market FROM edge_setups 
+     WHERE created_at >= ? AND created_at <= ? 
+     ORDER BY created_at ASC`,
+    [startUtcIso, endUtcIso]
+  );
+
+  // Combine and sort chronologically
+  const all = [...forex, ...futures];
+  all.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  return all;
+}
+
+export async function getVpsTradeSync(setupId: string): Promise<VpsTradeSyncRecord | null> {
+  const rows = await queryDb<VpsTradeSyncRecord>(
+    `SELECT * FROM vps_trade_sync WHERE setup_id = ? ORDER BY created_at DESC LIMIT 1`, [setupId]
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function upsertVpsTradeSync(data: Partial<VpsTradeSyncRecord> & { setup_id: string }): Promise<void> {
+  const id = data.id || `vps_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const now = new Date().toISOString();
+  await queryDb(
+    `INSERT INTO vps_trade_sync (
+      id, setup_id, ticket_number, lots, executed_action,
+      outcome_status, root_cause_notes, vps_timestamp, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET
+      ticket_number = COALESCE(?, ticket_number),
+      lots = COALESCE(?, lots),
+      executed_action = COALESCE(?, executed_action),
+      outcome_status = COALESCE(?, outcome_status),
+      root_cause_notes = COALESCE(?, root_cause_notes),
+      vps_timestamp = COALESCE(?, vps_timestamp)`,
+    [
+      id, data.setup_id, data.ticket_number || null, data.lots || null,
+      data.executed_action || null, data.outcome_status || null,
+      data.root_cause_notes || null, data.vps_timestamp || null, now,
+      data.ticket_number || null, data.lots || null,
+      data.executed_action || null, data.outcome_status || null,
+      data.root_cause_notes || null, data.vps_timestamp || null
+    ]
+  );
 }
 

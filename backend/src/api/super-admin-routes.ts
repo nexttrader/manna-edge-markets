@@ -1,10 +1,13 @@
 import express, { Request, Response } from 'express';
+import path from 'path';
+import fs from 'fs';
 import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
 import { outcomeDetector } from '../outcomes/outcome-detector';
+import { signalAuditService } from '../analytics/signal-audit-service';
 
 const router = express.Router();
 
@@ -1515,4 +1518,116 @@ router.delete('/notification-settings/markets/:market', async (req: Request, res
   }
 });
 
+// ─── SUPER ADMIN SIGNAL-BY-SIGNAL PROCESSING AUDIT PIPELINE ─────────────────
+
+/**
+ * POST /api/super-admin/signal-audit/trigger
+ * Manually triggers generation of the Signal-by-Signal Audit Report (PDF).
+ * Body: { sendTelegram?: boolean, sessionName?: string, customDate?: string }
+ */
+router.post('/signal-audit/trigger', async (req: Request, res: Response) => {
+  try {
+    const { sendTelegram, sessionName, customDate } = req.body || {};
+    const reportData = await signalAuditService.runScheduledPreScanAudit(
+      sessionName || 'manual',
+      Boolean(sendTelegram)
+    );
+
+    res.json({
+      success: true,
+      report: reportData,
+      message: `SND Signal-by-Signal Audit Report #${reportData.reportNumber} compiled successfully (${reportData.signalsCount} signals audited).`
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to generate signal audit report',
+      details: error?.message || String(error)
+    });
+  }
+});
+
+/**
+ * GET /api/super-admin/signal-audit/latest
+ * Returns the most recent Signal Audit Report metadata and details.
+ */
+router.get('/signal-audit/latest', async (_req: Request, res: Response) => {
+  try {
+    const report = await queries.getLatestSignalAuditReport();
+    if (!report) {
+      return res.json({ success: true, report: null });
+    }
+    let parsedSummary: any = null;
+    try {
+      parsedSummary = report.summary_json ? JSON.parse(report.summary_json) : null;
+    } catch {}
+    res.json({ success: true, report: { ...report, summary: parsedSummary } });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch latest audit report', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/super-admin/signal-audit/history
+ * Returns paginated history of past signal audit reports.
+ */
+router.get('/signal-audit/history', async (req: Request, res: Response) => {
+  try {
+    const limit = Number(req.query.limit) || 30;
+    const reports = await queries.listSignalAuditReports(limit);
+    res.json({ success: true, reports });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch audit report history', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/super-admin/signal-audit/pdf/:id
+ * Streams the generated PDF file for browser viewing or downloading.
+ */
+router.get('/signal-audit/pdf/:id', async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id as string;
+    const report = await queries.getSignalAuditReportById(reportId);
+    if (!report || !report.pdf_path || !fs.existsSync(report.pdf_path)) {
+      return res.status(404).json({ error: 'PDF report not found or file missing on disk.' });
+    }
+
+    const filename = path.basename(report.pdf_path);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    fs.createReadStream(report.pdf_path).pipe(res);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to stream PDF report', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * POST /api/super-admin/signal-audit/vps-sync
+ * Endpoint to record MT4/MT5/VPS broker ticket execution data or discrepancy notes.
+ * Body: { setupId: string, ticketNumber?: string, lots?: number, executedAction?: string, outcomeStatus?: string, rootCauseNotes?: string, vpsTimestamp?: string }
+ */
+router.post('/signal-audit/vps-sync', async (req: Request, res: Response) => {
+  try {
+    const { setupId, ticketNumber, lots, executedAction, outcomeStatus, rootCauseNotes, vpsTimestamp } = req.body || {};
+    if (!setupId) {
+      return res.status(400).json({ error: 'setupId is required for VPS telemetry sync' });
+    }
+
+    await queries.upsertVpsTradeSync({
+      setup_id: setupId,
+      ticket_number: ticketNumber,
+      lots: lots ? Number(lots) : undefined,
+      executed_action: executedAction,
+      outcome_status: outcomeStatus,
+      root_cause_notes: rootCauseNotes,
+      vps_timestamp: vpsTimestamp || new Date().toISOString()
+    });
+
+    res.json({ success: true, message: `VPS telemetry recorded for setup ${setupId}` });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to record VPS telemetry', details: error?.message || String(error) });
+  }
+});
+
 export default router;
+

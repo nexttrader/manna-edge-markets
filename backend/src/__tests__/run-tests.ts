@@ -15,6 +15,7 @@ import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import * as queries from '../db/queries';
 import { processKillzoneMidpointScan } from '../scheduler/midpoint-scanner';
 import { EdgeSetup, CandidateSetup, Candle, KillzoneInfo } from '../discovery/types';
+import { signalAuditService } from '../analytics/signal-audit-service';
 
 async function runAllTests() {
     console.log('🧪 Starting Killzone Discovery Engine Test Suite...\n');
@@ -569,7 +570,25 @@ async function runAllTests() {
 
     console.log('✅ TEST 18: Single-Asset Rescan Signal Replacement Telegram Notification & Event Pipeline');
 
-    console.log('\n🎉 ALL 18 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
+    // 19. SND Signal-by-Signal Processing Audit Report & Vector PDF Generation Test
+    const auditReport = await signalAuditService.generateSignalAudit('london_test');
+    assert.ok(auditReport.reportNumber > 0, 'Report number must be > 0');
+    assert.ok(auditReport.pdfPath, 'PDF path must exist');
+    assert.strictEqual(fs.existsSync(auditReport.pdfPath!), true, 'PDF file must exist on disk');
+    const pdfBytes = fs.readFileSync(auditReport.pdfPath!);
+    assert.strictEqual(pdfBytes.toString('utf8', 0, 5), '%PDF-', 'PDF must be valid vector format');
+
+    const auditSetting = (await queries.getNotificationSettings()).find(s => s.key === 'notify_signal_audit_report');
+    assert.ok(auditSetting, 'notify_signal_audit_report toggle must exist');
+    assert.strictEqual(auditSetting?.category, 'report');
+
+    // Verify zero occurrences of "manna" / "manner"
+    assert.strictEqual(JSON.stringify(auditReport).toLowerCase().includes('manner edge'), false);
+    assert.strictEqual(JSON.stringify(auditReport).toLowerCase().includes('manner'), false);
+
+    console.log(`✅ TEST 19: SND Signal-by-Signal Processing Audit Report & Vector PDF Generation (Report #${auditReport.reportNumber})`);
+
+    console.log('\n🎉 ALL 19 CORE SYSTEM TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runAllTests().catch((err) => {

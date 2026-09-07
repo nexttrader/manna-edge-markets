@@ -42,6 +42,44 @@ export const SuperAdminPanel: React.FC = () => {
   const [clientAccuracy, setClientAccuracy] = useState<any>(null);
   const [loadingClientAccuracy, setLoadingClientAccuracy] = useState(false);
 
+  // SND Signal-by-Signal Audit State
+  const [auditReport, setAuditReport] = useState<any>(null);
+  const [auditTriggering, setAuditTriggering] = useState(false);
+  const [auditMessage, setAuditMessage] = useState<string | null>(null);
+
+  const fetchLatestAuditReport = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/signal-audit/latest`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.report) setAuditReport(json.report);
+      }
+    } catch {}
+  };
+
+  const handleTriggerAuditReport = async (sendTelegram: boolean) => {
+    setAuditTriggering(true);
+    setAuditMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/signal-audit/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendTelegram })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAuditReport(data.report);
+        setAuditMessage(`✅ Report #${data.report.reportNumber} compiled successfully! ${sendTelegram ? 'Sent to Telegram channel.' : 'Generated on disk.'}`);
+      } else {
+        setAuditMessage(`❌ Failed to trigger audit: ${data.details || data.error || 'Server error'}`);
+      }
+    } catch (e: any) {
+      setAuditMessage(`❌ Error: ${e.message}`);
+    } finally {
+      setAuditTriggering(false);
+    }
+  };
+
   const fetchClientAccuracy = async () => {
     setLoadingClientAccuracy(true);
     try {
@@ -57,6 +95,7 @@ export const SuperAdminPanel: React.FC = () => {
 
   const fetchNotifSettings = async () => {
     setNotifLoading(true);
+    fetchLatestAuditReport();
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/notification-settings`);
       if (res.ok) {
@@ -396,6 +435,7 @@ export const SuperAdminPanel: React.FC = () => {
     fetchSentinelData();
     fetchTuningData();
     fetchClientAccuracy();
+    fetchLatestAuditReport();
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
@@ -1141,6 +1181,126 @@ export const SuperAdminPanel: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* ── SECTION 4: SND SIGNAL-BY-SIGNAL AUDIT REPORT (PRE-SCAN PDF) ── */}
+                <div className="super-card font-mono" style={{ borderColor: '#ab47bc', background: 'rgba(171, 71, 188, 0.05)', marginTop: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '1.25rem' }}>📋</span>
+                        <h3 style={{ margin: 0, color: '#e1bee7', fontSize: '1.05rem', fontWeight: 800 }}>
+                          SND SIGNAL-BY-SIGNAL PROCESSING AUDIT (PRE-SCAN PDF)
+                        </h3>
+                        <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(171, 71, 188, 0.25)', color: '#e1bee7', fontWeight: 800 }}>
+                          PRE-SCAN REPORT
+                        </span>
+                      </div>
+                      <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#bbb' }}>
+                        Audits every signal produced during the trading cycle (starting 8:00 PM EST Asia open). Automated updates run 30 mins before every scan session (01:30 ET London, 07:30 ET NY AM, 13:30 ET NY PM, 19:30 ET Asia).
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        disabled={auditTriggering}
+                        onClick={() => handleTriggerAuditReport(true)}
+                        style={{
+                          padding: '8px 16px',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          background: 'rgba(171, 71, 188, 0.3)',
+                          border: '1px solid #ab47bc',
+                          color: '#e1bee7',
+                          borderRadius: '6px',
+                          cursor: auditTriggering ? 'wait' : 'pointer'
+                        }}
+                      >
+                        {auditTriggering ? '⏳ Compiling Audit PDF...' : '⚡ Generate & Send to Telegram (PDF)'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={auditTriggering}
+                        onClick={() => handleTriggerAuditReport(false)}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          color: '#ddd',
+                          borderRadius: '6px',
+                          cursor: auditTriggering ? 'wait' : 'pointer'
+                        }}
+                      >
+                        📄 Generate PDF Only
+                      </button>
+                      {auditReport?.id && (
+                        <a
+                          href={`${API_BASE}/api/super-admin/signal-audit/pdf/${auditReport.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '8px 14px',
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            background: 'rgba(0, 230, 118, 0.15)',
+                            border: '1px solid #00e676',
+                            color: '#00e676',
+                            borderRadius: '6px',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          📥 Download Latest PDF
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {auditMessage && (
+                    <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', fontSize: '0.8rem', color: '#fff', marginBottom: '14px', borderLeft: '3px solid #ab47bc' }}>
+                      {auditMessage}
+                    </div>
+                  )}
+
+                  {auditReport ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>REPORT NUMBER</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ce93d8' }}>Report #{auditReport.report_number || auditReport.reportNumber}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>TRADING DAY (FROM 8 PM EST)</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e0e0e0' }}>{auditReport.period_start?.split('T')[0] || auditReport.tradingDate}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>TOTAL SIGNALS AUDITED</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>{auditReport.signals_count ?? auditReport.signalsCount ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>ACTIVE / PENDING</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#29b6f6' }}>{auditReport.active_count ?? auditReport.activeCount ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>CLOSED / RESOLVED</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#00e676' }}>{auditReport.closed_count ?? auditReport.closedCount ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#888' }}>TELEGRAM DISPATCH</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: (auditReport.telegram_sent || auditReport.telegramSent) ? '#00e676' : '#ff9800' }}>
+                          {(auditReport.telegram_sent || auditReport.telegramSent) ? '🟢 Dispatched' : '⚪ Generated (Not Sent)'}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.78rem', color: '#888', fontStyle: 'italic', padding: '12px 0' }}>
+                      No signal audit report has been generated yet for today. Click "Generate &amp; Send to Telegram (PDF)" to trigger the first report.
+                    </div>
+                  )}
                 </div>
               </>
             )}

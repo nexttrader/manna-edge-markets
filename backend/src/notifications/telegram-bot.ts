@@ -114,6 +114,79 @@ class TelegramBotService {
     }
   }
 
+  public async sendDocument(
+    fileBuffer: Buffer,
+    filename: string,
+    caption?: string,
+    parseMode: 'HTML' | 'Markdown' = 'HTML'
+  ): Promise<boolean> {
+    const { enabled, botToken, chatId } = this.config;
+    if (!enabled || !botToken || !chatId) {
+      logger.debug('Skipping Telegram sendDocument: Bot disabled or missing credentials');
+      return false;
+    }
+    try {
+      const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      formData.append('document', blob, filename);
+      if (caption) {
+        formData.append('caption', caption);
+        formData.append('parse_mode', parseMode);
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        logger.error({ status: res.status, error: await res.text() }, 'Failed to send Telegram document');
+        return false;
+      }
+      logger.info({ filename }, 'Telegram document dispatched successfully');
+      return true;
+    } catch (err: any) {
+      logger.error({ err: err.message }, 'Error dispatching Telegram document');
+      return false;
+    }
+  }
+
+  public async sendSignalAuditReport(
+    reportData: any,
+    pdfBuffer: Buffer,
+    force: boolean = false
+  ): Promise<boolean> {
+    if (!force) {
+      try {
+        const map = await getNotificationSettingsMap();
+        if ('notify_all_report' in map && !map['notify_all_report']) {
+          logger.debug('Signal audit report suppressed by notify_all_report master toggle');
+          return false;
+        }
+        if ('notify_signal_audit_report' in map && !map['notify_signal_audit_report']) {
+          logger.debug('Signal audit report suppressed by notify_signal_audit_report toggle');
+          return false;
+        }
+      } catch {}
+    }
+
+    const filename = `SND_Signal_Audit_Report_${reportData.reportNumber}_${reportData.tradingDate}.pdf`;
+    const sessionLabel = reportData.sessionName ? reportData.sessionName.toUpperCase().replace(/_/g, ' ') : 'SESSION';
+    const caption = `📋 <b>SND SIGNALS — SIGNAL-BY-SIGNAL AUDIT REPORT #${reportData.reportNumber}</b>
+━━━━━━━━━━━━━━━━━━━━━
+📅 <b>Trading Day:</b> <code>${reportData.tradingDate} (From 8:00 PM EST)</code>
+⏱️ <b>Pre-Scan Check:</b> 30m before ${sessionLabel} Scan
+📊 <b>Total Signals Audited:</b> ${reportData.signalsCount}
+🟢 <b>Wins / In-Profit:</b> ${reportData.winsCount} | 🔴 <b>Losses:</b> ${reportData.lossesCount}
+🛡️ <b>Breakeven / Active:</b> ${reportData.activeCount} | ⛔ <b>Cancelled / Rejected:</b> ${reportData.cancelledCount + reportData.failedCount}
+━━━━━━━━━━━━━━━━━━━━━
+<i>Attached is the comprehensive signal-by-signal audit PDF table with Trade IDs, broker execution status, and root cause notes.</i>`;
+
+    return await this.sendDocument(pdfBuffer, filename, caption);
+  }
+
   /** Checks DB feature toggle hierarchy before sending. Defaults to enabled on cold start. */
   private async sendIfEnabled(
     key: string,
