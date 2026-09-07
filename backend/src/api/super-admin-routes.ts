@@ -1533,9 +1533,22 @@ router.post('/signal-audit/trigger', async (req: Request, res: Response) => {
       Boolean(sendTelegram)
     );
 
+    const normalizedReport = {
+      ...reportData,
+      id: reportData.reportId,
+      report_number: reportData.reportNumber,
+      signals_count: reportData.signalsCount,
+      active_count: reportData.activeCount,
+      closed_count: reportData.closedCount,
+      pdf_path: reportData.pdfPath,
+      telegram_sent: Boolean(sendTelegram),
+      download_url: `/api/super-admin/signal-audit/pdf/${reportData.reportId}?download=true`,
+      view_url: `/api/super-admin/signal-audit/pdf/${reportData.reportId}`
+    };
+
     res.json({
       success: true,
-      report: reportData,
+      report: normalizedReport,
       message: `SND Signal-by-Signal Audit Report #${reportData.reportNumber} compiled successfully (${reportData.signalsCount} signals audited).`
     });
   } catch (error: any) {
@@ -1560,7 +1573,21 @@ router.get('/signal-audit/latest', async (_req: Request, res: Response) => {
     try {
       parsedSummary = report.summary_json ? JSON.parse(report.summary_json) : null;
     } catch {}
-    res.json({ success: true, report: { ...report, summary: parsedSummary } });
+    res.json({
+      success: true,
+      report: {
+        ...report,
+        reportId: report.id,
+        reportNumber: report.report_number,
+        signalsCount: report.signals_count,
+        activeCount: report.active_count,
+        closedCount: report.closed_count,
+        pdfPath: report.pdf_path,
+        summary: parsedSummary,
+        download_url: `/api/super-admin/signal-audit/pdf/${report.id}?download=true`,
+        view_url: `/api/super-admin/signal-audit/pdf/${report.id}`
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch latest audit report', details: error?.message || String(error) });
   }
@@ -1583,18 +1610,24 @@ router.get('/signal-audit/history', async (req: Request, res: Response) => {
 /**
  * GET /api/super-admin/signal-audit/pdf/:id
  * Streams the generated PDF file for browser viewing or downloading.
+ * Supports ?download=true to force browser download dialog.
  */
 router.get('/signal-audit/pdf/:id', async (req: Request, res: Response) => {
   try {
     const reportId = req.params.id as string;
-    const report = await queries.getSignalAuditReportById(reportId);
+    const report = (reportId === 'latest')
+      ? await queries.getLatestSignalAuditReport()
+      : await queries.getSignalAuditReportById(reportId);
+
     if (!report || !report.pdf_path || !fs.existsSync(report.pdf_path)) {
       return res.status(404).json({ error: 'PDF report not found or file missing on disk.' });
     }
 
     const filename = path.basename(report.pdf_path);
+    const forceDownload = req.query.download === 'true' || req.query.download === '1';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `${forceDownload ? 'attachment' : 'inline'}; filename="${filename}"`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     fs.createReadStream(report.pdf_path).pipe(res);
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to stream PDF report', details: error?.message || String(error) });

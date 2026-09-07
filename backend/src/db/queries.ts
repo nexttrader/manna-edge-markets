@@ -1277,8 +1277,13 @@ export async function getLatestSignalAuditReport(): Promise<SignalAuditReportRec
 }
 
 export async function getSignalAuditReportById(id: string): Promise<SignalAuditReportRecord | null> {
+  if (!id || id === 'latest') {
+    return getLatestSignalAuditReport();
+  }
+  const num = Number(id);
   const rows = await queryDb<SignalAuditReportRecord>(
-    `SELECT * FROM signal_audit_reports WHERE id = ? LIMIT 1`, [id]
+    `SELECT * FROM signal_audit_reports WHERE id = ? OR (report_number = ? AND ? > 0) ORDER BY created_at DESC LIMIT 1`,
+    [id, isNaN(num) ? -1 : num, isNaN(num) ? -1 : num]
   );
   return rows.length > 0 ? rows[0] : null;
 }

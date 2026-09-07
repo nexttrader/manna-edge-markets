@@ -47,6 +47,20 @@ export const SuperAdminPanel: React.FC = () => {
   const [auditTriggering, setAuditTriggering] = useState(false);
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
 
+  const downloadReportPdf = (repId?: string, repNum?: number | string) => {
+    const targetId = repId || auditReport?.id || auditReport?.reportId || 'latest';
+    const reportNumber = repNum || auditReport?.report_number || auditReport?.reportNumber || 'latest';
+    const filename = `SND_Signal_Audit_Report_${reportNumber}.pdf`;
+    const url = `${API_BASE}/api/super-admin/signal-audit/pdf/${targetId}?download=true`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const fetchLatestAuditReport = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/signal-audit/latest`);
@@ -67,9 +81,18 @@ export const SuperAdminPanel: React.FC = () => {
         body: JSON.stringify({ sendTelegram })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.report) {
         setAuditReport(data.report);
-        setAuditMessage(`✅ Report #${data.report.reportNumber} compiled successfully! ${sendTelegram ? 'Sent to Telegram channel.' : 'Generated on disk.'}`);
+        const repId = data.report.id || data.report.reportId || 'latest';
+        const repNum = data.report.report_number || data.report.reportNumber;
+        
+        if (!sendTelegram) {
+          // Immediately trigger browser file download for Generate PDF Only
+          downloadReportPdf(repId, repNum);
+          setAuditMessage(`✅ Report #${repNum} compiled successfully! Your browser download has started automatically.`);
+        } else {
+          setAuditMessage(`✅ Report #${repNum} compiled successfully and dispatched to your Telegram channel!`);
+        }
       } else {
         setAuditMessage(`❌ Failed to trigger audit: ${data.details || data.error || 'Server error'}`);
       }
@@ -1226,44 +1249,127 @@ export const SuperAdminPanel: React.FC = () => {
                         style={{
                           padding: '8px 14px',
                           fontSize: '0.78rem',
-                          fontWeight: 700,
-                          background: 'rgba(255,255,255,0.06)',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          color: '#ddd',
+                          fontWeight: 800,
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          color: '#fff',
                           borderRadius: '6px',
-                          cursor: auditTriggering ? 'wait' : 'pointer'
+                          cursor: auditTriggering ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}
                       >
-                        📄 Generate PDF Only
+                        📄 Generate &amp; Download PDF
                       </button>
-                      {auditReport?.id && (
-                        <a
-                          href={`${API_BASE}/api/super-admin/signal-audit/pdf/${auditReport.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            padding: '8px 14px',
-                            fontSize: '0.78rem',
-                            fontWeight: 800,
-                            background: 'rgba(0, 230, 118, 0.15)',
-                            border: '1px solid #00e676',
-                            color: '#00e676',
-                            borderRadius: '6px',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          📥 Download Latest PDF
-                        </a>
+
+                      {(auditReport?.id || auditReport?.reportId) && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => downloadReportPdf(auditReport.id || auditReport.reportId, auditReport.report_number || auditReport.reportNumber)}
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: '0.78rem',
+                              fontWeight: 800,
+                              background: 'rgba(0, 230, 118, 0.18)',
+                              border: '1px solid #00e676',
+                              color: '#00e676',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            📥 Download Latest PDF (#{auditReport.report_number || auditReport.reportNumber})
+                          </button>
+
+                          <a
+                            href={`${API_BASE}/api/super-admin/signal-audit/pdf/${auditReport.id || auditReport.reportId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              background: 'rgba(41, 182, 246, 0.15)',
+                              border: '1px solid #29b6f6',
+                              color: '#29b6f6',
+                              borderRadius: '6px',
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            👁️ View PDF in Tab
+                          </a>
+                        </>
                       )}
                     </div>
                   </div>
 
                   {auditMessage && (
-                    <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', fontSize: '0.8rem', color: '#fff', marginBottom: '14px', borderLeft: '3px solid #ab47bc' }}>
-                      {auditMessage}
+                    <div style={{
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      background: 'rgba(171, 71, 188, 0.15)',
+                      fontSize: '0.82rem',
+                      color: '#fff',
+                      marginBottom: '14px',
+                      border: '1px solid rgba(171, 71, 188, 0.5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{auditMessage}</div>
+                        {(auditReport?.pdf_path || auditReport?.pdfPath) && (
+                          <div style={{ fontSize: '0.72rem', color: '#ccc', marginTop: '4px' }}>
+                            Server archive path: <code style={{ color: '#ce93d8', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: '4px' }}>{auditReport.pdf_path || auditReport.pdfPath}</code>
+                          </div>
+                        )}
+                      </div>
+                      {(auditReport?.id || auditReport?.reportId) && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => downloadReportPdf(auditReport.id || auditReport.reportId, auditReport.report_number || auditReport.reportNumber)}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              background: '#00e676',
+                              color: '#000',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            📥 Re-Download PDF
+                          </button>
+                          <a
+                            href={`${API_BASE}/api/super-admin/signal-audit/pdf/${auditReport.id || auditReport.reportId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: 'rgba(255,255,255,0.1)',
+                              color: '#fff',
+                              border: '1px solid rgba(255,255,255,0.2)',
+                              borderRadius: '4px',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            👁️ Open PDF
+                          </a>
+                        </div>
+                      )}
                     </div>
                   )}
 
