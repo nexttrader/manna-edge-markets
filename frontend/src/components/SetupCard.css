@@ -503,14 +503,24 @@
   border-left: 3px solid var(--kdt-gold);
 }
 
+.signal-sent-row {
+  background: rgba(0, 229, 255, 0.05);
+  border-left: 3px solid #00e5ff;
+}
+
+.text-cyan {
+  color: #00e5ff !important;
+}
+
 .entry-session-row {
   background: rgba(0, 230, 118, 0.08);
   border-left: 3px solid var(--green);
 }
 
-.entry-session-row.awaiting-signal-row {
+.entry-session-row.awaiting-signal-row,
+.entry-session-row.awaiting-entry-row {
   background: rgba(255, 255, 255, 0.03);
-  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  border-left: 3px solid rgba(255, 215, 0, 0.35);
 }
 
 .entry-datetime-val {

@@ -185,7 +185,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const createdTime = setup.created_at || setup.createdAt || new Date().toISOString();
+  const signalSentTime = setup.created_at || setup.createdAt || setup.validatedAt;
+  const createdTime = signalSentTime || new Date().toISOString();
 
   const isBreakeven = Boolean(
     setup.is_breakeven ||
@@ -224,7 +225,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
       ? setup.entry_price_recorded || setup.entry_price_executed
       : null;
 
-  const entryTimestamp = setup.entry_triggered_at || (stateStr === 'active' || stateStr === 'resolved' || stateStr === 'runner' ? (setup.entryAt || setup.created_at || setup.createdAt) : null);
+  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (stateStr === 'active' || stateStr === 'resolved' || stateStr === 'runner' ? (setup.created_at || setup.createdAt) : null);
 
   const currentPrice = setup.current_price;
   const isStillInZone = Boolean(
@@ -378,9 +379,21 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="level-pips text-gold">⚡ FILLED</span>
           </div>
         )}
+        {/* Signal Sent Time - Always visible on every signal card */}
+        <div className="level-row signal-sent-row">
+          <span className="level-label text-cyan font-bold">Signal Sent</span>
+          <span className="level-val entry-datetime-val">
+            <span className="entry-val-date">{formatETDate(signalSentTime || createdTime)}</span>
+            <span className="entry-val-sep"> · </span>
+            <span className="entry-val-time">{formatETTime(signalSentTime || createdTime)}</span>
+          </span>
+          <span className="level-pips text-cyan font-bold">📡 SENT</span>
+        </div>
+
+        {/* Time Entered - Always visible on every signal card */}
         {entryTimestamp ? (
           <div className="level-row entry-session-row">
-            <span className="level-label text-green font-bold">Entry Fill</span>
+            <span className="level-label text-green font-bold">Time Entered</span>
             <span className="level-val text-green font-bold entry-datetime-val">
               <span className="entry-val-date">{formatETDate(entryTimestamp)}</span>
               <span className="entry-val-sep"> · </span>
@@ -389,19 +402,19 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 <span className="entry-val-session"> ({getEntrySessionName()})</span>
               )}
             </span>
-            <span className="level-pips text-green font-bold">📥 ENTRY TIME</span>
+            <span className="level-pips text-green font-bold">📥 ENTERED</span>
           </div>
-        ) : stateStr === 'awaiting_entry' ? (
-          <div className="level-row entry-session-row awaiting-signal-row">
-            <span className="level-label text-muted font-bold">Signal Time</span>
-            <span className="level-val text-muted font-bold entry-datetime-val">
-              <span className="entry-val-date">{formatETDate(createdTime)}</span>
-              <span className="entry-val-sep"> · </span>
-              <span className="entry-val-time">{formatETTime(createdTime)}</span>
+        ) : (
+          <div className="level-row entry-session-row awaiting-entry-row">
+            <span className="level-label text-muted font-bold">Time Entered</span>
+            <span className="level-val entry-datetime-val" style={{ color: stateStr === 'awaiting_entry' ? 'var(--kdt-gold)' : 'var(--kdt-white-muted)' }}>
+              {stateStr === 'awaiting_entry' ? 'Awaiting Entry...' : 'Not Entered'}
             </span>
-            <span className="level-pips text-muted font-bold">📡 SIGNAL</span>
+            <span className="level-pips font-bold" style={{ color: stateStr === 'awaiting_entry' ? 'var(--kdt-gold)' : 'var(--kdt-white-muted)' }}>
+              {stateStr === 'awaiting_entry' ? '⏳ PENDING' : '⛔ UNFILLED'}
+            </span>
           </div>
-        ) : null}
+        )}
         <div className="level-row">
           <span className="level-label">Stop Loss</span>
           <span className="level-val">
@@ -637,11 +650,11 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="timeline-title font-mono">⏱️ Signal Lifecycle Timeline</span>
             <div className="timeline-grid font-mono">
               <div className="timeline-item">
-                <span className="t-label">📡 Discovered:</span>
+                <span className="t-label">📡 Signal Sent:</span>
                 <span className="t-val">{formatETDateTime(createdTime)}</span>
               </div>
               <div className="timeline-item">
-                <span className="t-label">⚡ Entry Triggered:</span>
+                <span className="t-label">📥 Time Entered:</span>
                 <span className="t-val text-gold">
                   {setup.entry_triggered_at ? formatETDateTime(setup.entry_triggered_at) : 'Awaiting Entry'}
                 </span>

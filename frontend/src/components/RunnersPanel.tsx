@@ -112,6 +112,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                   : 0;
 
                 const tp1Percent = 66.6;
+                const createdTimestamp = setup.created_at || setup.createdAt || setup.validatedAt;
                 const entryTimestamp = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
                 const telegramId = formatTelegramTradeId(setup);
 
@@ -153,23 +154,44 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                     </div>
 
                     <div className="runner-card-body">
-                      <div className="runner-entry-bar font-mono">
-                        <div className="runner-entry-bar-left">
-                          <span className="runner-entry-icon">📥</span>
-                          <span className="runner-entry-label">ENTRY:</span>
-                          <span className="runner-entry-datetime">
-                            {entryTimestamp ? (
-                              <>
-                                <span className="entry-date">{formatETDate(entryTimestamp)}</span>
-                                <span className="entry-dot"> · </span>
-                                <span className="entry-time">{formatETTime(entryTimestamp)}</span>
-                              </>
-                            ) : (
-                              '--'
-                            )}
-                          </span>
+                      <div className="runner-timing-group font-mono">
+                        <div className="runner-sent-bar">
+                          <div className="runner-timing-bar-left">
+                            <span className="runner-timing-icon">📡</span>
+                            <span className="runner-timing-label">SIGNAL SENT:</span>
+                            <span className="runner-sent-datetime">
+                              {createdTimestamp ? (
+                                <>
+                                  <span className="entry-date">{formatETDate(createdTimestamp)}</span>
+                                  <span className="entry-dot"> · </span>
+                                  <span className="entry-time">{formatETTime(createdTimestamp)}</span>
+                                </>
+                              ) : (
+                                '--'
+                              )}
+                            </span>
+                          </div>
+                          <span className="runner-sent-pill font-mono">SENT</span>
                         </div>
-                        <span className="runner-entry-pill font-mono">FILLED</span>
+
+                        <div className="runner-entry-bar">
+                          <div className="runner-timing-bar-left">
+                            <span className="runner-timing-icon">📥</span>
+                            <span className="runner-timing-label">ENTERED:</span>
+                            <span className="runner-entry-datetime">
+                              {entryTimestamp ? (
+                                <>
+                                  <span className="entry-date">{formatETDate(entryTimestamp)}</span>
+                                  <span className="entry-dot"> · </span>
+                                  <span className="entry-time">{formatETTime(entryTimestamp)}</span>
+                                </>
+                              ) : (
+                                '--'
+                              )}
+                            </span>
+                          </div>
+                          <span className="runner-entry-pill font-mono">FILLED</span>
+                        </div>
                       </div>
 
                       <div className="runner-metric-grid">

@@ -7,6 +7,7 @@ import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 import { StrategyComparisonDashboard } from '../components/admin/StrategyComparisonDashboard';
 import { AssetControlHub } from '../components/admin/AssetControlHub';
+import { formatETDate, formatETTime } from '../utils/time';
 
 export const SuperAdminPanel: React.FC = () => {
   const { logout } = useAuth();
@@ -1525,11 +1526,24 @@ export const SuperAdminPanel: React.FC = () => {
                           POI: {meta.poi_type || 'FVG'} • Conviction: {s.conviction_score}% • Phase: {meta.sentinel_phase || 'ENTRY_ACTIVE'}
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px', fontSize: '0.8rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px', fontSize: '0.8rem' }}>
                           <div><span style={{ color: '#aaa' }}>ENTRY:</span> <strong style={{ color: '#fff' }}>{s.entry_zone_mid}</strong></div>
                           <div><span style={{ color: '#aaa' }}>STOP:</span> <strong style={{ color: '#ff1744' }}>{s.stop}</strong></div>
                           <div><span style={{ color: '#aaa' }}>TARGET 1:</span> <strong style={{ color: '#00e5ff' }}>{s.tp1} ({s.r_multiple_1}R)</strong></div>
                           <div><span style={{ color: '#aaa' }}>TARGET 2:</span> <strong style={{ color: '#ffab00' }}>{s.tp2 || 'N/A'} (3R)</strong></div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '12px', padding: '6px 8px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '0.74rem' }}>
+                          <div>
+                            <span style={{ color: '#00e5ff', fontWeight: 700 }}>📡 SENT: </span>
+                            <span style={{ color: '#fff' }}>{s.created_at ? `${formatETDate(s.created_at)} · ${formatETTime(s.created_at)}` : '--'}</span>
+                          </div>
+                          <div>
+                            <span style={{ color: '#00e676', fontWeight: 700 }}>📥 ENTERED: </span>
+                            <span style={{ color: s.entry_triggered_at ? '#00e676' : '#ffd700' }}>
+                              {s.entry_triggered_at ? `${formatETDate(s.entry_triggered_at)} · ${formatETTime(s.entry_triggered_at)}` : 'Awaiting Entry'}
+                            </span>
+                          </div>
                         </div>
 
                         <div style={{ fontSize: '0.72rem', color: '#aaa', fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
