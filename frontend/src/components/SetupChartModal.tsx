@@ -212,6 +212,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   };
 
   const isLong = (setup.bias || 'long').toLowerCase() === 'long';
+  const isForex = (setup.market || '').toLowerCase() === 'forex' || setup.instrument.includes('/');
 
   const levels = (setup.levels || {}) as any;
 
@@ -549,7 +550,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     priceLinesRef.current = [];
 
     // Determine count based on timeframe for deep historical chart scrolling
-    const count = timeframe === '1m' ? 1000 : timeframe === '5m' ? 1000 : timeframe === '15m' ? 800 : timeframe === '1h' ? 720 : timeframe === '4h' ? 500 : 365;
+    let count = timeframe === '1m' ? 1000 : timeframe === '5m' ? 1000 : timeframe === '15m' ? 800 : timeframe === '1h' ? 720 : timeframe === '4h' ? 500 : 365;
+    if (isResolved) {
+      count = Math.max(count, 2000);
+    }
 
     // Fetch candles from backend
     const encodedInst = encodeURIComponent(setup.instrument);
@@ -576,7 +580,21 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           close: Number(c.close),
         }));
 
-        candleSeries.setData(formattedCandles);
+        // Truncate price action after trade exit strictly on review charts (resolved/invalidated)
+        let displayCandles = formattedCandles;
+        if (isResolved && resolvedTimestamp) {
+          try {
+            const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+            const filtered = formattedCandles.filter((c: any) => (c.time as number) <= exitUnix);
+            if (filtered.length > 0) {
+              displayCandles = filtered;
+            }
+          } catch (e) {
+            console.warn('Failed to filter post-exit candles for review chart:', e);
+          }
+        }
+
+        candleSeries.setData(displayCandles);
 
         // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, runner, resolved)
         const lines: any[] = [];
@@ -682,9 +700,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           try {
             const entryTimeMs = new Date(entryTimestamp).getTime();
             const entryUnix = Math.floor(entryTimeMs / 1000);
-            let closestCandle = formattedCandles[0];
+            let closestCandle = displayCandles[0];
             let minDiff = Infinity;
-            for (const c of formattedCandles) {
+            for (const c of displayCandles) {
               const diff = Math.abs((c.time as number) - entryUnix);
               if (diff < minDiff) {
                 minDiff = diff;
@@ -693,25 +711,28 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             }
             if (closestCandle) {
               const entryTimeStr = formatTzTime(entryUnix, selectedTz);
+              const priceText = execPrice > 0 
+                ? (isForex ? execPrice.toFixed(execPrice < 2 ? 5 : 3) : execPrice.toFixed(2)) 
+                : 'Zone';
               markers.push({
                 time: closestCandle.time,
                 position: isLong ? 'belowBar' : 'aboveBar',
-                color: '#00e5ff',
+                color: isLong ? '#00e5ff' : '#ff9100',
                 shape: isLong ? 'arrowUp' : 'arrowDown',
-                text: `⚡ ENTRY @ ${entryTimeStr} ${tzBadge} (${execPrice > 0 ? execPrice : 'Zone'})`,
+                text: `⚡ ENTRY: ${priceText} (@ ${entryTimeStr} ${tzBadge})`,
                 size: 2,
               });
             }
           } catch {}
         }
 
-        if (resolvedTimestamp) {
+        if (resolvedTimestamp && isResolved) {
           try {
             const resTimeMs = new Date(resolvedTimestamp).getTime();
             const resUnix = Math.floor(resTimeMs / 1000);
-            let closestRes = formattedCandles[0];
+            let closestRes = displayCandles[displayCandles.length - 1];
             let minDiff = Infinity;
-            for (const c of formattedCandles) {
+            for (const c of displayCandles) {
               const diff = Math.abs((c.time as number) - resUnix);
               if (diff < minDiff) {
                 minDiff = diff;
@@ -722,7 +743,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               const resTimeStr = formatTzTime(resUnix, selectedTz);
               const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
               const isWin = reason.includes('TP');
-              const exitPriceLabel = exitPriceVal > 0 ? ` @ ${exitPriceVal}` : '';
+              const exitPriceLabel = exitPriceVal > 0 
+                ? ` @ ${isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2)}` 
+                : '';
               markers.push({
                 time: closestRes.time,
                 position: isWin ? 'aboveBar' : 'belowBar',
@@ -756,7 +779,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               let minIdx = -1;
               let maxIdx = -1;
 
-              formattedCandles.forEach((c: any, idx: number) => {
+              displayCandles.forEach((c: any, idx: number) => {
                 const t = c.time as number;
                 if (entryUnix && Math.abs(t - entryUnix) < 86400) {
                   if (minIdx === -1 || idx < minIdx) minIdx = idx;
@@ -768,11 +791,11 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                 }
               });
 
-              if (minIdx !== -1 && maxIdx !== -1) {
-                const pad = 20;
+              if (minIdx !== -1) {
+                const pad = 15;
                 chartRef.current?.timeScale().setVisibleLogicalRange({
                   from: Math.max(0, minIdx - pad),
-                  to: Math.min(formattedCandles.length - 1, maxIdx + pad)
+                  to: displayCandles.length - 1
                 });
               } else {
                 chartRef.current?.timeScale().fitContent();
@@ -798,10 +821,11 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, initialStopVal, exitPriceVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, isResolved, selectedTz]);
+  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, initialStopVal, exitPriceVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, isResolved, resolvedTimestamp, entryTimestamp, selectedTz]);
 
-  // 3. Dynamic Real-Time Candle Drawing
+  // 3. Dynamic Real-Time Candle Drawing (Live Signals ONLY)
   useEffect(() => {
+    if (isResolved) return;
     if (!candleSeriesRef.current || !setup.current_price) return;
 
     const currentPrice = Number(setup.current_price);
@@ -828,9 +852,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     } catch (err) {
       console.warn('Failed to update live candle on chart:', err);
     }
-  }, [setup.current_price, timeframe]);
+  }, [setup.current_price, timeframe, isResolved]);
 
-  // 4. Dynamic Real-Time Bid & Ask Price Lines
+  // 4. Dynamic Real-Time Bid & Ask Price Lines (Live Signals ONLY)
   useEffect(() => {
     if (!candleSeriesRef.current) return;
     const candleSeries = candleSeriesRef.current;
@@ -844,6 +868,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       try { candleSeries.removePriceLine(askLineRef.current); } catch {}
       askLineRef.current = null;
     }
+
+    // Do not draw today's live bid/ask lines on historical review charts
+    if (isResolved) return;
 
     const price = currentPrice && currentPrice > 0 
       ? currentPrice 
@@ -901,8 +928,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     canvas.width = width;
     canvas.height = height;
     ctx.clearRect(0, 0, width, height);
-
-    if (!isMannaSnd) return;
 
     const series = candleSeriesRef.current;
     const timeScale = chartRef.current.timeScale();
@@ -1019,48 +1044,144 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     }
 
-    // 3. Draw Vertical Entry Timestamp Marker Line & Floating Banner Flag
+    // 3. Draw Exact Entry Point Marker (Blob + Arrow + Price Badge) & Vertical Marker Line
     if (entryTimestamp) {
       try {
         const entryUnix = Math.floor(new Date(entryTimestamp).getTime() / 1000);
         const entryX = timeScale.timeToCoordinate(entryUnix as any);
+        const entryPriceVal = execPrice > 0 ? execPrice : entryMid;
+        const entryY = entryPriceVal > 0 ? series.priceToCoordinate(entryPriceVal) : null;
 
         if (entryX !== null && entryX > 0 && entryX < width) {
+          // Vertical guide line
           ctx.save();
           ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
 
           ctx.beginPath();
           ctx.moveTo(entryX, 0);
           ctx.lineTo(entryX, height);
           ctx.stroke();
+          ctx.restore();
 
+          // If entry price coordinate is visible on the canvas, draw exact Blob + Arrow + Price Pill
+          if (entryY !== null && entryY > 0 && entryY < height) {
+            ctx.save();
+            const blobColor = isLong ? (isLight ? '#0284c7' : '#00e5ff') : (isLight ? '#ea580c' : '#ff9100');
+            const arrowColor = isLong ? (isLight ? '#0369a1' : '#00e5ff') : (isLight ? '#c2410c' : '#ff9100');
+
+            // 1. Draw Outer Halo / Pulsing Glow Ring
+            ctx.beginPath();
+            ctx.arc(entryX, entryY, 9, 0, Math.PI * 2);
+            ctx.fillStyle = isLong 
+              ? (isLight ? 'rgba(2, 132, 199, 0.28)' : 'rgba(0, 229, 255, 0.35)')
+              : (isLight ? 'rgba(234, 88, 12, 0.28)' : 'rgba(255, 145, 0, 0.35)');
+            ctx.fill();
+
+            // 2. Draw Solid Core Blob
+            ctx.beginPath();
+            ctx.arc(entryX, entryY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = blobColor;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // 3. Draw Center Pip
+            ctx.beginPath();
+            ctx.arc(entryX, entryY, 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // 4. Draw Directional Arrow
+            // Long: Arrow placed below entry point pointing UP
+            // Short: Arrow placed above entry point pointing DOWN
+            ctx.fillStyle = arrowColor;
+            ctx.beginPath();
+            if (isLong) {
+              const arrowTipY = entryY + 8;
+              ctx.moveTo(entryX, arrowTipY);
+              ctx.lineTo(entryX - 6, arrowTipY + 9);
+              ctx.lineTo(entryX + 6, arrowTipY + 9);
+              ctx.closePath();
+              ctx.fill();
+            } else {
+              const arrowTipY = entryY - 8;
+              ctx.moveTo(entryX, arrowTipY);
+              ctx.lineTo(entryX - 6, arrowTipY - 9);
+              ctx.lineTo(entryX + 6, arrowTipY - 9);
+              ctx.closePath();
+              ctx.fill();
+            }
+
+            // 5. Draw Entry Price Badge Pill right beside the blob
+            const priceText = entryPriceVal > 0 
+              ? (isForex ? entryPriceVal.toFixed(entryPriceVal < 2 ? 5 : 3) : entryPriceVal.toFixed(2))
+              : 'Zone';
+            const badgeText = `${isLong ? '▲' : '▼'} ENTRY: ${priceText}`;
+            ctx.font = 'bold 11px monospace';
+            const badgeTextWidth = ctx.measureText(badgeText).width;
+            const badgePaddingX = 6;
+            const badgeH = 18;
+            const badgeW = badgeTextWidth + badgePaddingX * 2;
+
+            // Position badge to the right if space permits, else to the left
+            let pillX = entryX + 14;
+            if (pillX + badgeW > width - 10) {
+              pillX = entryX - badgeW - 14;
+            }
+            let pillY = entryY - badgeH / 2;
+            pillY = Math.max(10, Math.min(height - badgeH - 10, pillY));
+
+            ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 10, 20, 0.92)';
+            ctx.strokeStyle = blobColor;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            if ((ctx as any).roundRect) {
+              (ctx as any).roundRect(pillX, pillY, badgeW, badgeH, 4);
+            } else {
+              ctx.rect(pillX, pillY, badgeW, badgeH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = blobColor;
+            ctx.fillText(badgeText, pillX + badgePaddingX, pillY + badgeH - 4);
+
+            ctx.restore();
+          }
+
+          // Top Floating Header Flag
           const entryTimeStr = formatTzTime(entryUnix, selectedTz, true) + ` ${tzBadge}`;
-          const labelText = `⚡ EXACT ENTRY FILL @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`;
+          const topLabelText = `⚡ EXACT ENTRY FILL @ ${entryTimeStr} (${execPrice > 0 ? execPrice : 'Zone'})`;
+          ctx.save();
           ctx.font = 'bold 11px monospace';
-          const textWidth = ctx.measureText(labelText).width;
+          const topTextWidth = ctx.measureText(topLabelText).width;
 
-          const badgeX = Math.max(10, Math.min(width - textWidth - 20, entryX - textWidth / 2));
-          const badgeY = 28;
+          const topBadgeX = Math.max(10, Math.min(width - topTextWidth - 20, entryX - topTextWidth / 2));
+          const topBadgeY = 28;
 
           ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(9, 3, 20, 0.9)';
           ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
           ctx.lineWidth = 1;
           ctx.setLineDash([]);
 
-          ctx.fillRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
-          ctx.strokeRect(badgeX - 6, badgeY - 14, textWidth + 12, 20);
+          ctx.fillRect(topBadgeX - 6, topBadgeY - 14, topTextWidth + 12, 20);
+          ctx.strokeRect(topBadgeX - 6, topBadgeY - 14, topTextWidth + 12, 20);
 
           ctx.fillStyle = isLight ? '#0369a1' : '#00e5ff';
-          ctx.fillText(labelText, badgeX, badgeY);
+          ctx.fillText(topLabelText, topBadgeX, topBadgeY);
           ctx.restore();
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Failed to draw entry marker:', err);
+      }
     }
 
-    // 4. Draw Vertical Resolved Timestamp Marker Line & Exit Banner Flag
-    if (resolvedTimestamp) {
+    // 4. Draw Vertical Resolved Timestamp Marker Line & Exit Banner Flag (Review Charts Only)
+    if (resolvedTimestamp && isResolved) {
       try {
         const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
         const resX = timeScale.timeToCoordinate(resUnix as any);
@@ -1102,7 +1223,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }
       } catch {}
     }
-  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, isLong, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz]);
+  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, entryMid, isLong, isForex, isResolved, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
