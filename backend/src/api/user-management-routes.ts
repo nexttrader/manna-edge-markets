@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import {
   getAllUsers,
+  getAllUsersWithMetrics,
+  UserWithExportMetrics,
   addUser,
   updateUserFull,
   updateUserRole,
@@ -67,6 +69,219 @@ router.use(requireAdminOrSuperAdmin);
 // ==========================================
 // USER DIRECTORY & PROFILE ENDPOINTS
 // ==========================================
+
+function escapeCsvValue(val: any): string {
+  if (val === null || val === undefined) return '""';
+  const str = String(val);
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function buildUserExportCsv(users: UserWithExportMetrics[], mode: 'full' | 'email_campaign' = 'full'): string {
+  if (mode === 'email_campaign') {
+    const headers = [
+      'Email Address',
+      'Full Name',
+      'Role',
+      'Account Status',
+      'Tier',
+      'Subscription Status',
+      'Is Trial Account',
+      'Trial Days Remaining',
+      'Assigned Tags',
+      'Assigned Cohort Groups',
+      'Preferred Market',
+      'Created At',
+      'Last Active'
+    ];
+    const rows = users.map(u => [
+      escapeCsvValue(u.email),
+      escapeCsvValue(u.name),
+      escapeCsvValue(u.role),
+      escapeCsvValue(u.status),
+      escapeCsvValue(u.tier),
+      escapeCsvValue(u.subscriptionStatus || (u.isTrial ? 'trialing' : u.status)),
+      escapeCsvValue(u.isTrial ? 'YES' : 'NO'),
+      escapeCsvValue(u.trialDaysRemaining !== undefined ? u.trialDaysRemaining : ''),
+      escapeCsvValue((u.tags || []).join('; ')),
+      escapeCsvValue((u.groups || []).join('; ')),
+      escapeCsvValue(u.preferredMarket || 'Both'),
+      escapeCsvValue(u.createdAt || ''),
+      escapeCsvValue(u.lastActive || 'Never')
+    ].join(','));
+    return [headers.join(','), ...rows].join('\r\n');
+  }
+
+  // Full comprehensive export (40+ data points)
+  const headers = [
+    'User ID',
+    'Full Name',
+    'Email Address',
+    'Role',
+    'Account Status',
+    'Must Change Password',
+    'Created At',
+    'Last Active',
+    'Plan Tier',
+    'Market Access',
+    'Subscription Status',
+    'Subscription Start Date',
+    'Subscription End Date',
+    'Subscription Days Remaining',
+    'Billing Cycle',
+    'Auto Renew',
+    'Is Paused',
+    'Pause Start Date',
+    'Pause Resume Date',
+    'Paused Saved Days',
+    'Is Trial Account',
+    'Trial Started Date',
+    'Trial Expiry Date',
+    'Trial Days Remaining',
+    'Trial Expired',
+    'Trial Extension Count',
+    'Custom Trial Template Name',
+    'Custom Max Signals Limit',
+    'Custom Strategy Access',
+    'Custom Calculators Allowed',
+    'Preferred Trading Market',
+    'Risk Limit Profile',
+    'Signals Viewed Count',
+    'Watchlist Count',
+    'Demo Trades Tagged Count',
+    'Coupons Redeemed Count',
+    'Open Support Tickets Count',
+    'Assigned Tags',
+    'Assigned Cohort Groups',
+    'In Holding Zone (Soft Deleted)',
+    'Purge Date'
+  ];
+
+  const rows = users.map(u => {
+    const isPaused = u.status === 'paused' || !!u.pauseStartDate;
+    const custom = u.customFeatures || {};
+
+    return [
+      escapeCsvValue(u.id),
+      escapeCsvValue(u.name),
+      escapeCsvValue(u.email),
+      escapeCsvValue(u.role),
+      escapeCsvValue(u.status),
+      escapeCsvValue(u.mustChangePassword ? 'YES' : 'NO'),
+      escapeCsvValue(u.createdAt || ''),
+      escapeCsvValue(u.lastActive || 'Never'),
+      escapeCsvValue(u.tier || ''),
+      escapeCsvValue(u.marketAccess || (u.tier === 'forex_only' ? 'forex' : 'all')),
+      escapeCsvValue(u.subscriptionStatus || (u.isTrial ? 'trialing' : u.status)),
+      escapeCsvValue(u.subscriptionStart || ''),
+      escapeCsvValue(u.subscriptionEnd || ''),
+      escapeCsvValue(u.daysRemaining !== undefined ? u.daysRemaining : ''),
+      escapeCsvValue(u.billingCycle || 'monthly'),
+      escapeCsvValue(u.autoRenew ? 'YES' : 'NO'),
+      escapeCsvValue(isPaused ? 'YES' : 'NO'),
+      escapeCsvValue(u.pauseStartDate || ''),
+      escapeCsvValue(u.pauseResumeDate || ''),
+      escapeCsvValue(u.pausedRemainingDays !== undefined ? u.pausedRemainingDays : ''),
+      escapeCsvValue(u.isTrial ? 'YES' : 'NO'),
+      escapeCsvValue(u.trialStartedAt || ''),
+      escapeCsvValue(u.trialExpiresAt || ''),
+      escapeCsvValue(u.trialDaysRemaining !== undefined ? u.trialDaysRemaining : ''),
+      escapeCsvValue(u.trialExpired ? 'YES' : 'NO'),
+      escapeCsvValue(u.trialExtendedCount || 0),
+      escapeCsvValue(custom.trialName || ''),
+      escapeCsvValue(custom.maxSignals !== undefined ? custom.maxSignals : ''),
+      escapeCsvValue(custom.strategyAccess || 'all'),
+      escapeCsvValue(custom.allowCalculators !== undefined ? (custom.allowCalculators ? 'YES' : 'NO') : 'YES'),
+      escapeCsvValue(u.preferredMarket || 'Both'),
+      escapeCsvValue(u.riskLimit || '1%'),
+      escapeCsvValue(u.signalsViewed || 0),
+      escapeCsvValue(u.watchlistCount || 0),
+      escapeCsvValue(u.taggedTradesCount || 0),
+      escapeCsvValue(u.couponsRedeemedCount || 0),
+      escapeCsvValue(u.openSupportTicketsCount || 0),
+      escapeCsvValue((u.tags || []).join('; ')),
+      escapeCsvValue((u.groups || []).join('; ')),
+      escapeCsvValue(u.isInHoldingZone ? 'YES' : 'NO'),
+      escapeCsvValue(u.purgeAt || '')
+    ].join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\r\n');
+}
+
+const handleExportCsv = async (req: Request, res: Response) => {
+  try {
+    const search = ((req.query.search as string) || '').toLowerCase().trim();
+    const role = (req.query.role as string) || '';
+    const status = (req.query.status as string) || '';
+    const tier = (req.query.tier as string) || '';
+    const tagId = (req.query.tagId as string) || '';
+    const groupId = (req.query.groupId as string) || '';
+    const mode = ((req.query.mode as string) || 'full') === 'email_campaign' ? 'email_campaign' : 'full';
+    const includeHoldingZone = req.query.includeHoldingZone !== 'false';
+
+    let users = await getAllUsersWithMetrics(includeHoldingZone);
+
+    if (search) {
+      users = users.filter((u: any) =>
+        (u.name && u.name.toLowerCase().includes(search)) ||
+        (u.email && u.email.toLowerCase().includes(search)) ||
+        (u.id && u.id.toLowerCase().includes(search))
+      );
+    }
+    if (role) {
+      users = users.filter((u: any) => u.role === role);
+    }
+    if (status) {
+      users = users.filter((u: any) => u.status === status);
+    }
+    if (tier) {
+      users = users.filter((u: any) => u.tier === tier);
+    }
+    if (tagId) {
+      const mappings = await getTags();
+      const specificTag = mappings.find((t: any) => t.id === tagId || t.name.toLowerCase() === tagId.toLowerCase());
+      if (specificTag) {
+        users = users.filter((u: any) => (u.tags || []).includes(specificTag.name));
+      }
+    }
+    if (groupId) {
+      const mappings = await getGroups();
+      const specificGroup = mappings.find((g: any) => g.id === groupId || g.name.toLowerCase() === groupId.toLowerCase());
+      if (specificGroup) {
+        users = users.filter((u: any) => (u.groups || []).includes(specificGroup.name));
+      }
+    }
+
+    const csvContent = buildUserExportCsv(users, mode);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = mode === 'email_campaign'
+      ? `manna_users_email_list_${dateStr}.csv`
+      : `manna_users_full_directory_${dateStr}.csv`;
+
+    await recordAuditLog({
+      adminEmail: req.body._adminEmail || 'admin@mannaedge.com',
+      adminRole: req.body._adminRole || 'admin',
+      action: 'USERS_EXPORTED_CSV',
+      detailsJson: JSON.stringify({
+        mode,
+        count: users.length,
+        filters: { search, role, status, tier, tagId, groupId, includeHoldingZone },
+        filename
+      })
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\uFEFF' + csvContent);
+  } catch (error: any) {
+    console.error('Failed to export user CSV:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate user CSV export', details: error.message });
+  }
+};
+
+router.get('/users/export-csv', handleExportCsv);
+router.get('/export-csv', handleExportCsv);
+
 router.get('/users', async (req: Request, res: Response) => {
   const search = ((req.query.search as string) || '').toLowerCase().trim();
   const role = (req.query.role as string) || '';

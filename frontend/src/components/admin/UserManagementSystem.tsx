@@ -35,6 +35,19 @@ export interface UserProfile {
   riskLimit?: string;
   tags?: string[];
   groups?: string[];
+  mustChangePassword?: boolean;
+  marketAccess?: string;
+  autoRenew?: boolean;
+  daysRemaining?: number;
+  trialStartedAt?: string;
+  signalsViewed?: number;
+  watchlistCount?: number;
+  purgeAt?: string;
+  customFeatures?: any;
+  taggedTradesCount?: number;
+  couponsRedeemedCount?: number;
+  openSupportTicketsCount?: number;
+  isInHoldingZone?: boolean;
 }
 
 export interface Coupon {
@@ -141,6 +154,12 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
   const [showTagModal, setShowTagModal] = useState<boolean>(false);
   const [showGroupModal, setShowGroupModal] = useState<boolean>(false);
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [exportModalTab, setExportModalTab] = useState<'full_csv' | 'campaign_csv' | 'email_list'>('full_csv');
+  const [exportScope, setExportScope] = useState<'all' | 'filtered' | 'selected'>('all');
+  const [emailListCohort, setEmailListCohort] = useState<'all' | 'active' | 'trials' | 'expired' | 'forex' | 'futures'>('all');
+  const [emailListSeparator, setEmailListSeparator] = useState<'newline' | 'comma' | 'semicolon'>('newline');
+  const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
 
   // Search & Control States
   const [controlSearchQuery, setControlSearchQuery] = useState<string>('');
@@ -515,6 +534,232 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
     return matchSearch && matchRole && matchStatus && matchTier;
   });
 
+  // ==========================================
+  // CSV EXPORT & EMAIL LIST HELPERS
+  // ==========================================
+  const escapeCsv = (val: any): string => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const getTargetUsersForExport = (): UserProfile[] => {
+    if (exportScope === 'selected' && selectedUserIds.length > 0) {
+      return users.filter(u => selectedUserIds.includes(u.id));
+    }
+    if (exportScope === 'filtered') {
+      return filteredUsers;
+    }
+    return users;
+  };
+
+  const downloadCsvBlob = (csvString: string, filename: string) => {
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleClientCsvDownload = (mode: 'full' | 'email_campaign') => {
+    const targetUsers = getTargetUsersForExport();
+    if (targetUsers.length === 0) {
+      showNotification('No user records to export in selected scope.', true);
+      return;
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    let csvContent = '';
+    let filename = '';
+
+    if (mode === 'email_campaign') {
+      const headers = [
+        'Email Address',
+        'Full Name',
+        'Role',
+        'Account Status',
+        'Tier',
+        'Subscription Status',
+        'Is Trial Account',
+        'Trial Days Remaining',
+        'Assigned Tags',
+        'Assigned Cohort Groups',
+        'Preferred Market',
+        'Created At',
+        'Last Active'
+      ];
+      const rows = targetUsers.map(u => [
+        escapeCsv(u.email),
+        escapeCsv(u.name),
+        escapeCsv(u.role),
+        escapeCsv(u.status),
+        escapeCsv(u.tier),
+        escapeCsv(u.subscriptionStatus || (u.isTrial ? 'trialing' : u.status)),
+        escapeCsv(u.isTrial ? 'YES' : 'NO'),
+        escapeCsv(u.trialDaysRemaining !== undefined ? u.trialDaysRemaining : ''),
+        escapeCsv((u.tags || []).join('; ')),
+        escapeCsv((u.groups || []).join('; ')),
+        escapeCsv(u.preferredMarket || 'Both'),
+        escapeCsv(u.createdAt || ''),
+        escapeCsv(u.lastActive || 'Never')
+      ].join(','));
+      csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+      filename = `manna_email_campaign_${exportScope}_${dateStr}.csv`;
+    } else {
+      const headers = [
+        'User ID',
+        'Full Name',
+        'Email Address',
+        'Role',
+        'Account Status',
+        'Must Change Password',
+        'Created At',
+        'Last Active',
+        'Plan Tier',
+        'Market Access',
+        'Subscription Status',
+        'Subscription Start Date',
+        'Subscription End Date',
+        'Subscription Days Remaining',
+        'Billing Cycle',
+        'Auto Renew',
+        'Is Paused',
+        'Pause Start Date',
+        'Pause Resume Date',
+        'Paused Saved Days',
+        'Is Trial Account',
+        'Trial Started Date',
+        'Trial Expiry Date',
+        'Trial Days Remaining',
+        'Trial Expired',
+        'Trial Extension Count',
+        'Custom Trial Template Name',
+        'Custom Max Signals Limit',
+        'Custom Strategy Access',
+        'Custom Calculators Allowed',
+        'Preferred Trading Market',
+        'Risk Limit Profile',
+        'Signals Viewed Count',
+        'Watchlist Count',
+        'Demo Trades Tagged Count',
+        'Coupons Redeemed Count',
+        'Open Support Tickets Count',
+        'Assigned Tags',
+        'Assigned Cohort Groups',
+        'In Holding Zone (Soft Deleted)',
+        'Purge Date'
+      ];
+
+      const rows = targetUsers.map(u => {
+        const isPaused = u.status === 'paused' || !!u.pauseStartDate;
+        const custom = (u as any).customFeatures || {};
+
+        return [
+          escapeCsv(u.id),
+          escapeCsv(u.name),
+          escapeCsv(u.email),
+          escapeCsv(u.role),
+          escapeCsv(u.status),
+          escapeCsv((u as any).mustChangePassword ? 'YES' : 'NO'),
+          escapeCsv(u.createdAt || ''),
+          escapeCsv(u.lastActive || 'Never'),
+          escapeCsv(u.tier || ''),
+          escapeCsv((u as any).marketAccess || (u.tier === 'forex_only' ? 'forex' : 'all')),
+          escapeCsv(u.subscriptionStatus || (u.isTrial ? 'trialing' : u.status)),
+          escapeCsv(u.subscriptionStart || ''),
+          escapeCsv(u.subscriptionEnd || ''),
+          escapeCsv((u as any).daysRemaining !== undefined ? (u as any).daysRemaining : ''),
+          escapeCsv(u.billingCycle || 'monthly'),
+          escapeCsv((u as any).autoRenew ? 'YES' : 'NO'),
+          escapeCsv(isPaused ? 'YES' : 'NO'),
+          escapeCsv(u.pauseStartDate || ''),
+          escapeCsv(u.pauseResumeDate || ''),
+          escapeCsv(u.pausedRemainingDays !== undefined ? u.pausedRemainingDays : ''),
+          escapeCsv(u.isTrial ? 'YES' : 'NO'),
+          escapeCsv((u as any).trialStartedAt || ''),
+          escapeCsv(u.trialExpiresAt || ''),
+          escapeCsv(u.trialDaysRemaining !== undefined ? u.trialDaysRemaining : ''),
+          escapeCsv(u.trialExpired ? 'YES' : 'NO'),
+          escapeCsv(u.trialExtendedCount || 0),
+          escapeCsv(custom.trialName || ''),
+          escapeCsv(custom.maxSignals !== undefined ? custom.maxSignals : ''),
+          escapeCsv(custom.strategyAccess || 'all'),
+          escapeCsv(custom.allowCalculators !== undefined ? (custom.allowCalculators ? 'YES' : 'NO') : 'YES'),
+          escapeCsv(u.preferredMarket || 'Both'),
+          escapeCsv(u.riskLimit || '1%'),
+          escapeCsv((u as any).signalsViewed || 0),
+          escapeCsv((u as any).watchlistCount || 0),
+          escapeCsv((u as any).taggedTradesCount || 0),
+          escapeCsv((u as any).couponsRedeemedCount || 0),
+          escapeCsv((u as any).openSupportTicketsCount || 0),
+          escapeCsv((u.tags || []).join('; ')),
+          escapeCsv((u.groups || []).join('; ')),
+          escapeCsv(u.status === 'pending_deletion' ? 'YES' : 'NO'),
+          escapeCsv((u as any).purgeAt || '')
+        ].join(',');
+      });
+      csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+      filename = `manna_users_full_directory_${exportScope}_${dateStr}.csv`;
+    }
+
+    downloadCsvBlob(csvContent, filename);
+    showNotification(`Successfully exported ${targetUsers.length} user records to ${filename}`);
+  };
+
+  const handleServerCsvDownload = (mode: 'full' | 'email_campaign') => {
+    const params = new URLSearchParams();
+    params.append('mode', mode);
+    if (exportScope === 'filtered') {
+      if (searchTerm) params.append('search', searchTerm);
+      if (roleFilter) params.append('role', roleFilter);
+      if (statusFilter) params.append('status', statusFilter);
+      if (tierFilter) params.append('tier', tierFilter);
+    }
+    params.append('requesterEmail', adminEmail);
+    params.append('requesterRole', adminRole);
+    const url = `${API_BASE}/api/admin/system/users/export-csv?${params.toString()}`;
+    window.open(url, '_blank');
+    showNotification(`Generating server CSV export for ${exportScope} scope...`);
+  };
+
+  const getCohortEmailList = (): string[] => {
+    let pool = users;
+    if (emailListCohort === 'active') {
+      pool = users.filter(u => u.status === 'active' && !u.isTrial);
+    } else if (emailListCohort === 'trials') {
+      pool = users.filter(u => u.isTrial && !u.trialExpired);
+    } else if (emailListCohort === 'expired') {
+      pool = users.filter(u => u.status === 'expired' || u.trialExpired || ((u as any).daysRemaining !== undefined && (u as any).daysRemaining <= 0));
+    } else if (emailListCohort === 'forex') {
+      pool = users.filter(u => u.preferredMarket === 'Forex' || u.tier === 'forex_only');
+    } else if (emailListCohort === 'futures') {
+      pool = users.filter(u => u.preferredMarket === 'Futures' || u.tier === 'futures_forex');
+    }
+    const emails = Array.from(new Set(pool.map(u => u.email.trim()).filter(Boolean)));
+    return emails;
+  };
+
+  const handleCopyEmailList = () => {
+    const emails = getCohortEmailList();
+    if (emails.length === 0) {
+      showNotification('No emails found for selected cohort.', true);
+      return;
+    }
+    const sep = emailListSeparator === 'newline' ? '\n' : emailListSeparator === 'comma' ? ', ' : '; ';
+    const text = emails.join(sep);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedSuccess(true);
+      setTimeout(() => setCopiedSuccess(false), 2500);
+      showNotification(`Copied ${emails.length} email addresses to clipboard!`);
+    }).catch(err => {
+      showNotification('Failed to copy to clipboard: ' + err.message, true);
+    });
+  };
+
   const handleAssignCustomTrial = async () => {
     setAssigningTrial(true);
     setTrialNotice(null);
@@ -632,7 +877,10 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
           </h2>
           <p>Manage traders, custom subscription dates, pause logic, trials, coupons, cohorts & automated alerts.</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="ums-btn-secondary" onClick={() => { setExportScope('all'); setShowExportModal(true); }}>
+            📥 Export Users & Email Lists
+          </button>
           <button className="ums-btn-secondary" onClick={fetchAllData} disabled={loading}>
             {loading ? 'Refreshing...' : '🔄 Refresh Data'}
           </button>
@@ -724,14 +972,31 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
                 <option value="forex_only">Forex Only</option>
                 <option value="free">Free Tier</option>
               </select>
+              <button
+                type="button"
+                className="ums-btn-secondary"
+                style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                onClick={() => { setExportScope(filteredUsers.length !== users.length ? 'filtered' : 'all'); setShowExportModal(true); }}
+                title="Export user directory as CSV or clean email list"
+              >
+                📥 Export Users ({filteredUsers.length})
+              </button>
             </div>
           </div>
 
           {/* Bulk Action Bar */}
           {selectedUserIds.length > 0 && (
-            <div style={{ background: 'rgba(56,189,248,0.15)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ background: 'rgba(56,189,248,0.15)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
               <span>Selected <strong>{selectedUserIds.length}</strong> user(s)</span>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="ums-btn-secondary"
+                  style={{ borderColor: 'rgba(56,189,248,0.5)', background: 'rgba(56,189,248,0.2)' }}
+                  onClick={() => { setExportScope('selected'); setShowExportModal(true); }}
+                >
+                  📥 Export Selected ({selectedUserIds.length})
+                </button>
                 <button className="ums-btn-secondary" onClick={() => handleBulkAction('extend_trial_7d')}>+7d Trial</button>
                 <button className="ums-btn-secondary" onClick={() => handleBulkAction('extend_sub_30d')}>+30d Sub</button>
                 <button className="ums-btn-secondary" onClick={() => handleBulkAction('pause')}>Pause Selected</button>
@@ -1869,6 +2134,256 @@ export const UserManagementSystem: React.FC<UserManagementProps> = ({
               </div>
               <button type="submit" className="ums-btn-primary">Dispatch Broadcast</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: EXPORT USERS & EMAIL LISTS */}
+      {showExportModal && (
+        <div className="ums-modal-overlay">
+          <div className="ums-modal-card ums-export-modal-card">
+            <div className="ums-modal-header">
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  📥 Export User Directory & Email Lists
+                </h3>
+                <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.825rem' }}>
+                  Export full account details, subscription metrics, trading preferences, and marketing email lists.
+                </p>
+              </div>
+              <button className="ums-modal-close" onClick={() => setShowExportModal(false)}>✕</button>
+            </div>
+
+            {/* Export Scope Selector */}
+            <div className="ums-export-scope-bar">
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>Target Scope:</span>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={`ums-scope-chip ${exportScope === 'all' ? 'active' : ''}`}
+                  onClick={() => setExportScope('all')}
+                >
+                  🌐 Entire User Base ({users.length})
+                </button>
+                <button
+                  type="button"
+                  className={`ums-scope-chip ${exportScope === 'filtered' ? 'active' : ''}`}
+                  onClick={() => setExportScope('filtered')}
+                >
+                  🔍 Current Filtered View ({filteredUsers.length})
+                </button>
+                {selectedUserIds.length > 0 && (
+                  <button
+                    type="button"
+                    className={`ums-scope-chip ${exportScope === 'selected' ? 'active' : ''}`}
+                    onClick={() => setExportScope('selected')}
+                  >
+                    ✓ Selected Accounts ({selectedUserIds.length})
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Export Tabs */}
+            <div className="ums-export-tabs">
+              <button
+                type="button"
+                className={`ums-export-tab-btn ${exportModalTab === 'full_csv' ? 'active' : ''}`}
+                onClick={() => setExportModalTab('full_csv')}
+              >
+                📊 Master Full CSV (41 Data Points)
+              </button>
+              <button
+                type="button"
+                className={`ums-export-tab-btn ${exportModalTab === 'campaign_csv' ? 'active' : ''}`}
+                onClick={() => setExportModalTab('campaign_csv')}
+              >
+                ✉️ CRM & Email Campaign CSV
+              </button>
+              <button
+                type="button"
+                className={`ums-export-tab-btn ${exportModalTab === 'email_list' ? 'active' : ''}`}
+                onClick={() => setExportModalTab('email_list')}
+              >
+                📋 Quick Copy Email List
+              </button>
+            </div>
+
+            <div className="ums-export-body">
+              {/* TAB 1: MASTER FULL CSV */}
+              {exportModalTab === 'full_csv' && (
+                <div className="ums-export-content-pane">
+                  <div className="ums-export-info-box">
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#60a5fa' }}>Complete Institutional CSV Export</h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                      Exports a full spreadsheet containing <strong>41 data points</strong> per account: Account ID, Full Name, Email, Role, Account Status, Password Setup Status, Created At, Last Active, Tier, Market Access, Subscription Status, Dates, Days Remaining, Billing Cycle, Auto Renew, Pause Details, Trial Lifecycle (Started, Expiry, Days Remaining, Extended Count), Custom Strategy Allocations, Max Signals, Calculators, Preferred Market, Risk Limit, Signals Viewed, Watchlist Count, Demo Trades Tagged, Coupons Redeemed, Open Tickets, Tags, Groups, and Holding Zone Status.
+                    </p>
+                  </div>
+
+                  <div className="ums-export-metrics-preview">
+                    <div className="ums-preview-item">
+                      <span className="label">Export Scope</span>
+                      <span className="val">{exportScope.toUpperCase()}</span>
+                    </div>
+                    <div className="ums-preview-item">
+                      <span className="label">Total Records</span>
+                      <span className="val" style={{ color: '#38bdf8' }}>{getTargetUsersForExport().length}</span>
+                    </div>
+                    <div className="ums-preview-item">
+                      <span className="label">Total Columns</span>
+                      <span className="val" style={{ color: '#a855f7' }}>41</span>
+                    </div>
+                    <div className="ums-preview-item">
+                      <span className="label">Character Encoding</span>
+                      <span className="val">UTF-8 BOM (Excel Ready)</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="ums-btn-primary"
+                      style={{ flex: 1, minWidth: '220px', padding: '0.75rem 1.25rem', fontSize: '0.95rem' }}
+                      onClick={() => handleClientCsvDownload('full')}
+                    >
+                      ⚡ Instant Download Full CSV ({getTargetUsersForExport().length})
+                    </button>
+                    <button
+                      type="button"
+                      className="ums-btn-secondary"
+                      style={{ padding: '0.75rem 1.25rem', fontSize: '0.95rem' }}
+                      onClick={() => handleServerCsvDownload('full')}
+                      title="Download via backend server stream"
+                    >
+                      🌐 Server Stream CSV
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: EMAIL CAMPAIGN CSV */}
+              {exportModalTab === 'campaign_csv' && (
+                <div className="ums-export-content-pane">
+                  <div className="ums-export-info-box">
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#34d399' }}>Marketing & CRM Import CSV</h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                      Clean, standardized CSV tailored for uploading straight into <strong>Mailchimp, ConvertKit, Klaviyo, Brevo, SendGrid, Beehiiv, or Google Sheets</strong>. Includes: Email Address, Full Name, Role, Account Status, Tier, Subscription Status, Trial Status, Trial Days Remaining, Tags, Groups, Preferred Market, Created At, and Last Active.
+                    </p>
+                  </div>
+
+                  <div className="ums-export-metrics-preview">
+                    <div className="ums-preview-item">
+                      <span className="label">Export Scope</span>
+                      <span className="val">{exportScope.toUpperCase()}</span>
+                    </div>
+                    <div className="ums-preview-item">
+                      <span className="label">Total Email Rows</span>
+                      <span className="val" style={{ color: '#34d399' }}>{getTargetUsersForExport().length}</span>
+                    </div>
+                    <div className="ums-preview-item">
+                      <span className="label">Columns</span>
+                      <span className="val">13 Essential CRM Fields</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="ums-btn-primary"
+                      style={{ flex: 1, minWidth: '220px', padding: '0.75rem 1.25rem', fontSize: '0.95rem', background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)' }}
+                      onClick={() => handleClientCsvDownload('email_campaign')}
+                    >
+                      ✉️ Download Campaign CSV ({getTargetUsersForExport().length})
+                    </button>
+                    <button
+                      type="button"
+                      className="ums-btn-secondary"
+                      style={{ padding: '0.75rem 1.25rem', fontSize: '0.95rem' }}
+                      onClick={() => handleServerCsvDownload('email_campaign')}
+                    >
+                      🌐 Server Stream CSV
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: QUICK COPY EMAIL LIST */}
+              {exportModalTab === 'email_list' && (
+                <div className="ums-export-content-pane">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Filter Cohort:</span>
+                      <select
+                        className="ums-filter-select"
+                        value={emailListCohort}
+                        onChange={e => setEmailListCohort(e.target.value as any)}
+                        style={{ padding: '0.35rem 0.65rem', fontSize: '0.85rem' }}
+                      >
+                        <option value="all">All Registered Accounts ({users.length})</option>
+                        <option value="active">Active Paid Subscribers ({users.filter(u => u.status === 'active' && !u.isTrial).length})</option>
+                        <option value="trials">Active VIP Trialists ({users.filter(u => u.isTrial && !u.trialExpired).length})</option>
+                        <option value="expired">Expired / Lapsed Traders (Win-back) ({users.filter(u => u.status === 'expired' || u.trialExpired || ((u as any).daysRemaining !== undefined && (u as any).daysRemaining <= 0)).length})</option>
+                        <option value="forex">Forex Traders ({users.filter(u => u.preferredMarket === 'Forex' || u.tier === 'forex_only').length})</option>
+                        <option value="futures">Futures Traders ({users.filter(u => u.preferredMarket === 'Futures' || u.tier === 'futures_forex').length})</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Separator:</span>
+                      <div className="ums-sep-toggle">
+                        <button
+                          type="button"
+                          className={emailListSeparator === 'newline' ? 'active' : ''}
+                          onClick={() => setEmailListSeparator('newline')}
+                        >
+                          New Line
+                        </button>
+                        <button
+                          type="button"
+                          className={emailListSeparator === 'comma' ? 'active' : ''}
+                          onClick={() => setEmailListSeparator('comma')}
+                        >
+                          Comma (, )
+                        </button>
+                        <button
+                          type="button"
+                          className={emailListSeparator === 'semicolon' ? 'active' : ''}
+                          onClick={() => setEmailListSeparator('semicolon')}
+                        >
+                          Semicolon (; )
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email text preview box */}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                      <span>Preview ({getCohortEmailList().length} unique emails)</span>
+                      <span>Ready to copy into Mailchimp, SendGrid, or Email Bcc</span>
+                    </div>
+                    <textarea
+                      readOnly
+                      rows={7}
+                      className="ums-email-preview-box"
+                      value={getCohortEmailList().join(emailListSeparator === 'newline' ? '\n' : emailListSeparator === 'comma' ? ', ' : '; ')}
+                      placeholder="No emails found for this cohort filter..."
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="ums-btn-primary"
+                      style={{ flex: 1, padding: '0.75rem 1.25rem', fontSize: '0.95rem' }}
+                      onClick={handleCopyEmailList}
+                    >
+                      {copiedSuccess ? '✓ Copied to Clipboard!' : `📋 Copy ${getCohortEmailList().length} Emails to Clipboard`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -43,6 +43,15 @@ export interface UserProfile {
   };
 }
 
+export interface UserWithExportMetrics extends UserProfile {
+  tags?: string[];
+  groups?: string[];
+  taggedTradesCount?: number;
+  couponsRedeemedCount?: number;
+  openSupportTicketsCount?: number;
+  isInHoldingZone?: boolean;
+}
+
 // Convert DB row to UserProfile object
 const mapRowToUserProfile = (row: any): UserProfile => {
   return {
@@ -191,6 +200,108 @@ export const getHoldingZoneUsers = async (): Promise<UserProfile[]> => {
     const remainingMs = Math.max(0, purgeTime - now);
     const daysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
     return { ...u, daysRemaining };
+  });
+};
+
+export const getAllUsersWithMetrics = async (includeHoldingZone: boolean = true): Promise<UserWithExportMetrics[]> => {
+  const now = Date.now();
+  const sql = includeHoldingZone 
+    ? 'SELECT * FROM user_profiles ORDER BY created_at DESC' 
+    : 'SELECT * FROM user_profiles WHERE status != ? ORDER BY created_at DESC';
+  const params = includeHoldingZone ? [] : ['pending_deletion'];
+  const rows = await queryDb(sql, params);
+  const baseUsers = rows.map(mapRowToUserProfile);
+
+  // Safely retrieve tags map
+  const tagsByUser = new Map<string, string[]>();
+  try {
+    const tagRows = await queryDb('SELECT m.user_id, t.name FROM user_tags t JOIN user_tag_mappings m ON t.id = m.tag_id');
+    for (const r of tagRows) {
+      const arr = tagsByUser.get(r.user_id) || [];
+      arr.push(r.name);
+      tagsByUser.set(r.user_id, arr);
+    }
+  } catch (_e) {
+    // Table may not exist yet or be empty
+  }
+
+  // Safely retrieve groups map
+  const groupsByUser = new Map<string, string[]>();
+  try {
+    const groupRows = await queryDb('SELECT m.user_id, g.name FROM user_groups g JOIN user_group_mappings m ON g.id = m.group_id');
+    for (const r of groupRows) {
+      const arr = groupsByUser.get(r.user_id) || [];
+      arr.push(r.name);
+      groupsByUser.set(r.user_id, arr);
+    }
+  } catch (_e) {
+    // Table may not exist yet or be empty
+  }
+
+  // Safely retrieve tagged trades count
+  const demoTradesByUser = new Map<string, number>();
+  try {
+    const tradeRows = await queryDb('SELECT user_id, COUNT(*) as count FROM client_signal_tags GROUP BY user_id');
+    for (const r of tradeRows) {
+      demoTradesByUser.set(r.user_id, Number(r.count) || 0);
+    }
+  } catch (_e) {
+    // Ignore
+  }
+
+  // Safely retrieve coupon redemptions count
+  const couponsByUser = new Map<string, number>();
+  try {
+    const couponRows = await queryDb('SELECT user_id, COUNT(*) as count FROM coupon_redemptions GROUP BY user_id');
+    for (const r of couponRows) {
+      couponsByUser.set(r.user_id, Number(r.count) || 0);
+    }
+  } catch (_e) {
+    // Ignore
+  }
+
+  // Safely retrieve open support tickets count
+  const ticketsByUser = new Map<string, number>();
+  try {
+    const ticketRows = await queryDb("SELECT user_id, COUNT(*) as count FROM support_tickets WHERE status != 'resolved' GROUP BY user_id");
+    for (const r of ticketRows) {
+      ticketsByUser.set(r.user_id, Number(r.count) || 0);
+    }
+  } catch (_e) {
+    // Ignore
+  }
+
+  return baseUsers.map(u => {
+    let trialDaysRemaining = u.trialDaysRemaining;
+    let trialExpired = u.trialExpired;
+    if (u.isTrial && u.trialExpiresAt) {
+      const expiresTime = new Date(u.trialExpiresAt).getTime();
+      const remainingMs = Math.max(0, expiresTime - now);
+      trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+      trialExpired = remainingMs <= 0;
+    }
+
+    let daysRemaining = u.daysRemaining;
+    if (u.subscriptionEnd) {
+      const subEndTime = new Date(u.subscriptionEnd).getTime();
+      const remainingMs = Math.max(0, subEndTime - now);
+      daysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+    }
+
+    const isInHoldingZone = u.status === 'pending_deletion';
+
+    return {
+      ...u,
+      trialDaysRemaining,
+      trialExpired,
+      daysRemaining,
+      tags: tagsByUser.get(u.id) || [],
+      groups: groupsByUser.get(u.id) || [],
+      taggedTradesCount: demoTradesByUser.get(u.id) || 0,
+      couponsRedeemedCount: couponsByUser.get(u.id) || 0,
+      openSupportTicketsCount: ticketsByUser.get(u.id) || 0,
+      isInHoldingZone
+    };
   });
 };
 
