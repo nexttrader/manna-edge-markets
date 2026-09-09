@@ -1,6 +1,7 @@
 import { getDb } from '../db/database';
 import * as queries from '../db/queries';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
@@ -183,12 +184,34 @@ export class OutcomeDetector {
                 : -1.0; // sl_hit hard-capped at -1.0R
           
           const risk = Math.abs(entryPrice - origStop);
-          let mae = outcomeType === 'sl_hit' ? risk : risk * 0.3;
-          let mfe = outcomeType === 'tp2_hit' ? (isLong ? (tp2 - entryPrice) : (entryPrice - tp2)) : outcomeType === 'tp1_hit' ? (isLong ? (tp1 - entryPrice) : (entryPrice - tp1)) : (maxHigh - entryPrice);
+          let mae = outcomeType === 'sl_hit' ? 1.0 : 0.3;
+          let mfe = outcomeType === 'tp2_hit' ? (setup.r_multiple_2 || 3.0) : outcomeType === 'tp1_hit' ? (setup.r_multiple_1 || 2.0) : 0.4;
+          let highestRecorded = maxHigh;
+          let lowestRecorded = minLow;
           const entryTime = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : new Date().getTime();
           const exitTime = new Date().getTime();
-          const durationMin = Number(Math.max(0.1, (exitTime - entryTime) / 60000).toFixed(1));
-          const barsHeld = Math.max(1, Math.round(durationMin));
+          let durationMin = Number(Math.max(0.1, (exitTime - entryTime) / 60000).toFixed(1));
+          let barsHeld = Math.max(1, Math.round(durationMin));
+
+          try {
+            const excursion = await calculateTradeExcursion({
+              instrument: setup.instrument,
+              bias: setup.bias,
+              entryPrice,
+              initialStop: origStop,
+              entryTime: setup.entry_triggered_at || setup.created_at || new Date(entryTime).toISOString(),
+              exitTime: new Date(exitTime).toISOString(),
+              exitPrice: executionPrice
+            });
+            mae = excursion.maeR;
+            mfe = excursion.mfeR;
+            highestRecorded = excursion.highestPrice;
+            lowestRecorded = excursion.lowestPrice;
+            barsHeld = excursion.barsHeld || barsHeld;
+          } catch (e: any) {
+            logger.warn({ setupId: setup.id, error: e.message }, 'Failed to fetch historical candles for excursion, fallback used');
+          }
+
           const exitReason = outcomeType === 'tp2_hit' ? 'TP2' : outcomeType === 'tp1_hit' ? 'TP1' : outcomeType === 'sl_hit' ? 'Stop Loss' : outcomeType === 'be_hit' ? 'Break Even' : 'Manual Exit';
 
           const outcome = {
@@ -200,8 +223,8 @@ export class OutcomeDetector {
             realized_pl: realizedPL,
             mae: Number(mae.toFixed(4)),
             mfe: Number(mfe.toFixed(4)),
-            highest_price: maxHigh,
-            lowest_price: minLow,
+            highest_price: highestRecorded,
+            lowest_price: lowestRecorded,
             bars_held: barsHeld,
             duration_min: durationMin,
             exit_reason: exitReason,
@@ -296,12 +319,39 @@ export class OutcomeDetector {
           const execPrice = isLong ? Math.max(currentPrice, tp2Target) : Math.min(currentPrice, tp2Target);
           const newRealizedR = setup.r_multiple_2 || 3.0;
           
+          let runnerMae: number | undefined;
+          let runnerMfe = newRealizedR;
+          let runnerHigh = maxHigh;
+          let runnerLow = minLow;
+          let runnerBars = 1;
+          try {
+            const excursion = await calculateTradeExcursion({
+              instrument: setup.instrument,
+              bias: setup.bias,
+              entryPrice,
+              initialStop: origStop,
+              entryTime: setup.entry_triggered_at || setup.created_at,
+              exitTime: new Date().toISOString(),
+              exitPrice: execPrice
+            });
+            runnerMae = excursion.maeR;
+            runnerMfe = excursion.mfeR;
+            runnerHigh = excursion.highestPrice;
+            runnerLow = excursion.lowestPrice;
+            runnerBars = excursion.barsHeld;
+          } catch { /* ignore fallback */ }
+
           await queries.updateOutcomeBySetupId(setup.id, {
             outcome_type: 'tp2_hit',
             execution_price: execPrice,
             execution_time: new Date().toISOString(),
             realized_pl: newRealizedR,
-            was_runner: 1
+            was_runner: 1,
+            ...(runnerMae !== undefined ? { mae: runnerMae } : {}),
+            mfe: runnerMfe,
+            highest_price: runnerHigh,
+            lowest_price: runnerLow,
+            bars_held: runnerBars
           });
           
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {

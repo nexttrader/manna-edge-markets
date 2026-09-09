@@ -13,6 +13,8 @@ import { generateReportMetrics } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
 import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/health-checker';
 import { outcomeDetector } from '../outcomes/outcome-detector';
+import { calculateTradeExcursion, buildSequenceExcursionCSV, buildCandleReplayCSV, loadDetailedTradeExcursions, DetailedTradeExcursion } from '../analytics/candle-excursion-service';
+import { backfillDatabaseOutcomes } from '../analytics/backfill-csv-mae';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 import { saveSignalsSnapshot } from '../db/signal-snapshot-restore';
@@ -1850,6 +1852,43 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
       return true;
     });
 
+    // Ensure all exported outcomes have accurate historical candle MAE & MFE filled in
+    await Promise.all(outcomes.map(async o => {
+      if (o.mae === null || o.mae === undefined) {
+        try {
+          const setup = o.setup;
+          const instrument = setup?.instrument || o.instrument || 'NQ=F';
+          const bias = setup?.bias || o.bias || 'long';
+          const entryPrice = setup?.entry_price_recorded || setup?.entry_zone_mid || o.execution_price || 0;
+          const initialStop = setup?.initial_stop || setup?.stop || (bias === 'long' ? entryPrice * 0.995 : entryPrice * 1.005);
+          const entryTime = setup?.entry_triggered_at || setup?.created_at || o.created_at;
+          const exitTime = setup?.resolved_at || o.execution_time || o.created_at;
+
+          if (entryPrice && initialStop && entryTime) {
+            const excursion = await calculateTradeExcursion({
+              instrument,
+              bias,
+              entryPrice,
+              initialStop,
+              entryTime,
+              exitTime,
+              exitPrice: o.execution_price
+            });
+            o.mae = excursion.maeR;
+            o.mfe = excursion.mfeR;
+            o.highest_price = excursion.highestPrice;
+            o.lowest_price = excursion.lowestPrice;
+            o.bars_held = excursion.barsHeld;
+
+            // Persist back to database asynchronously so future exports are instant
+            queryDb(`UPDATE outcomes SET mae = ?, mfe = ?, highest_price = ?, lowest_price = ?, bars_held = ? WHERE id = ?`,
+              [excursion.maeR, excursion.mfeR, excursion.highestPrice, excursion.lowestPrice, excursion.barsHeld, o.id]
+            ).catch(() => {});
+          }
+        } catch { /* ignore fallback */ }
+      }
+    }));
+
     const audienceLabel = audience === 'public' ? 'Client_Delivered' : audience === 'super_admin' ? 'SuperAdmin_Master' : 'Unified_All';
     const csvContent = buildAnalyticsCSV(`Live Session (${audienceLabel})`, earliestTime, latestTime, {}, outcomes);
 
@@ -1858,6 +1897,57 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
     res.send(csvContent);
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate CSV export', details: String(error) });
+  }
+});
+
+router.post('/analytics/backfill-excursions', async (req: Request, res: Response) => {
+  try {
+    if (!isSuperAdminRequest(req)) {
+      return res.status(403).json({ error: 'Access denied. Super Admin privileges required.' });
+    }
+    const strategy = req.body?.strategy || req.query?.strategy;
+    const result = await backfillDatabaseOutcomes(strategy === 'all' ? undefined : (strategy || 'manna_snd'));
+    res.json({
+      success: true,
+      message: `Successfully backfilled ${result.updatedCount} trades with accurate historical candle MAE.`,
+      result
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to backfill excursions', details: String(error) });
+  }
+});
+
+router.get('/analytics/export-excursion-sequence', async (req: Request, res: Response) => {
+  try {
+    if (!isSuperAdminRequest(req)) {
+      return res.status(403).json({ error: 'Access denied. Excursion analytics CSV exports are restricted exclusively to Super Admins.' });
+    }
+    const strategy = (req.query.strategy || 'manna_snd').toString();
+    const trades = await loadDetailedTradeExcursions(strategy === 'all' ? undefined : strategy);
+    const csvContent = buildSequenceExcursionCSV(trades);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="manna_${strategy}_excursion_sequence_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate excursion sequence CSV', details: String(error) });
+  }
+});
+
+router.get('/analytics/export-candle-replay', async (req: Request, res: Response) => {
+  try {
+    if (!isSuperAdminRequest(req)) {
+      return res.status(403).json({ error: 'Access denied. Candle replay CSV exports are restricted exclusively to Super Admins.' });
+    }
+    const strategy = (req.query.strategy || 'manna_snd').toString();
+    const trades = await loadDetailedTradeExcursions(strategy === 'all' ? undefined : strategy);
+    const csvContent = buildCandleReplayCSV(trades);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="manna_${strategy}_candle_replay_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate candle replay CSV', details: String(error) });
   }
 });
 
