@@ -13,7 +13,7 @@ import { generateReportMetrics } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
 import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/health-checker';
 import { outcomeDetector } from '../outcomes/outcome-detector';
-import { calculateTradeExcursion, buildSequenceExcursionCSV, buildCandleReplayCSV, loadDetailedTradeExcursions, DetailedTradeExcursion } from '../analytics/candle-excursion-service';
+import { calculateTradeExcursion, buildSequenceExcursionCSV, buildCandleReplayCSV, loadDetailedTradeExcursions, preloadCandlesForSymbols, DetailedTradeExcursion } from '../analytics/candle-excursion-service';
 import { backfillDatabaseOutcomes } from '../analytics/backfill-csv-mae';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
@@ -1852,9 +1852,14 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
       return true;
     });
 
+    // Preload bulk historical candles for all unique symbols to accelerate processing
+    const uniqueSymbols = Array.from(new Set(outcomes.map(o => o.instrument || o.setup?.instrument).filter(Boolean)));
+    await preloadCandlesForSymbols(uniqueSymbols as string[]);
+
     // Ensure all exported outcomes have accurate historical candle MAE & MFE filled in
     await Promise.all(outcomes.map(async o => {
-      if (o.mae === null || o.mae === undefined) {
+      const isMannaSnd = o.strategy_id === 'manna_snd' || (o.setup && o.setup.strategy_id === 'manna_snd');
+      if (o.mae === null || o.mae === undefined || isMannaSnd || req.query.refresh_mae === 'true') {
         try {
           const setup = o.setup;
           const instrument = setup?.instrument || o.instrument || 'NQ=F';

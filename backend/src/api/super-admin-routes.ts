@@ -1161,6 +1161,10 @@ async function calculateStrategyComparisonData(filters?: {
       tp2: setup?.tp2 || 0,
       outcomeType: o.outcome_type || 'N/A',
       realizedR: Number(rVal.toFixed(2)),
+      mae: o.mae !== null && o.mae !== undefined ? Number(o.mae) : null,
+      mfe: o.mfe !== null && o.mfe !== undefined ? Number(o.mfe) : null,
+      highestPrice: o.highest_price || null,
+      lowestPrice: o.lowest_price || null,
       createdAt: o.created_at || setup?.created_at || new Date().toISOString()
     });
   }
@@ -1299,9 +1303,9 @@ router.get('/strategy-analytics/export', async (req: Request, res: Response) => 
     }
 
     if (format === 'csv') {
-      let csv = 'OutcomeID,SetupID,StrategyID,StrategyName,Instrument,Market,Bias,Killzone,ConvictionScore,PoiType,EntryPrice,StopLoss,TP1,TP2,OutcomeType,RealizedR,CreatedAt\n';
+      let csv = 'OutcomeID,SetupID,StrategyID,StrategyName,Instrument,Market,Bias,Killzone,ConvictionScore,PoiType,EntryPrice,StopLoss,TP1,TP2,OutcomeType,RealizedR,MAE_R,MFE_R,CreatedAt\n';
       dataset.tradeLogs.forEach((t: any) => {
-        csv += `"${t.outcomeId}","${t.setupId}","${t.strategyId}","${t.strategyName}","${t.instrument}","${t.market}","${t.bias}","${t.killzone}",${t.convictionScore},"${t.poiType}",${t.entryPrice},${t.stopLoss},${t.tp1},${t.tp2},"${t.outcomeType}",${t.realizedR},"${t.createdAt}"\n`;
+        csv += `"${t.outcomeId}","${t.setupId}","${t.strategyId}","${t.strategyName}","${t.instrument}","${t.market}","${t.bias}","${t.killzone}",${t.convictionScore},"${t.poiType}",${t.entryPrice},${t.stopLoss},${t.tp1},${t.tp2},"${t.outcomeType}",${t.realizedR},${t.mae !== null && t.mae !== undefined ? t.mae : ''},${t.mfe !== null && t.mfe !== undefined ? t.mfe : ''},"${t.createdAt}"\n`;
       });
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="strategy_trade_logs_${Date.now()}.csv"`);
