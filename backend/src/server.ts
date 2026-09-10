@@ -28,6 +28,7 @@ import supportRoutes from './api/support-routes';
 import userManagementRoutes from './api/user-management-routes';
 import { startSubscriptionScheduler } from './scheduler/subscription-cron';
 import { telegramBotService } from './notifications/telegram-bot';
+import { earlyScanService } from './scheduler/early-scan-service';
 
 const logger = createLogger('server');
 const app = express();
@@ -141,6 +142,18 @@ async function startServer() {
                     } else if (!isForexOpen && isFuturesOpen) {
                         scope = 'futures';
                     }
+
+                    // If NY AM early Forex scan has already executed today, restrict 08:00 ET scan to Futures only
+                    const earlyStatus = earlyScanService.getStatus(now);
+                    if (kzInfo.killzone === 'ny_am' && earlyStatus.hasCompletedToday) {
+                        if (scope === 'both') {
+                            scope = 'futures';
+                            logger.info('Early Forex scan already completed at 07:30 ET; 08:00 ET scan restricted to Futures only.');
+                        } else if (scope === 'forex') {
+                            logger.info('Early Forex scan already completed at 07:30 ET; skipping 08:00 ET Forex scan.');
+                            return;
+                        }
+                    }
                     
                     if (!scope) {
                         logger.info('Skipping Killzone boundary scan: Both Forex and Futures markets are closed.');
@@ -162,6 +175,25 @@ async function startServer() {
                     await processKillzoneMidpointScan(kzInfo, 'live');
                 } catch (err) {
                     logger.error({ err }, 'Killzone midpoint handler failed');
+                }
+            },
+            // 3. Early Forex Scan Handler (07:30 ET Mon-Fri on High-Impact News days)
+            async (kzInfo) => {
+                logger.info({ killzone: kzInfo.killzone }, '⚡ Early Forex boundary triggered at 07:30 ET due to high-impact news');
+                try {
+                    const now = new Date();
+                    const isForexOpen = isForexMarketOpen(now);
+                    if (!isForexOpen) {
+                        logger.info('Skipping early Forex scan: Forex market is closed.');
+                        return;
+                    }
+
+                    const runId = `run_early_forex_${Date.now()}`;
+                    const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex');
+                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled');
+                    logger.info({ result }, 'Early Forex scan publish run completed successfully');
+                } catch (err) {
+                    logger.error({ err }, 'Early Forex boundary handler failed');
                 }
             }
         );

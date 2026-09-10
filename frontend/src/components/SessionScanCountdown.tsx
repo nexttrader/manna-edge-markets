@@ -1,25 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import './SessionScanCountdown.css';
 
+import { API_BASE } from '../config';
+
 interface Boundary {
   name: string;
   hour: number;
+  minute: number;
   et: string;
 }
 
-const BOUNDARIES: Boundary[] = [
-  { name: 'London Open', hour: 2, et: '02:00 ET' },
-  { name: 'NY AM Open', hour: 8, et: '08:00 ET' },
-  { name: 'NY PM Open', hour: 14, et: '14:00 ET' },
-  { name: 'Asia Open', hour: 20, et: '20:00 ET' }
+const DEFAULT_BOUNDARIES: Boundary[] = [
+  { name: 'London Open', hour: 2, minute: 0, et: '02:00 ET' },
+  { name: 'NY AM Open', hour: 8, minute: 0, et: '08:00 ET' },
+  { name: 'NY PM Open', hour: 14, minute: 0, et: '14:00 ET' },
+  { name: 'Asia Open', hour: 20, minute: 0, et: '20:00 ET' }
 ];
 
 export const SessionScanCountdown: React.FC = () => {
   const [time, setTime] = useState(new Date());
+  const [hasEarlyScan, setHasEarlyScan] = useState(false);
+  const [earlyCompleted, setEarlyCompleted] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchEarlyScan = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/news/early-scan-status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted) {
+          setHasEarlyScan(Boolean(data.hasEarlyScanToday));
+          setEarlyCompleted(Boolean(data.hasCompletedToday));
+        }
+      } catch {
+        // Silently catch network errors
+      }
+    };
+
+    fetchEarlyScan();
+    const interval = setInterval(fetchEarlyScan, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -36,17 +65,28 @@ export const SessionScanCountdown: React.FC = () => {
   const currentHour = getPart('hour');
   const currentMinute = getPart('minute');
   const currentSecond = getPart('second');
+  const currentSecTotal = currentHour * 3600 + currentMinute * 60 + currentSecond;
 
-  let nextB = BOUNDARIES.find(b => b.hour > currentHour);
+  let activeBoundaries = [...DEFAULT_BOUNDARIES];
+  if (hasEarlyScan) {
+    activeBoundaries = [
+      { name: 'London Open', hour: 2, minute: 0, et: '02:00 ET' },
+      ...(earlyCompleted ? [] : [{ name: 'Forex Early Scan (News)', hour: 7, minute: 30, et: '07:30 ET' }]),
+      { name: 'NY AM Futures Open', hour: 8, minute: 0, et: '08:00 ET' },
+      { name: 'NY PM Open', hour: 14, minute: 0, et: '14:00 ET' },
+      { name: 'Asia Open', hour: 20, minute: 0, et: '20:00 ET' }
+    ];
+  }
+
+  let nextB = activeBoundaries.find(b => (b.hour * 3600 + b.minute * 60) > currentSecTotal);
   let daysAdd = 0;
 
   if (!nextB) {
-    nextB = BOUNDARIES[0];
+    nextB = activeBoundaries[0];
     daysAdd = 1;
   }
 
-  const currentSecTotal = currentHour * 3600 + currentMinute * 60 + currentSecond;
-  const targetSecTotal = nextB.hour * 3600 + (daysAdd * 24 * 3600);
+  const targetSecTotal = nextB.hour * 3600 + nextB.minute * 60 + (daysAdd * 24 * 3600);
   const diffSec = Math.max(0, targetSecTotal - currentSecTotal);
 
   const countdownH = Math.floor(diffSec / 3600);

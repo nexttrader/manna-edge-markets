@@ -6,6 +6,7 @@ import { SetupCard } from '../components/SetupCard';
 import { useSetups } from '../hooks/useSetups';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { NewsWarningBanner } from '../components/NewsWarningBanner';
+import { EarlyScanNewsBanner } from '../components/EarlyScanNewsBanner';
 import { MarketClosedBanner } from '../components/MarketClosedBanner';
 import { TrialWelcomeBanner } from '../components/TrialWelcomeBanner';
 import { FaqModal } from '../components/FaqModal';
@@ -179,6 +180,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
+      <EarlyScanNewsBanner />
       <NewsWarningBanner />
       <DashboardHeader setups={setups} />
       

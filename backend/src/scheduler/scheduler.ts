@@ -3,12 +3,14 @@ import { mapTimestampToKillzone, KillzoneInfo } from './killzone-mapper';
 import { Killzone } from '../discovery/types';
 import { autoGenerateSessionPerformanceReports } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
+import { earlyScanService } from './early-scan-service';
 
 let scheduledTasks: cron.ScheduledTask[] = [];
 
 export function startScheduler(
     onKillzoneBoundary: (kz: KillzoneInfo) => Promise<void>,
-    onKillzoneMidpoint?: (kz: KillzoneInfo) => Promise<void>
+    onKillzoneMidpoint?: (kz: KillzoneInfo) => Promise<void>,
+    onEarlyForexScan?: (kz: KillzoneInfo) => Promise<void>
 ): void {
     // 1. Killzone Start Boundaries (02:00, 08:00, 13:00/14:00, 20:00 ET)
     const boundaries: Array<{ cron: string; expected: Killzone }> = [
@@ -94,8 +96,59 @@ export function startScheduler(
 
         scheduledTasks.push(task);
     });
+
+    // 4. Early Scan Telegram Warning Notice Check (07:00 ET Mon-Fri)
+    const earlyNoticeTask = cron.schedule('0 7 * * 1-5', async () => {
+        try {
+            await earlyScanService.checkAndSendNotice();
+        } catch (error) {
+            console.error('Error in early scan notice check at 07:00 ET:', error);
+        }
+    }, {
+        timezone: 'America/New_York'
+    });
+    scheduledTasks.push(earlyNoticeTask);
+
+    // 5. NY AM High-Impact News: Early Forex Scan (07:30 ET Mon-Fri)
+    const earlyForexScanTask = cron.schedule('30 7 * * 1-5', async () => {
+        const now = new Date();
+        try {
+            // Ensure Telegram notice was sent
+            await earlyScanService.checkAndSendNotice(now);
+
+            if (earlyScanService.isEarlyScanRequired(now)) {
+                console.log(`⚡ NY AM High-Impact News: Executing Early Forex Scan at 07:30 ET (${now.toISOString()})`);
+                const kzInfo: KillzoneInfo = {
+                    killzone: 'ny_am',
+                    name: 'NY_AM',
+                    boundaryET: '07:30',
+                    boundaryUTC: now.toISOString()
+                };
+                if (onEarlyForexScan) {
+                    await onEarlyForexScan(kzInfo);
+                }
+                earlyScanService.markCompleted(now);
+            } else {
+                console.log('No NY AM high-impact news requiring early Forex scan today.');
+            }
+        } catch (error) {
+            console.error('Error executing early Forex scan at 07:30 ET:', error);
+        }
+    }, {
+        timezone: 'America/New_York'
+    });
+    scheduledTasks.push(earlyForexScanTask);
+
+    // Initial startup check for warning notice if within 07:00-07:30 ET window
+    setTimeout(async () => {
+        try {
+            await earlyScanService.checkAndSendNotice();
+        } catch (err) {
+            // Ignore startup check errors
+        }
+    }, 5000);
     
-    console.log(`Scheduler started with ${scheduledTasks.length} America/New_York boundary, midpoint & pre-scan audit jobs registered.`);
+    console.log(`Scheduler started with ${scheduledTasks.length} America/New_York boundary, midpoint, pre-scan & early-scan jobs registered.`);
 }
 
 export function stopScheduler(): void {

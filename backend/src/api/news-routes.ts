@@ -1,7 +1,19 @@
 import express, { Request, Response } from 'express';
 import { newsEngine } from '../news/news-engine';
+import { earlyScanService } from '../scheduler/early-scan-service';
 
 const router = express.Router();
+
+// GET /api/news/early-scan-status — Check if high-impact NY AM news triggers early Forex scan
+router.get('/early-scan-status', (_req: Request, res: Response) => {
+  try {
+    const status = earlyScanService.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve early scan status', details: String(error) });
+  }
+});
+
 
 // GET /api/news/events — Get upcoming high-impact economic news releases
 router.get('/events', (_req: Request, res: Response) => {

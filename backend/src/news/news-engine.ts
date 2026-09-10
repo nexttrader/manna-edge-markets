@@ -184,7 +184,76 @@ export class NewsEngine {
 
     return { isNear: false };
   }
+
+  /**
+   * Checks if high-impact economic news is scheduled during the NY AM session (08:00 - 12:00 ET)
+   * for Forex-relevant currencies (USD, EUR, GBP, CAD, etc.).
+   */
+  public hasNyAmHighImpactNews(targetDate: Date = new Date()): {
+    hasNews: boolean;
+    events: EconomicEvent[];
+    firstEvent: EconomicEvent | null;
+    scheduledTimeET: string;
+    description: string;
+  } {
+    if (!this.isLive || this.events.length === 0) {
+      return { hasNews: false, events: [], firstEvent: null, scheduledTimeET: '', description: '' };
+    }
+
+    const nyFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const targetDayStr = nyFormatter.format(targetDate);
+
+    const relevantCurrencies = ['USD', 'EUR', 'GBP', 'CAD', 'JPY', 'AUD', 'NZD', 'CHF', 'ALL'];
+
+    const nyAmHighImpact = this.events.filter(e => {
+      if (e.impact !== 'high') return false;
+      const curr = (e.currency || e.country || '').toUpperCase();
+      if (!relevantCurrencies.includes(curr)) return false;
+
+      const eventDate = new Date(e.eventTime);
+      const eventDayStr = nyFormatter.format(eventDate);
+      if (eventDayStr !== targetDayStr) return false;
+
+      const hourFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        hour12: false
+      });
+      const hourET = parseInt(hourFormatter.format(eventDate), 10);
+      // NY AM session window (08:00 ET to 12:00 ET, e.g. 08:30 data releases, 10:00 PMI)
+      return hourET >= 8 && hourET < 12;
+    }).sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
+
+    if (nyAmHighImpact.length === 0) {
+      return { hasNews: false, events: [], firstEvent: null, scheduledTimeET: '', description: '' };
+    }
+
+    const first = nyAmHighImpact[0];
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    const scheduledTimeET = timeFormatter.format(new Date(first.eventTime)) + ' ET';
+
+    const eventNames = nyAmHighImpact.map(e => `${e.currency} ${e.title}`).join(', ');
+
+    return {
+      hasNews: true,
+      events: nyAmHighImpact,
+      firstEvent: first,
+      scheduledTimeET,
+      description: eventNames
+    };
+  }
 }
 
 export const newsEngine = new NewsEngine();
+
 
