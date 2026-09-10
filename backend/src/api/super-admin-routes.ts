@@ -391,6 +391,9 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
     if (req.body?.halvedFloorTp1Be !== undefined) {
       await queries.updateStrategyHalvedFloorTp1Be(strategyId, Boolean(req.body.halvedFloorTp1Be));
     }
+    if (req.body?.dailySignalCapEnabled !== undefined) {
+      await queries.updateStrategyDailySignalCap(strategyId, Boolean(req.body.dailySignalCapEnabled), Number(req.body.dailySignalCapMax) || 2);
+    }
 
     const updated = await queries.getStrategySettings('super_admin');
     res.json({ success: true, strategies: updated });
@@ -431,6 +434,31 @@ router.post('/strategies/:id/toggle-halved-floor', async (req: Request, res: Res
     res.json({ success: true, strategies: updated });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to toggle halved floor & TP1 break-even mode', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/toggle-daily-cap', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { enabled, maxSignals } = req.body || {};
+
+    await queries.updateStrategyDailySignalCap(strategyId, Boolean(enabled), Number(maxSignals) || 2);
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to toggle daily signal cap', details: err.message });
+  }
+});
+
+router.get('/daily-signal-cap-status', async (req: Request, res: Response) => {
+  try {
+    const targetDay = req.query.day ? String(req.query.day) : undefined;
+    const report = await queries.getCappedAssetsReport(targetDay);
+    res.json({ success: true, ...report });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch daily signal cap status', details: err.message });
   }
 });
 

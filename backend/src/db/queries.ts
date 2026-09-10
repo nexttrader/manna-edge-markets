@@ -325,7 +325,7 @@ function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean
   }
 }
 
-function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }> {
+function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean; dailySignalCapEnabled?: boolean; dailySignalCapMax?: number }> {
   try {
     if (fs.existsSync(STRATEGY_SNAPSHOT_PATH)) {
       const data = fs.readFileSync(STRATEGY_SNAPSHOT_PATH, 'utf8');
@@ -353,11 +353,19 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       public_max_signals INTEGER DEFAULT 6,
       public_min_conviction DOUBLE PRECISION DEFAULT 70.0,
       halved_floor_tp1_be INTEGER DEFAULT 0,
+      daily_signal_cap_enabled INTEGER DEFAULT 0,
+      daily_signal_cap_max INTEGER DEFAULT 2,
       updated_at TEXT NOT NULL
     )`);
 
     try {
       await queryDb(`ALTER TABLE strategy_settings ADD COLUMN halved_floor_tp1_be INTEGER DEFAULT 0`);
+    } catch {}
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN daily_signal_cap_enabled INTEGER DEFAULT 0`);
+    } catch {}
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN daily_signal_cap_max INTEGER DEFAULT 2`);
     } catch {}
 
     const snapshot = loadStrategySnapshotFromDisk();
@@ -375,18 +383,24 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       const halvedVal = snap.halvedFloorTp1Be !== undefined 
         ? (snap.halvedFloorTp1Be ? 1 : 0) 
         : (d.id === 'manna_snd' ? 1 : 0);
+      const capEnabledVal = snap.dailySignalCapEnabled !== undefined ? (snap.dailySignalCapEnabled ? 1 : 0) : 0;
+      const capMaxVal = snap.dailySignalCapMax !== undefined ? snap.dailySignalCapMax : 2;
 
       await queryDb(
-        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, daily_signal_cap_enabled, daily_signal_cap_max, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-        [d.id, d.name, enabledVal, adminVal, traderVal, halvedVal]
+        [d.id, d.name, enabledVal, adminVal, traderVal, halvedVal, capEnabledVal, capMaxVal]
       );
 
       if (snap.halvedFloorTp1Be !== undefined) {
         await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = ? WHERE id = ?`, [snap.halvedFloorTp1Be ? 1 : 0, d.id]);
       } else if (d.id === 'manna_snd') {
         await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = 1 WHERE id = 'manna_snd' AND (halved_floor_tp1_be IS NULL OR halved_floor_tp1_be = 0)`);
+      }
+
+      if (snap.dailySignalCapEnabled !== undefined) {
+        await queryDb(`UPDATE strategy_settings SET daily_signal_cap_enabled = ?, daily_signal_cap_max = ? WHERE id = ?`, [snap.dailySignalCapEnabled ? 1 : 0, snap.dailySignalCapMax || 2, d.id]);
       }
     }
 
@@ -396,10 +410,10 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
   }
 }
 
-export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean, halvedFloorTp1Be?: boolean }[]> {
+export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean, halvedFloorTp1Be?: boolean, dailySignalCapEnabled?: boolean, dailySignalCapMax?: number }[]> {
     await ensureStrategySettingsSeeded();
     try {
-        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any, halved_floor_tp1_be?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
+        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any, halved_floor_tp1_be?: any, daily_signal_cap_enabled?: any, daily_signal_cap_max?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
         
         const mapped = rows.map(r => ({
             id: r.id,
@@ -407,7 +421,9 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
             enabled: r.enabled === 1 || r.enabled === true || r.enabled === '1' || r.enabled === 't',
             visibleToAdmins: r.visible_to_admins === undefined || r.visible_to_admins === null ? true : (r.visible_to_admins === 1 || r.visible_to_admins === true || r.visible_to_admins === '1' || r.visible_to_admins === 't'),
             visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't'),
-            halvedFloorTp1Be: r.halved_floor_tp1_be === undefined || r.halved_floor_tp1_be === null ? false : (r.halved_floor_tp1_be === 1 || r.halved_floor_tp1_be === true || r.halved_floor_tp1_be === '1' || r.halved_floor_tp1_be === 't')
+            halvedFloorTp1Be: r.halved_floor_tp1_be === undefined || r.halved_floor_tp1_be === null ? false : (r.halved_floor_tp1_be === 1 || r.halved_floor_tp1_be === true || r.halved_floor_tp1_be === '1' || r.halved_floor_tp1_be === 't'),
+            dailySignalCapEnabled: r.daily_signal_cap_enabled === undefined || r.daily_signal_cap_enabled === null ? false : (r.daily_signal_cap_enabled === 1 || r.daily_signal_cap_enabled === true || r.daily_signal_cap_enabled === '1' || r.daily_signal_cap_enabled === 't'),
+            dailySignalCapMax: typeof r.daily_signal_cap_max === 'number' ? r.daily_signal_cap_max : 2
         }));
 
         if (role === 'super_admin') {
@@ -418,17 +434,24 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true },
-            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false }
+            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true, dailySignalCapEnabled: false, dailySignalCapMax: 2 },
+            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false, dailySignalCapEnabled: false, dailySignalCapMax: 2 }
         ];
     }
 }
 
 function syncStrategySnapshot(): void {
   getStrategySettings('super_admin').then(strats => {
-    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }> = {};
+    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean; dailySignalCapEnabled?: boolean; dailySignalCapMax?: number }> = {};
     for (const s of strats) {
-      snap[s.id] = { enabled: s.enabled, visibleToAdmins: s.visibleToAdmins, visibleToTraders: s.visibleToTraders, halvedFloorTp1Be: s.halvedFloorTp1Be };
+      snap[s.id] = { 
+        enabled: s.enabled, 
+        visibleToAdmins: s.visibleToAdmins, 
+        visibleToTraders: s.visibleToTraders, 
+        halvedFloorTp1Be: s.halvedFloorTp1Be,
+        dailySignalCapEnabled: s.dailySignalCapEnabled,
+        dailySignalCapMax: s.dailySignalCapMax
+      };
     }
     saveStrategySnapshotToDisk(snap);
   }).catch(() => {});
@@ -491,6 +514,203 @@ export async function isHalvedFloorTp1BeEnabled(strategyId: string = 'manna_snd'
     } catch {
         return strategyId === 'manna_snd';
     }
+}
+
+export async function updateStrategyDailySignalCap(id: string, enabled: boolean, maxSignals: number = 2): Promise<void> {
+    await ensureStrategySettingsSeeded();
+    const val = enabled ? 1 : 0;
+    const maxVal = Math.max(1, maxSignals || 2);
+    const now = new Date().toISOString();
+    await queryDb(
+      `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, daily_signal_cap_enabled, daily_signal_cap_max, updated_at)
+       VALUES (?, ?, 1, 1, 1, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET daily_signal_cap_enabled = ?, daily_signal_cap_max = ?, name = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, maxVal, now, val, maxVal, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now]
+    );
+    syncStrategySnapshot();
+}
+
+export async function isDailySignalCapEnabled(strategyId: string = 'manna_snd'): Promise<{ enabled: boolean; maxSignals: number }> {
+    try {
+        const rows = await queryDb<{ daily_signal_cap_enabled: any; daily_signal_cap_max: any }>(
+            `SELECT daily_signal_cap_enabled, daily_signal_cap_max FROM strategy_settings WHERE id = ?`,
+            [strategyId]
+        );
+        if (rows && rows.length > 0 && rows[0].daily_signal_cap_enabled !== undefined && rows[0].daily_signal_cap_enabled !== null) {
+            const v = rows[0].daily_signal_cap_enabled;
+            const isEn = v === 1 || v === true || v === '1' || v === 't';
+            const m = typeof rows[0].daily_signal_cap_max === 'number' ? rows[0].daily_signal_cap_max : 2;
+            return { enabled: isEn, maxSignals: m };
+        }
+        const snap = loadStrategySnapshotFromDisk();
+        if (snap[strategyId]?.dailySignalCapEnabled !== undefined) {
+            return {
+                enabled: Boolean(snap[strategyId].dailySignalCapEnabled),
+                maxSignals: snap[strategyId].dailySignalCapMax || 2
+            };
+        }
+        return { enabled: false, maxSignals: 2 };
+    } catch {
+        return { enabled: false, maxSignals: 2 };
+    }
+}
+
+export function getETCalendarDay(date: Date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(date);
+  const getP = (type: string) => parts.find(p => p.type === type)?.value;
+  return `${getP('year')}-${getP('month')}-${getP('day')}`;
+}
+
+export async function getDailySignalCountForInstrument(
+  instrument: string,
+  market: string = 'forex',
+  strategyId: string = 'manna_snd',
+  targetDateET?: string
+): Promise<number> {
+    const dayET = targetDateET || getETCalendarDay();
+    const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    try {
+        const rows = await queryDb<any>(`SELECT id, instrument, created_at, strategy_id FROM ${table} WHERE instrument = ?`, [instrument]);
+        let count = 0;
+        for (const r of rows) {
+            const sid = r.strategy_id || 'sentinel_v2';
+            if (sid !== strategyId) continue;
+            const rDay = getETCalendarDay(new Date(r.created_at));
+            if (rDay === dayET) count++;
+        }
+        return count;
+    } catch {
+        return 0;
+    }
+}
+
+export async function getCappedAssetsReport(targetDateET?: string): Promise<{
+  isCapEnabled: boolean;
+  maxSignals: number;
+  currentDayET: string;
+  previousDayET: string;
+  selectedDayET: string;
+  availableDays: string[];
+  cappedAssetsForDay: any[];
+  allAssetsForDay: any[];
+}> {
+  await ensureStrategySettingsSeeded();
+  const capStatus = await isDailySignalCapEnabled('manna_snd');
+  const nowET = getETCalendarDay();
+
+  const prevDate = new Date();
+  prevDate.setDate(prevDate.getDate() - 1);
+  const prevET = getETCalendarDay(prevDate);
+
+  const selectedDay = targetDateET || nowET;
+
+  // 1. Gather setups from DB
+  let allSetups: any[] = [];
+  try {
+    const setupsForex = await queryDb<any>(`SELECT id, instrument, market, bias, killzone_origin, signal_state, created_at, strategy_id FROM forex_edge_setups ORDER BY created_at DESC`);
+    const setupsFutures = await queryDb<any>(`SELECT id, instrument, market, bias, killzone_origin, signal_state, created_at, strategy_id FROM edge_setups ORDER BY created_at DESC`);
+    allSetups = [...setupsForex, ...setupsFutures];
+  } catch {}
+
+  // Map of date -> Map of instrument -> signals
+  const dayMap = new Map<string, Map<string, any>>();
+
+  function addSignal(day: string, inst: string, signal: any) {
+    if (!dayMap.has(day)) dayMap.set(day, new Map());
+    const instMap = dayMap.get(day)!;
+    if (!instMap.has(inst)) {
+      instMap.set(inst, {
+        instrument: inst,
+        market: signal.market || (inst.includes('/') ? 'forex' : 'futures'),
+        strategyId: signal.strategyId || 'manna_snd',
+        signalsCount: 0,
+        maxSignals: capStatus.maxSignals || 2,
+        isCapped: false,
+        excessSignals: 0,
+        signals: []
+      });
+    }
+    const item = instMap.get(inst)!;
+    item.signals.push(signal);
+    item.signalsCount = item.signals.length;
+    item.isCapped = item.signalsCount >= (capStatus.maxSignals || 2);
+    item.excessSignals = Math.max(0, item.signalsCount - (capStatus.maxSignals || 2));
+  }
+
+  for (const s of allSetups) {
+    if (!s.created_at) continue;
+    const d = new Date(s.created_at);
+    const day = getETCalendarDay(d);
+    const timeET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+    addSignal(day, s.instrument, {
+      setupId: s.id,
+      market: s.market,
+      strategyId: s.strategy_id || 'manna_snd',
+      timeET,
+      bias: s.bias,
+      killzone: s.killzone_origin,
+      state: s.signal_state,
+      outcome: null,
+      realizedR: null
+    });
+  }
+
+  // 2. Also check .scratch/trade_logs.csv or trade_logs.csv for historical sessions
+  const csvPaths = ['.scratch/trade_logs.csv', 'trade_logs.csv', 'data/trade_logs.csv'];
+  for (const csvPath of csvPaths) {
+    if (fs.existsSync(csvPath)) {
+      try {
+        const lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(l => l.trim().length > 0);
+        for (let i = 1; i < lines.length; i++) {
+          const r = lines[i].split(',').map(v => v.replace(/^"|"$/g, '').trim());
+          const inst = r[4];
+          const market = (r[5] || 'Forex').toLowerCase();
+          const strat = r[3] || 'Manna SnD';
+          const exitIso = r[16];
+          if (!inst || !exitIso) continue;
+          const d = new Date(exitIso);
+          const day = getETCalendarDay(d);
+          const timeET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+          
+          addSignal(day, inst, {
+            setupId: r[1] || r[0],
+            market,
+            strategyId: strat.includes('SnD') ? 'manna_snd' : 'sentinel_v2',
+            timeET,
+            bias: r[6],
+            killzone: r[7],
+            state: 'resolved',
+            outcome: r[14],
+            realizedR: parseFloat(r[15]) || 0
+          });
+        }
+        break;
+      } catch {}
+    }
+  }
+
+  const availableDays = Array.from(dayMap.keys()).sort().reverse();
+  const effectiveDay = dayMap.has(selectedDay) ? selectedDay : (availableDays.length > 0 ? availableDays[0] : nowET);
+  const targetDayMap = dayMap.get(effectiveDay) || new Map();
+  const allAssetsForDay = Array.from(targetDayMap.values()).sort((a, b) => b.signalsCount - a.signalsCount);
+  const cappedAssetsForDay = allAssetsForDay.filter(a => a.isCapped);
+
+  return {
+    isCapEnabled: capStatus.enabled,
+    maxSignals: capStatus.maxSignals,
+    currentDayET: nowET,
+    previousDayET: availableDays.find(d => d < nowET) || prevET,
+    selectedDayET: effectiveDay,
+    availableDays,
+    cappedAssetsForDay,
+    allAssetsForDay
+  };
 }
 
 export async function deleteStrategy(id: string): Promise<void> {

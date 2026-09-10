@@ -417,6 +417,47 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const [dailyCapData, setDailyCapData] = useState<any>(null);
+  const [loadingDailyCap, setLoadingDailyCap] = useState(false);
+  const [selectedCapDay, setSelectedCapDay] = useState<string>('');
+
+  const fetchDailyCapStatus = async (day?: string) => {
+    setLoadingDailyCap(true);
+    try {
+      const url = day 
+        ? `${API_BASE}/api/super-admin/daily-signal-cap-status?day=${encodeURIComponent(day)}`
+        : `${API_BASE}/api/super-admin/daily-signal-cap-status`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        setDailyCapData(json);
+        if (!selectedCapDay && json.selectedDayET) {
+          setSelectedCapDay(json.selectedDayET);
+        }
+      }
+    } catch {} finally {
+      setLoadingDailyCap(false);
+    }
+  };
+
+  const handleToggleDailyCap = async (strategyId: string, currentVal: boolean) => {
+    try {
+      const nextVal = !currentVal;
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/toggle-daily-cap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextVal, maxSignals: 2 })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to toggle daily cap');
+      if (resData.strategies) setStrategiesList(resData.strategies);
+      await fetchDailyCapStatus(selectedCapDay);
+      alert(`🛡️ ${strategyId === 'manna_snd' ? 'Manna SnD' : strategyId}: ${nextVal ? 'DAILY SIGNAL CAP ACTIVATED (Max 2 Signals/Day Per Asset)' : 'DAILY SIGNAL CAP DEACTIVATED (Uncapped Mode)'}`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccEmail, setNewAccEmail] = useState('');
@@ -477,6 +518,7 @@ export const SuperAdminPanel: React.FC = () => {
     fetchTuningData();
     fetchClientAccuracy();
     fetchLatestAuditReport();
+    fetchDailyCapStatus();
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
@@ -1921,6 +1963,297 @@ export const SuperAdminPanel: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Manna SnD Daily Signal Cap Controls & Capped Asset Reporting */}
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 6px 0', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.05rem' }}>
+                    <span>🛡️</span> MANNA SND DAILY SIGNAL CAP PER ASSET (MAX 2 SIGNALS / DAY)
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: '#aaa', margin: 0, maxWidth: '780px' }}>
+                    Protective intraday burnout gate. Restricts each currency pair to a <strong>maximum of 2 signals per trading day (New York calendar day: 00:00 to 23:59 ET)</strong>. Eliminates 3rd+ continuation trades during late-session exhaustion and low-liquidity rollover hours.
+                  </p>
+                </div>
+                <div>
+                  {(() => {
+                    const mannaStrat = strategiesList.find((s: any) => (s.id || s.strategyId) === 'manna_snd');
+                    const isCapActive = mannaStrat?.dailySignalCapEnabled !== undefined ? Boolean(mannaStrat.dailySignalCapEnabled) : false;
+                    return (
+                      <button
+                        type="button"
+                        className="font-mono"
+                        style={{
+                          background: isCapActive ? '#00e676' : '#263238',
+                          color: isCapActive ? '#000' : '#eceff1',
+                          border: isCapActive ? '2px solid #00e676' : '2px solid #546e7a',
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '0.88rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '3px',
+                          boxShadow: isCapActive ? '0 0 16px rgba(0, 230, 118, 0.45)' : 'none',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={() => handleToggleDailyCap('manna_snd', isCapActive)}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
+                          {isCapActive ? '⚡ 2-SIGNAL CAP: ON' : '🛡️ 2-SIGNAL CAP: OFF'}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.85, textDecoration: 'underline' }}>
+                          {isCapActive ? 'Click to Turn OFF (Allow 3rd+ Signals)' : 'Click to Turn ON (Enforces 2 Signals Max / Day)'}
+                        </span>
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Side-by-Side Detailed Explanations: New Floor vs Old Floor */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginTop: '14px' }}>
+                {/* Impact under New Floor */}
+                <div style={{ background: 'rgba(0, 230, 118, 0.05)', border: '1px solid rgba(0, 230, 118, 0.25)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>⚡</span>
+                    <strong style={{ color: '#00e676', fontSize: '0.92rem' }}>EFFECT WITH NEW FLOOR (50% FLOOR + TP1 BE)</strong>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.55 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#888' }}>UNCAPPED (ALL 185 TRADES)</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00e5ff' }}>+80.0R</div>
+                        <div style={{ fontSize: '0.75rem', color: '#aaa' }}>37.3% WR | 1.72 PF</div>
+                      </div>
+                      <div style={{ background: 'rgba(0, 230, 118, 0.15)', border: '1px solid #00e676', padding: '8px', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#00e676', fontWeight: 700 }}>CAPPED AT 2 SIGNALS (170 TRADES)</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00e676' }}>+83.0R (+3.0R GAIN)</div>
+                        <div style={{ fontSize: '0.75rem', color: '#cfd8dc' }}>38.8% WR | 1.84 PF</div>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 6px 0', color: '#eee' }}>
+                      Under the new rules, Signal #1 (<strong>+60.0R</strong>, 1.83 PF) and Signal #2 (<strong>+23.0R</strong>, 1.85 PF) are high-probability compounders.
+                    </p>
+                    <p style={{ margin: 0, color: '#bbb' }}>
+                      However, 3rd+ signals on the same asset dropped to <strong>-3.0R</strong> (0.75 PF), with <strong>100% of the losses occurring during low-liquidity rollover hours (17:00–20:00 ET)</strong>. Capping at 2 signals purges this drag and lifts profit to <strong>+83.0R</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Impact under Old Floor */}
+                <div style={{ background: 'rgba(255, 171, 0, 0.05)', border: '1px solid rgba(255, 171, 0, 0.25)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🛡️</span>
+                    <strong style={{ color: '#ffb74d', fontSize: '0.92rem' }}>EFFECT WITH OLD FLOOR (100% FLOOR + 1.0R BE)</strong>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.55 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#888' }}>UNCAPPED (ALL 185 TRADES)</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ff5252' }}>-14.0R</div>
+                        <div style={{ fontSize: '0.75rem', color: '#aaa' }}>16.8% WR | 0.83 PF</div>
+                      </div>
+                      <div style={{ background: 'rgba(255, 171, 0, 0.15)', border: '1px solid #ffb74d', padding: '8px', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#ffb74d', fontWeight: 700 }}>CAPPED AT 2 SIGNALS (170 TRADES)</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ffb74d' }}>-8.0R (+6.0R SAVED)</div>
+                        <div style={{ fontSize: '0.75rem', color: '#cfd8dc' }}>17.1% WR | 0.89 PF</div>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 6px 0', color: '#eee' }}>
+                      Under the old 100% stop floors and early +1.0R BE, 3rd+ continuation signals were a severe loss trap, losing <strong>-6.0R with an abysmal 0.45 Profit Factor</strong> and only 13.3% Win Rate.
+                    </p>
+                    <p style={{ margin: 0, color: '#bbb' }}>
+                      Capping at 2 signals saved <strong>+6.0R</strong> from bleeding into whipsaws, though the old floor still suffered from early scratch-outs on Signal #1.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Day Definition & Session Protection */}
+                <div style={{ background: 'rgba(179, 136, 255, 0.05)', border: '1px solid rgba(179, 136, 255, 0.25)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🕒</span>
+                    <strong style={{ color: '#b388ff', fontSize: '0.92rem' }}>DAY DEFINITION &amp; SESSION DISTRIBUTION</strong>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.55 }}>
+                    <p style={{ margin: '0 0 8px 0', color: '#eee' }}>
+                      <strong>Trading Day Boundary:</strong> Defined as the <strong>New York Calendar Day (00:00 to 23:59 ET)</strong>. The 2-signal counter resets automatically every midnight in New York.
+                    </p>
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '10px', borderRadius: '6px', borderLeft: '3px solid #b388ff' }}>
+                      <div style={{ color: '#b388ff', fontWeight: 700, marginBottom: '4px' }}>Session Impact Under 2-Signal Cap:</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <span>🇬🇧 London Session (02:00–07:00 ET):</span>
+                        <strong style={{ color: '#00e676' }}>0.0% Reduction (100% Preserved)</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <span>🇺🇸 NY AM Session (07:00–12:00 ET):</span>
+                        <strong style={{ color: '#cfd8dc' }}>6.6% Reduction (4 filtered)</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <span>📉 NY PM Session (12:00–17:00 ET):</span>
+                        <strong style={{ color: '#ffb74d' }}>23.5% Reduction (4 filtered)</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                        <span>🚫 Rollover / Post-Close (17:00–20:00 ET):</span>
+                        <strong style={{ color: '#ff5252' }}>100% Filtered (-3.0R eliminated)</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Panel: Assets Meeting 2-Signal Max in Last Day & Today */}
+              <div style={{ marginTop: '16px', background: 'rgba(0, 0, 0, 0.35)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', color: '#fff', fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📋</span> ASSETS MEETING THE 2-SIGNAL MAX (AUDIT &amp; LIVE STATUS)
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#aaa' }}>
+                      Real-time register of all instruments that reached the 2-signal limit for the selected trading day.
+                    </p>
+                  </div>
+
+                  {/* Day Selector Pills */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#888', marginRight: '4px' }}>Select Day (ET):</span>
+                    {dailyCapData?.availableDays && dailyCapData.availableDays.length > 0 ? (
+                      dailyCapData.availableDays.slice(0, 5).map((d: string) => {
+                        const isSelected = (selectedCapDay || dailyCapData.selectedDayET) === d;
+                        const isToday = d === dailyCapData.currentDayET;
+                        const isLastDay = d === dailyCapData.previousDayET;
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCapDay(d);
+                              fetchDailyCapStatus(d);
+                            }}
+                            style={{
+                              background: isSelected ? '#b388ff' : '#1e242b',
+                              color: isSelected ? '#000' : '#ccc',
+                              border: isSelected ? '1px solid #b388ff' : '1px solid #37474f',
+                              padding: '4px 10px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: isSelected ? 800 : 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {d} {isToday ? '(Today)' : isLastDay ? '(Last Day)' : ''}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#666' }}>Loading dates...</span>
+                    )}
+                  </div>
+                </div>
+
+                {loadingDailyCap ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '0.85rem' }}>
+                    🔄 Querying daily signal registers...
+                  </div>
+                ) : dailyCapData?.allAssetsForDay && dailyCapData.allAssetsForDay.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                    {dailyCapData.allAssetsForDay.map((asset: any) => {
+                      const isCapReached = asset.signalsCount >= (dailyCapData.maxSignals || 2);
+                      const isExcess = asset.signalsCount > (dailyCapData.maxSignals || 2);
+                      return (
+                        <div
+                          key={asset.instrument}
+                          style={{
+                            background: isExcess 
+                              ? 'rgba(244, 67, 54, 0.08)' 
+                              : isCapReached 
+                              ? 'rgba(0, 230, 118, 0.08)' 
+                              : 'rgba(255, 255, 255, 0.03)',
+                            border: isExcess 
+                              ? '1px solid rgba(244, 67, 54, 0.4)' 
+                              : isCapReached 
+                              ? '1px solid rgba(0, 230, 118, 0.4)' 
+                              : '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '6px',
+                            padding: '12px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ fontSize: '1rem', color: '#fff' }}>{asset.instrument}</strong>
+                              <span style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: '#bbb' }}>
+                                {asset.market.toUpperCase()}
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                background: isExcess ? '#d32f2f' : isCapReached ? '#2e7d32' : '#37474f',
+                                color: '#fff'
+                              }}
+                            >
+                              {asset.signalsCount} / {dailyCapData.maxSignals || 2} SIGNALS
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.76rem', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#aaa' }}>Enforcement Status:</span>
+                            {dailyCapData.isCapEnabled ? (
+                              isCapReached ? (
+                                <span style={{ color: '#00e676', fontWeight: 700 }}>🚫 CAP ACTIVE (3rd+ Blocked)</span>
+                              ) : (
+                                <span style={{ color: '#00e5ff' }}>✅ Open ({ (dailyCapData.maxSignals || 2) - asset.signalsCount } remaining)</span>
+                              )
+                            ) : (
+                              <span style={{ color: '#ffb74d' }}>⚠️ Uncapped (Toggle is OFF)</span>
+                            )}
+                          </div>
+
+                          {/* Individual Signal Log */}
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {asset.signals.map((sig: any, idx: number) => {
+                              const isLong = (sig.bias || '').toLowerCase() === 'long';
+                              return (
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#ccc' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ color: '#888' }}>#{idx + 1}</span>
+                                    <span style={{ color: '#bbb' }}>{sig.timeET || '—'} ET</span>
+                                    <span style={{ color: isLong ? '#00e676' : '#ff5252', fontWeight: 700 }}>
+                                      {sig.bias ? sig.bias.toUpperCase() : 'TRADE'}
+                                    </span>
+                                    {sig.killzone && (
+                                      <span style={{ color: '#78909c', fontSize: '0.68rem' }}>({sig.killzone})</span>
+                                    )}
+                                  </span>
+                                  <span>
+                                    {sig.outcome ? (
+                                      <span style={{ color: sig.realizedR > 0 ? '#00e676' : sig.realizedR < 0 ? '#ff5252' : '#ffb74d' }}>
+                                        {sig.outcome.toUpperCase()} ({sig.realizedR > 0 ? `+${sig.realizedR}R` : `${sig.realizedR}R`})
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#00e5ff' }}>{sig.state || 'ACTIVE'}</span>
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#888', fontSize: '0.85rem' }}>
+                    No signals recorded yet for {selectedCapDay || dailyCapData?.selectedDayET || 'the selected day'}.
+                  </div>
+                )}
               </div>
             </div>
 

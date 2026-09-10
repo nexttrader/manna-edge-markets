@@ -150,6 +150,43 @@ export async function executePublishRun(
         // 2. Dedupe and Select
         const dedupeResult = dedupeAndSelect(effectiveExisting, instCandidates, currentPrice, atr14);
         
+        // 2b. Daily Signal Cap Gate (Enforced only when toggled on)
+        if ((dedupeResult.action === 'replace' || dedupeResult.action === 'insert') && dedupeResult.selectedCandidate) {
+          const candidateStratId = dedupeResult.selectedCandidate.strategy_id || 'sentinel_v2';
+          const capSetting = await queries.isDailySignalCapEnabled(candidateStratId);
+
+          if (capSetting.enabled) {
+            const currentCountToday = await queries.getDailySignalCountForInstrument(
+              dedupeResult.selectedCandidate.instrument,
+              market.name,
+              candidateStratId
+            );
+            if (currentCountToday >= capSetting.maxSignals) {
+              logger.warn({
+                instrument: dedupeResult.selectedCandidate.instrument,
+                strategyId: candidateStratId,
+                currentCountToday,
+                maxSignals: capSetting.maxSignals
+              }, 'PublishGate: Daily signal cap reached for instrument. Blocking 3rd+ continuation signal.');
+
+              await hawkeyeService.logInvalidation({
+                setupId: `capped_${dedupeResult.selectedCandidate.instrument}_${Date.now()}`,
+                instrument: dedupeResult.selectedCandidate.instrument,
+                setupMarket: market.name,
+                runId: runId,
+                reasonCode: 'daily_signal_cap_exceeded',
+                detail: `Asset has already generated ${currentCountToday} signals on this trading day (cap is ${capSetting.maxSignals}). Suppressed to prevent intraday burnout.`,
+                previousState: 'candidate',
+                newState: 'rejected',
+                createdBy: 'publish_gate'
+              });
+
+              stats.discarded++;
+              continue;
+            }
+          }
+        }
+
         for (const inv of dedupeResult.invalidations) {
           if (inv.reason === 'discarded_duplicate') {
              stats.discarded++;

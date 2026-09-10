@@ -91,6 +91,8 @@ export interface EdgeSetup {
   entry_price_executed?: number;
   is_breakeven?: boolean | number;
   halved_floor_tp1_be?: boolean | number;
+  daily_signal_cap_enabled?: boolean | number;
+  daily_signal_cap_max?: number;
   initial_stop?: number;
   order_type?: string;
   strategy_id?: string;
