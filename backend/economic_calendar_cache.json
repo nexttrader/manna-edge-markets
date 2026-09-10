@@ -1,0 +1,771 @@
+{
+  "lastFetchedAt": 1789079467455,
+  "activeSource": "ForexFactory NFS Media JSON",
+  "events": [
+    {
+      "id": "ff_0_1788744600000",
+      "title": "ANZ Job Advertisements m/m",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-07T01:30:00.000Z",
+      "previous": "0.8%"
+    },
+    {
+      "id": "ff_1_1788757200000",
+      "title": "Leading Indicators",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T05:00:00.000Z",
+      "forecast": "117.9%",
+      "previous": "116.4%"
+    },
+    {
+      "id": "ff_2_1788760800000",
+      "title": "German Industrial Production m/m",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-07T06:00:00.000Z",
+      "forecast": "0.1%",
+      "previous": "0.2%"
+    },
+    {
+      "id": "ff_3_1788760800000",
+      "title": "Lloyds HPI m/m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-07T06:00:00.000Z",
+      "forecast": "0.2%",
+      "previous": "0.0%"
+    },
+    {
+      "id": "ff_4_1788764400000",
+      "title": "Foreign Currency Reserves",
+      "country": "CHF",
+      "currency": "CHF",
+      "impact": "low",
+      "eventTime": "2026-09-07T07:00:00.000Z",
+      "previous": "768B"
+    },
+    {
+      "id": "ff_5_1788764400000",
+      "title": "Unemployment Rate",
+      "country": "CHF",
+      "currency": "CHF",
+      "impact": "low",
+      "eventTime": "2026-09-07T07:00:00.000Z",
+      "forecast": "3.1%",
+      "previous": "3.1%"
+    },
+    {
+      "id": "ff_6_1788769800000",
+      "title": "Sentix Investor Confidence",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-07T08:30:00.000Z",
+      "forecast": "2.1",
+      "previous": "0.9"
+    },
+    {
+      "id": "ff_7_1788771600000",
+      "title": "Final Employment Change q/q",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-07T09:00:00.000Z",
+      "forecast": "0.1%",
+      "previous": "0.1%"
+    },
+    {
+      "id": "ff_8_1788771600000",
+      "title": "Revised GDP q/q",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-07T09:00:00.000Z",
+      "forecast": "0.4%",
+      "previous": "0.4%"
+    },
+    {
+      "id": "ff_9_1788782400000",
+      "title": "Bank Holiday",
+      "country": "CAD",
+      "currency": "CAD",
+      "impact": "low",
+      "eventTime": "2026-09-07T12:00:00.000Z"
+    },
+    {
+      "id": "ff_10_1788782400000",
+      "title": "Bank Holiday",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-07T12:00:00.000Z"
+    },
+    {
+      "id": "ff_11_1788821100000",
+      "title": "Manufacturing Sales q/q",
+      "country": "NZD",
+      "currency": "NZD",
+      "impact": "low",
+      "eventTime": "2026-09-07T22:45:00.000Z",
+      "previous": "2.8%"
+    },
+    {
+      "id": "ff_12_1788822060000",
+      "title": "BRC Retail Sales Monitor y/y",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:01:00.000Z",
+      "forecast": "1.2%",
+      "previous": "1.0%"
+    },
+    {
+      "id": "ff_13_1788823800000",
+      "title": "Average Cash Earnings y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:30:00.000Z",
+      "forecast": "3.8%",
+      "previous": "3.4%"
+    },
+    {
+      "id": "ff_14_1788825000000",
+      "title": "Bank Lending y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:50:00.000Z",
+      "forecast": "5.5%",
+      "previous": "5.4%"
+    },
+    {
+      "id": "ff_15_1788825000000",
+      "title": "Current Account",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:50:00.000Z",
+      "forecast": "2.48T",
+      "previous": "1.40T"
+    },
+    {
+      "id": "ff_16_1788825000000",
+      "title": "Final GDP Price Index y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:50:00.000Z",
+      "forecast": "2.6%",
+      "previous": "2.6%"
+    },
+    {
+      "id": "ff_17_1788825000000",
+      "title": "Final GDP q/q",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-07T23:50:00.000Z",
+      "forecast": "0.4%",
+      "previous": "0.3%"
+    },
+    {
+      "id": "ff_18_1788827400000",
+      "title": "Westpac Consumer Sentiment",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-08T00:30:00.000Z",
+      "previous": "6.0%"
+    },
+    {
+      "id": "ff_19_1788831000000",
+      "title": "NAB Business Confidence",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-08T01:30:00.000Z",
+      "previous": "-6"
+    },
+    {
+      "id": "ff_20_1788834900000",
+      "title": "Trade Balance",
+      "country": "CNY",
+      "currency": "CNY",
+      "impact": "low",
+      "eventTime": "2026-09-08T02:35:00.000Z",
+      "forecast": "805B",
+      "previous": "767B"
+    },
+    {
+      "id": "ff_21_1788834900000",
+      "title": "USD-Denominated Trade Balance",
+      "country": "CNY",
+      "currency": "CNY",
+      "impact": "low",
+      "eventTime": "2026-09-08T02:35:00.000Z",
+      "forecast": "118.6B",
+      "previous": "112.5B"
+    },
+    {
+      "id": "ff_22_1788837600000",
+      "title": "RBA Assist Gov Hunter Speaks",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-08T03:20:00.000Z"
+    },
+    {
+      "id": "ff_23_1788843600000",
+      "title": "Economy Watchers Sentiment",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-08T05:00:00.000Z",
+      "forecast": "46.3",
+      "previous": "45.7"
+    },
+    {
+      "id": "ff_24_1788847200000",
+      "title": "German Trade Balance",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-08T06:00:00.000Z",
+      "forecast": "16.0B",
+      "previous": "15.4B"
+    },
+    {
+      "id": "ff_25_1788849900000",
+      "title": "French Trade Balance",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-08T06:45:00.000Z",
+      "forecast": "-6.0B",
+      "previous": "-5.8B"
+    },
+    {
+      "id": "ff_26_1788859800000",
+      "title": "RBA Deputy Gov Hauser Speaks",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-08T09:30:00.000Z"
+    },
+    {
+      "id": "ff_27_1788861600000",
+      "title": "NFIB Small Business Index",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-08T10:00:00.000Z",
+      "forecast": "99.4",
+      "previous": "99.8"
+    },
+    {
+      "id": "ff_28_1788873300000",
+      "title": "Monetary Policy Report Hearings",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "medium",
+      "eventTime": "2026-09-08T13:15:00.000Z"
+    },
+    {
+      "id": "ff_29_1788894000000",
+      "title": "Consumer Credit m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-08T19:00:00.000Z",
+      "forecast": "11.9B",
+      "previous": "14.2B"
+    },
+    {
+      "id": "ff_30_1788911400000",
+      "title": "M2 Money Stock y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-08T23:50:00.000Z",
+      "forecast": "2.2%",
+      "previous": "2.2%"
+    },
+    {
+      "id": "ff_31_1788917400000",
+      "title": "CPI y/y",
+      "country": "CNY",
+      "currency": "CNY",
+      "impact": "low",
+      "eventTime": "2026-09-09T01:30:00.000Z",
+      "forecast": "0.8%",
+      "previous": "0.5%"
+    },
+    {
+      "id": "ff_32_1788917400000",
+      "title": "PPI y/y",
+      "country": "CNY",
+      "currency": "CNY",
+      "impact": "low",
+      "eventTime": "2026-09-09T01:30:00.000Z",
+      "forecast": "3.6%",
+      "previous": "3.5%"
+    },
+    {
+      "id": "ff_33_1788933600000",
+      "title": "Prelim Machine Tool Orders y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-09T06:00:00.000Z",
+      "previous": "50.4%"
+    },
+    {
+      "id": "ff_34_1788936300000",
+      "title": "French Industrial Production m/m",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-09T06:45:00.000Z",
+      "forecast": "0.2%",
+      "previous": "0.1%"
+    },
+    {
+      "id": "ff_35_1788946380000",
+      "title": "German 10-y Bond Auction",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-09T09:33:00.000Z",
+      "previous": "3.26|1.1"
+    },
+    {
+      "id": "ff_36_1788956040000",
+      "title": "ADP Weekly Employment Change",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-09T12:14:00.000Z",
+      "previous": "11.8K"
+    },
+    {
+      "id": "ff_37_1788956100000",
+      "title": "ADP Weekly Employment Change",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-09T12:15:00.000Z",
+      "previous": "10.0K"
+    },
+    {
+      "id": "ff_38_1788973200000",
+      "title": "German Buba President Nagel Speaks",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-09T17:00:00.000Z"
+    },
+    {
+      "id": "ff_39_1788973200000",
+      "title": "ECB President Lagarde Speaks",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-09T17:00:00.000Z"
+    },
+    {
+      "id": "ff_40_1788973260000",
+      "title": "10-y Bond Auction",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-09T17:01:00.000Z",
+      "previous": "4.68|2.5"
+    },
+    {
+      "id": "ff_41_1788985800000",
+      "title": "API Weekly Statistical Bulletin",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-09T20:30:00.000Z"
+    },
+    {
+      "id": "ff_42_1788994860000",
+      "title": "RICS House Price Balance",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-09T23:01:00.000Z",
+      "forecast": "-30%",
+      "previous": "-30%"
+    },
+    {
+      "id": "ff_43_1789002000000",
+      "title": "MI Inflation Expectations",
+      "country": "AUD",
+      "currency": "AUD",
+      "impact": "low",
+      "eventTime": "2026-09-10T01:00:00.000Z",
+      "previous": "4.9%"
+    },
+    {
+      "id": "ff_44_1789002900000",
+      "title": "President Trump Speaks",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "medium",
+      "eventTime": "2026-09-10T01:15:00.000Z"
+    },
+    {
+      "id": "ff_45_1789020000000",
+      "title": "German Final CPI m/m",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-10T06:00:00.000Z",
+      "forecast": "0.2%",
+      "previous": "0.2%"
+    },
+    {
+      "id": "ff_46_1789027200000",
+      "title": "Italian Industrial Production m/m",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-10T08:00:00.000Z",
+      "forecast": "0.3%",
+      "previous": "-1.0%"
+    },
+    {
+      "id": "ff_47_1789042500000",
+      "title": "Main Refinancing Rate",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "high",
+      "eventTime": "2026-09-10T12:15:00.000Z",
+      "forecast": "2.65%",
+      "previous": "2.40%"
+    },
+    {
+      "id": "ff_48_1789042500000",
+      "title": "Monetary Policy Statement",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "high",
+      "eventTime": "2026-09-10T12:15:00.000Z"
+    },
+    {
+      "id": "ff_49_1789043400000",
+      "title": "Core PPI m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-10T12:30:00.000Z",
+      "forecast": "0.3%",
+      "previous": "0.2%"
+    },
+    {
+      "id": "ff_50_1789043400000",
+      "title": "PPI m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-10T12:30:00.000Z",
+      "forecast": "0.4%",
+      "previous": "0.0%"
+    },
+    {
+      "id": "ff_51_1789043400000",
+      "title": "Unemployment Claims",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "medium",
+      "eventTime": "2026-09-10T12:30:00.000Z",
+      "forecast": "205K",
+      "previous": "206K"
+    },
+    {
+      "id": "ff_52_1789044300000",
+      "title": "ECB Press Conference",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "high",
+      "eventTime": "2026-09-10T12:45:00.000Z"
+    },
+    {
+      "id": "ff_53_1789048800000",
+      "title": "Existing Home Sales",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-10T14:00:00.000Z",
+      "forecast": "3.98M",
+      "previous": "4.06M"
+    },
+    {
+      "id": "ff_54_1789048800000",
+      "title": "Final Wholesale Inventories m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-10T14:00:00.000Z",
+      "forecast": "1.2%",
+      "previous": "1.3%"
+    },
+    {
+      "id": "ff_55_1789050600000",
+      "title": "Natural Gas Storage",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-10T14:30:00.000Z",
+      "forecast": "35B",
+      "previous": "30B"
+    },
+    {
+      "id": "ff_56_1789056000000",
+      "title": "Crude Oil Inventories",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-10T16:00:00.000Z",
+      "forecast": "-1.4M",
+      "previous": "-4.5M"
+    },
+    {
+      "id": "ff_57_1789059660000",
+      "title": "30-y Bond Auction",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-10T17:01:00.000Z",
+      "previous": "5.22|2.4"
+    },
+    {
+      "id": "ff_58_1789079400000",
+      "title": "BusinessNZ Manufacturing Index",
+      "country": "NZD",
+      "currency": "NZD",
+      "impact": "low",
+      "eventTime": "2026-09-10T22:30:00.000Z",
+      "previous": "54.3"
+    },
+    {
+      "id": "ff_59_1789084200000",
+      "title": "BSI Manufacturing Index",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-10T23:50:00.000Z",
+      "forecast": "2.5",
+      "previous": "-1.8"
+    },
+    {
+      "id": "ff_60_1789084200000",
+      "title": "PPI y/y",
+      "country": "JPY",
+      "currency": "JPY",
+      "impact": "low",
+      "eventTime": "2026-09-10T23:50:00.000Z",
+      "forecast": "7.4%",
+      "previous": "7.2%"
+    },
+    {
+      "id": "ff_61_1789106400000",
+      "title": "GDP m/m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "high",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "0.0%",
+      "previous": "0.3%"
+    },
+    {
+      "id": "ff_62_1789106400000",
+      "title": "Construction Output m/m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "0.1%",
+      "previous": "-0.1%"
+    },
+    {
+      "id": "ff_63_1789106400000",
+      "title": "Goods Trade Balance",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "-22.6B",
+      "previous": "-23.0B"
+    },
+    {
+      "id": "ff_64_1789106400000",
+      "title": "Index of Services 3m/3m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "0.5%",
+      "previous": "0.5%"
+    },
+    {
+      "id": "ff_65_1789106400000",
+      "title": "Industrial Production m/m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "-0.2%",
+      "previous": "-0.2%"
+    },
+    {
+      "id": "ff_66_1789106400000",
+      "title": "Manufacturing Production m/m",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T06:00:00.000Z",
+      "forecast": "0.2%",
+      "previous": "-0.5%"
+    },
+    {
+      "id": "ff_67_1789110000000",
+      "title": "SECO Consumer Climate",
+      "country": "CHF",
+      "currency": "CHF",
+      "impact": "low",
+      "eventTime": "2026-09-11T07:00:00.000Z",
+      "forecast": "-33",
+      "previous": "-35"
+    },
+    {
+      "id": "ff_68_1789113600000",
+      "title": "Italian Quarterly Unemployment Rate",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "low",
+      "eventTime": "2026-09-11T08:00:00.000Z",
+      "forecast": "5.4%",
+      "previous": "5.3%"
+    },
+    {
+      "id": "ff_69_1789115400000",
+      "title": "Consumer Inflation Expectations",
+      "country": "GBP",
+      "currency": "GBP",
+      "impact": "low",
+      "eventTime": "2026-09-11T08:30:00.000Z",
+      "previous": "4.0%"
+    },
+    {
+      "id": "ff_70_1789118100000",
+      "title": "SNB Chairman Schlegel Speaks",
+      "country": "CHF",
+      "currency": "CHF",
+      "impact": "medium",
+      "eventTime": "2026-09-11T09:15:00.000Z"
+    },
+    {
+      "id": "ff_71_1789129800000",
+      "title": "Core CPI m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-11T12:30:00.000Z",
+      "forecast": "0.2%",
+      "previous": "0.2%"
+    },
+    {
+      "id": "ff_72_1789129800000",
+      "title": "Core CPI y/y",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-11T12:30:00.000Z",
+      "forecast": "2.4%",
+      "previous": "2.5%"
+    },
+    {
+      "id": "ff_73_1789129800000",
+      "title": "CPI m/m",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-11T12:30:00.000Z",
+      "forecast": "0.4%",
+      "previous": "0.1%"
+    },
+    {
+      "id": "ff_74_1789129800000",
+      "title": "CPI y/y",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "high",
+      "eventTime": "2026-09-11T12:30:00.000Z",
+      "forecast": "3.4%",
+      "previous": "3.4%"
+    },
+    {
+      "id": "ff_75_1789135200000",
+      "title": "ECB President Lagarde Speaks",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "medium",
+      "eventTime": "2026-09-11T14:00:00.000Z"
+    },
+    {
+      "id": "ff_76_1789135200000",
+      "title": "Prelim UoM Consumer Sentiment",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "medium",
+      "eventTime": "2026-09-11T14:00:00.000Z",
+      "forecast": "51.0",
+      "previous": "51.0"
+    },
+    {
+      "id": "ff_77_1789135200000",
+      "title": "Prelim UoM Inflation Expectations",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "medium",
+      "eventTime": "2026-09-11T14:00:00.000Z",
+      "previous": "4.3%"
+    },
+    {
+      "id": "ff_78_1789149600000",
+      "title": "Federal Budget Balance",
+      "country": "USD",
+      "currency": "USD",
+      "impact": "low",
+      "eventTime": "2026-09-11T18:00:00.000Z",
+      "forecast": "-221.1B",
+      "previous": "-432.3B"
+    },
+    {
+      "id": "ff_79_1789200000000",
+      "title": "ECB President Lagarde Speaks",
+      "country": "EUR",
+      "currency": "EUR",
+      "impact": "medium",
+      "eventTime": "2026-09-12T08:00:00.000Z"
+    },
+    {
+      "id": "ff_80_1789200900000",
+      "title": "BRICS Summit",
+      "country": "ALL",
+      "currency": "ALL",
+      "impact": "low",
+      "eventTime": "2026-09-12T08:15:00.000Z"
+    }
+  ]
+}

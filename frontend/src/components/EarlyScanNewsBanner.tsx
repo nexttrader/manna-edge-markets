@@ -10,6 +10,7 @@ interface EconomicEvent {
   eventTime: string;
   forecast?: string;
   previous?: string;
+  actual?: string;
 }
 
 interface EarlyScanStatus {
@@ -23,6 +24,19 @@ interface EarlyScanStatus {
   firstEvent: EconomicEvent | null;
   scheduledTimeET: string;
   bannerText: string;
+}
+
+function formatET(isoStr: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).format(new Date(isoStr)) + ' ET';
+  } catch {
+    return 'NY AM';
+  }
 }
 
 export const EarlyScanNewsBanner: React.FC = () => {
@@ -56,45 +70,67 @@ export const EarlyScanNewsBanner: React.FC = () => {
     return null;
   }
 
-  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, firstEvent, scheduledTimeET } = status;
+  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, events = [] } = status;
 
   return (
     <div className={`early-scan-news-banner ${hasCompletedToday ? 'completed' : 'pending'}`}>
       <div className="container early-scan-banner-container">
-        <div className="banner-badge-wrapper">
-          <span className="pulse-beacon"></span>
-          <span className="banner-badge">
-            {hasCompletedToday ? '✅ FOREX EARLY SCAN COMPLETE' : '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED'}
-          </span>
-        </div>
-
-        <div className="banner-message-content">
-          <div className="banner-headline">
-            {hasCompletedToday ? (
-              <span>
-                Early Forex scan executed at <strong>{earlyScanTimeET}</strong> ahead of high-impact news. Standard Futures scan remains at <strong>{standardScanTimeET}</strong>.
-              </span>
-            ) : (
-              <span>
-                High-impact economic release scheduled: <strong>{firstEvent?.currency} {firstEvent?.title}</strong> at <strong>{scheduledTimeET}</strong>.
-              </span>
-            )}
+        
+        {/* Top Header & Status Row */}
+        <div className="banner-top-row">
+          <div className="banner-badge-group">
+            <span className="pulse-beacon"></span>
+            <span className="banner-badge">
+              {hasCompletedToday ? '✅ FOREX EARLY SCAN EXECUTED' : '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED'}
+            </span>
           </div>
-          <div className="banner-subtext">
-            {hasCompletedToday ? (
-              <span>Double-scan protection active: Forex market will not be rescanned at {standardScanTimeET}.</span>
-            ) : (
-              <span>
-                Forex scanner will execute <strong>30 minutes earlier at {earlyScanTimeET}</strong> (standard: {standardScanTimeET}). Futures scanner remains scheduled at {standardScanTimeET}.
-              </span>
-            )}
+
+          <div className="banner-timing-pill font-mono">
+            <span className="timing-label">{hasCompletedToday ? 'STATUS' : 'RESCHEDULED FOREX SCAN'}</span>
+            <span className="timing-value">{hasCompletedToday ? `COMPLETED AT ${earlyScanTimeET}` : earlyScanTimeET}</span>
           </div>
         </div>
 
-        <div className="banner-timing-pill font-mono">
-          <span className="timing-label">{hasCompletedToday ? 'STATUS' : 'FOREX SCAN'}</span>
-          <span className="timing-value">{hasCompletedToday ? 'EXECUTED' : earlyScanTimeET}</span>
+        {/* Narrative Description */}
+        <div className="banner-narrative">
+          {hasCompletedToday ? (
+            <span>
+              The Forex scanner executed 30 minutes earlier at <strong>{earlyScanTimeET}</strong> ahead of high-impact economic releases. Standard Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong> (Double-scan protection active: Forex market will not be rescanned).
+            </span>
+          ) : (
+            <span>
+              Real high-impact economic news is scheduled during today's New York AM session. The <strong>Forex Scanner</strong> will execute <strong>30 minutes earlier at {earlyScanTimeET}</strong> (standard: {standardScanTimeET}). The Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong>.
+            </span>
+          )}
         </div>
+
+        {/* Real News Events List */}
+        {events.length > 0 && (
+          <div className="banner-events-section font-mono">
+            <div className="banner-events-label">
+              <span>📰 SCHEDULED HIGH-IMPACT NEWS RELEASES:</span>
+            </div>
+            <div className="banner-events-grid">
+              {events.map((ev, idx) => {
+                const timeET = formatET(ev.eventTime);
+                const curLower = (ev.currency || 'usd').toLowerCase();
+                return (
+                  <div key={ev.id || idx} className="banner-event-item">
+                    <span className="event-time">{timeET}</span>
+                    <span className={`event-curr-badge cur-${curLower}`}>{ev.currency}</span>
+                    <span className="event-title">{ev.title}</span>
+                    {ev.forecast && (
+                      <span className="event-metrics">
+                        Exp: <strong>{ev.forecast}</strong> {ev.previous ? `| Prev: ${ev.previous}` : ''}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -115,6 +115,32 @@ async function runTests() {
   }
   console.log('\n  ✅ Test 4 Passed: Telegram alert formatted cleanly with zero mention of "manna".\n');
 
+  // Test 5: Verify that only real high-impact events trigger rescheduling (holidays & minor speeches rejected)
+  console.log('Test 5: Testing exclusion of Bank Holidays and minor voting member speeches');
+  (newsEngine as any).events = [
+    {
+      id: 'mock-holiday',
+      title: 'US Bank Holiday',
+      currency: 'USD',
+      impact: 'high',
+      eventTime: '2026-09-10T12:30:00.000Z'
+    },
+    {
+      id: 'mock-speech',
+      title: 'FOMC Member Barkin Speaks',
+      currency: 'USD',
+      impact: 'high',
+      eventTime: '2026-09-10T13:00:00.000Z'
+    }
+  ];
+
+  const fakeNewsCheck = newsEngine.hasNyAmHighImpactNews(testDate);
+  console.log('  Bank Holiday & Minor Speech result:', { hasNews: fakeNewsCheck.hasNews, count: fakeNewsCheck.events.length });
+  if (fakeNewsCheck.hasNews) {
+    throw new Error('Test 5 Failed: Bank Holiday or minor speech incorrectly triggered early scan rescheduling!');
+  }
+  console.log('  ✅ Test 5 Passed: Holidays and minor speeches strictly rejected from triggering early scans.\n');
+
   console.log('🎉 ALL TESTS PASSED SUCCESSFULLY!');
   process.exit(0);
 }

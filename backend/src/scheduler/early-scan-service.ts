@@ -83,7 +83,9 @@ class EarlyScanService {
     }
 
     try {
-      const eventTitle = `${newsInfo.firstEvent.currency} ${newsInfo.firstEvent.title}`;
+      const eventTitle = newsInfo.events.length > 1
+        ? newsInfo.events.map(e => `${e.currency} ${e.title}`).join(' | ')
+        : `${newsInfo.firstEvent.currency} ${newsInfo.firstEvent.title}`;
       const sent = await telegramBotService.sendEarlyScanNotice(
         eventTitle,
         newsInfo.scheduledTimeET,
