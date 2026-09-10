@@ -45,7 +45,8 @@ export function getLogicalStopDistance(
   instrument: string,
   atr14: number,
   rawCalculatedRisk: number,
-  market: 'futures' | 'forex'
+  market: 'futures' | 'forex',
+  halvedFloor: boolean = false
 ): number {
   const isJpy = instrument.includes('JPY');
   const safeAtr = (isNaN(atr14) || atr14 <= 0) ? (market === 'futures' ? 2.0 : (isJpy ? 0.20 : 0.0010)) : atr14;
@@ -54,16 +55,18 @@ export function getLogicalStopDistance(
   const atrRiskDistance = Math.max(safeRaw, safeAtr * atrMultiplier);
   
   // Instrument-specific logical minimum floor
-  const floor = MIN_STOP_FLOORS[instrument] !== undefined
+  const baseFloor = MIN_STOP_FLOORS[instrument] !== undefined
     ? MIN_STOP_FLOORS[instrument]
     : (market === 'futures' ? 1.0 : (isJpy ? 0.20 : 0.00050));
+  const floor = halvedFloor ? (baseFloor * 0.5) : baseFloor;
 
   const distance = Math.max(atrRiskDistance, floor);
   const decimals = getInstrumentDecimals(instrument, market);
   const rounded = Number(distance.toFixed(decimals));
 
   // Ensure stop distance is strictly non-zero
-  const minNonZero = market === 'futures' ? 0.25 : (isJpy ? 0.08 : 0.00020);
+  const baseMinNonZero = market === 'futures' ? 0.25 : (isJpy ? 0.08 : 0.00020);
+  const minNonZero = halvedFloor ? (baseMinNonZero * 0.5) : baseMinNonZero;
   return Math.max(rounded, minNonZero);
 }
 

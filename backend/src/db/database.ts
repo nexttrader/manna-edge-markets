@@ -93,6 +93,8 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0`,
                     `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_max_signals INTEGER DEFAULT 6`,
                     `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_min_conviction DOUBLE PRECISION DEFAULT 70.0`,
+                    `ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS halved_floor_tp1_be INTEGER DEFAULT 0`,
+                    `UPDATE strategy_settings SET halved_floor_tp1_be = 1 WHERE id = 'manna_snd'`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS was_runner INTEGER DEFAULT 0`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS runner_realized_r DOUBLE PRECISION DEFAULT 0.0`,
                     `ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
@@ -306,6 +308,7 @@ export async function initializeDatabase(): Promise<void> {
                     ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0;
                     ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_max_signals INTEGER DEFAULT 6;
                     ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS public_min_conviction DOUBLE PRECISION DEFAULT 70.0;
+                    ALTER TABLE strategy_settings ADD COLUMN IF NOT EXISTS halved_floor_tp1_be INTEGER DEFAULT 0;
 
                     CREATE TABLE IF NOT EXISTS admin_strategy_access (
                         user_email TEXT NOT NULL,
@@ -661,6 +664,8 @@ export async function initializeDatabase(): Promise<void> {
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN super_admin_min_conviction REAL DEFAULT 70.0`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_max_signals INTEGER DEFAULT 6`); } catch {}
     try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN public_min_conviction REAL DEFAULT 70.0`); } catch {}
+    try { db.exec(`ALTER TABLE strategy_settings ADD COLUMN halved_floor_tp1_be INTEGER DEFAULT 0`); } catch {}
+    try { db.exec(`UPDATE strategy_settings SET halved_floor_tp1_be = 1 WHERE id = 'manna_snd' AND (halved_floor_tp1_be IS NULL OR halved_floor_tp1_be = 0)`); } catch {}
     try { db.exec(`CREATE TABLE IF NOT EXISTS admin_strategy_access (user_email TEXT NOT NULL, strategy_id TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_email, strategy_id))`); } catch {}
     try { db.exec(`CREATE TABLE IF NOT EXISTS system_maintenance (id TEXT PRIMARY KEY DEFAULT 'current', enabled INTEGER DEFAULT 0, message TEXT DEFAULT 'Manna is currently undergoing scheduled system maintenance.', estimated_return_time TEXT DEFAULT 'Asia Session Today', updated_at TEXT, updated_by TEXT)`); } catch {}
     try { db.exec(`INSERT OR IGNORE INTO system_maintenance (id, enabled, message, estimated_return_time, updated_at) VALUES ('current', 0, 'Manna is currently undergoing scheduled system maintenance.', 'Asia Session Today', CURRENT_TIMESTAMP)`); } catch {}

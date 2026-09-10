@@ -131,11 +131,14 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           }
         }
 
+        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'manna_snd');
+        const isEarlyBeEligible = !isTp1BeOnly && (unrealizedR !== undefined && unrealizedR >= 1.0);
+
         const isBreakeven = Boolean(
           setup.is_breakeven === 1 ||
           setup.is_breakeven === true ||
           setup.invalidation_reason === 'tp1_hit' ||
-          (unrealizedR !== undefined && unrealizedR >= 1.0)
+          isEarlyBeEligible
         );
 
         if (isBreakeven && !setup.is_breakeven && setup.signal_state === 'active') {
@@ -157,6 +160,7 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           unrealizedR: unrealizedR,
           distance_to_entry_r: distanceToEntryR,
           is_breakeven: isBreakeven ? 1 : 0,
+          halved_floor_tp1_be: isTp1BeOnly ? 1 : 0,
           asset_display_enabled: isAssetDisplayEnabled
         };
       })

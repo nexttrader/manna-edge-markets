@@ -33,3 +33,6 @@ npm-debug.log*
 
 # Generated audit reports
 backend/reports/
+
+# Temporary analysis scratch directory
+.scratch/

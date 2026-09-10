@@ -400,6 +400,23 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const handleToggleHalvedFloor = async (strategyId: string, currentVal: boolean) => {
+    try {
+      const nextVal = !currentVal;
+      const res = await fetch(`${API_BASE}/api/super-admin/strategies/${strategyId}/toggle-halved-floor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextVal })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to toggle mode');
+      if (resData.strategies) setStrategiesList(resData.strategies);
+      alert(`⚡ ${strategyId === 'manna_snd' ? 'Manna SnD' : strategyId}: ${nextVal ? 'OPTIMIZED MODE ACTIVATED (50% Floor + TP1 Break-Even)' : 'REVERTED TO STANDARD RULES (100% Floor + 1.0R Break-Even)'}`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccEmail, setNewAccEmail] = useState('');
@@ -1691,6 +1708,22 @@ export const SuperAdminPanel: React.FC = () => {
                       <tr key={stratId}>
                         <td>
                           <strong style={{ color: '#fff' }}>{stratName}</strong> ({stratId})
+                          {stratId === 'manna_snd' && (
+                            <div style={{ marginTop: '6px' }}>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: s.halvedFloorTp1Be ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 171, 0, 0.15)',
+                                border: s.halvedFloorTp1Be ? '1px solid #00e676' : '1px solid #ffab00',
+                                color: s.halvedFloorTp1Be ? '#00e676' : '#ffab00',
+                                fontWeight: 700,
+                                display: 'inline-block'
+                              }}>
+                                {s.halvedFloorTp1Be ? '⚡ OPTIMIZED: 50% FLOOR + TP1 BE' : '🛡️ STANDARD: 100% FLOOR + 1.0R BE'}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td>
                           <span style={{ color: isEnabled ? '#00e676' : '#ff1744', fontWeight: 800 }}>
@@ -1724,6 +1757,26 @@ export const SuperAdminPanel: React.FC = () => {
                             >
                               {isEnabled ? '🛑 Turn Engine OFF' : '⚡ Turn Engine ON'}
                             </button>
+
+                            {stratId === 'manna_snd' && (
+                              <button
+                                type="button"
+                                className="font-mono"
+                                style={{
+                                  background: s.halvedFloorTp1Be ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 171, 0, 0.15)',
+                                  border: s.halvedFloorTp1Be ? '1px solid #00e676' : '1px solid #ffab00',
+                                  color: s.halvedFloorTp1Be ? '#00e676' : '#ffab00',
+                                  padding: '4px 10px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: 700
+                                }}
+                                onClick={() => handleToggleHalvedFloor(stratId, Boolean(s.halvedFloorTp1Be))}
+                                title={s.halvedFloorTp1Be ? 'Click to revert to standard 100% stop floors and 1.0R BE' : 'Click to enable 50% stop floors and move to BE only at TP1'}
+                              >
+                                {s.halvedFloorTp1Be ? '⚡ 50% Floor + TP1 BE: ON' : '🛡️ Standard BE: ON'}
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -1772,6 +1825,103 @@ export const SuperAdminPanel: React.FC = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Manna SnD Execution Rules & Floor Optimization (64R Mode) */}
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 6px 0', color: '#00e5ff', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.05rem' }}>
+                    <span>⚡</span> MANNA SND INSTITUTIONAL EXECUTION &amp; FLOOR OPTIMIZATION (64R OPTIMIZED)
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: '#aaa', margin: 0, maxWidth: '750px' }}>
+                    Master execution toggle for Manna SnD Forex trades. Configures Stop Loss floor limits and Break-Even transition timing to eliminate premature scratch-outs and maximize net R-multiples.
+                  </p>
+                </div>
+                <div>
+                  {(() => {
+                    const mannaStrat = strategiesList.find((s: any) => (s.id || s.strategyId) === 'manna_snd');
+                    const isHalvedActive = mannaStrat?.halvedFloorTp1Be !== undefined ? Boolean(mannaStrat.halvedFloorTp1Be) : true;
+                    return (
+                      <button
+                        type="button"
+                        className="font-mono"
+                        style={{
+                          background: isHalvedActive ? '#00e676' : '#263238',
+                          color: isHalvedActive ? '#000' : '#eceff1',
+                          border: isHalvedActive ? '2px solid #00e676' : '2px solid #546e7a',
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: '0.88rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '3px',
+                          boxShadow: isHalvedActive ? '0 0 16px rgba(0, 230, 118, 0.45)' : 'none',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={() => handleToggleHalvedFloor('manna_snd', isHalvedActive)}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
+                          {isHalvedActive ? '⚡ OPTIMIZED MODE: ON' : '🛡️ STANDARD MODE: ON'}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.85, textDecoration: 'underline' }}>
+                          {isHalvedActive ? 'Click to Turn OFF (Reverts to 100% Floor & 1.0R BE)' : 'Click to Turn ON (50% Floor & TP1 BE)'}
+                        </span>
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Side-by-Side Detailed Explanations */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginTop: '14px' }}>
+                {/* Rule 1: Stop Loss Floor */}
+                <div style={{ background: 'rgba(0, 229, 255, 0.05)', border: '1px solid rgba(0, 229, 255, 0.25)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🎯</span>
+                    <strong style={{ color: '#00e5ff', fontSize: '0.92rem' }}>RULE 1: STOP LOSS FLOOR CALCULATION</strong>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.55 }}>
+                    <div style={{ marginBottom: '10px', padding: '10px', borderRadius: '6px', background: 'rgba(0, 230, 118, 0.12)', borderLeft: '4px solid #00e676' }}>
+                      <strong style={{ color: '#00e676' }}>⚡ WHEN TOGGLED ON (OPTIMIZED):</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#eee' }}>
+                        Minimum Stop Loss floors on Forex pairs are <strong>cut in half (50% reduction)</strong>. For example, EUR/USD is 5 pips instead of 10 pips, GBP/USD is 6 pips instead of 12 pips, and USD/JPY is 9 pips instead of 18 pips. Because the floor is halved, TP1 (+2R) and TP2 (+3R) targets are <strong>pulled 50% closer to entry</strong>, allowing trades to hit full targets much faster while respecting high-probability institutional order block wicks.
+                      </p>
+                    </div>
+                    <div style={{ padding: '10px', borderRadius: '6px', background: 'rgba(255, 171, 0, 0.12)', borderLeft: '4px solid #ffab00' }}>
+                      <strong style={{ color: '#ffab00' }}>🛡️ WHEN TOGGLED OFF (CURRENT / REVERTED):</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#eee' }}>
+                        Reverts back to standard <strong>100% institutional floors</strong> (10 pips EUR/USD, 12 pips GBP/USD, 18 pips USD/JPY, etc.).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rule 2: Move to Break-Even */}
+                <div style={{ background: 'rgba(179, 136, 255, 0.05)', border: '1px solid rgba(179, 136, 255, 0.25)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>⚖️</span>
+                    <strong style={{ color: '#b388ff', fontSize: '0.92rem' }}>RULE 2: MOVE TO BREAK-EVEN (BE) TRIGGER</strong>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.55 }}>
+                    <div style={{ marginBottom: '10px', padding: '10px', borderRadius: '6px', background: 'rgba(0, 230, 118, 0.12)', borderLeft: '4px solid #00e676' }}>
+                      <strong style={{ color: '#00e676' }}>⚡ WHEN TOGGLED ON (OPTIMIZED):</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#eee' }}>
+                        Stop Loss moves to Break-Even (entry price, 0R) <strong>ONLY once TP1 (+2R) is reached</strong>. The early +1.0R move-to-BE rule is <strong>bypassed</strong>. This gives trades essential breathing room so they are not scratched out during normal entry retests, converting 20 previous break-even trades into full +2R/+3R winners (unlocking +64R net profit).
+                      </p>
+                    </div>
+                    <div style={{ padding: '10px', borderRadius: '6px', background: 'rgba(255, 171, 0, 0.12)', borderLeft: '4px solid #ffab00' }}>
+                      <strong style={{ color: '#ffab00' }}>🛡️ WHEN TOGGLED OFF (CURRENT / REVERTED):</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#eee' }}>
+                        Reverts back to current rule where the stop loss is automatically moved to Break-Even (0R) as soon as the trade reaches <strong>+1.0R open profit</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Twin-Profile Engine Tuning Controls for Sentinel V2 */}

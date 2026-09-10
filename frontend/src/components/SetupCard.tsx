@@ -190,10 +190,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
   const isBreakeven = Boolean(
     setup.is_breakeven ||
-    (stateStr === 'active' || stateStr === 'resolved') && (
-      (setup.unrealizedR !== undefined && setup.unrealizedR >= 1.0) ||
-      setup.invalidation_reason === 'tp1_hit'
-    )
+    ((stateStr === 'active' || stateStr === 'resolved') && (
+      setup.invalidation_reason === 'tp1_hit' ||
+      (!setup.halved_floor_tp1_be && setup.unrealizedR !== undefined && setup.unrealizedR >= 1.0)
+    ))
   );
 
   const getOrderType = (): string => {

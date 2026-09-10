@@ -122,7 +122,8 @@ export class OutcomeDetector {
         const maxProfit = isLong ? (maxHigh - entryPrice) : (entryPrice - minLow);
         const maxR = initialRisk > 0 ? (maxProfit / initialRisk) : 0;
         
-        const beCriteriaReached = maxR >= 1.0;
+        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'manna_snd');
+        const beCriteriaReached = !isTp1BeOnly && (maxR >= 1.0);
         if (!setup.is_breakeven && beCriteriaReached) {
           setup.is_breakeven = 1;
           setup.initial_stop = origStop;

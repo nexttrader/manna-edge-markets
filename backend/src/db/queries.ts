@@ -317,7 +317,7 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 const STRATEGY_SNAPSHOT_PATH = path.resolve(process.cwd(), 'strategy_settings_snapshot.json');
 
-function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }>): void {
+function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }>): void {
   try {
     fs.writeFileSync(STRATEGY_SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2), 'utf8');
   } catch (err) {
@@ -325,7 +325,7 @@ function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean
   }
 }
 
-function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }> {
+function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }> {
   try {
     if (fs.existsSync(STRATEGY_SNAPSHOT_PATH)) {
       const data = fs.readFileSync(STRATEGY_SNAPSHOT_PATH, 'utf8');
@@ -352,8 +352,13 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       super_admin_min_conviction DOUBLE PRECISION DEFAULT 70.0,
       public_max_signals INTEGER DEFAULT 6,
       public_min_conviction DOUBLE PRECISION DEFAULT 70.0,
+      halved_floor_tp1_be INTEGER DEFAULT 0,
       updated_at TEXT NOT NULL
     )`);
+
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN halved_floor_tp1_be INTEGER DEFAULT 0`);
+    } catch {}
 
     const snapshot = loadStrategySnapshotFromDisk();
 
@@ -367,13 +372,22 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       const enabledVal = snap.enabled !== undefined ? (snap.enabled ? 1 : 0) : 1;
       const adminVal = snap.visibleToAdmins !== undefined ? (snap.visibleToAdmins ? 1 : 0) : 1;
       const traderVal = snap.visibleToTraders !== undefined ? (snap.visibleToTraders ? 1 : 0) : 1;
+      const halvedVal = snap.halvedFloorTp1Be !== undefined 
+        ? (snap.halvedFloorTp1Be ? 1 : 0) 
+        : (d.id === 'manna_snd' ? 1 : 0);
 
       await queryDb(
-        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, updated_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-        [d.id, d.name, enabledVal, adminVal, traderVal]
+        [d.id, d.name, enabledVal, adminVal, traderVal, halvedVal]
       );
+
+      if (snap.halvedFloorTp1Be !== undefined) {
+        await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = ? WHERE id = ?`, [snap.halvedFloorTp1Be ? 1 : 0, d.id]);
+      } else if (d.id === 'manna_snd') {
+        await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = 1 WHERE id = 'manna_snd' AND (halved_floor_tp1_be IS NULL OR halved_floor_tp1_be = 0)`);
+      }
     }
 
     isStrategySettingsSeeded = true;
@@ -382,17 +396,18 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
   }
 }
 
-export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean }[]> {
+export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean, halvedFloorTp1Be?: boolean }[]> {
     await ensureStrategySettingsSeeded();
     try {
-        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
+        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any, halved_floor_tp1_be?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
         
         const mapped = rows.map(r => ({
             id: r.id,
             name: r.id === 'sentinel_v2' ? 'Manna Elite v1.2' : r.name,
             enabled: r.enabled === 1 || r.enabled === true || r.enabled === '1' || r.enabled === 't',
             visibleToAdmins: r.visible_to_admins === undefined || r.visible_to_admins === null ? true : (r.visible_to_admins === 1 || r.visible_to_admins === true || r.visible_to_admins === '1' || r.visible_to_admins === 't'),
-            visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't')
+            visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't'),
+            halvedFloorTp1Be: r.halved_floor_tp1_be === undefined || r.halved_floor_tp1_be === null ? false : (r.halved_floor_tp1_be === 1 || r.halved_floor_tp1_be === true || r.halved_floor_tp1_be === '1' || r.halved_floor_tp1_be === 't')
         }));
 
         if (role === 'super_admin') {
@@ -403,17 +418,17 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true },
-            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true }
+            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true },
+            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false }
         ];
     }
 }
 
 function syncStrategySnapshot(): void {
   getStrategySettings('super_admin').then(strats => {
-    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean }> = {};
+    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }> = {};
     for (const s of strats) {
-      snap[s.id] = { enabled: s.enabled, visibleToAdmins: s.visibleToAdmins, visibleToTraders: s.visibleToTraders };
+      snap[s.id] = { enabled: s.enabled, visibleToAdmins: s.visibleToAdmins, visibleToTraders: s.visibleToTraders, halvedFloorTp1Be: s.halvedFloorTp1Be };
     }
     saveStrategySnapshotToDisk(snap);
   }).catch(() => {});
@@ -443,6 +458,39 @@ export async function updateStrategyVisibility(id: string, visibleToAdmins: bool
       [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, now, val, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now]
     );
     syncStrategySnapshot();
+}
+
+export async function updateStrategyHalvedFloorTp1Be(id: string, enabled: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
+    const val = enabled ? 1 : 0;
+    const now = new Date().toISOString();
+    await queryDb(
+      `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, updated_at)
+       VALUES (?, ?, 1, 1, 1, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET halved_floor_tp1_be = ?, name = ?, updated_at = ?`,
+      [id, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', val, now, val, id === 'sentinel_v2' ? 'Manna Elite v1.2' : 'Manna SnD', now]
+    );
+    syncStrategySnapshot();
+}
+
+export async function isHalvedFloorTp1BeEnabled(strategyId: string = 'manna_snd'): Promise<boolean> {
+    try {
+        const rows = await queryDb<{ halved_floor_tp1_be: any }>(
+            `SELECT halved_floor_tp1_be FROM strategy_settings WHERE id = ?`,
+            [strategyId]
+        );
+        if (rows && rows.length > 0 && rows[0].halved_floor_tp1_be !== undefined && rows[0].halved_floor_tp1_be !== null) {
+            const v = rows[0].halved_floor_tp1_be;
+            return v === 1 || v === true || v === '1' || v === 't';
+        }
+        const snap = loadStrategySnapshotFromDisk();
+        if (snap[strategyId]?.halvedFloorTp1Be !== undefined) {
+            return Boolean(snap[strategyId].halvedFloorTp1Be);
+        }
+        return strategyId === 'manna_snd';
+    } catch {
+        return strategyId === 'manna_snd';
+    }
 }
 
 export async function deleteStrategy(id: string): Promise<void> {

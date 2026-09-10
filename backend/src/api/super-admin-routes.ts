@@ -388,6 +388,9 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
     if (visibleToTraders !== undefined) {
       await queries.updateStrategyTraderVisibility(strategyId, Boolean(visibleToTraders));
     }
+    if (req.body?.halvedFloorTp1Be !== undefined) {
+      await queries.updateStrategyHalvedFloorTp1Be(strategyId, Boolean(req.body.halvedFloorTp1Be));
+    }
 
     const updated = await queries.getStrategySettings('super_admin');
     res.json({ success: true, strategies: updated });
@@ -413,6 +416,21 @@ router.post('/strategies/:id/toggle', async (req: Request, res: Response) => {
     res.json({ success: true, strategies: updated });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to toggle strategy engine', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/toggle-halved-floor', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { enabled } = req.body || {};
+
+    await queries.updateStrategyHalvedFloorTp1Be(strategyId, Boolean(enabled));
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to toggle halved floor & TP1 break-even mode', details: err.message });
   }
 });
 

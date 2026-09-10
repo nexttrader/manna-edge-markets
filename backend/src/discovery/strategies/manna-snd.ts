@@ -16,6 +16,7 @@ import {
 } from '../scoring';
 
 import { getLogicalStopDistance } from '../stop-loss-rules';
+import * as queries from '../../db/queries';
 
 type CandleType = 'base' | 'leg_up' | 'leg_down';
 
@@ -304,6 +305,7 @@ export class MannaSndStrategy implements IStrategyEngine {
     preCalculatedBiases: Record<string, Bias>
   ): Promise<CandidateSetup[]> {
     const candidates: CandidateSetup[] = [];
+    const isHalvedFloor = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
 
     for (const instrument of instruments) {
       try {
@@ -376,7 +378,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
           const rawStop = zone.distal - distalBuffer;
           const rawRisk = Math.abs(entry_zone_mid - rawStop);
-          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
+          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor);
           const stop = entry_zone_mid - risk;
           if (risk <= 0) continue;
 
@@ -512,7 +514,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
           const rawStop = zone.distal + distalBuffer;
           const rawRisk = Math.abs(rawStop - entry_zone_mid);
-          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market);
+          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor);
           const stop = entry_zone_mid + risk;
           if (risk <= 0) continue;
 
