@@ -62,7 +62,11 @@ export async function getLiveCandles(
     count: number
 ): Promise<Candle[]> {
     const isForex = instrument.includes('/');
-    if (isForex) {
+    // Shield Twelve Data credits from high-frequency 15s background polling:
+    // lifecycle-sync and outcome-detector poll 1m candles (count=5) continuously.
+    // Route background 1m checks to Yahoo/RAM cache, preserving Twelve Data for strategy scans and charts.
+    const isBackground1mPoll = timeframe === '1m' && count <= 10;
+    if (isForex && !isBackground1mPoll) {
         try {
             const tdCandles = await getTwelveDataCandles(instrument, timeframe, count);
             if (tdCandles && tdCandles.length > 0) {
