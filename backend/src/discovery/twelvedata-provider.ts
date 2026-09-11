@@ -39,7 +39,7 @@ function getCandleTTL(timeframe: string): number {
     }
 }
 
-const PRICE_CACHE_TTL_MS = 30 * 1000; // 30s cache for fast live price checks
+const PRICE_CACHE_TTL_MS = 180 * 1000; // 3 minutes cache for fast live price checks (prevents rapid credit burn)
 
 // Rate limiting: Twelve Data Free tier allows 8 requests/minute.
 // We space outbound requests by at least 7.5 seconds to guarantee zero 429 errors.
@@ -143,10 +143,10 @@ export async function getTwelveDataPrice(instrument: string): Promise<number> {
         return cached.data;
     }
 
-    // If we have any cached candles from the last 2 minutes, use the last close (saves an API call!)
+    // If we have any cached candles from the last 15 minutes, use the last close (saves API calls!)
     for (const tf of ['1m', '5m', '15m']) {
         const cEntry = candleCache.get(`${instrument}_${tf}`);
-        if (cEntry && Date.now() - cEntry.timestamp < 2 * 60 * 1000 && cEntry.data.length > 0) {
+        if (cEntry && Date.now() - cEntry.timestamp < 15 * 60 * 1000 && cEntry.data.length > 0) {
             const price = cEntry.data[cEntry.data.length - 1].close;
             priceCache.set(instrument, { data: price, timestamp: Date.now() });
             return price;
@@ -193,18 +193,28 @@ export interface TwelveDataUsage {
     plan_category: string;
 }
 
+// In-memory cache for API usage so checking credits doesn't burn credits!
+let cachedUsage: TwelveDataUsage | null = null;
+let lastUsageFetchTime = 0;
+const USAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
 /**
- * Query live API usage metrics directly from Twelve Data
+ * Query live API usage metrics directly from Twelve Data (cached for 5 minutes)
  */
-export async function getTwelveDataUsage(): Promise<TwelveDataUsage | null> {
+export async function getTwelveDataUsage(forceRefresh = false): Promise<TwelveDataUsage | null> {
+    const now = Date.now();
+    if (!forceRefresh && cachedUsage && (now - lastUsageFetchTime < USAGE_CACHE_TTL_MS)) {
+        return cachedUsage;
+    }
+
     try {
         const url = `https://api.twelvedata.com/api_usage?apikey=${TWELVE_DATA_API_KEY}`;
         const res = await fetch(url);
-        if (!res.ok) return null;
+        if (!res.ok) return cachedUsage;
         const data: any = await res.json();
         const dailyLimit = data.plan_daily_limit || 800;
         const dailyUsage = data.daily_usage || 0;
-        return {
+        cachedUsage = {
             timestamp: data.timestamp || new Date().toISOString(),
             current_usage: data.current_usage || 0,
             plan_limit: data.plan_limit || 8,
@@ -213,7 +223,9 @@ export async function getTwelveDataUsage(): Promise<TwelveDataUsage | null> {
             credits_left_today: Math.max(0, dailyLimit - dailyUsage),
             plan_category: data.plan_category || 'basic'
         };
+        lastUsageFetchTime = now;
+        return cachedUsage;
     } catch {
-        return null;
+        return cachedUsage;
     }
 }

@@ -1717,9 +1717,10 @@ router.post('/signal-audit/vps-sync', async (req: Request, res: Response) => {
  * GET /api/super-admin/twelve-data-usage
  * Live API credit usage for Twelve Data (Super Admin only)
  */
-router.get('/twelve-data-usage', async (_req: Request, res: Response) => {
+router.get('/twelve-data-usage', async (req: Request, res: Response) => {
   try {
-    const usage = await getTwelveDataUsage();
+    const force = req.query.force === 'true';
+    const usage = await getTwelveDataUsage(force);
     if (!usage) {
       return res.status(503).json({ error: 'Unable to fetch Twelve Data usage at this time' });
     }

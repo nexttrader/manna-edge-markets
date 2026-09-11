@@ -58,9 +58,9 @@ export const SuperAdminPanel: React.FC = () => {
     timestamp?: string;
   } | null>(null);
 
-  const fetchTwelveDataUsage = async () => {
+  const fetchTwelveDataUsage = async (force = false) => {
     try {
-      const res = await fetch(`${API_BASE}/api/super-admin/twelve-data-usage`);
+      const res = await fetch(`${API_BASE}/api/super-admin/twelve-data-usage${force ? '?force=true' : ''}`);
       if (res.ok) {
         const json = await res.json();
         if (json.usage) setTwelveDataUsage(json.usage);
@@ -543,7 +543,6 @@ export const SuperAdminPanel: React.FC = () => {
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
-      fetchTwelveDataUsage();
     }, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -649,7 +648,7 @@ export const SuperAdminPanel: React.FC = () => {
 
             <button
               type="button"
-              onClick={fetchTwelveDataUsage}
+              onClick={() => fetchTwelveDataUsage(true)}
               style={{
                 background: 'rgba(0, 229, 255, 0.15)',
                 border: '1px solid #00e5ff',
