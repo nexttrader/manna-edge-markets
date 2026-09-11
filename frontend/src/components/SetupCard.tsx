@@ -451,11 +451,11 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             >
               {isForex ? (
                 <>
-                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE (Y)</span>
+                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE (12D)</span>
                   <span className="level-val font-bold text-white">
                     {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
                   </span>
-                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ Y-Feed</span>
+                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ 12Data</span>
                 </>
               ) : setup.is_ibkr_fresh ? (
                 <>
