@@ -21,6 +21,10 @@ export const SessionScanCountdown: React.FC = () => {
   const [time, setTime] = useState(new Date());
   const [hasEarlyScan, setHasEarlyScan] = useState(false);
   const [earlyCompleted, setEarlyCompleted] = useState(false);
+  const [isEarlyScanNeeded, setIsEarlyScanNeeded] = useState(false);
+  const [scanHour, setScanHour] = useState(7);
+  const [scanMinute, setScanMinute] = useState(30);
+  const [scanTimeET, setScanTimeET] = useState('07:30 ET');
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -37,6 +41,12 @@ export const SessionScanCountdown: React.FC = () => {
         if (isMounted) {
           setHasEarlyScan(Boolean(data.hasEarlyScanToday));
           setEarlyCompleted(Boolean(data.hasCompletedToday));
+          setIsEarlyScanNeeded(Boolean(data.isEarlyScanNeeded));
+          if (typeof data.scanHour === 'number') setScanHour(data.scanHour);
+          if (typeof data.scanMinute === 'number') setScanMinute(data.scanMinute);
+          if (data.earlyScanTimeET) {
+            setScanTimeET(data.earlyScanTimeET.replace(' AM', '').replace(' PM', ''));
+          }
         }
       } catch {
         // Silently catch network errors
@@ -68,10 +78,10 @@ export const SessionScanCountdown: React.FC = () => {
   const currentSecTotal = currentHour * 3600 + currentMinute * 60 + currentSecond;
 
   let activeBoundaries = [...DEFAULT_BOUNDARIES];
-  if (hasEarlyScan) {
+  if (hasEarlyScan && isEarlyScanNeeded) {
     activeBoundaries = [
       { name: 'London Open', hour: 2, minute: 0, et: '02:00 ET' },
-      ...(earlyCompleted ? [] : [{ name: 'Forex Early Scan (News)', hour: 7, minute: 30, et: '07:30 ET' }]),
+      ...(earlyCompleted ? [] : [{ name: 'Forex Pre-News Scan', hour: scanHour, minute: scanMinute, et: scanTimeET }]),
       { name: 'NY AM Futures Open', hour: 8, minute: 0, et: '08:00 ET' },
       { name: 'NY PM Open', hour: 14, minute: 0, et: '14:00 ET' },
       { name: 'Asia Open', hour: 20, minute: 0, et: '20:00 ET' }

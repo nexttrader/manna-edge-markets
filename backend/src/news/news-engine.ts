@@ -380,9 +380,27 @@ export class NewsEngine {
     firstEvent: EconomicEvent | null;
     scheduledTimeET: string;
     description: string;
+    targetScanDate: Date | null;
+    targetScanTimeET: string;
+    isEarlyScanNeeded: boolean;
+    isStandardTimeScan: boolean;
+    scanHour: number;
+    scanMinute: number;
   } {
     if (!this.isLive || this.events.length === 0) {
-      return { hasNews: false, events: [], firstEvent: null, scheduledTimeET: '', description: '' };
+      return {
+        hasNews: false,
+        events: [],
+        firstEvent: null,
+        scheduledTimeET: '',
+        description: '',
+        targetScanDate: null,
+        targetScanTimeET: '08:00 AM ET',
+        isEarlyScanNeeded: false,
+        isStandardTimeScan: true,
+        scanHour: 8,
+        scanMinute: 0
+      };
     }
 
     const nyFormatter = new Intl.DateTimeFormat('en-US', {
@@ -406,22 +424,54 @@ export class NewsEngine {
         hour12: false
       });
       const hourET = parseInt(hourFormatter.format(eventDate), 10);
-      // NY AM session window (08:00 ET to 12:00 ET, e.g. 08:15 ECB, 08:30 CPI/NFP, 10:00 ISM)
+      // NY AM session window (08:00 ET to 12:00 ET, e.g. 08:15 ADP, 08:30 CPI/NFP, 10:00 ISM)
       return hourET >= 8 && hourET < 12;
     }).sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
 
     if (nyAmHighImpact.length === 0) {
-      return { hasNews: false, events: [], firstEvent: null, scheduledTimeET: '', description: '' };
+      return {
+        hasNews: false,
+        events: [],
+        firstEvent: null,
+        scheduledTimeET: '',
+        description: '',
+        targetScanDate: null,
+        targetScanTimeET: '08:00 AM ET',
+        isEarlyScanNeeded: false,
+        isStandardTimeScan: true,
+        scanHour: 8,
+        scanMinute: 0
+      };
     }
 
     const first = nyAmHighImpact[0];
+    const firstEventDate = new Date(first.eventTime);
     const timeFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/New_York',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     });
-    const scheduledTimeET = timeFormatter.format(new Date(first.eventTime)) + ' ET';
+    const scheduledTimeET = timeFormatter.format(firstEventDate) + ' ET';
+
+    // Target scan time: exactly 30 minutes prior to first high-impact news event
+    const targetScanMs = firstEventDate.getTime() - 30 * 60 * 1000;
+    const targetScanDate = new Date(targetScanMs);
+    const targetScanTimeET = timeFormatter.format(targetScanDate) + ' ET';
+
+    const hourMinFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = hourMinFormatter.formatToParts(targetScanDate);
+    const scanHour = parseInt(parts.find(p => p.type === 'hour')?.value || '8', 10);
+    const scanMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+    // Early scan is strictly required before 08:00 AM ET session open
+    const isEarlyScanNeeded = (scanHour < 8);
+    const isStandardTimeScan = (scanHour === 8 && scanMinute === 0);
 
     const eventNames = nyAmHighImpact.map(e => {
       const timeStr = timeFormatter.format(new Date(e.eventTime)) + ' ET';
@@ -433,7 +483,13 @@ export class NewsEngine {
       events: nyAmHighImpact,
       firstEvent: first,
       scheduledTimeET,
-      description: eventNames
+      description: eventNames,
+      targetScanDate,
+      targetScanTimeET,
+      isEarlyScanNeeded,
+      isStandardTimeScan,
+      scanHour,
+      scanMinute
     };
   }
 }

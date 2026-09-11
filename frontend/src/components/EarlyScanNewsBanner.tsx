@@ -24,6 +24,7 @@ interface EarlyScanStatus {
   firstEvent: EconomicEvent | null;
   scheduledTimeET: string;
   bannerText: string;
+  isEarlyScanNeeded?: boolean;
 }
 
 function formatET(isoStr: string): string {
@@ -44,7 +45,6 @@ export const EarlyScanNewsBanner: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-
     const fetchStatus = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/news/early-scan-status`);
@@ -54,7 +54,7 @@ export const EarlyScanNewsBanner: React.FC = () => {
           setStatus(data);
         }
       } catch {
-        // Silently catch network errors
+        // Silently catch fetch errors
       }
     };
 
@@ -70,7 +70,8 @@ export const EarlyScanNewsBanner: React.FC = () => {
     return null;
   }
 
-  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, events = [] } = status;
+  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, events = [], isEarlyScanNeeded, scheduledTimeET } = status;
+  const isEarly = isEarlyScanNeeded ?? (earlyScanTimeET !== standardScanTimeET);
 
   return (
     <div className={`early-scan-news-banner ${hasCompletedToday ? 'completed' : 'pending'}`}>
@@ -81,12 +82,16 @@ export const EarlyScanNewsBanner: React.FC = () => {
           <div className="banner-badge-group">
             <span className="pulse-beacon"></span>
             <span className="banner-badge">
-              {hasCompletedToday ? '✅ FOREX EARLY SCAN EXECUTED' : '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED'}
+              {hasCompletedToday
+                ? (isEarly ? '✅ FOREX EARLY SCAN EXECUTED' : '✅ FOREX NEWS SCAN EXECUTED')
+                : (isEarly ? '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED' : '⚡ HIGH-IMPACT NEWS: PRE-NEWS FOREX SCAN')}
             </span>
           </div>
 
           <div className="banner-timing-pill font-mono">
-            <span className="timing-label">{hasCompletedToday ? 'STATUS' : 'RESCHEDULED FOREX SCAN'}</span>
+            <span className="timing-label">
+              {hasCompletedToday ? 'STATUS' : (isEarly ? 'RESCHEDULED FOREX SCAN' : 'PRE-NEWS FOREX SCAN')}
+            </span>
             <span className="timing-value">{hasCompletedToday ? `COMPLETED AT ${earlyScanTimeET}` : earlyScanTimeET}</span>
           </div>
         </div>
@@ -94,13 +99,25 @@ export const EarlyScanNewsBanner: React.FC = () => {
         {/* Narrative Description */}
         <div className="banner-narrative">
           {hasCompletedToday ? (
-            <span>
-              The Forex scanner executed 30 minutes earlier at <strong>{earlyScanTimeET}</strong> ahead of high-impact economic releases. Standard Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong> (Double-scan protection active: Forex market will not be rescanned).
-            </span>
+            isEarly ? (
+              <span>
+                The Forex scanner executed 30 minutes prior to news at <strong>{earlyScanTimeET}</strong> ahead of high-impact economic releases. Standard Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong> (Double-scan protection active: Forex market will not be rescanned).
+              </span>
+            ) : (
+              <span>
+                The Forex scanner executed 30 minutes prior to news at <strong>{earlyScanTimeET}</strong> ahead of high-impact economic releases along with the standard session scan.
+              </span>
+            )
           ) : (
-            <span>
-              Real high-impact economic news is scheduled during today's New York AM session. The <strong>Forex Scanner</strong> will execute <strong>30 minutes earlier at {earlyScanTimeET}</strong> (standard: {standardScanTimeET}). The Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong>.
-            </span>
+            isEarly ? (
+              <span>
+                Real high-impact economic news is scheduled during today's New York AM session. The <strong>Forex Scanner</strong> will execute <strong>30 minutes prior to news at {earlyScanTimeET}</strong> (standard: {standardScanTimeET}). The Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong>.
+              </span>
+            ) : (
+              <span>
+                Real high-impact economic news is scheduled during today's New York AM session ({scheduledTimeET}). The <strong>Forex Scanner</strong> will execute <strong>30 minutes prior to news at {earlyScanTimeET}</strong> (aligned with standard session open). Both Forex and Futures will scan at <strong>{standardScanTimeET}</strong>.
+              </span>
+            )
           )}
         </div>
 

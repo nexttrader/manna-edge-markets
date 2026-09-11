@@ -30,6 +30,9 @@ export function startScheduler(
                 try {
                     await onKillzoneBoundary(kzInfo);
                     await autoGenerateSessionPerformanceReports(b.expected);
+                    if (b.expected === 'ny_am') {
+                        earlyScanService.markCompleted(now);
+                    }
                 } catch (error) {
                     console.error(`Error in onKillzoneBoundary handler for ${b.expected}:`, error);
                 }
@@ -109,30 +112,27 @@ export function startScheduler(
     });
     scheduledTasks.push(earlyNoticeTask);
 
-    // 5. NY AM High-Impact News: Early Forex Scan (07:30 ET Mon-Fri)
-    const earlyForexScanTask = cron.schedule('30 7 * * 1-5', async () => {
+    // 5. NY AM High-Impact News: Dynamic Pre-News Early Forex Scan (30m prior to earliest news)
+    // Checks every minute Mon-Fri between 07:00 and 07:59 ET for an early scan (<08:00 ET) timed 30m prior to news
+    const earlyForexScanTask = cron.schedule('* 7 * * 1-5', async () => {
         const now = new Date();
         try {
-            // Ensure Telegram notice was sent
-            await earlyScanService.checkAndSendNotice(now);
-
-            if (earlyScanService.isEarlyScanRequired(now)) {
-                console.log(`⚡ NY AM High-Impact News: Executing Early Forex Scan at 07:30 ET (${now.toISOString()})`);
+            if (earlyScanService.isEarlyScanDue(now)) {
+                const status = earlyScanService.getStatus(now);
+                console.log(`⚡ NY AM High-Impact News: Executing Early Forex Scan at ${status.earlyScanTimeET} (${now.toISOString()})`);
                 const kzInfo: KillzoneInfo = {
                     killzone: 'ny_am',
                     name: 'NY_AM',
-                    boundaryET: '07:30',
+                    boundaryET: `${String(status.scanHour).padStart(2, '0')}:${String(status.scanMinute).padStart(2, '0')}`,
                     boundaryUTC: now.toISOString()
                 };
                 if (onEarlyForexScan) {
                     await onEarlyForexScan(kzInfo);
                 }
                 earlyScanService.markCompleted(now);
-            } else {
-                console.log('No NY AM high-impact news requiring early Forex scan today.');
             }
         } catch (error) {
-            console.error('Error executing early Forex scan at 07:30 ET:', error);
+            console.error('Error executing dynamic pre-news early Forex scan:', error);
         }
     }, {
         timezone: 'America/New_York'

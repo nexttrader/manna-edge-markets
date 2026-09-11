@@ -148,9 +148,9 @@ async function startServer() {
                     if (kzInfo.killzone === 'ny_am' && earlyStatus.hasCompletedToday) {
                         if (scope === 'both') {
                             scope = 'futures';
-                            logger.info('Early Forex scan already completed at 07:30 ET; 08:00 ET scan restricted to Futures only.');
+                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; 08:00 ET scan restricted to Futures only.');
                         } else if (scope === 'forex') {
-                            logger.info('Early Forex scan already completed at 07:30 ET; skipping 08:00 ET Forex scan.');
+                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; skipping 08:00 ET Forex scan.');
                             return;
                         }
                     }
@@ -177,9 +177,9 @@ async function startServer() {
                     logger.error({ err }, 'Killzone midpoint handler failed');
                 }
             },
-            // 3. Early Forex Scan Handler (07:30 ET Mon-Fri on High-Impact News days)
+            // 3. Early Forex Scan Handler (30m prior on High-Impact News days)
             async (kzInfo) => {
-                logger.info({ killzone: kzInfo.killzone }, '⚡ Early Forex boundary triggered at 07:30 ET due to high-impact news');
+                logger.info({ killzone: kzInfo.killzone, boundaryET: kzInfo.boundaryET }, '⚡ Pre-news Forex boundary triggered due to high-impact news');
                 try {
                     const now = new Date();
                     const isForexOpen = isForexMarketOpen(now);

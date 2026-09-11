@@ -465,12 +465,20 @@ class TelegramBotService {
   }
 
   public async sendEarlyScanNotice(eventTitle: string, eventTimeET: string, scheduledScanTimeET: string): Promise<boolean> {
+    const isStandard = scheduledScanTimeET === '08:00 AM ET';
+    const actionText = isStandard
+      ? `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>08:00 AM ET</b> (aligned with standard session open).`
+      : `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>${scheduledScanTimeET}</b> (standard: 08:00 AM ET).`;
+    const marketText = isStandard
+      ? `Both Forex & Futures will scan at 08:00 AM ET.`
+      : `Forex Only (Futures scan remains scheduled at 08:00 AM ET).`;
+
     const text = `⚠️ <b>HIGH-IMPACT NEWS SCHEDULE WARNING</b>
 ━━━━━━━━━━━━━━━━━━━━━
 📢 <b>Notice:</b> High-impact economic news is scheduled during today's New York AM session.
 📰 <b>Event:</b> ${eventTitle} (${eventTimeET})
-⚡ <b>Action:</b> The <b>Forex Scanner</b> will run <b>30 minutes prior</b> at <b>${scheduledScanTimeET}</b> (standard: 08:00 AM ET).
-📊 <b>Market:</b> Forex Only (Futures scan remains scheduled at 08:00 AM ET).
+⚡ <b>Action:</b> ${actionText}
+📊 <b>Market:</b> ${marketText}
 📅 <b>Timestamp:</b> <code>${fmtTs()}</code>
 ━━━━━━━━━━━━━━━━━━━━━`;
     return this.sendMessage(text);
