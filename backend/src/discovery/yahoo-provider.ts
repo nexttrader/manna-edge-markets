@@ -164,16 +164,6 @@ export async function getLiveCandles(
 
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const isForex = instrument.includes('/');
-    if (isForex) {
-        try {
-            const tdPrice = await getTwelveDataPrice(instrument);
-            if (tdPrice && tdPrice > 0) {
-                return tdPrice;
-            }
-        } catch (tdErr: any) {
-            logger.warn({ instrument, err: tdErr.message }, 'Twelve Data failed for forex price, falling back to Yahoo');
-        }
-    }
 
     // 1. Check if IBKR is configured as the active provider (futures only)
     if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
