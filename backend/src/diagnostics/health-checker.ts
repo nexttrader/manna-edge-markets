@@ -1,5 +1,6 @@
 import { queryDb } from '../db/database';
 import { getLiveCurrentPrice } from '../discovery/yahoo-provider';
+import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { newsEngine } from '../news/news-engine';
 
@@ -69,14 +70,17 @@ export async function runSystemHealthCheck(): Promise<SystemHealthOverview> {
   try {
     const testPrice = await getLiveCurrentPrice('EUR/USD');
     const feedMs = Date.now() - feedStart;
+    const usage = await getTwelveDataUsage();
+    const creditsInfo = usage ? ` | Twelve Data Credits: ${usage.credits_left_today}/${usage.plan_daily_limit} left today (Used: ${usage.daily_usage})` : '';
+
     if (testPrice > 0) {
       feedStatus = 'healthy';
-      feedMsg = `Market price data is flowing smoothly! Live EUR/USD quote received at ${testPrice}.`;
-      feedTech = `Yahoo price stream returned EUR/USD = ${testPrice} in ${feedMs}ms.`;
+      feedMsg = `Market price data is flowing smoothly! Live EUR/USD quote received at ${testPrice}.${creditsInfo}`;
+      feedTech = `Twelve Data (Forex) & IBKR/Yahoo (Futures) active. EUR/USD = ${testPrice} in ${feedMs}ms.${creditsInfo}`;
     } else {
       feedStatus = 'warning';
       feedMsg = `Price quotes are currently offline or market is closed. Using last fallback price.`;
-      feedTech = `Live quote returned ${testPrice}.`;
+      feedTech = `Live quote returned ${testPrice}.${creditsInfo}`;
     }
   } catch (err: any) {
     feedStatus = 'warning';

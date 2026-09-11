@@ -8,6 +8,7 @@ import { isMarketOpen } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { signalAuditService } from '../analytics/signal-audit-service';
+import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
 
 const router = express.Router();
 
@@ -1709,6 +1710,25 @@ router.post('/signal-audit/vps-sync', async (req: Request, res: Response) => {
     res.json({ success: true, message: `VPS telemetry recorded for setup ${setupId}` });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to record VPS telemetry', details: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/super-admin/twelve-data-usage
+ * Live API credit usage for Twelve Data (Super Admin only)
+ */
+router.get('/twelve-data-usage', async (_req: Request, res: Response) => {
+  try {
+    const usage = await getTwelveDataUsage();
+    if (!usage) {
+      return res.status(503).json({ error: 'Unable to fetch Twelve Data usage at this time' });
+    }
+    res.json({
+      success: true,
+      usage
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch Twelve Data usage', details: error?.message || String(error) });
   }
 });
 

@@ -48,6 +48,26 @@ export const SuperAdminPanel: React.FC = () => {
   const [auditTriggering, setAuditTriggering] = useState(false);
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
 
+  // Live Twelve Data Credit Tracking State
+  const [twelveDataUsage, setTwelveDataUsage] = useState<{
+    credits_left_today: number;
+    plan_daily_limit: number;
+    daily_usage: number;
+    current_usage: number;
+    plan_limit: number;
+    timestamp?: string;
+  } | null>(null);
+
+  const fetchTwelveDataUsage = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/twelve-data-usage`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.usage) setTwelveDataUsage(json.usage);
+      }
+    } catch {}
+  };
+
   const downloadReportPdf = (repId?: string, repNum?: number | string) => {
     const targetId = repId || auditReport?.id || auditReport?.reportId || 'latest';
     const reportNumber = repNum || auditReport?.report_number || auditReport?.reportNumber || 'latest';
@@ -519,10 +539,12 @@ export const SuperAdminPanel: React.FC = () => {
     fetchClientAccuracy();
     fetchLatestAuditReport();
     fetchDailyCapStatus();
+    fetchTwelveDataUsage();
     const interval = setInterval(() => {
       fetchSuperAdminData();
       fetchSentinelData();
-    }, 5000);
+      fetchTwelveDataUsage();
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -577,6 +599,74 @@ export const SuperAdminPanel: React.FC = () => {
       </header>
 
       <main className="container" style={{ maxWidth: '1400px', margin: '24px auto', padding: '0 20px' }}>
+        {/* LIVE FOREX MARKET FEED & API CREDITS BANNER */}
+        <div className="font-mono" style={{
+          background: 'linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(124, 77, 255, 0.08) 100%)',
+          border: '1px solid rgba(0, 229, 255, 0.3)',
+          borderRadius: '10px',
+          padding: '12px 18px',
+          marginBottom: '18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚡</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#00e5ff', letterSpacing: '0.02em' }}>
+                LIVE DATA FEED: TWELVE DATA (FOREX) &amp; IBKR/YAHOO (FUTURES)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#a0aec0' }}>
+                Institutional interbank quotes active • Cache protection enabled
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Credits Left Today
+              </div>
+              <div style={{
+                fontSize: '1.15rem',
+                fontWeight: 900,
+                color: (twelveDataUsage?.credits_left_today ?? 800) < 100 ? '#ff1744' : '#00e676'
+              }}>
+                {twelveDataUsage ? `${twelveDataUsage.credits_left_today} / ${twelveDataUsage.plan_daily_limit}` : 'Checking...'}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Used Today (Min Usage)
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e0e0e0' }}>
+                {twelveDataUsage ? `${twelveDataUsage.daily_usage} used (${twelveDataUsage.current_usage}/${twelveDataUsage.plan_limit} min)` : '...'}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchTwelveDataUsage}
+              style={{
+                background: 'rgba(0, 229, 255, 0.15)',
+                border: '1px solid #00e5ff',
+                color: '#00e5ff',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              title="Refresh live Twelve Data credits"
+            >
+              🔄 Refresh
+            </button>
+          </div>
+        </div>
+
         {/* High-Level Executive Summary Cards */}
         <div className="stat-grid-4 font-mono">
           <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>

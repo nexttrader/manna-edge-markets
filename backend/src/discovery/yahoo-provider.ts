@@ -2,6 +2,7 @@ import YahooFinance from 'yahoo-finance2';
 import { Candle } from './types';
 import { createLogger } from '../telemetry/logger';
 import { queryDb } from '../db/database';
+import { getTwelveDataCandles, getTwelveDataPrice } from './twelvedata-provider';
 
 const logger = createLogger('YahooProvider');
 
@@ -60,6 +61,18 @@ export async function getLiveCandles(
     timeframe: '1m' | '5m' | '15m' | '1h' | '4h' | '1d',
     count: number
 ): Promise<Candle[]> {
+    const isForex = instrument.includes('/');
+    if (isForex) {
+        try {
+            const tdCandles = await getTwelveDataCandles(instrument, timeframe, count);
+            if (tdCandles && tdCandles.length > 0) {
+                return tdCandles;
+            }
+        } catch (tdErr: any) {
+            logger.warn({ instrument, err: tdErr.message }, 'Twelve Data failed for forex candles, falling back to Yahoo');
+        }
+    }
+
     const yahooSymbol = SYMBOL_MAP[instrument];
     if (!yahooSymbol) {
         logger.warn({ instrument }, 'No Yahoo Finance ticker mapping found for instrument');
@@ -151,6 +164,17 @@ export async function getLiveCandles(
 
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const isForex = instrument.includes('/');
+    if (isForex) {
+        try {
+            const tdPrice = await getTwelveDataPrice(instrument);
+            if (tdPrice && tdPrice > 0) {
+                return tdPrice;
+            }
+        } catch (tdErr: any) {
+            logger.warn({ instrument, err: tdErr.message }, 'Twelve Data failed for forex price, falling back to Yahoo');
+        }
+    }
+
     // 1. Check if IBKR is configured as the active provider (futures only)
     if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
         try {
