@@ -19,15 +19,19 @@ async function runTests() {
   assert.strictEqual(gbpUsdStandard, 0.0012, 'Standard GBP/USD floor must be 12 pips (0.0012)');
   console.log('  ✓ Standard 100% floors verified (10 pips EUR/USD, 18 pips USD/JPY, 12 pips GBP/USD)');
 
-  // Optimized (50% floor)
-  const eurUsdHalved = getLogicalStopDistance('EUR/USD', 0.0001, 0.0002, 'forex', true);
-  const usdJpyHalved = getLogicalStopDistance('USD/JPY', 0.01, 0.02, 'forex', true);
-  const gbpUsdHalved = getLogicalStopDistance('GBP/USD', 0.0001, 0.0002, 'forex', true);
+  // Optimized (Data-backed tailored floors)
+  const eurUsdOptimized = getLogicalStopDistance('EUR/USD', 0.0001, 0.0002, 'forex', true);
+  const usdJpyOptimized = getLogicalStopDistance('USD/JPY', 0.01, 0.02, 'forex', true);
+  const gbpUsdOptimized = getLogicalStopDistance('GBP/USD', 0.0001, 0.0002, 'forex', true);
+  const eurGbpOptimized = getLogicalStopDistance('EUR/GBP', 0.0001, 0.0002, 'forex', true);
+  const audUsdOptimized = getLogicalStopDistance('AUD/USD', 0.0001, 0.0002, 'forex', true);
 
-  assert.strictEqual(eurUsdHalved, 0.0005, 'Halved EUR/USD floor must be 5 pips (0.0005)');
-  assert.strictEqual(usdJpyHalved, 0.09, 'Halved USD/JPY floor must be 9 pips (0.09)');
-  assert.strictEqual(gbpUsdHalved, 0.0006, 'Halved GBP/USD floor must be 6 pips (0.0006)');
-  console.log('  ✓ Halved 50% floors verified (5 pips EUR/USD, 9 pips USD/JPY, 6 pips GBP/USD)');
+  assert.strictEqual(eurUsdOptimized, 0.0006, 'Optimized EUR/USD floor must be 6.0 pips (0.0006)');
+  assert.strictEqual(usdJpyOptimized, 0.09, 'Halved USD/JPY floor must be 9.0 pips (0.09)');
+  assert.strictEqual(gbpUsdOptimized, 0.0012, 'Preserved GBP/USD floor must be 12.0 pips (0.0012)');
+  assert.strictEqual(eurGbpOptimized, 0.0008, 'Preserved EUR/GBP floor must be 8.0 pips (0.0008)');
+  assert.strictEqual(audUsdOptimized, 0.0005, 'Halved AUD/USD floor must be 5.0 pips (0.0005)');
+  console.log('  ✓ Data-backed optimized floors verified: 6.0 pips EUR/USD, 12.0 pips GBP/USD, 8.0 pips EUR/GBP, 9.0 pips USD/JPY, 5.0 pips AUD/USD');
 
   // TEST 2: Database Persistence & Toggle Reversion
   console.log('\nTest 2: Verifying Setting Toggle, Persistence & Default Value...');
