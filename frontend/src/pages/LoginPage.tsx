@@ -1,15 +1,28 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 import './LoginPage.css';
 
-export const LoginPage: React.FC = () => {
+export interface LoginPageProps {
+  initialMode?: 'login' | 'register';
+}
+
+export const LoginPage: React.FC<LoginPageProps> = ({ initialMode }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
+  const isExplicitSignup = initialMode === 'register' || 
+    location.pathname === '/signup' || 
+    location.pathname === '/trial' || 
+    new URLSearchParams(location.search).get('signup') === 'true' ||
+    new URLSearchParams(location.search).get('trial') === 'true';
+
   // Auth Flow Steps: 'email' | 'create_password' | 'enter_password' | 'register'
-  const [step, setStep] = useState<'email' | 'create_password' | 'enter_password' | 'register'>('email');
+  const [step, setStep] = useState<'email' | 'create_password' | 'enter_password' | 'register'>(
+    isExplicitSignup ? 'register' : 'email'
+  );
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -182,7 +195,17 @@ export const LoginPage: React.FC = () => {
       }
 
       const registeredUser = data.user;
-      login(registeredUser.email, 'trader', registeredUser.name, 'free', false, true, 14, false);
+      login(
+        registeredUser.email, 
+        'trader', 
+        registeredUser.name, 
+        registeredUser.tier || 'futures_forex', 
+        false, 
+        true, 
+        14, 
+        false, 
+        registeredUser.trialExpiresAt
+      );
       navigate('/dashboard');
     } catch (err: any) {
       setLoading(false);
@@ -211,6 +234,44 @@ export const LoginPage: React.FC = () => {
           <p className="login-subtitle">Institutional Killzone Discovery Engine & Multi-Timeframe Trading Desk</p>
         </div>
 
+        {/* Toggle Mode Tabs for Sign In vs 14-Day Free Trial */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px' }}>
+          <button
+            type="button"
+            onClick={() => { setStep('email'); setError(null); }}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              background: step !== 'register' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
+              color: step !== 'register' ? '#00e5ff' : '#888',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer'
+            }}
+          >
+            🔑 Member Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStep('register'); setError(null); }}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              background: step === 'register' ? 'linear-gradient(135deg, rgba(255,215,0,0.25), rgba(255,140,0,0.25))' : 'transparent',
+              color: step === 'register' ? '#ffd700' : '#888',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer'
+            }}
+          >
+            🎁 14-Day Free Trial
+          </button>
+        </div>
+
         {error && <div className="login-error-msg">{error}</div>}
 
         {/* STEP 1: ENTER EMAIL */}
@@ -222,7 +283,7 @@ export const LoginPage: React.FC = () => {
                 type="email" 
                 placeholder="name@example.com" 
                 value={email} 
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)} 
                 className="font-mono"
                 autoFocus
                 required
@@ -232,6 +293,17 @@ export const LoginPage: React.FC = () => {
             <button type="submit" className="btn-submit font-mono" disabled={loading}>
               {loading ? 'Checking Member Status...' : 'Continue ➔'}
             </button>
+
+            <div style={{ marginTop: '18px', textAlign: 'center', fontSize: '0.85rem', color: '#94a3b8' }}>
+              <span>New trader? </span>
+              <button
+                type="button"
+                onClick={() => { setStep('register'); setError(null); }}
+                style={{ background: 'none', border: 'none', color: '#ffd700', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Claim your 14-Day Free Trial ➔
+              </button>
+            </div>
           </form>
         )}
 
@@ -335,20 +407,17 @@ export const LoginPage: React.FC = () => {
           </form>
         )}
 
-        {/* STEP 2C: NEW MEMBER REGISTRATION */}
+        {/* STEP 2C: NEW MEMBER REGISTRATION (14-DAY FREE TRIAL) */}
         {step === 'register' && (
           <form onSubmit={handleRegister} className="login-form">
-            <div className="welcome-banner glass-card font-mono">
-              <div className="welcome-icon">✨</div>
+            <div className="welcome-banner glass-card font-mono" style={{ border: '1px solid #ffd700', background: 'rgba(255, 215, 0, 0.08)' }}>
+              <div className="welcome-icon">🎁</div>
               <div>
-                <h4>Create Your Account</h4>
-                <p>Set up your new Manna Edge Markets trader profile.</p>
+                <h4 style={{ color: '#ffd700', margin: '0 0 4px 0' }}>14-Day Free Trial Pass</h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#ccc', lineHeight: 1.4 }}>
+                  Instant access to live CME Futures & Forex setups for 14 days. Zero commitments, no credit card required.
+                </p>
               </div>
-            </div>
-
-            <div className="form-group">
-              <label className="font-mono">Email</label>
-              <input type="text" value={email} disabled className="font-mono disabled-input" />
             </div>
 
             <div className="form-group">
@@ -359,8 +428,20 @@ export const LoginPage: React.FC = () => {
                 value={name} 
                 onChange={e => setName(e.target.value)}
                 className="font-mono"
-                autoFocus
+                autoFocus={!name}
                 required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="font-mono">Email Address</label>
+              <input 
+                type="email" 
+                placeholder="name@example.com" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                className="font-mono"
+                required 
               />
             </div>
 
@@ -377,26 +458,33 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="font-mono">Subscription Tier</label>
+              <label className="font-mono">Access Level</label>
               <input 
                 type="text" 
-                value="🆓 Free Tier (14-Day VIP Trial Pass)" 
+                value="👑 14-Day Full VIP Pass (Futures & Forex)" 
                 disabled 
                 className="font-mono disabled-input" 
-                style={{ color: '#38bdf8', fontWeight: 700 }}
+                style={{ color: '#ffd700', fontWeight: 800 }}
               />
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
-                Includes 14 days of signal access. Upgrade to paid tiers anytime from your dashboard or via admin coupon.
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                Full 14 days of institutional signal discovery. When your 14 days conclude, you can request continued access directly from your desk.
               </span>
             </div>
 
-            <button type="submit" className="btn-submit font-mono" disabled={loading}>
-              {loading ? 'Activating Account...' : '✨ Activate 14-Day Trial & Launch'}
+            <button type="submit" className="btn-submit font-mono" disabled={loading} style={{ background: 'linear-gradient(135deg, #ffd700, #ff8c00)', color: '#090314', fontWeight: 900 }}>
+              {loading ? 'Activating 14-Day VIP Trial...' : '🚀 Launch 14-Day Free Trial Desk'}
             </button>
 
-            <button type="button" onClick={handleResetStep} className="btn-back-step font-mono">
-              ← Change Email
-            </button>
+            <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '0.85rem', color: '#94a3b8' }}>
+              <span>Already have an account? </span>
+              <button
+                type="button"
+                onClick={() => { setStep('email'); setError(null); }}
+                style={{ background: 'none', border: 'none', color: '#00e5ff', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Sign in here ➔
+              </button>
+            </div>
           </form>
         )}
 

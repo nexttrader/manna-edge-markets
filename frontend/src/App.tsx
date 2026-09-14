@@ -130,6 +130,8 @@ function App() {
           } 
         />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<LoginPage initialMode="register" />} />
+        <Route path="/trial" element={<LoginPage initialMode="register" />} />
         <Route 
           path="/admin" 
           element={

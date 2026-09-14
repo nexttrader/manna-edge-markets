@@ -21,6 +21,8 @@ import {
   InvoiceDetails
 } from '../db/ticket-store';
 import { getAllUsers } from '../db/user-store';
+import { sendNotificationToUser, recordAuditLog } from '../db/user-management-store';
+import { telegramBotService } from '../notifications/telegram-bot';
 
 const router = express.Router();
 
@@ -41,6 +43,85 @@ router.post('/tickets', async (req: Request, res: Response) => {
     res.json({ success: true, ticket });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create ticket', details: err.message });
+  }
+});
+
+// Dedicated Access Request for Expired 14-Day Trial Users
+router.post('/request-access', async (req: Request, res: Response) => {
+  try {
+    const { userId, userEmail, userName, requestedTier, contactInfo, message } = req.body || {};
+    if (!userEmail || !userName) {
+      return res.status(400).json({ error: 'userEmail and userName are required' });
+    }
+
+    const tierLabel = requestedTier === 'futures_forex' ? 'Futures & Forex VIP' :
+                      requestedTier === 'forex_only' ? 'Forex Only Pro' :
+                      requestedTier === 'custom' ? 'Custom Extension' : (requestedTier || 'Full Trading Desk Access');
+
+    const ticketSubject = `🔒 14-Day Trial Expired: Access Request - ${userName} (${tierLabel})`;
+    
+    const formattedBody = `[14-DAY TRIAL EXPIRED ACCESS REQUEST]\n\n` +
+      `👤 Trader: ${userName} (${userEmail})\n` +
+      `👑 Desired Access / Tier: ${tierLabel}\n` +
+      (contactInfo ? `📱 Phone / Telegram: ${contactInfo}\n` : '') +
+      `\n💬 Private Message to Admins:\n"${message || 'I would like to request continued access to Manna Edge Markets.'}"\n\n` +
+      `⚡ Action Required: An admin can review this request, send an invoice, or extend the user's trial in the Support Command Centre.`;
+
+    const ticket = await createTicket({
+      userId: userId || `usr_${Date.now()}`,
+      userName,
+      userEmail,
+      requestedTier: (requestedTier === 'futures_forex' || requestedTier === 'forex_only') ? requestedTier : 'futures_forex',
+      type: 'access_issue',
+      subject: ticketSubject,
+      body: formattedBody,
+      priority: 'urgent'
+    });
+
+    // 1. Post private in-app notification to all Admins & Super Admins
+    try {
+      const allUsers = await getAllUsers();
+      const adminUsers = allUsers.filter((u: any) => u.role === 'admin' || u.role === 'super_admin');
+      for (const admin of adminUsers) {
+        await sendNotificationToUser(
+          admin.id,
+          `🚨 Access Request: ${userName}`,
+          `${userName} (${userEmail}) completed their 14-day trial and requested access (${tierLabel}). Message: "${message || 'Requested continued access.'}"`,
+          'access_request'
+        );
+      }
+    } catch (notifErr: any) {
+      console.warn('Failed to send in-app notification to admins:', notifErr.message);
+    }
+
+    // 2. Broadcast private alert to Telegram admin channel if active
+    try {
+      const tgMsg = `🚨 <b>[MANNA EDGE] 14-DAY TRIAL EXPIRED — ACCESS REQUEST</b>\n\n` +
+        `👤 <b>Trader:</b> ${userName}\n` +
+        `📧 <b>Email:</b> ${userEmail}\n` +
+        `👑 <b>Requested Tier:</b> ${tierLabel}\n` +
+        (contactInfo ? `📱 <b>Contact:</b> ${contactInfo}\n` : '') +
+        `💬 <b>Message:</b>\n<i>"${message || 'Requested continued access.'}"</i>\n\n` +
+        `👉 <i>Log in to Admin Command Centre (/admin) to review, reply, or grant access.</i>`;
+      telegramBotService.sendMessage(tgMsg).catch(() => {});
+    } catch (tgErr: any) {
+      console.warn('Failed to send Telegram alert:', tgErr.message);
+    }
+
+    // 3. Record in audit logs
+    try {
+      await recordAuditLog({
+        adminEmail: userEmail,
+        adminRole: 'trader',
+        action: '14DAY_TRIAL_ACCESS_REQUESTED',
+        targetUserId: userId,
+        detailsJson: JSON.stringify({ userName, userEmail, requestedTier, contactInfo, message })
+      });
+    } catch (_e) {}
+
+    res.json({ success: true, ticket });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to submit access request', details: err.message });
   }
 });
 

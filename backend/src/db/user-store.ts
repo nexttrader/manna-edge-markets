@@ -147,7 +147,7 @@ const upsertUserSql = `
     custom_features = EXCLUDED.custom_features
 `;
 
-const upsertUser = async (user: UserProfile) => {
+export const upsertUser = async (user: UserProfile) => {
   if (isPg()) {
     await queryDb(upsertUserSql, mapUserProfileToParams(user));
   } else {
@@ -157,31 +157,34 @@ const upsertUser = async (user: UserProfile) => {
   }
 };
 
+export const enrichTrialStatus = (u: UserProfile): UserProfile => {
+  if (u.isTrial && u.trialExpiresAt) {
+    const now = Date.now();
+    const expiresTime = new Date(u.trialExpiresAt).getTime();
+    const remainingMs = Math.max(0, expiresTime - now);
+    const trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+    const trialExpired = remainingMs <= 0;
+    const status = trialExpired ? 'expired' : u.status;
+    return { ...u, trialDaysRemaining, trialExpired, status };
+  }
+  return u;
+};
+
 export const findUserByEmail = async (email: string): Promise<UserProfile | undefined> => {
   const rows = await queryDb('SELECT * FROM user_profiles WHERE LOWER(email) = LOWER(?)', [email.trim()]);
-  if (rows.length > 0) return mapRowToUserProfile(rows[0]);
+  if (rows.length > 0) return enrichTrialStatus(mapRowToUserProfile(rows[0]));
   return undefined;
 };
 
 export const findUserById = async (id: string): Promise<UserProfile | undefined> => {
   const rows = await queryDb('SELECT * FROM user_profiles WHERE id = ? OR LOWER(email) = LOWER(?)', [id, id]);
-  if (rows.length > 0) return mapRowToUserProfile(rows[0]);
+  if (rows.length > 0) return enrichTrialStatus(mapRowToUserProfile(rows[0]));
   return undefined;
 };
 
 export const getAllUsers = async (): Promise<UserProfile[]> => {
-  const now = Date.now();
   const rows = await queryDb('SELECT * FROM user_profiles WHERE status != ?', ['pending_deletion']);
-  return rows.map(mapRowToUserProfile).map(u => {
-    if (u.isTrial && u.trialExpiresAt) {
-      const expiresTime = new Date(u.trialExpiresAt).getTime();
-      const remainingMs = Math.max(0, expiresTime - now);
-      const trialDaysRemaining = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
-      const trialExpired = remainingMs <= 0;
-      return { ...u, trialDaysRemaining, trialExpired };
-    }
-    return u;
-  });
+  return rows.map(mapRowToUserProfile).map(enrichTrialStatus);
 };
 
 export const getHoldingZoneUsers = async (): Promise<UserProfile[]> => {

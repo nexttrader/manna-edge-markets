@@ -2,228 +2,330 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 
-type Step = 'plan_select' | 'submitting' | 'submitted' | 'free_activating';
+type Step = 'request_form' | 'submitting' | 'submitted';
 
 export const TrialExpiredModal: React.FC = () => {
-  const { user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<'free' | 'forex_only' | 'futures_forex'>('futures_forex');
-  const [step, setStep] = useState<Step>('plan_select');
+  const { user, logout } = useAuth();
+  const [step, setStep] = useState<Step>('request_form');
   const [loading, setLoading] = useState(false);
+  const [requestedTier, setRequestedTier] = useState<'futures_forex' | 'forex_only' | 'custom'>('futures_forex');
+  const [contactInfo, setContactInfo] = useState('');
+  const [message, setMessage] = useState(
+    "Hi Admin Team, I've completed my 14-day free trial on Manna Edge Markets and would like to request continued access. Please send payment details or invoice to activate my trading desk."
+  );
+  const [error, setError] = useState<string | null>(null);
 
-  if (!user || !user.isTrial || !user.trialExpired) return null;
+  // Expired check: check both flag and real-time timestamp
+  const isExpired = Boolean(
+    user && user.isTrial && (
+      user.trialExpired || 
+      (user.trialExpiresAt && new Date(user.trialExpiresAt).getTime() <= Date.now())
+    )
+  );
 
-  const TIER_LABEL: Record<string, string> = {
-    futures_forex: 'Futures & Forex VIP',
-    forex_only: 'Forex Only Pro',
-    free: 'Free Tier'
-  };
+  if (!user || !user.isTrial || !isExpired) return null;
 
-  const handleSelectPlan = async () => {
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) {
+      setError('Please enter a brief message requesting access.');
+      return;
+    }
+
     setLoading(true);
-    try {
-      if (selectedPlan === 'free') {
-        // Free tier activates immediately — no payment needed
-        setStep('free_activating');
-        const res = await fetch(`${API_BASE}/api/admin/users/${user.id}/tier`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier: 'free' })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to activate Free Tier');
-        window.location.reload();
-      } else {
-        // Paid plan → fire a support ticket, admin will review + send invoice
-        setStep('submitting');
-        const tierLabel = TIER_LABEL[selectedPlan];
-        const trialText = user.customFeatures?.trialName ? `custom '${user.customFeatures.trialName}' trial` : '21-day VIP trial';
-        const body = `${user.name} has completed a ${trialText} and is requesting an upgrade to the ${tierLabel} plan. Please review, send an invoice to ${user.email}, and activate their account once payment is confirmed.`;
+    setError(null);
+    setStep('submitting');
 
-        const res = await fetch(`${API_BASE}/api/support/tickets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            userName: user.name,
-            userEmail: user.email,
-            requestedTier: selectedPlan,
-            currentTier: user.tier || 'free',
-            type: 'tier_upgrade_request',
-            subject: `Tier Upgrade Request — ${tierLabel}`,
-            body,
-            priority: selectedPlan === 'futures_forex' ? 'urgent' : 'high'
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to submit request');
-        setStep('submitted');
+    try {
+      const res = await fetch(`${API_BASE}/api/support/request-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          userName: user.name,
+          userEmail: user.email,
+          requestedTier,
+          contactInfo: contactInfo.trim(),
+          message: message.trim()
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to submit access request');
       }
+
+      setStep('submitted');
     } catch (err: any) {
-      alert(`⚠️ ${err.message}`);
-      setStep('plan_select');
+      setError(err.message || 'Error sending request to admins. Please try again.');
+      setStep('request_form');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    if (window.confirm('Sign out of Manna Edge Markets?')) {
+      logout();
+      window.location.href = '/login';
     }
   };
 
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(6, 2, 12, 0.96)', backdropFilter: 'blur(16px)',
+      background: 'rgba(6, 2, 14, 0.97)', backdropFilter: 'blur(16px)',
       zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px', fontFamily: "'Space Mono', 'Courier New', monospace"
     }}>
       <div style={{
-        background: '#0f0620', border: '2px solid #ffd700', borderRadius: '16px',
-        padding: '32px', maxWidth: '520px', width: '100%', color: '#fff',
-        boxShadow: '0 0 40px rgba(255, 215, 0, 0.3)'
+        background: '#0d061a', border: '2px solid #ffd700', borderRadius: '16px',
+        padding: '32px', maxWidth: '540px', width: '100%', color: '#fff',
+        boxShadow: '0 0 50px rgba(255, 215, 0, 0.35)',
+        maxHeight: '92vh', overflowY: 'auto'
       }}>
 
-        {/* ── Plan Select ── */}
-        {(step === 'plan_select' || step === 'free_activating') && (
-          <>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <span style={{ fontSize: '3rem' }}>⏰</span>
-              <h2 style={{ color: '#ffd700', margin: '8px 0 4px 0', fontSize: '1.4rem', fontWeight: 900 }}>
-                VIP PASS EXPIRED
+        {/* ── STEP 1: REQUEST FORM ── */}
+        {step === 'request_form' && (
+          <form onSubmit={handleSubmitRequest}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '4px' }}>🔒</div>
+              <h2 style={{ color: '#ffd700', margin: '4px 0', fontSize: '1.35rem', fontWeight: 900, letterSpacing: '1px' }}>
+                14-DAY FREE TRIAL CONCLUDED
               </h2>
-              <p style={{ color: '#00e5ff', margin: 0, fontSize: '0.9rem', fontWeight: 800 }}>
-                CHOOSE A PLAN TO CONTINUE ACCESS
+              <p style={{ color: '#00e5ff', margin: 0, fontSize: '0.85rem', fontWeight: 800 }}>
+                SUBMIT AN ACCESS REQUEST TO CONTINUE
               </p>
             </div>
 
-            <p style={{ fontSize: '0.85rem', color: '#ccc', lineHeight: '1.6', textAlign: 'center', marginBottom: '24px' }}>
-              Your VIP Trial has completed. Select a plan below. Free Tier activates instantly. Paid plans require an invoice — your admin will send payment details directly to your inbox.
-            </p>
+            <div style={{
+              background: 'rgba(255, 215, 0, 0.08)',
+              border: '1px solid rgba(255, 215, 0, 0.3)',
+              borderRadius: '10px',
+              padding: '14px',
+              fontSize: '0.82rem',
+              color: '#e2e8f0',
+              lineHeight: 1.5,
+              marginBottom: '20px'
+            }}>
+              Your 14-day free trial has automatically concluded. To unlock live signal discovery, fill in the box below. <strong>Your message will be delivered privately to all administrators.</strong>
+            </div>
 
-            {/* Plan cards */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
-              {/* Free */}
-              <div
-                onClick={() => setSelectedPlan('free')}
-                style={{
-                  padding: '14px 18px', borderRadius: '8px', cursor: 'pointer',
-                  border: selectedPlan === 'free' ? '2px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
-                  background: selectedPlan === 'free' ? 'rgba(0, 229, 255, 0.12)' : 'rgba(255,255,255,0.03)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 900, color: '#00e5ff', fontSize: '0.95rem' }}>🟢 Free Tier ($0 / month)</div>
-                  <div style={{ fontSize: '0.78rem', color: '#aaa', marginTop: '2px' }}>2 Futures + 2 Forex setups per day • Activates immediately</div>
-                </div>
-                <span style={{ fontWeight: 800, color: '#00e5ff' }}>FREE</span>
+            {error && (
+              <div style={{
+                background: 'rgba(255, 59, 59, 0.15)',
+                border: '1px solid #ff3b3b',
+                color: '#ff3b3b',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                fontSize: '0.82rem',
+                marginBottom: '16px'
+              }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            {/* Trader details (pre-filled) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>
+                  Trader Name
+                </label>
+                <input
+                  type="text"
+                  value={user.name}
+                  disabled
+                  style={{
+                    width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px',
+                    color: '#94a3b8', fontSize: '0.85rem', fontFamily: 'inherit'
+                  }}
+                />
               </div>
 
-              {/* Forex Only */}
-              <div
-                onClick={() => setSelectedPlan('forex_only')}
-                style={{
-                  padding: '14px 18px', borderRadius: '8px', cursor: 'pointer',
-                  border: selectedPlan === 'forex_only' ? '2px solid #e056fd' : '1px solid rgba(255,255,255,0.1)',
-                  background: selectedPlan === 'forex_only' ? 'rgba(224, 86, 253, 0.12)' : 'rgba(255,255,255,0.03)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 900, color: '#e056fd', fontSize: '0.95rem' }}>🔵 Forex Only Pro</div>
-                  <div style={{ fontSize: '0.78rem', color: '#aaa', marginTop: '2px' }}>Unlimited Forex pairs + multi-timeframe conviction scores</div>
-                  <div style={{ fontSize: '0.72rem', color: '#e056fd', marginTop: '3px', fontWeight: 700 }}>💳 Admin sends invoice to your inbox after request</div>
-                </div>
-                <span style={{ fontWeight: 800, color: '#e056fd' }}>Invoice</span>
-              </div>
-
-              {/* Futures & Forex VIP */}
-              <div
-                onClick={() => setSelectedPlan('futures_forex')}
-                style={{
-                  padding: '14px 18px', borderRadius: '8px', cursor: 'pointer',
-                  border: selectedPlan === 'futures_forex' ? '2px solid #ffd700' : '1px solid rgba(255,255,255,0.1)',
-                  background: selectedPlan === 'futures_forex' ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255,255,255,0.03)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 900, color: '#ffd700', fontSize: '0.95rem' }}>👑 Futures &amp; Forex VIP</div>
-                  <div style={{ fontSize: '0.78rem', color: '#aaa', marginTop: '2px' }}>All CME Futures (NQ, ES, CL, GC) + All Forex pairs</div>
-                  <div style={{ fontSize: '0.72rem', color: '#ffd700', marginTop: '3px', fontWeight: 700 }}>💳 Admin sends invoice to your inbox after request</div>
-                </div>
-                <span style={{ fontWeight: 800, color: '#ffd700' }}>Invoice</span>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>
+                  Account Email
+                </label>
+                <input
+                  type="text"
+                  value={user.email}
+                  disabled
+                  style={{
+                    width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px',
+                    color: '#94a3b8', fontSize: '0.85rem', fontFamily: 'inherit'
+                  }}
+                />
               </div>
             </div>
 
+            {/* Desired Access Tier */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#ffd700', fontWeight: 800, marginBottom: '6px' }}>
+                Select Desired Membership / Plan
+              </label>
+              <select
+                value={requestedTier}
+                onChange={e => setRequestedTier(e.target.value as any)}
+                style={{
+                  width: '100%', padding: '10px', background: '#160b2b',
+                  border: '1px solid #ffd700', borderRadius: '6px',
+                  color: '#fff', fontSize: '0.85rem', fontFamily: 'inherit',
+                  fontWeight: 700
+                }}
+              >
+                <option value="futures_forex">👑 Futures &amp; Forex VIP Access ($149 / mo)</option>
+                <option value="forex_only">🔵 Forex Only Pro Access ($79 / mo)</option>
+                <option value="custom">⚡ Trial Extension / Custom Institutional Arrangement</option>
+              </select>
+            </div>
+
+            {/* Contact Info (Optional) */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>
+                Phone Number / Telegram Handle <span style={{ color: '#666' }}>(Optional for fast contact)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. +1 555-0199 or @trader_handle"
+                value={contactInfo}
+                onChange={e => setContactInfo(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px',
+                  color: '#fff', fontSize: '0.85rem', fontFamily: 'inherit'
+                }}
+              />
+            </div>
+
+            {/* Request Message Box */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#00e5ff', fontWeight: 800, marginBottom: '6px' }}>
+                Your Private Message to Admins <span style={{ color: '#ff3b3b' }}>*</span>
+              </label>
+              <textarea
+                rows={4}
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Write your request message here..."
+                required
+                style={{
+                  width: '100%', padding: '12px', background: '#120824',
+                  border: '1px solid #00e5ff', borderRadius: '8px',
+                  color: '#fff', fontSize: '0.85rem', fontFamily: 'inherit',
+                  lineHeight: 1.5, resize: 'vertical', boxSizing: 'border-box'
+                }}
+              />
+              <span style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px', display: 'block' }}>
+                💡 Tip: Mention preferred payment method (Crypto, Card, Wire) or any specific instruments you trade.
+              </span>
+            </div>
+
+            {/* Submit Action */}
             <button
-              onClick={handleSelectPlan}
+              type="submit"
               disabled={loading}
               style={{
-                width: '100%',
-                background: selectedPlan === 'free' ? '#00e5ff' : '#ffd700',
+                width: '100%', background: 'linear-gradient(135deg, #ffd700 0%, #ff8c00 100%)',
                 color: '#090314', border: 'none', padding: '14px',
-                borderRadius: '8px', fontWeight: 900, fontSize: '1rem',
+                borderRadius: '8px', fontWeight: 900, fontSize: '0.95rem',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit', opacity: loading ? 0.7 : 1
+                fontFamily: 'inherit', opacity: loading ? 0.7 : 1,
+                boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)',
+                marginBottom: '12px'
               }}
             >
-              {loading
-                ? '⏳ Processing...'
-                : selectedPlan === 'free'
-                  ? '✅ Activate Free Tier ($0/mo)'
-                  : `📬 Request ${TIER_LABEL[selectedPlan]} Upgrade`}
+              {loading ? '⏳ Delivering Private Message to Admins...' : '✉️ Submit Private Access Request to Admins'}
             </button>
-          </>
+
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  background: 'none', border: 'none', color: '#888',
+                  fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline'
+                }}
+              >
+                Sign out of this account
+              </button>
+            </div>
+          </form>
         )}
 
-        {/* ── Submitting ── */}
+        {/* ── STEP 2: SUBMITTING ── */}
         {step === 'submitting' && (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⏳</div>
-            <div style={{ fontWeight: 900, color: '#ffd700', fontSize: '1.1rem' }}>Submitting your request...</div>
+          <div style={{ textAlign: 'center', padding: '36px 0' }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: '16px' }}>⏳</div>
+            <h3 style={{ color: '#ffd700', fontSize: '1.2rem', fontWeight: 900, margin: '0 0 8px 0' }}>
+              Broadcasting Private Request to Admins...
+            </h3>
+            <p style={{ color: '#aaa', fontSize: '0.85rem', margin: 0 }}>
+              Posting your message to the Admin Support Command Centre and sending direct alerts.
+            </p>
           </div>
         )}
 
-        {/* ── Submitted Confirmation ── */}
+        {/* ── STEP 3: SUBMITTED CONFIRMATION ── */}
         {step === 'submitted' && (
-          <div style={{ textAlign: 'center' }}>
-            <span style={{ fontSize: '3rem' }}>✅</span>
-            <h3 style={{ color: '#00e5ff', margin: '12px 0 8px 0', fontSize: '1.2rem', fontWeight: 900 }}>
-              UPGRADE REQUEST RECEIVED
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: '8px' }}>✅</div>
+            <h3 style={{ color: '#00e5ff', margin: '4px 0 8px 0', fontSize: '1.3rem', fontWeight: 900 }}>
+              REQUEST SENT PRIVATELY TO ALL ADMINS
             </h3>
             <p style={{ fontSize: '0.85rem', color: '#ccc', lineHeight: '1.6', marginBottom: '20px' }}>
-              Your request to upgrade to <strong style={{ color: '#ffd700' }}>{TIER_LABEL[selectedPlan]}</strong> has been submitted to our admin team.
+              Your message has been delivered directly into our administrators' private command centre.
             </p>
 
             <div style={{
-              background: 'rgba(255,215,0,0.07)', border: '1px solid rgba(255,215,0,0.25)',
+              background: 'rgba(255,215,0,0.07)', border: '1px solid rgba(255,215,0,0.3)',
               borderRadius: '10px', padding: '16px', textAlign: 'left', marginBottom: '20px'
             }}>
               <div style={{ fontWeight: 900, color: '#ffd700', fontSize: '0.85rem', marginBottom: '10px' }}>
-                📬 What happens next:
+                📬 Next Steps:
               </div>
               <div style={{ fontSize: '0.82rem', color: '#ccc', lineHeight: 1.7 }}>
-                <div>1. An admin will review your request and be assigned to your case.</div>
-                <div>2. You will receive a <strong>payment invoice</strong> sent directly to your <strong>Inbox</strong> on this platform.</div>
-                <div>3. Follow the payment instructions in the invoice.</div>
-                <div>4. Once confirmed, your account will be upgraded <strong>immediately</strong>.</div>
+                <div>1. Our admin team has received your private alert.</div>
+                <div>2. An admin will review your message and reach out via your <strong>Dashboard Inbox</strong> and email.</div>
+                <div>3. You will receive an activation invoice or payment details.</div>
+                <div>4. Once approved, your live signal desk will be unlocked immediately.</div>
               </div>
             </div>
 
-            <div style={{ background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '0.8rem', color: '#00e5ff' }}>
-              📬 Check your <strong>Inbox</strong> button on the Dashboard for the invoice and admin replies.
+            <div style={{ background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '24px', fontSize: '0.8rem', color: '#00e5ff' }}>
+              📬 Contacting: <strong>{user.email}</strong>
               <br />
-              <span style={{ color: '#888', fontSize: '0.75rem' }}>Contacting: <strong>{user.email}</strong></span>
+              <span style={{ color: '#888', fontSize: '0.75rem' }}>You can check your desk inbox periodically for updates.</span>
             </div>
 
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                width: '100%', background: '#ffd700', color: '#090314',
-                border: 'none', padding: '13px', borderRadius: '8px',
-                fontWeight: 900, fontSize: '0.95rem', cursor: 'pointer',
-                fontFamily: 'inherit'
-              }}
-            >
-              📊 Return to Dashboard
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{
+                  flex: 1, background: '#ffd700', color: '#090314',
+                  border: 'none', padding: '13px', borderRadius: '8px',
+                  fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer',
+                  fontFamily: 'inherit'
+                }}
+              >
+                🔄 Refresh Desk Status
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  background: 'rgba(255,255,255,0.08)', color: '#ccc',
+                  border: '1px solid rgba(255,255,255,0.2)', padding: '13px 18px',
+                  borderRadius: '8px', fontWeight: 700, fontSize: '0.85rem',
+                  cursor: 'pointer', fontFamily: 'inherit'
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         )}
 

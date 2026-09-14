@@ -76,8 +76,11 @@ export const HomePage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div className="guest-actions">
-                <Link to="/login" className="btn-nav-primary">
+              <div className="guest-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <Link to="/signup" className="btn-nav-primary" style={{ background: 'linear-gradient(135deg, #ffd700, #ff9100)', color: '#090314', fontWeight: 900, textDecoration: 'none' }}>
+                  🎁 14-Day Free Trial
+                </Link>
+                <Link to="/login" className="btn-nav-outline" style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', color: '#e2e8f0', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 700 }}>
                   🔑 Sign In
                 </Link>
               </div>
@@ -88,8 +91,11 @@ export const HomePage: React.FC = () => {
 
       {/* Hero Section */}
       <section className="hero-section container">
-        <div className="hero-badge animate-fade-in">
+        <div className="hero-badge animate-fade-in" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span>✨ AUTOMATED MARKET SIGNAL PLATFORM</span>
+          <span style={{ background: 'rgba(255, 215, 0, 0.2)', border: '1px solid #ffd700', color: '#ffd700', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800 }}>
+            🎁 14-DAY VIP PASS (NO CREDIT CARD NEEDED)
+          </span>
         </div>
 
         <h1 className="hero-title animate-slide-up">
@@ -103,12 +109,18 @@ export const HomePage: React.FC = () => {
         <LiveTickerWidget />
 
         <div className="hero-cta-group animate-slide-up">
-          <Link to="/dashboard" className="btn-hero-main">
-            🚀 VIEW LIVE SIGNALS
-          </Link>
-          {!user && (
-            <Link to="/login" className="btn-hero-outline">
-              🔑 SIGN IN / REGISTER
+          {!user ? (
+            <>
+              <Link to="/signup" className="btn-hero-main" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ff8c00 100%)', color: '#090314', fontWeight: 900, boxShadow: '0 0 25px rgba(255, 215, 0, 0.4)' }}>
+                🔥 START 14-DAY FREE TRIAL
+              </Link>
+              <Link to="/login" className="btn-hero-outline">
+                🔑 MEMBER SIGN IN
+              </Link>
+            </>
+          ) : (
+            <Link to="/dashboard" className="btn-hero-main">
+              🚀 VIEW LIVE SIGNALS
             </Link>
           )}
         </div>

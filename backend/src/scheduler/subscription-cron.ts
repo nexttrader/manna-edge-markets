@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getAllUsers, pauseUserSubscription, resumeUserSubscription } from '../db/user-store.js';
+import { getAllUsers, pauseUserSubscription, resumeUserSubscription, upsertUser } from '../db/user-store.js';
 import { sendNotificationToUser, recordAuditLog } from '../db/user-management-store.js';
 
 export async function checkSubscriptionAndTrialExpirations(): Promise<{
@@ -37,10 +37,11 @@ export async function checkSubscriptionAndTrialExpirations(): Promise<{
       const remainingMs = expiryMs - now;
       const daysLeft = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
 
-      if (remainingMs <= 0 && !user.trialExpired) {
+      if (remainingMs <= 0) {
         user.trialExpired = true;
         user.trialDaysRemaining = 0;
         user.status = 'expired';
+        await upsertUser(user);
         expiredTrialsCount++;
         await sendNotificationToUser(
           user.id,
@@ -69,6 +70,7 @@ export async function checkSubscriptionAndTrialExpirations(): Promise<{
       if (remainingMs <= 0) {
         user.status = 'expired';
         user.subscriptionStatus = 'expired';
+        await upsertUser(user);
         await sendNotificationToUser(
           user.id,
           'Subscription Expired',

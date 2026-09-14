@@ -115,10 +115,23 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     password,
     mustChangePassword: false,
     role: 'trader',
-    tier: 'free',
+    tier: 'futures_forex',
     isTrial: true,
     trialDays: 14 // Enforce 14-day trial ONLY for self signup
   });
+
+  // Notify admins via Telegram bot if enabled
+  try {
+    const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    telegramBotService.sendMessage(
+      `🎉 <b>NEW 14-DAY FREE TRIAL SIGNUP</b>\n\n` +
+      `👤 <b>Name:</b> ${name.trim()}\n` +
+      `📧 <b>Email:</b> ${email.trim()}\n` +
+      `⚡ <b>Access:</b> 14-Day VIP Pass (Futures & Forex)\n` +
+      `⏱️ <b>Registered:</b> ${timeStr}\n\n` +
+      `<i>Access will automatically conclude after 14 days unless upgraded.</i>`
+    ).catch(() => {});
+  } catch (_e) {}
 
   return res.json({ success: true, user: newUser });
 });

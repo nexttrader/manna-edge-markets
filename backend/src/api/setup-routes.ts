@@ -7,6 +7,7 @@ import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { getIBKRGatewayStatus } from '../discovery/ib-provider';
 import { isCtraderConnected } from '../discovery/ctrader-provider';
+import { findUserByEmail } from '../db/user-store';
 
 const router = express.Router();
 
@@ -52,6 +53,24 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
 
     if (!email) {
       return res.status(401).json({ success: false, error: 'Authentication required. Please sign in to view live signals.', setups: [] });
+    }
+
+    if (role !== 'admin' && role !== 'super_admin') {
+      const userProfile = await findUserByEmail(email);
+      if (userProfile) {
+        const isTrialExpired = userProfile.isTrial && (
+          userProfile.trialExpired || 
+          (userProfile.trialExpiresAt && new Date(userProfile.trialExpiresAt).getTime() <= Date.now())
+        );
+        if (userProfile.status === 'expired' || isTrialExpired) {
+          return res.status(403).json({
+            success: false,
+            trialExpired: true,
+            error: 'Your 14-day free trial has concluded. Please fill out an access request to continue.',
+            setups: []
+          });
+        }
+      }
     }
 
     const maintenance = await queries.getMaintenanceState();
