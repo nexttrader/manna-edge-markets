@@ -1,8 +1,11 @@
 import { getDb } from '../db/database';
 import * as queries from '../db/queries';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { computeATR } from '../discovery/atr';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
+import { revalidateSetup } from '../publish-gate/revalidation';
+import { hawkeyeService } from '../hawkeye/hawkeye-service';
 import { isMarketOpen, mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 
@@ -46,9 +49,11 @@ export class LifecycleSync {
         const createdTimeMs = new Date(setup.created_at).getTime();
         let maxHigh = currentPrice;
         let minLow = currentPrice;
+        let recentCandles: any[] = [];
         try {
-          const candles = await getLiveCandles(setup.instrument, '1m', 5);
+          const candles = await getLiveCandles(setup.instrument, '1m', 15);
           if (candles && candles.length > 0) {
+            recentCandles = candles;
             // Filter ONLY candles that opened strictly AFTER this setup was created.
             // The -5000ms window was including the current in-progress candle (opened before setup
             // creation), whose wick instantly satisfied fill conditions. Strict >= createdTimeMs ensures
@@ -65,6 +70,50 @@ export class LifecycleSync {
           }
         } catch (e) {
           logger.warn({ instrument: setup.instrument }, 'Failed to fetch 1m candles for wick entry detection');
+        }
+
+        const isForex = (setup.market || '').toLowerCase() === 'forex';
+        const defaultAtr = isForex ? 0.0020 : 3.0;
+        const atr14 = recentCandles.length >= 14 ? computeATR(recentCandles, 14) : defaultAtr;
+
+        // 1. PRE-ENTRY INVALIDATION CHECK
+        // If price reached TP1/TP2 or breached SL before ever entering, the move completed or zone failed.
+        const revalResult = revalidateSetup(setup, currentPrice, atr14, maxHigh, minLow);
+        if (!revalResult.isValid) {
+          const market = setup.market || 'futures';
+          await queries.updateSetupState(setup.id, market, 'invalidated', {
+            invalidation_reason: revalResult.reason,
+            invalidation_detail: revalResult.detail,
+            tradable: 0,
+            resolved_at: new Date().toISOString()
+          });
+
+          await hawkeyeService.logInvalidation({
+            setupId: setup.id,
+            instrument: setup.instrument,
+            setupMarket: market,
+            runId: `lifecycle_invalidation_${Date.now()}`,
+            reasonCode: revalResult.reason || 'price_displaced',
+            detail: revalResult.detail || 'Pre-entry target reached or structure breached',
+            previousState: setup.signal_state,
+            newState: 'invalidated',
+            createdBy: 'lifecycle_sync'
+          });
+
+          logger.info(
+            { setupId: setup.id, instrument: setup.instrument, reason: revalResult.reason, detail: revalResult.detail },
+            'Pre-entry setup invalidated by LifecycleSync — pending order cancelled'
+          );
+
+          publishEvents.emit('setup_invalidated', {
+            setupId: setup.id,
+            reason: revalResult.reason,
+            setup: { ...setup, signal_state: 'invalidated' },
+            superseded: false
+          });
+
+          // Skip fill check; move to next setup
+          continue;
         }
         
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';

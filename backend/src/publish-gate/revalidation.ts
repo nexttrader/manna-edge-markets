@@ -14,7 +14,13 @@ export function isMockSetup(setup: EdgeSetup | null | undefined): boolean {
   return false;
 }
 
-export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: number): RevalidationResult {
+export function revalidateSetup(
+  setup: EdgeSetup,
+  currentPrice: number,
+  atr14: number,
+  maxHigh?: number,
+  minLow?: number
+): RevalidationResult {
   // Rule 0: Anti-Mock Data Enforcement — Invalidate any mock/placeholder data instantly
   if (isMockSetup(setup)) {
     return {
@@ -38,37 +44,52 @@ export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: n
   }
 
   if (setup.signal_state === 'awaiting_entry') {
-    // Rule 2a: TP2 blown — price has already reached the take-profit target without ever
-    // filling the entry. The full move has completed without us — supersede immediately.
-    // Uses TP2 as the threshold; falls back to TP1 if TP2 is not set.
-    const tpTarget = setup.tp2 ?? setup.tp1;
-    if (tpTarget) {
-      if (isLong && currentPrice >= tpTarget) {
+    const effectiveHigh = maxHigh !== undefined ? Math.max(currentPrice, maxHigh) : currentPrice;
+    const effectiveLow = minLow !== undefined ? Math.min(currentPrice, minLow) : currentPrice;
+
+    // Rule 2a: TP reached before entry — the full move has completed without us.
+    // Invalidate immediately if price reached either TP1 (+2R) or TP2 (+3R).
+    if (isLong) {
+      if (setup.tp1 && (effectiveHigh >= setup.tp1 || currentPrice >= setup.tp1)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${currentPrice} reached TP target ${tpTarget} without filling entry — full move missed, setup superseded`
+          detail: `Price ${effectiveHigh} reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
         };
       }
-      if (!isLong && currentPrice <= tpTarget) {
+      if (setup.tp2 && (effectiveHigh >= setup.tp2 || currentPrice >= setup.tp2)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${currentPrice} reached TP target ${tpTarget} without filling entry — full move missed, setup superseded`
+          detail: `Price ${effectiveHigh} reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
+        };
+      }
+    } else {
+      if (setup.tp1 && (effectiveLow <= setup.tp1 || currentPrice <= setup.tp1)) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${effectiveLow} reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
+        };
+      }
+      if (setup.tp2 && (effectiveLow <= setup.tp2 || currentPrice <= setup.tp2)) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${effectiveLow} reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
         };
       }
     }
 
-    // Rule 2b: zone_consumed — price has blown THROUGH the zone without triggering a fill.
-    // For LONG (limit buy waiting for price to DROP into zone):
-    //   The demand zone sits BELOW current price. Price being above is NORMAL — we're waiting.
-    //   Only invalidate if price crashes BELOW the zone bottom (entry_zone_low = zone.distal)
-    //   by more than 1.5x ATR — meaning the demand zone was consumed/destroyed.
-    // For SHORT (limit sell waiting for price to RALLY into zone):
-    //   The supply zone sits ABOVE current price. Price being below is NORMAL — we're waiting.
-    //   Only invalidate if price rallies ABOVE the zone top (entry_zone_high = zone.distal)
-    //   by more than 1.5x ATR — meaning the supply zone was consumed/destroyed.
+    // Rule 2b: zone_consumed / stop breached before filling entry
     if (isLong) {
+      if (effectiveLow <= setup.stop || currentPrice <= setup.stop) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${effectiveLow} breached Stop Loss ${setup.stop} before entry fill — demand zone consumed`
+        };
+      }
       const blowThrough = setup.entry_zone_low - currentPrice; // positive only if price < zone bottom
       if (blowThrough > 1.5 * atr14) {
         return {
@@ -78,6 +99,13 @@ export function revalidateSetup(setup: EdgeSetup, currentPrice: number, atr14: n
         };
       }
     } else {
+      if (effectiveHigh >= setup.stop || currentPrice >= setup.stop) {
+        return {
+          isValid: false,
+          reason: InvalidationReason.price_displaced,
+          detail: `Price ${effectiveHigh} breached Stop Loss ${setup.stop} before entry fill — supply zone consumed`
+        };
+      }
       const blowThrough = currentPrice - setup.entry_zone_high; // positive only if price > zone top
       if (blowThrough > 1.5 * atr14) {
         return {
