@@ -83,10 +83,10 @@ export function resolveCtraderSymbol(instrument: string): string | null {
 export async function startCtraderProvider(): Promise<void> {
     if (isConnected || isStarting) return;
 
-    const clientId = process.env.CTRADER_CLIENT_ID;
-    const clientSecret = process.env.CTRADER_CLIENT_SECRET;
-    const accessToken = process.env.CTRADER_ACCESS_TOKEN;
-    const accountIdStr = process.env.CTRADER_ACCOUNT_ID;
+    const clientId = process.env.CTRADER_CLIENT_ID || '39573_6DFom6Ds6qTufd6UEAeuC95ei5cwKqhbUK8EhJ0AJbuB4oFn36';
+    const clientSecret = process.env.CTRADER_CLIENT_SECRET || 'QAJOLFHIEK9hYa4jHsDGq9AzwasNo2sUuP52EZYeVd63GqeX6y';
+    const accessToken = process.env.CTRADER_ACCESS_TOKEN || 'Xv93xb9hZcbZAja6qY9BxW3bOChv9vgvXlauP4yWM00';
+    const accountIdStr = process.env.CTRADER_ACCOUNT_ID || '48662843';
     const environment = (process.env.CTRADER_ENVIRONMENT as 'demo' | 'live') || 'demo';
 
     if (!clientId || !clientSecret || !accessToken || !accountIdStr) {
