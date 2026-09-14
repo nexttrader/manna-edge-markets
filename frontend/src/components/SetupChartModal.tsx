@@ -199,6 +199,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     }
   });
   const [serverQuote, setServerQuote] = useState<{ bid?: number; ask?: number; spread?: number; price?: number } | null>(null);
+  const [feedProvider, setFeedProvider] = useState<string>('');
 
   const toggleBidAsk = () => {
     setShowBidAsk(prev => {
@@ -581,6 +582,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         if (data.quote) {
           setServerQuote(data.quote);
+        }
+
+        if (data.provider) {
+          setFeedProvider(data.provider);
         }
 
         const formattedCandles = data.candles.map((c: any) => ({
@@ -1304,7 +1309,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             <span className="market-tag font-mono">{(setup.market || 'futures').toUpperCase()}</span>
             <span className="kz-tag font-mono">{(setup.killzone_origin || 'NY AM').toUpperCase()} SESSION</span>
             <span className="font-mono" style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(0, 230, 118, 0.12)', color: '#00e676', border: '1px solid rgba(0, 230, 118, 0.4)', fontSize: '0.74rem', fontWeight: 800 }}>
-              {setup.instrument?.includes('/') ? '⚡ 12DATA FEED' : '⚡ FUTURES FEED'}
+              ⚡ {feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS RAW ECN' : 'FUTURES FEED')}
             </span>
           </div>
 

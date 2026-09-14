@@ -6,6 +6,7 @@ import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../dis
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { getIBKRGatewayStatus } from '../discovery/ib-provider';
+import { isCtraderConnected } from '../discovery/ctrader-provider';
 
 const router = express.Router();
 
@@ -383,7 +384,10 @@ router.get('/candles/:instrument', async (req: Request, res: Response) => {
     const count = parseInt(req.query.count as string) || 150;
     const candles = await getLiveCandles(instrument, timeframe, count);
     const quote = await getLiveQuoteDetails(instrument).catch(() => null);
-    res.json({ instrument, timeframe, candles, quote });
+    const isForex = instrument.includes('/');
+    const isCt = isForex && isCtraderConnected();
+    const provider = isForex ? (isCt ? 'IC MARKETS RAW ECN' : 'TWELVE DATA') : 'FUTURES';
+    res.json({ instrument, timeframe, candles, quote, provider, isCtrader: isCt });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candles', details: error instanceof Error ? error.message : String(error) });
   }

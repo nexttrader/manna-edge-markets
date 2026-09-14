@@ -615,10 +615,10 @@ export const SuperAdminPanel: React.FC = () => {
             <span style={{ fontSize: '1.4rem' }}>⚡</span>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#00e5ff', letterSpacing: '0.02em' }}>
-                LIVE DATA FEED: TWELVE DATA (FOREX) &amp; IBKR/YAHOO (FUTURES)
+                PRIMARY FEED: IC MARKETS CTRADER (FOREX UNLIMITED) &amp; IBKR/YAHOO (FUTURES)
               </div>
               <div style={{ fontSize: '0.78rem', color: '#a0aec0' }}>
-                Institutional interbank quotes active • Cache protection enabled
+                IC Markets Raw ECN Spreads • Twelve Data Reserve Quota preserved
               </div>
             </div>
           </div>
