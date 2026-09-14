@@ -1,6 +1,7 @@
 import { queryDb } from '../db/database';
 import { getLiveCurrentPrice } from '../discovery/yahoo-provider';
 import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
+import { isCtraderConnected } from '../discovery/ctrader-provider';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { newsEngine } from '../news/news-engine';
 
@@ -73,10 +74,15 @@ export async function runSystemHealthCheck(): Promise<SystemHealthOverview> {
     const usage = await getTwelveDataUsage();
     const creditsInfo = usage ? ` | Twelve Data Credits: ${usage.credits_left_today}/${usage.plan_daily_limit} left today (Used: ${usage.daily_usage})` : '';
 
+    const isCt = isCtraderConnected();
+    const ctInfo = isCt ? 'IC Markets (cTrader Open API - Unlimited)' : 'Twelve Data / Yahoo';
+
     if (testPrice > 0) {
       feedStatus = 'healthy';
-      feedMsg = `Market price data is flowing smoothly! Live EUR/USD quote received at ${testPrice}.${creditsInfo}`;
-      feedTech = `Twelve Data (Forex) & IBKR/Yahoo (Futures) active. EUR/USD = ${testPrice} in ${feedMs}ms.${creditsInfo}`;
+      feedMsg = isCt
+        ? `Market price data is flowing smoothly via IC Markets (cTrader)! Live EUR/USD quote received at ${testPrice} in ${feedMs}ms.`
+        : `Market price data is flowing smoothly! Live EUR/USD quote received at ${testPrice}.${creditsInfo}`;
+      feedTech = `Primary: ${ctInfo}. EUR/USD = ${testPrice} in ${feedMs}ms.${creditsInfo}`;
     } else {
       feedStatus = 'warning';
       feedMsg = `Price quotes are currently offline or market is closed. Using last fallback price.`;

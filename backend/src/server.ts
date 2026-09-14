@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -15,6 +16,7 @@ import { outcomeDetector } from './outcomes/outcome-detector';
 import { startAutomatedHealthDiagnostics } from './diagnostics/health-checker';
 import { createLogger } from './telemetry/logger';
 import { startIBPriceStreaming } from './discovery/ib-provider';
+import { startCtraderProvider } from './discovery/ctrader-provider';
 
 import { processKillzoneMidpointScan } from './scheduler/midpoint-scanner';
 import setupRoutes from './api/setup-routes';
@@ -107,6 +109,15 @@ async function startServer() {
             startIBPriceStreaming();
         } catch (err: any) {
             logger.error({ err: err.message }, 'Failed to start IBKR price streaming daemon');
+        }
+
+        logger.info('Starting IC Markets (cTrader Open API) market data provider...');
+        try {
+            startCtraderProvider().catch((err: any) => {
+                logger.error({ err: err.message }, 'cTrader initialization background error');
+            });
+        } catch (err: any) {
+            logger.error({ err: err.message }, 'Failed to launch cTrader provider');
         }
 
         logger.info('Starting lifecycle sync...');

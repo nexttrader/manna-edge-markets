@@ -3,6 +3,7 @@ import { Candle } from './types';
 import { createLogger } from '../telemetry/logger';
 import { queryDb } from '../db/database';
 import { getTwelveDataCandles, getTwelveDataPrice } from './twelvedata-provider';
+import { getCtraderCandles, getCtraderLivePrice, getCtraderQuoteDetails } from './ctrader-provider';
 
 const logger = createLogger('YahooProvider');
 
@@ -62,9 +63,21 @@ export async function getLiveCandles(
     count: number
 ): Promise<Candle[]> {
     const isForex = instrument.includes('/');
-    // Shield Twelve Data credits from high-frequency 15s background polling:
-    // lifecycle-sync and outcome-detector poll 1m candles (count=5) continuously.
-    // Route background 1m checks to Yahoo/RAM cache, preserving Twelve Data for strategy scans and charts.
+
+    // 1. Primary Forex Feed: IC Markets (cTrader Open API)
+    // Unlimited, real-time broker-grade candles across all timeframes.
+    if (isForex) {
+        try {
+            const ctCandles = await getCtraderCandles(instrument, timeframe, count);
+            if (ctCandles && ctCandles.length > 0) {
+                return ctCandles;
+            }
+        } catch (ctErr: any) {
+            logger.warn({ instrument, err: ctErr.message }, 'cTrader failed for forex candles, falling back to Twelve Data');
+        }
+    }
+
+    // 2. Secondary Forex Feed: Twelve Data (shielded from high-frequency 1m background polling)
     const isBackground1mPoll = timeframe === '1m' && count <= 10;
     if (isForex && !isBackground1mPoll) {
         try {
@@ -169,7 +182,16 @@ export async function getLiveCandles(
 export async function getLiveCurrentPrice(instrument: string): Promise<number> {
     const isForex = instrument.includes('/');
 
-    // 1. Check if IBKR is configured as the active provider (futures only)
+    // 1. Primary Forex Feed: IC Markets (cTrader Open API)
+    // Instant sub-second price ticks from in-memory WebSocket cache.
+    if (isForex) {
+        const ctPrice = getCtraderLivePrice(instrument);
+        if (ctPrice > 0) {
+            return ctPrice;
+        }
+    }
+
+    // 2. Check if IBKR is configured as the active provider (futures only)
     if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
         try {
             const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
@@ -247,6 +269,16 @@ export interface LiveQuoteDetails {
 
 export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuoteDetails | null> {
     const isForex = instrument.includes('/');
+
+    // 1. Primary Forex Feed: IC Markets (cTrader Open API)
+    // Return exact institutional Bid, Ask, and Raw ECN Spread
+    if (isForex) {
+        const ctQuote = getCtraderQuoteDetails(instrument);
+        if (ctQuote && ctQuote.price > 0) {
+            return ctQuote;
+        }
+    }
+
     const yahooSymbol = SYMBOL_MAP[instrument];
     const price = await getLiveCurrentPrice(instrument);
     if (!price || price <= 0) return null;
