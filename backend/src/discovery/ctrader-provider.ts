@@ -132,20 +132,21 @@ export async function startCtraderProvider(): Promise<void> {
                 if (res?.trendbars?.length > 0) {
                     const b = res.trendbars[0];
                     const digits = symbolDigits.get(sym) ?? 5;
-                    const factor = Math.pow(10, digits);
-                    const close = Number(((b.low + (b.deltaClose || 0)) / factor).toFixed(digits));
+                    const close = Number(((b.low + (b.deltaClose || 0)) / 100000).toFixed(digits));
+                    const defaultSpread = sym.includes('JPY') ? 0.012 : (sym.includes('XAU') ? 0.15 : 0.00010);
                     const existing = spotCache.get(sym) || {
                         symbol: sym,
                         bid: close,
                         ask: close,
                         price: close,
-                        spread: 0.0001,
+                        spread: defaultSpread,
                         timestamp: Date.now(),
                     };
                     if (existing.price === 0) {
                         existing.price = close;
-                        existing.bid = close;
-                        existing.ask = close;
+                        existing.bid = Number((close - defaultSpread / 2).toFixed(digits));
+                        existing.ask = Number((close + defaultSpread / 2).toFixed(digits));
+                        existing.spread = defaultSpread;
                         existing.timestamp = Date.now();
                         spotCache.set(sym, existing);
                     }
@@ -294,7 +295,8 @@ export async function getCtraderCandles(
     const fetchPromise = (async () => {
         try {
             const digits = symbolDigits.get(sym) ?? 5;
-            const factor = Math.pow(10, digits);
+            // cTrader Open API standardizes all trendbars to 1e5 (100,000)
+            const factor = 100000;
 
             const fetchCount = Math.max(count + 5, 20);
             const res = await ctClient.getTrendbars(sym, {
