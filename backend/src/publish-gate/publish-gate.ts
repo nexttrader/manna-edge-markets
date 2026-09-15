@@ -156,17 +156,24 @@ export async function executePublishRun(
           const capSetting = await queries.isDailySignalCapEnabled(candidateStratId);
 
           if (capSetting.enabled) {
+            const activeOverride = await queries.getActiveSignalCapOverride(
+              dedupeResult.selectedCandidate.instrument,
+              candidateStratId
+            );
+            const effectiveMaxSignals = activeOverride ? activeOverride.max_signals : capSetting.maxSignals;
+
             const currentCountToday = await queries.getDailySignalCountForInstrument(
               dedupeResult.selectedCandidate.instrument,
               market.name,
               candidateStratId
             );
-            if (currentCountToday >= capSetting.maxSignals) {
+            if (currentCountToday >= effectiveMaxSignals) {
               logger.warn({
                 instrument: dedupeResult.selectedCandidate.instrument,
                 strategyId: candidateStratId,
                 currentCountToday,
-                maxSignals: capSetting.maxSignals
+                maxSignals: effectiveMaxSignals,
+                hasOverride: Boolean(activeOverride)
               }, 'PublishGate: Daily signal cap reached for instrument. Blocking 3rd+ continuation signal.');
 
               await hawkeyeService.logInvalidation({
@@ -175,7 +182,7 @@ export async function executePublishRun(
                 setupMarket: market.name,
                 runId: runId,
                 reasonCode: 'daily_signal_cap_exceeded',
-                detail: `Asset has already generated ${currentCountToday} signals on this trading day (cap is ${capSetting.maxSignals}). Suppressed to prevent intraday burnout.`,
+                detail: `Asset has already generated ${currentCountToday} signals on this trading day (effective cap is ${effectiveMaxSignals}${activeOverride ? ` [${activeOverride.scope_type.toUpperCase()} override]` : ''}). Suppressed to prevent intraday burnout.`,
                 previousState: 'candidate',
                 newState: 'rejected',
                 createdBy: 'publish_gate'

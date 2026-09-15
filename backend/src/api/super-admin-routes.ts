@@ -4,11 +4,12 @@ import fs from 'fs';
 import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
-import { isMarketOpen } from '../scheduler/killzone-mapper';
+import { isMarketOpen, getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { signalAuditService } from '../analytics/signal-audit-service';
 import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
+import { telegramBotService } from '../notifications/telegram-bot';
 
 const router = express.Router();
 
@@ -462,6 +463,150 @@ router.get('/daily-signal-cap-status', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch daily signal cap status', details: err.message });
   }
 });
+
+// ── Super Admin: Resend Already Sent Signal to Telegram ───────────────────────
+router.post('/signals/:id/resend-telegram', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const setupId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { market, assignNewTradeId } = req.body || {};
+
+    let targetMarket = (market || '').toLowerCase();
+    let setup: any = null;
+
+    if (targetMarket === 'forex') {
+      const rows = await queryDb<any>(`SELECT * FROM forex_edge_setups WHERE id = ?`, [setupId]);
+      if (rows.length > 0) setup = rows[0];
+    } else if (targetMarket === 'futures') {
+      const rows = await queryDb<any>(`SELECT * FROM edge_setups WHERE id = ?`, [setupId]);
+      if (rows.length > 0) setup = rows[0];
+    } else {
+      const fxRows = await queryDb<any>(`SELECT * FROM forex_edge_setups WHERE id = ?`, [setupId]);
+      if (fxRows.length > 0) {
+        setup = fxRows[0];
+        targetMarket = 'forex';
+      } else {
+        const futRows = await queryDb<any>(`SELECT * FROM edge_setups WHERE id = ?`, [setupId]);
+        if (futRows.length > 0) {
+          setup = futRows[0];
+          targetMarket = 'futures';
+        }
+      }
+    }
+
+    if (!setup) {
+      return res.status(404).json({ error: `Signal with ID ${setupId} not found.` });
+    }
+
+    const oldId = setup.id;
+    let newId = oldId;
+
+    if (assignNewTradeId) {
+      const crypto = await import('crypto');
+      newId = crypto.randomUUID();
+      await queries.updateSetupId(oldId, newId, targetMarket);
+      setup.id = newId;
+    }
+
+    // Format the Telegram signal message
+    const formattedMsg = telegramBotService.formatSignal(setup);
+    
+    // Direct dispatch to Telegram
+    await telegramBotService.sendMessage(formattedMsg);
+
+    // Record audit trail
+    try {
+      await queryDb(
+        `INSERT INTO admin_audit_logs (user_email, action, details) VALUES (?, ?, ?)`,
+        [
+          'chadwinsolomon@gmail.com',
+          'resend_telegram_signal',
+          JSON.stringify({
+            originalId: oldId,
+            sentId: newId,
+            assignedNewTradeId: Boolean(assignNewTradeId),
+            instrument: setup.instrument,
+            market: targetMarket,
+            sentAt: new Date().toISOString()
+          })
+        ]
+      );
+    } catch {}
+
+    res.json({
+      success: true,
+      message: `Signal for ${setup.instrument} successfully resent to Telegram.`,
+      setupId: newId,
+      oldId,
+      assignedNewTradeId: Boolean(assignNewTradeId)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to resend signal to Telegram', details: err.message });
+  }
+});
+
+// ── Super Admin: Individual Asset Signal Cap Overrides ─────────────────────────
+router.post('/signal-cap/override', async (req: Request, res: Response) => {
+  try {
+    const { instrument, market, strategyId, extraSignals, scopeType } = req.body || {};
+    if (!instrument) {
+      return res.status(400).json({ error: 'Instrument is required' });
+    }
+
+    const type: 'session' | '24hr' = scopeType === 'session' ? 'session' : '24hr';
+    const extras = Math.max(1, Number(extraSignals) || 1);
+    let expiresAt: string;
+    let sessionName: string | undefined;
+
+    if (type === 'session') {
+      const now = new Date();
+      const currentKz = getCurrentKillzone(now);
+      sessionName = currentKz?.killzone || 'unknown';
+      const nextBoundary = getNextKillzoneBoundary(now);
+      expiresAt = nextBoundary.boundaryUTC.toISOString();
+    } else {
+      const now = new Date();
+      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      expiresAt = in24h.toISOString();
+    }
+
+    const override = await queries.setAssetSignalCapOverride({
+      instrument,
+      market: market || (instrument.includes('/') ? 'forex' : 'futures'),
+      strategyId: strategyId || 'manna_snd',
+      extraSignals: extras,
+      scopeType: type,
+      sessionName,
+      expiresAt,
+      createdBy: 'super_admin'
+    });
+
+    res.json({ success: true, override });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to set asset signal cap override', details: err.message });
+  }
+});
+
+router.delete('/signal-cap/override/:instrument', async (req: Request, res: Response) => {
+  try {
+    const rawInst = req.params.instrument;
+    const instrument = decodeURIComponent(Array.isArray(rawInst) ? rawInst[0] : rawInst);
+    await queries.deleteAssetSignalCapOverride(instrument);
+    res.json({ success: true, instrument });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to delete asset signal cap override', details: err.message });
+  }
+});
+
+router.get('/signal-cap/overrides', async (_req: Request, res: Response) => {
+  try {
+    const overrides = await queries.getAssetSignalCapOverrides();
+    res.json({ success: true, overrides });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch asset signal cap overrides', details: err.message });
+  }
+});
+
 
 router.get('/sentinel/analytics', async (_req: Request, res: Response) => {
     try {

@@ -478,6 +478,49 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
+  const [boostingInstrument, setBoostingInstrument] = useState<string | null>(null);
+  const [boostExtra, setBoostExtra] = useState<number>(1);
+  const [boostScope, setBoostScope] = useState<'session' | '24hr'>('session');
+  const [savingBoost, setSavingBoost] = useState(false);
+
+  const handleApplyCapOverride = async (instrument: string, market: string) => {
+    try {
+      setSavingBoost(true);
+      const res = await fetch(`${API_BASE}/api/super-admin/signal-cap/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrument,
+          market,
+          strategyId: 'manna_snd',
+          extraSignals: boostExtra,
+          scopeType: boostScope
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to apply cap override');
+      setBoostingInstrument(null);
+      await fetchDailyCapStatus(selectedCapDay);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    } finally {
+      setSavingBoost(false);
+    }
+  };
+
+  const handleResetCapOverride = async (instrument: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/signal-cap/override/${encodeURIComponent(instrument)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset cap override');
+      await fetchDailyCapStatus(selectedCapDay);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccEmail, setNewAccEmail] = useState('');
@@ -2251,8 +2294,12 @@ export const SuperAdminPanel: React.FC = () => {
                 ) : dailyCapData?.allAssetsForDay && dailyCapData.allAssetsForDay.length > 0 ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
                     {dailyCapData.allAssetsForDay.map((asset: any) => {
-                      const isCapReached = asset.signalsCount >= (dailyCapData.maxSignals || 2);
-                      const isExcess = asset.signalsCount > (dailyCapData.maxSignals || 2);
+                      const effectiveMax = asset.maxSignals || dailyCapData.maxSignals || 2;
+                      const isCapReached = asset.signalsCount >= effectiveMax;
+                      const isExcess = asset.signalsCount > effectiveMax;
+                      const hasOverride = Boolean(asset.activeOverride);
+                      const isBoosting = boostingInstrument === asset.instrument;
+
                       return (
                         <div
                           key={asset.instrument}
@@ -2264,6 +2311,8 @@ export const SuperAdminPanel: React.FC = () => {
                               : 'rgba(255, 255, 255, 0.03)',
                             border: isExcess 
                               ? '1px solid rgba(244, 67, 54, 0.4)' 
+                              : hasOverride
+                              ? '1px solid #ffab00'
                               : isCapReached 
                               ? '1px solid rgba(0, 230, 118, 0.4)' 
                               : '1px solid rgba(255, 255, 255, 0.1)',
@@ -2284,24 +2333,208 @@ export const SuperAdminPanel: React.FC = () => {
                                 fontWeight: 800,
                                 padding: '3px 8px',
                                 borderRadius: '4px',
-                                background: isExcess ? '#d32f2f' : isCapReached ? '#2e7d32' : '#37474f',
-                                color: '#fff'
+                                background: isExcess ? '#d32f2f' : hasOverride ? '#ffab00' : isCapReached ? '#2e7d32' : '#37474f',
+                                color: hasOverride ? '#000' : '#fff'
                               }}
                             >
-                              {asset.signalsCount} / {dailyCapData.maxSignals || 2} SIGNALS
+                              {asset.signalsCount} / {effectiveMax} SIGNALS
                             </span>
                           </div>
 
                           <div style={{ fontSize: '0.76rem', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: '#aaa' }}>Enforcement Status:</span>
+                            <span style={{ color: '#aaa' }}>Enforcement:</span>
                             {dailyCapData.isCapEnabled ? (
-                              isCapReached ? (
+                              hasOverride ? (
+                                <span style={{ color: '#ffab00', fontWeight: 800 }}>⚡ Boosted Cap ({effectiveMax} Max)</span>
+                              ) : isCapReached ? (
                                 <span style={{ color: '#00e676', fontWeight: 700 }}>🚫 CAP ACTIVE (3rd+ Blocked)</span>
                               ) : (
-                                <span style={{ color: '#00e5ff' }}>✅ Open ({ (dailyCapData.maxSignals || 2) - asset.signalsCount } remaining)</span>
+                                <span style={{ color: '#00e5ff' }}>✅ Open ({ effectiveMax - asset.signalsCount } remaining)</span>
                               )
                             ) : (
                               <span style={{ color: '#ffb74d' }}>⚠️ Uncapped (Toggle is OFF)</span>
+                            )}
+                          </div>
+
+                          {/* Active Override Status Banner */}
+                          {hasOverride && (
+                            <div
+                              style={{
+                                margin: '8px 0',
+                                padding: '8px 10px',
+                                background: 'rgba(255, 171, 0, 0.1)',
+                                border: '1px solid rgba(255, 171, 0, 0.4)',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                fontSize: '0.72rem'
+                              }}
+                            >
+                              <div>
+                                <div style={{ color: '#ffab00', fontWeight: 800 }}>
+                                  ⚡ +{asset.activeOverride.extra_signals} Extra Signal ({effectiveMax} Max)
+                                </div>
+                                <div style={{ color: '#aaa', fontSize: '0.67rem' }}>
+                                  Scope: {asset.activeOverride.scope_type === 'session' ? `${(asset.activeOverride.session_name || 'Active').toUpperCase()} Session` : '24-Hour Period'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleResetCapOverride(asset.instrument)}
+                                style={{
+                                  background: 'rgba(255, 23, 68, 0.2)',
+                                  border: '1px solid #ff1744',
+                                  color: '#ff1744',
+                                  padding: '3px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: 800,
+                                  fontSize: '0.7rem'
+                                }}
+                                title="Cancel override and revert to default cap"
+                              >
+                                ✕ Reset
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Booster Controls Drawer */}
+                          <div style={{ marginTop: '8px', marginBottom: '8px' }}>
+                            {!isBoosting ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBoostingInstrument(asset.instrument);
+                                  setBoostExtra(1);
+                                  setBoostScope('session');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  background: hasOverride ? 'rgba(255, 171, 0, 0.12)' : 'rgba(0, 229, 255, 0.08)',
+                                  border: hasOverride ? '1px solid rgba(255, 171, 0, 0.4)' : '1px solid rgba(0, 229, 255, 0.3)',
+                                  color: hasOverride ? '#ffb74d' : '#00e5ff',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: '0.73rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                <span>⚡</span> {hasOverride ? 'Modify Asset Cap' : 'Increase Cap (Session / 24hr)'}
+                              </button>
+                            ) : (
+                              <div style={{ background: 'rgba(0, 0, 0, 0.5)', border: '1px solid #00e5ff', borderRadius: '6px', padding: '10px' }}>
+                                <div style={{ fontSize: '0.73rem', fontWeight: 800, color: '#00e5ff', marginBottom: '6px' }}>
+                                  ⚡ BOOST CAP: {asset.instrument}
+                                </div>
+
+                                <div style={{ marginBottom: '6px' }}>
+                                  <div style={{ fontSize: '0.67rem', color: '#aaa', marginBottom: '3px' }}>Extra Allowance:</div>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    {[1, 2].map((extra) => (
+                                      <button
+                                        key={extra}
+                                        type="button"
+                                        onClick={() => setBoostExtra(extra)}
+                                        style={{
+                                          flex: 1,
+                                          padding: '4px 6px',
+                                          borderRadius: '4px',
+                                          fontSize: '0.7rem',
+                                          fontWeight: boostExtra === extra ? 800 : 500,
+                                          background: boostExtra === extra ? '#00e5ff' : 'rgba(255, 255, 255, 0.05)',
+                                          color: boostExtra === extra ? '#000' : '#ccc',
+                                          border: boostExtra === extra ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        +{extra} (Max {(dailyCapData.maxSignals || 2) + extra})
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div style={{ marginBottom: '8px' }}>
+                                  <div style={{ fontSize: '0.67rem', color: '#aaa', marginBottom: '3px' }}>Duration Scope:</div>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBoostScope('session')}
+                                      style={{
+                                        flex: 1,
+                                        padding: '4px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: boostScope === 'session' ? 800 : 500,
+                                        background: boostScope === 'session' ? '#b388ff' : 'rgba(255, 255, 255, 0.05)',
+                                        color: boostScope === 'session' ? '#000' : '#ccc',
+                                        border: boostScope === 'session' ? '1px solid #b388ff' : '1px solid rgba(255, 255, 255, 0.1)',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      ⏱️ Session
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBoostScope('24hr')}
+                                      style={{
+                                        flex: 1,
+                                        padding: '4px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: boostScope === '24hr' ? 800 : 500,
+                                        background: boostScope === '24hr' ? '#ffb74d' : 'rgba(255, 255, 255, 0.05)',
+                                        color: boostScope === '24hr' ? '#000' : '#ccc',
+                                        border: boostScope === '24hr' ? '1px solid #ffb74d' : '1px solid rgba(255, 255, 255, 0.1)',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      📅 24-Hour
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setBoostingInstrument(null)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: '1px solid #546e7a',
+                                      color: '#bbb',
+                                      padding: '3px 8px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.68rem',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={savingBoost}
+                                    onClick={() => handleApplyCapOverride(asset.instrument, asset.market)}
+                                    style={{
+                                      background: '#00e676',
+                                      border: 'none',
+                                      color: '#000',
+                                      padding: '3px 10px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 800,
+                                      cursor: savingBoost ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    {savingBoost ? 'Saving...' : '✓ Boost'}
+                                  </button>
+                                </div>
+                              </div>
                             )}
                           </div>
 

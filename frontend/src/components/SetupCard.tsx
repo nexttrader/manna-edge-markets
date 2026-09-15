@@ -27,6 +27,7 @@ function getSelectionRationale(setup: EdgeSetup): string {
 }
 
 import { SignalReplaceModal } from './SignalReplaceModal';
+import { TelegramResendModal } from './TelegramResendModal';
 import { API_BASE } from '../config';
 import { useAuth } from '../context/AuthContext';
 
@@ -48,6 +49,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [showTelegramResend, setShowTelegramResend] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [invalidating, setInvalidating] = useState(false);
   const [replacementCandidate, setReplacementCandidate] = useState<any | null>(null);
@@ -589,6 +591,21 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <button className="btn-action btn-chart" onClick={() => setShowChart(true)}>
           📈 Chart
         </button>
+        {isSuperAdmin && (
+          <button
+            className="btn-action btn-resend-tg"
+            onClick={() => setShowTelegramResend(true)}
+            style={{
+              background: 'rgba(41, 182, 246, 0.16)',
+              color: '#29b6f6',
+              border: '1px solid rgba(41, 182, 246, 0.4)',
+              fontWeight: 700
+            }}
+            title="Super Admin Only: Resend this signal to Telegram (with optional new Trade ID)"
+          >
+            📲 Resend to TG
+          </button>
+        )}
         {isAdmin && stateStr === 'awaiting_entry' && (
           <button 
             className="btn-action btn-rescan" 
@@ -627,6 +644,20 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
       {showChart && (
         <SetupChartModal setup={setup} onClose={() => setShowChart(false)} />
+      )}
+
+      {showTelegramResend && (
+        <TelegramResendModal
+          setup={setup}
+          isOpen={showTelegramResend}
+          onClose={() => setShowTelegramResend(false)}
+          onSuccess={(newSetupId) => {
+            if (newSetupId && newSetupId !== setup.id) {
+              setup.id = newSetupId;
+            }
+            setTimeout(() => window.location.reload(), 600);
+          }}
+        />
       )}
 
       {replacementCandidate && (

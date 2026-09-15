@@ -14,6 +14,7 @@ import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 import { ExpandableCalendar } from '../components/ExpandableCalendar';
 import { SetupChartModal } from '../components/SetupChartModal';
+import { TelegramResendModal } from '../components/TelegramResendModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
 import type { EdgeSetup } from '../types';
 
@@ -81,6 +82,7 @@ export const AdminPanel: React.FC = () => {
   const [selectedUserProfile, setSelectedUserProfile] = useState<any | null>(null);
   const [chartReviewSetup, setChartReviewSetup] = useState<EdgeSetup | null>(null);
   const [copiedOutcomeTradeId, setCopiedOutcomeTradeId] = useState<string | null>(null);
+  const [telegramResendSetup, setTelegramResendSetup] = useState<any | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -1231,6 +1233,25 @@ export const AdminPanel: React.FC = () => {
                             >
                               {isDisabling ? 'Disabling...' : '⛔ DISABLE SIGNAL'}
                             </button>
+                            {isSuperAdmin && (
+                              <button
+                                className="font-mono"
+                                style={{
+                                  background: 'rgba(41, 182, 246, 0.18)',
+                                  border: '1px solid #29b6f6',
+                                  color: '#29b6f6',
+                                  padding: '4px 10px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: 800,
+                                  fontSize: '0.75rem'
+                                }}
+                                onClick={() => setTelegramResendSetup(setup)}
+                                title="Super Admin: Resend signal to Telegram (with Trade ID reassignment option)"
+                              >
+                                📲 Resend TG
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2428,6 +2449,17 @@ export const AdminPanel: React.FC = () => {
           <SetupChartModal
             setup={chartReviewSetup}
             onClose={() => setChartReviewSetup(null)}
+          />
+        )}
+        {telegramResendSetup && (
+          <TelegramResendModal
+            setup={telegramResendSetup}
+            isOpen={Boolean(telegramResendSetup)}
+            onClose={() => setTelegramResendSetup(null)}
+            onSuccess={() => {
+              setTelegramResendSetup(null);
+              refetchActiveSetups();
+            }}
           />
         )}
       </main>

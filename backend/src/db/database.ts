@@ -827,6 +827,22 @@ export async function initializeDatabase(): Promise<void> {
       }
     } catch {}
 
+    // ── Individual Asset Signal Cap Overrides ──────────────────────────────────
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS asset_signal_cap_overrides (
+        instrument TEXT PRIMARY KEY,
+        market TEXT NOT NULL,
+        strategy_id TEXT DEFAULT 'manna_snd',
+        extra_signals INTEGER NOT NULL DEFAULT 1,
+        max_signals INTEGER NOT NULL DEFAULT 3,
+        scope_type TEXT NOT NULL,
+        session_name TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        created_by TEXT DEFAULT 'super_admin'
+      )`);
+    } catch {}
+
     console.log('Database initialized successfully.');
     await ensureActiveSignalsRestored();
 }

@@ -451,3 +451,17 @@ CREATE TABLE IF NOT EXISTS vps_trade_sync (
 
 CREATE INDEX IF NOT EXISTS idx_vps_trade_sync_setup ON vps_trade_sync(setup_id);
 
+-- Individual Asset Signal Cap Overrides (Super Admin Session / 24hr Overrides)
+CREATE TABLE IF NOT EXISTS asset_signal_cap_overrides (
+    instrument TEXT PRIMARY KEY,
+    market TEXT NOT NULL,
+    strategy_id TEXT DEFAULT 'manna_snd',
+    extra_signals INTEGER NOT NULL DEFAULT 1,
+    max_signals INTEGER NOT NULL DEFAULT 3,
+    scope_type TEXT NOT NULL,
+    session_name TEXT,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by TEXT DEFAULT 'super_admin'
+);
+

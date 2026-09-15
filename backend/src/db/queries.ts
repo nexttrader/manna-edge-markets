@@ -599,6 +599,7 @@ export async function getCappedAssetsReport(targetDateET?: string): Promise<{
   availableDays: string[];
   cappedAssetsForDay: any[];
   allAssetsForDay: any[];
+  activeOverrides?: AssetSignalCapOverride[];
 }> {
   await ensureStrategySettingsSeeded();
   const capStatus = await isDailySignalCapEnabled('manna_snd');
@@ -696,9 +697,47 @@ export async function getCappedAssetsReport(targetDateET?: string): Promise<{
   }
 
   const availableDays = Array.from(dayMap.keys()).sort().reverse();
-  const effectiveDay = dayMap.has(selectedDay) ? selectedDay : (availableDays.length > 0 ? availableDays[0] : nowET);
+  const effectiveDay = (selectedDay && dayMap.has(selectedDay)) || selectedDay === nowET 
+    ? selectedDay 
+    : (availableDays.length > 0 ? availableDays[0] : nowET);
   const targetDayMap = dayMap.get(effectiveDay) || new Map();
+
+  const activeOverrides = await getAssetSignalCapOverrides();
+  const overrideMap = new Map<string, AssetSignalCapOverride>();
+  for (const ov of activeOverrides) {
+    overrideMap.set(ov.instrument, ov);
+  }
+
+  // If viewing current day, ensure assets with active overrides are present in targetDayMap even if 0 signals
+  if (effectiveDay === nowET) {
+    for (const ov of activeOverrides) {
+      if (!targetDayMap.has(ov.instrument)) {
+        targetDayMap.set(ov.instrument, {
+          instrument: ov.instrument,
+          market: ov.market,
+          strategyId: ov.strategy_id,
+          signalsCount: 0,
+          maxSignals: ov.max_signals,
+          isCapped: false,
+          excessSignals: 0,
+          signals: []
+        });
+      }
+    }
+  }
+
   const allAssetsForDay = Array.from(targetDayMap.values()).sort((a, b) => b.signalsCount - a.signalsCount);
+
+  for (const asset of allAssetsForDay) {
+    const ov = overrideMap.get(asset.instrument);
+    if (ov) {
+      asset.activeOverride = ov;
+      asset.maxSignals = ov.max_signals;
+      asset.isCapped = asset.signalsCount >= ov.max_signals;
+      asset.excessSignals = Math.max(0, asset.signalsCount - ov.max_signals);
+    }
+  }
+
   const cappedAssetsForDay = allAssetsForDay.filter(a => a.isCapped);
 
   return {
@@ -709,8 +748,153 @@ export async function getCappedAssetsReport(targetDateET?: string): Promise<{
     selectedDayET: effectiveDay,
     availableDays,
     cappedAssetsForDay,
-    allAssetsForDay
+    allAssetsForDay,
+    activeOverrides
   };
+}
+
+export interface AssetSignalCapOverride {
+  instrument: string;
+  market: string;
+  strategy_id: string;
+  extra_signals: number;
+  max_signals: number;
+  scope_type: 'session' | '24hr';
+  session_name?: string | null;
+  expires_at: string;
+  created_at: string;
+  created_by?: string;
+}
+
+export async function ensureAssetSignalCapTable(): Promise<void> {
+  try {
+    await queryDb(`CREATE TABLE IF NOT EXISTS asset_signal_cap_overrides (
+      instrument TEXT PRIMARY KEY,
+      market TEXT NOT NULL,
+      strategy_id TEXT DEFAULT 'manna_snd',
+      extra_signals INTEGER NOT NULL DEFAULT 1,
+      max_signals INTEGER NOT NULL DEFAULT 3,
+      scope_type TEXT NOT NULL,
+      session_name TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by TEXT DEFAULT 'super_admin'
+    )`);
+  } catch {}
+}
+
+export async function setAssetSignalCapOverride(data: {
+  instrument: string;
+  market: string;
+  strategyId?: string;
+  extraSignals: number;
+  maxSignals?: number;
+  scopeType: 'session' | '24hr';
+  sessionName?: string;
+  expiresAt: string;
+  createdBy?: string;
+}): Promise<AssetSignalCapOverride> {
+  await ensureAssetSignalCapTable();
+  const stratId = data.strategyId || 'manna_snd';
+  const cap = await isDailySignalCapEnabled(stratId);
+  const baseMax = cap.maxSignals || 2;
+  const maxSignals = data.maxSignals !== undefined ? data.maxSignals : (baseMax + data.extraSignals);
+  const now = new Date().toISOString();
+
+  await queryDb(
+    `INSERT INTO asset_signal_cap_overrides (instrument, market, strategy_id, extra_signals, max_signals, scope_type, session_name, expires_at, created_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (instrument) DO UPDATE SET
+       market = excluded.market,
+       strategy_id = excluded.strategy_id,
+       extra_signals = excluded.extra_signals,
+       max_signals = excluded.max_signals,
+       scope_type = excluded.scope_type,
+       session_name = excluded.session_name,
+       expires_at = excluded.expires_at,
+       created_at = excluded.created_at,
+       created_by = excluded.created_by`,
+    [
+      data.instrument,
+      data.market,
+      stratId,
+      data.extraSignals,
+      maxSignals,
+      data.scopeType,
+      data.sessionName || null,
+      data.expiresAt,
+      now,
+      data.createdBy || 'super_admin'
+    ]
+  );
+
+  return {
+    instrument: data.instrument,
+    market: data.market,
+    strategy_id: stratId,
+    extra_signals: data.extraSignals,
+    max_signals: maxSignals,
+    scope_type: data.scopeType,
+    session_name: data.sessionName || null,
+    expires_at: data.expiresAt,
+    created_at: now,
+    created_by: data.createdBy || 'super_admin'
+  };
+}
+
+export async function getActiveSignalCapOverride(instrument: string, strategyId: string = 'manna_snd'): Promise<AssetSignalCapOverride | null> {
+  try {
+    await ensureAssetSignalCapTable();
+    const now = new Date().toISOString();
+    const rows = await queryDb<AssetSignalCapOverride>(
+      `SELECT * FROM asset_signal_cap_overrides WHERE instrument = ? AND strategy_id = ? AND expires_at > ?`,
+      [instrument, strategyId, now]
+    );
+    if (rows && rows.length > 0) {
+      return rows[0];
+    }
+    // Clean up expired override for this instrument if any
+    await queryDb(`DELETE FROM asset_signal_cap_overrides WHERE instrument = ? AND expires_at <= ?`, [instrument, now]);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAssetSignalCapOverrides(): Promise<AssetSignalCapOverride[]> {
+  try {
+    await ensureAssetSignalCapTable();
+    const now = new Date().toISOString();
+    // Clean up expired overrides
+    await queryDb(`DELETE FROM asset_signal_cap_overrides WHERE expires_at <= ?`, [now]);
+    const rows = await queryDb<AssetSignalCapOverride>(
+      `SELECT * FROM asset_signal_cap_overrides WHERE expires_at > ? ORDER BY created_at DESC`,
+      [now]
+    );
+    return rows || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteAssetSignalCapOverride(instrument: string): Promise<void> {
+  try {
+    await queryDb(`DELETE FROM asset_signal_cap_overrides WHERE instrument = ?`, [instrument]);
+  } catch {}
+}
+
+export async function updateSetupId(oldId: string, newId: string, market: string): Promise<boolean> {
+  try {
+    const table = market.toLowerCase() === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+    await queryDb(`UPDATE ${table} SET id = ? WHERE id = ?`, [newId, oldId]);
+    try { await queryDb(`UPDATE client_signal_tags SET setup_id = ? WHERE setup_id = ?`, [newId, oldId]); } catch {}
+    try { await queryDb(`UPDATE vps_trade_sync SET setup_id = ? WHERE setup_id = ?`, [newId, oldId]); } catch {}
+    try { await queryDb(`UPDATE invalidation_audit SET setup_id = ? WHERE setup_id = ?`, [newId, oldId]); } catch {}
+    return true;
+  } catch (err) {
+    console.error('Failed to update setup id:', err);
+    return false;
+  }
 }
 
 export async function deleteStrategy(id: string): Promise<void> {
