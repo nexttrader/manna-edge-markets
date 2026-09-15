@@ -52,9 +52,24 @@ function mktPrefix(setup: EdgeSetup): string {
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+interface TelegramQueueItem {
+  id: string;
+  description: string;
+  execute: () => Promise<Response>;
+  resolve: (value: boolean) => void;
+  reject: (reason?: any) => void;
+  retries: number;
+}
+
 class TelegramBotService {
   private config: TelegramConfig = { enabled: false, botToken: '', chatId: '' };
   private isInitialized = false;
+
+  // ── Rate Limiting Queue State ──
+  private queue: TelegramQueueItem[] = [];
+  private isProcessingQueue = false;
+  private minIntervalMs = 1100; // Telegram chat limit is 1 req/sec; 1100ms guarantees safe margin
+  private lastDispatchTime = 0;
 
   public init() {
     if (this.isInitialized) return;
@@ -87,6 +102,124 @@ class TelegramBotService {
 
   public getConfig(): TelegramConfig { return this.config; }
 
+  /** Internal queue pacing and inspection helpers */
+  public getQueueLength(): number { return this.queue.length; }
+  public setMinIntervalMs(ms: number): void { this.minIntervalMs = ms; }
+
+  /** Waits until all currently enqueued Telegram dispatches have completed */
+  public async drainQueue(): Promise<void> {
+    while (this.queue.length > 0 || this.isProcessingQueue) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+  }
+
+  // ── Queue Processing Engine ──────────────────────────────────────────────────
+
+  private enqueue(
+    description: string,
+    execute: () => Promise<Response>
+  ): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({
+        id: Math.random().toString(36).substring(2, 9),
+        description,
+        execute,
+        resolve,
+        reject,
+        retries: 0
+      });
+      this.processQueue().catch(err => {
+        logger.error({ err: err.message }, 'Unexpected error running Telegram queue processor');
+      });
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue) return;
+    this.isProcessingQueue = true;
+
+    try {
+      while (this.queue.length > 0) {
+        const item = this.queue[0];
+
+        // Enforce rate limiting pacing: ensure minimum gap of minIntervalMs between dispatches
+        const now = Date.now();
+        const elapsed = now - this.lastDispatchTime;
+        if (elapsed < this.minIntervalMs) {
+          const waitTime = this.minIntervalMs - elapsed;
+          await new Promise(r => setTimeout(r, waitTime));
+        }
+
+        try {
+          const res = await item.execute();
+          this.lastDispatchTime = Date.now();
+
+          if (res.ok) {
+            this.queue.shift();
+            logger.info({ description: item.description }, 'Telegram message dispatched successfully');
+            item.resolve(true);
+          } else if (res.status === 429) {
+            // Telegram Rate Limit (Too Many Requests)
+            let retryAfter = 3;
+            try {
+              const data: any = await res.json();
+              if (data?.parameters?.retry_after) {
+                retryAfter = Number(data.parameters.retry_after);
+              }
+            } catch {}
+
+            const pauseMs = (retryAfter * 1000) + 500;
+            logger.warn(
+              { description: item.description, status: 429, retryAfter, pauseMs },
+              'Telegram 429 rate limit hit. Pausing queue and retrying...'
+            );
+
+            item.retries++;
+            if (item.retries > 5) {
+              logger.error({ description: item.description }, 'Telegram message dropped after exceeding max 429 retries (5)');
+              this.queue.shift();
+              item.resolve(false);
+            } else {
+              // Wait requested backoff duration before retrying this item
+              await new Promise(r => setTimeout(r, pauseMs));
+            }
+          } else if (res.status >= 500 && res.status <= 599) {
+            // Temporary Telegram server error
+            item.retries++;
+            if (item.retries > 3) {
+              logger.error({ status: res.status, description: item.description }, 'Telegram server error: dropped after 3 retries');
+              this.queue.shift();
+              item.resolve(false);
+            } else {
+              const backoffMs = item.retries * 1500;
+              logger.warn({ status: res.status, backoffMs }, 'Telegram 5xx error. Retrying after backoff...');
+              await new Promise(r => setTimeout(r, backoffMs));
+            }
+          } else {
+            // Permanent client error (e.g. 400 Bad Request / parse error)
+            const errorText = await res.text().catch(() => '');
+            logger.error({ status: res.status, error: errorText, description: item.description }, 'Failed to send Telegram message (permanent error)');
+            this.queue.shift();
+            item.resolve(false);
+          }
+        } catch (err: any) {
+          // Network fetch failure
+          item.retries++;
+          if (item.retries > 3) {
+            logger.error({ err: err.message, description: item.description }, 'Network error during Telegram dispatch: dropped after 3 retries');
+            this.queue.shift();
+            item.resolve(false);
+          } else {
+            logger.warn({ err: err.message, retries: item.retries }, 'Network error contacting Telegram. Retrying in 2s...');
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
   // ── Core send ──────────────────────────────────────────────────────────────
 
   public async sendMessage(text: string, parseMode: 'HTML' | 'Markdown' = 'HTML'): Promise<boolean> {
@@ -95,23 +228,22 @@ class TelegramBotService {
       logger.debug('Skipping Telegram send: Bot disabled or missing credentials');
       return false;
     }
-    try {
-      const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-      const res = await fetch(url, {
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const payload = {
+      chat_id: chatId,
+      text,
+      parse_mode: parseMode,
+      disable_web_page_preview: true
+    };
+
+    return this.enqueue(text.substring(0, 45).replace(/\n/g, ' '), () => {
+      return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true })
+        body: JSON.stringify(payload)
       });
-      if (!res.ok) {
-        logger.error({ status: res.status, error: await res.text() }, 'Failed to send Telegram message');
-        return false;
-      }
-      logger.info('Telegram alert message dispatched successfully');
-      return true;
-    } catch (err: any) {
-      logger.error({ err: err.message }, 'Error dispatching Telegram message');
-      return false;
-    }
+    });
   }
 
   public async sendDocument(
@@ -125,8 +257,10 @@ class TelegramBotService {
       logger.debug('Skipping Telegram sendDocument: Bot disabled or missing credentials');
       return false;
     }
-    try {
-      const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+
+    const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+
+    return this.enqueue(`doc:${filename}`, () => {
       const formData = new FormData();
       formData.append('chat_id', chatId);
       const blob = new Blob([fileBuffer], { type: 'application/pdf' });
@@ -135,22 +269,11 @@ class TelegramBotService {
         formData.append('caption', caption);
         formData.append('parse_mode', parseMode);
       }
-
-      const res = await fetch(url, {
+      return fetch(url, {
         method: 'POST',
         body: formData
       });
-
-      if (!res.ok) {
-        logger.error({ status: res.status, error: await res.text() }, 'Failed to send Telegram document');
-        return false;
-      }
-      logger.info({ filename }, 'Telegram document dispatched successfully');
-      return true;
-    } catch (err: any) {
-      logger.error({ err: err.message }, 'Error dispatching Telegram document');
-      return false;
-    }
+    });
   }
 
   public async sendSignalAuditReport(
