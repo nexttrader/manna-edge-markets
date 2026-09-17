@@ -399,8 +399,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
           if (ez_low < htfDemand.distal || ez_high > htfSupply.proximal) continue;
 
-          // Discard setup if current market price has breached Stop Loss or is excessively displaced (> 6x ATR)
-          if (currentPrice <= stop || (currentPrice - ez_high) > (atr14 * 6)) continue;
+          // Discard setup if current market price has breached Stop Loss, already reached TP1, or is excessively displaced (> 6x ATR)
+          if (currentPrice <= stop || currentPrice >= tp1 || (currentPrice - ez_high) > (atr14 * 6)) continue;
 
           const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
           const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
@@ -574,8 +574,8 @@ export class MannaSndStrategy implements IStrategyEngine {
           // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
           if (ez_high > htfSupply.distal || ez_low < htfDemand.proximal) continue;
 
-          // Discard setup if current market price has breached Stop Loss or is excessively displaced
-          if (currentPrice >= stop || (ez_low - currentPrice) > (atr14 * 6)) continue;
+          // Discard setup if current market price has breached Stop Loss, already reached TP1, or is excessively displaced
+          if (currentPrice >= stop || currentPrice <= tp1 || (ez_low - currentPrice) > (atr14 * 6)) continue;
 
           const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Supply Curve. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 

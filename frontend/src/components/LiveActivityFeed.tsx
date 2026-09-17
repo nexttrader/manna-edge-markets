@@ -21,6 +21,14 @@ function formatPlainEnglishAudit(reasonCode: string, detail?: string) {
     } else {
       explanation = 'Market price touched Stop Loss level. Position closed in Loss.';
     }
+  } else if (code === 'target_reached_pre_entry') {
+    title = 'Target Reached Pre-Entry';
+    icon = '🎯';
+    explanation = 'Market price reached take-profit target before filling the pending limit order. Move completed without us — order cancelled.';
+  } else if (code === 'stop_breached_pre_entry') {
+    title = 'Stop Breached Pre-Entry';
+    icon = '🛑';
+    explanation = 'Market price breached Stop Loss level before order could fill. Zone consumed — pending order cancelled.';
   } else if (code === 'price_displaced') {
     title = 'Price Displaced';
     icon = '🏃';

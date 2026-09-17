@@ -375,9 +375,15 @@ export class SentinelV2Strategy implements IStrategyEngine {
         }
 
         const finalEntry = roundedEntry;
-        const finalStop = roundedStop;
         const finalTp1 = Number(tp1.toFixed(decimals));
         const finalTp2 = Number(tp2.toFixed(decimals));
+
+        // Discard setup if current market price has already breached Stop Loss or reached TP1 before publication
+        if (bias === 'long') {
+          if (currentPrice <= finalStop || currentPrice >= finalTp1) continue;
+        } else {
+          if (currentPrice >= finalStop || currentPrice <= finalTp1) continue;
+        }
 
         const r_multiple_1 = computeRMultiple(finalEntry, finalTp1, finalStop, bias);
         const r_multiple_2 = computeRMultiple(finalEntry, finalTp2, finalStop, bias);

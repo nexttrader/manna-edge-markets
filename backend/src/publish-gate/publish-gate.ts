@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import * as queries from '../db/queries';
-import { KillzoneInfo, CandidateSetup, EdgeSetup, RunMode } from '../discovery/types';
+import { KillzoneInfo, CandidateSetup, EdgeSetup, RunMode, InvalidationReason } from '../discovery/types';
 import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
 import { computeATR } from '../discovery/atr';
 import { createLogger } from '../telemetry/logger';
@@ -179,8 +179,43 @@ export async function executePublishRun(
           }
         }
         
+        // Pre-publication Target & Stop Filter: Discard candidates where price already reached TP1 or breached Stop
+        const validCandidates: CandidateSetup[] = [];
+        for (const c of instCandidates) {
+          if (currentPrice > 0) {
+            const isLong = c.bias === 'long';
+            const targetReached = isLong ? currentPrice >= c.tp1 : currentPrice <= c.tp1;
+            const stopBreached = isLong ? currentPrice <= c.stop : currentPrice >= c.stop;
+            if (targetReached || stopBreached) {
+              logger.warn({
+                instrument: c.instrument,
+                strategyId: c.strategy_id,
+                currentPrice,
+                tp1: c.tp1,
+                stop: c.stop,
+                reason: targetReached ? 'target_reached_pre_publish' : 'stop_breached_pre_publish'
+              }, 'PublishGate: Discarding candidate prior to deduplication — price already reached TP1 or breached stop');
+
+              await hawkeyeService.logInvalidation({
+                setupId: `pre_pub_${c.instrument}_${Date.now()}`,
+                instrument: c.instrument,
+                setupMarket: market.name,
+                runId: runId,
+                reasonCode: targetReached ? InvalidationReason.target_reached_pre_entry : InvalidationReason.stop_breached_pre_entry,
+                detail: `Candidate discarded pre-publish: current price ${currentPrice} already ${targetReached ? `reached TP1 (${c.tp1})` : `breached Stop (${c.stop})`}`,
+                previousState: 'candidate',
+                newState: 'rejected',
+                createdBy: 'publish_gate'
+              });
+              stats.discarded++;
+              continue;
+            }
+          }
+          validCandidates.push(c);
+        }
+
         // 2. Dedupe and Select
-        const dedupeResult = dedupeAndSelect(effectiveExisting, instCandidates, currentPrice, atr14);
+        const dedupeResult = dedupeAndSelect(effectiveExisting, validCandidates, currentPrice, atr14);
         
         // 2b. Daily Signal Cap Gate & Smart Consecutive Loss Halt (Enforced per market scope & rules)
         if ((dedupeResult.action === 'replace' || dedupeResult.action === 'insert') && dedupeResult.selectedCandidate) {

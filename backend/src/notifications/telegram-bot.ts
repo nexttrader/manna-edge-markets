@@ -507,7 +507,20 @@ class TelegramBotService {
     const p   = mktPrefix(setup);
     const id  = fmtId(setup);
     const sym = cleanSymbol(setup.instrument);
-    const why = (reason || 'market_structure_breach').replace(/_/g, ' ');
+    let why = (reason || 'market_structure_breach').replace(/_/g, ' ');
+    let instruction = 'Discard setup — do not enter. Pending order cancelled.';
+
+    if (reason === 'target_reached_pre_entry') {
+      why = 'Target Reached Pre-Entry (Move Completed Without Fill)';
+      instruction = 'Target hit before limit order could fill. Pending order cancelled.';
+    } else if (reason === 'stop_breached_pre_entry') {
+      why = 'Stop Level Breached Pre-Entry (Zone Consumed)';
+      instruction = 'Price broke beyond stop before filling order. Pending order cancelled.';
+    } else if (reason === 'price_displaced') {
+      why = 'Zone Blown Through (> 1.5x ATR Volatility Invalidation)';
+      instruction = 'Price moved aggressively through zone. Pending order cancelled.';
+    }
+
     return `<b>⛔ ${p} MANAGE ⚡</b>
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 <b>Trade ID:</b> <code>${id}</code>
@@ -515,7 +528,7 @@ class TelegramBotService {
 🎯 <b>Action:</b> CANCEL PENDING ORDER
 📢 <b>Status:</b> SIGNAL INVALIDATED (PRE-ENTRY)
 ⚠️ <b>Reason:</b> ${why}.
-👉 <b>Instruction:</b> Discard setup — do not enter. Pending order cancelled.
+👉 <b>Instruction:</b> ${instruction}
 📅 <b>Date &amp; Time:</b> <code>${fmtTs()}</code>
 ━━━━━━━━━━━━━━━━━━━━━`;
   }

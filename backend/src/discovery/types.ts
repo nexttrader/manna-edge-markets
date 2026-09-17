@@ -13,6 +13,8 @@ export type RunMode = 'dry_run' | 'live' | 'forced';
 
 export enum InvalidationReason {
     price_displaced = 'price_displaced',
+    target_reached_pre_entry = 'target_reached_pre_entry',
+    stop_breached_pre_entry = 'stop_breached_pre_entry',
     structure_broken = 'structure_broken',
     sl_breached = 'sl_breached',
     entry_expired = 'entry_expired',

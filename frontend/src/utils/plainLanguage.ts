@@ -49,6 +49,14 @@ export function translateInvalidationToPlainEnglish(reason: string | undefined):
 
   const lower = reason.toLowerCase();
 
+  if (lower.includes('target_reached')) {
+    return 'Target price was reached before our limit order could fill. The move completed without us, so the pending order was safely cancelled.';
+  }
+
+  if (lower.includes('stop_breached')) {
+    return 'Market price broke past the stop level before entering the trade. The zone failed, so the pending order was safely cancelled.';
+  }
+
   if (lower.includes('displaced') || lower.includes('displacement')) {
     return 'Price ran away too quickly before filling our limit order. Order cancelled to keep your account safe from chasing!';
   }

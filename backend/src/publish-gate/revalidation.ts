@@ -69,14 +69,14 @@ export function revalidateSetup(
       if (setup.tp1 && (effectiveHigh >= setup.tp1 || evalPrice >= setup.tp1)) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.target_reached_pre_entry,
           detail: `Price ${effectiveHigh} (Bid) reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
         };
       }
       if (setup.tp2 && (effectiveHigh >= setup.tp2 || evalPrice >= setup.tp2)) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.target_reached_pre_entry,
           detail: `Price ${effectiveHigh} (Bid) reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
         };
       }
@@ -84,14 +84,14 @@ export function revalidateSetup(
       if (setup.tp1 && (effectiveLow <= setup.tp1 || evalPrice <= setup.tp1)) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.target_reached_pre_entry,
           detail: `Price ${effectiveLow} (Ask) reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
         };
       }
       if (setup.tp2 && (effectiveLow <= setup.tp2 || evalPrice <= setup.tp2)) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.target_reached_pre_entry,
           detail: `Price ${effectiveLow} (Ask) reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
         };
       }
@@ -102,7 +102,7 @@ export function revalidateSetup(
       if (effectiveLow <= setup.stop || evalPrice <= setup.stop) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.stop_breached_pre_entry,
           detail: `Price ${effectiveLow} (Bid) breached Stop Loss ${setup.stop} before entry fill — demand zone consumed`
         };
       }
@@ -118,7 +118,7 @@ export function revalidateSetup(
       if (effectiveHigh >= setup.stop || evalPrice >= setup.stop) {
         return {
           isValid: false,
-          reason: InvalidationReason.price_displaced,
+          reason: InvalidationReason.stop_breached_pre_entry,
           detail: `Price ${effectiveHigh} (Ask) breached Stop Loss ${setup.stop} before entry fill — supply zone consumed`
         };
       }

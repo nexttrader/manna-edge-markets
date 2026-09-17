@@ -89,7 +89,7 @@ async function runAllTests() {
         entry_zone_low: 1.0900,
         entry_zone_high: 1.0920,
         entry_zone_mid: 1.0910,
-        stop: 1.0870,
+        stop: 1.0800,
         tp1: 1.0950,
         signal_state: 'awaiting_entry',
         superseded: 0,
