@@ -838,6 +838,42 @@ router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     }
 });
 
+router.post('/manna-snd/scan', async (req: Request, res: Response) => {
+    try {
+        const { getCurrentKillzone, isForexMarketOpen, isFuturesMarketOpen } = await import('../scheduler/killzone-mapper');
+        const { discoverUnifiedSetups } = await import('../discovery/unified-discovery');
+        const { executePublishRun } = await import('../publish-gate/publish-gate');
+        
+        const now = new Date();
+        const force = Boolean(req.body?.force);
+        let scope: 'both' | 'futures' | 'forex' = 'both';
+
+        if (process.env.NODE_ENV !== 'test' && !force) {
+            const isForexOpen = isForexMarketOpen(now);
+            const isFuturesOpen = isFuturesMarketOpen(now);
+            if (!isForexOpen && !isFuturesOpen) {
+                return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
+            } else if (!isForexOpen) {
+                scope = 'futures';
+            } else if (!isFuturesOpen) {
+                scope = 'forex';
+            }
+        }
+
+        const kzInfo = getCurrentKillzone(now) || {
+            killzone: 'ny_am' as const,
+            boundaryET: '08:00',
+            boundaryUTC: now.toISOString()
+        };
+        const runId = `manna_snd_manual_${Date.now()}`;
+        const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
+        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
+        res.json({ success: true, result, runId, scope });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Manna SnD manual scan failed', details: err.message });
+    }
+});
+
 router.get('/strategies/:id/admin-access', async (req: Request, res: Response) => {
     try {
         const rawId = req.params.id;

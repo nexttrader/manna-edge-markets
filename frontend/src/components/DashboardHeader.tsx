@@ -31,6 +31,27 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
   const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
+  const [isScanningManna, setIsScanningManna] = useState(false);
+
+  const handleTriggerMannaScan = async () => {
+    setIsScanningManna(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/manna-snd/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'live', force: false })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Scan failed');
+      const stats = data.result?.stats || {};
+      alert(`✅ Manna SnD Scan Completed!\n\n• Signals Created: ${stats.created || 0}\n• Signals Preserved: ${stats.preserved || 0}\n• Invalidation Check: ${stats.invalidated || 0}\n• Market Scope: ${data.scope?.toUpperCase() || 'ALL'}`);
+      window.location.reload();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    } finally {
+      setIsScanningManna(false);
+    }
+  };
 
   const isTrader = user?.role === 'trader';
 
@@ -242,6 +263,32 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                 </>
               )}
             </div>
+
+            {isAdmin && (
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                  color: '#000',
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
+                }}
+                onClick={handleTriggerMannaScan}
+                disabled={isScanningManna}
+                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+              >
+                <span>{isScanningManna ? '⏳ Scanning...' : '🟡 Scan Manna SnD'}</span>
+              </button>
+            )}
 
             <div className="header-circuit-breaker-wrap">
               <CircuitBreakerIndicator />

@@ -752,24 +752,24 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
   try {
     const { mode = 'live', market = 'both', strategyId } = req.body || {};
     const now = new Date();
+    let effectiveScope = (market.toLowerCase() as 'both' | 'futures' | 'forex');
 
     if (process.env.NODE_ENV !== 'test') {
-      const scope = (market.toLowerCase() as 'both' | 'futures' | 'forex');
       const isForexOpen = isForexMarketOpen(now);
       const isFuturesOpen = isFuturesMarketOpen(now);
-      if (scope === 'forex' && !isForexOpen) {
+      if (effectiveScope === 'forex' && !isForexOpen) {
         return res.status(400).json({ error: 'Cannot scan: The Forex market is currently closed.' });
       }
-      if (scope === 'futures' && !isFuturesOpen) {
+      if (effectiveScope === 'futures' && !isFuturesOpen) {
         return res.status(400).json({ error: 'Cannot scan: The Futures market is currently closed.' });
       }
-      if (scope === 'both') {
+      if (effectiveScope === 'both') {
         if (!isForexOpen && !isFuturesOpen) {
           return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
         } else if (!isForexOpen) {
-          return res.status(400).json({ error: 'Cannot scan: The Forex market is currently closed.' });
+          effectiveScope = 'futures';
         } else if (!isFuturesOpen) {
-          return res.status(400).json({ error: 'Cannot scan: The Futures market is currently closed.' });
+          effectiveScope = 'forex';
         }
       }
     }
@@ -782,13 +782,46 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
     };
     
     const runId = `manual_${Date.now()}`;
-    const scope = (market.toLowerCase() as 'both' | 'futures' | 'forex');
-    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], strategyId);
+    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, effectiveScope, [], strategyId);
     
     const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/manna-snd/scan', async (req: Request, res: Response) => {
+  try {
+    const { mode = 'live', force = false } = req.body || {};
+    const now = new Date();
+    let scope: 'both' | 'futures' | 'forex' = 'both';
+
+    if (process.env.NODE_ENV !== 'test' && !force) {
+      const isForexOpen = isForexMarketOpen(now);
+      const isFuturesOpen = isFuturesMarketOpen(now);
+      if (!isForexOpen && !isFuturesOpen) {
+        return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed. Use force=true to bypass.' });
+      } else if (!isForexOpen) {
+        scope = 'futures';
+      } else if (!isFuturesOpen) {
+        scope = 'forex';
+      }
+    }
+
+    const currentKz = getCurrentKillzone(now);
+    const kzInfo = currentKz || {
+      killzone: 'ny_am' as const,
+      boundaryET: '08:00',
+      boundaryUTC: now.toISOString()
+    };
+    
+    const runId = `manna_snd_manual_${Date.now()}`;
+    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
+    const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
+    res.json({ success: true, result, runId, scope });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Manna SnD manual scan failed', details: error?.message || String(error) });
   }
 });
 

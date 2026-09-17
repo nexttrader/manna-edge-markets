@@ -69,7 +69,7 @@ function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
 export const AdminPanel: React.FC = () => {
   const { user, originalAdmin, logout, impersonateUser } = useAuth();
   const navigate = useNavigate();
-  const { triggerRun, disableSignal, cancelUnwantedBatch, cancelRebootSignals } = useAdmin();
+  const { triggerRun, triggerMannaSndScan, disableSignal, cancelUnwantedBatch, cancelRebootSignals } = useAdmin();
   const [isCancellingAll, setIsCancellingAll] = useState(false);
   const [isCancellingReboot, setIsCancellingReboot] = useState(false);
 
@@ -476,6 +476,23 @@ export const AdminPanel: React.FC = () => {
       refetchActiveSetups();
       refetchAnalytics();
     }, 1000);
+  };
+
+  const handleMannaSndQuickScan = async () => {
+    setIsTriggering(true);
+    try {
+      const res = await triggerMannaSndScan('live', false);
+      if (res.success) {
+        const stats = res.data?.result?.stats || {};
+        alert(`✅ Manna SnD Scan Completed (All Assets)!\n\n• New Signals Created: ${stats.created || 0}\n• Signals Preserved: ${stats.preserved || 0}\n• Invalidation Check: ${stats.invalidated || 0}\n• Scope: ${res.data?.scope?.toUpperCase() || 'ALL'}`);
+        await refetchActiveSetups();
+        await refetchAnalytics();
+      } else {
+        alert(`⚠️ ${res.error || 'Manna SnD scan failed'}`);
+      }
+    } finally {
+      setIsTriggering(false);
+    }
   };
 
   const handleToggleStrategy = async (strategyId: string, currentEnabled: boolean) => {
@@ -2383,6 +2400,23 @@ export const AdminPanel: React.FC = () => {
               disabled={isTriggering}
             >
               {isTriggering ? 'Triggering...' : '▶ TRIGGER MANUAL RUN'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-trigger"
+              style={{
+                marginTop: '10px',
+                background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                color: '#000',
+                fontWeight: 900,
+                border: 'none',
+                boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
+              }}
+              onClick={handleMannaSndQuickScan}
+              disabled={isTriggering}
+            >
+              {isTriggering ? 'Scanning Manna SnD...' : '🟡 ONE-CLICK: SCAN ALL ASSETS (MANNA SND)'}
             </button>
           </div>
 

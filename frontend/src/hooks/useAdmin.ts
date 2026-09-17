@@ -60,7 +60,22 @@ export function useAdmin() {
     }
   };
 
-  return { triggerRun, disableSignal, cancelUnwantedBatch, cancelRebootSignals };
+  const triggerMannaSndScan = async (mode: 'live' | 'dry_run' = 'live', force: boolean = false) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/manna-snd/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, force })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Scan failed');
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  return { triggerRun, triggerMannaSndScan, disableSignal, cancelUnwantedBatch, cancelRebootSignals };
 }
 
 
