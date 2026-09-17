@@ -478,13 +478,19 @@ export const AdminPanel: React.FC = () => {
     }, 1000);
   };
 
-  const handleMannaSndQuickScan = async () => {
+  const [showAdminMannaDropdown, setShowAdminMannaDropdown] = useState(false);
+
+  const handleMannaSndQuickScan = async (market: 'both' | 'forex' | 'futures' = 'both') => {
     setIsTriggering(true);
+    setShowAdminMannaDropdown(false);
     try {
-      const res = await triggerMannaSndScan('live', false);
+      const res = await triggerMannaSndScan(market, 'live', false);
       if (res.success) {
         const stats = res.data?.result?.stats || {};
-        alert(`✅ Manna SnD Scan Completed (All Assets)!\n\n• New Signals Created: ${stats.created || 0}\n• Signals Preserved: ${stats.preserved || 0}\n• Invalidation Check: ${stats.invalidated || 0}\n• Scope: ${res.data?.scope?.toUpperCase() || 'ALL'}`);
+        const total = (stats.futuresDiscovered || 0) + (stats.forexDiscovered || 0);
+        const pub = (stats.futuresPublished || 0) + (stats.forexPublished || 0);
+        const scopeLabel = market === 'both' ? 'All (Forex + CME)' : market === 'forex' ? 'Forex Only' : 'Futures Only';
+        alert(`✅ Manna SnD Scan Completed (${scopeLabel})!\n\n• Candidates Analyzed: ${total}\n• Signals Published: ${pub}\n• Scope: ${res.data?.scope?.toUpperCase() || 'ALL'}`);
         await refetchActiveSetups();
         await refetchAnalytics();
       } else {
@@ -648,29 +654,119 @@ export const AdminPanel: React.FC = () => {
               {isSuperAdmin ? '👑 SUPER ADMIN' : `⚙️ ADMIN: ${user?.name || 'System Admin'}`}
             </span>
             {isSuperAdmin && (
-              <button
-                type="button"
-                className="font-mono"
-                style={{
-                  background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                  color: '#000',
-                  border: 'none',
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  fontWeight: 900,
-                  fontSize: '0.8rem',
-                  cursor: isTriggering ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
-                }}
-                onClick={handleMannaSndQuickScan}
-                disabled={isTriggering}
-                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
-              >
-                <span>{isTriggering ? '⏳ Scanning...' : '🟡 Scan Manna SnD (All Assets)'}</span>
-              </button>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="font-mono"
+                  style={{
+                    background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                    color: '#000',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontWeight: 900,
+                    fontSize: '0.8rem',
+                    cursor: isTriggering ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
+                  }}
+                  onClick={() => setShowAdminMannaDropdown(prev => !prev)}
+                  disabled={isTriggering}
+                  title="Trigger manual Manna SnD scan (All Assets, Forex, or Futures)"
+                >
+                  <span>{isTriggering ? '⏳ Scanning...' : '🟡 Scan Manna SnD ▾'}</span>
+                </button>
+
+                {showAdminMannaDropdown && (
+                  <div
+                    className="font-mono animate-slide-up"
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      right: 0,
+                      minWidth: '220px',
+                      background: '#0f0620',
+                      border: '1px solid rgba(255, 215, 0, 0.6)',
+                      borderRadius: '8px',
+                      padding: '8px',
+                      boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9), 0 0 25px rgba(255, 215, 0, 0.3)',
+                      zIndex: 99999,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.68rem', fontWeight: 900, color: '#888', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                      ⚡ Select Market Scope
+                    </div>
+                    <button
+                      type="button"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'transparent',
+                        color: '#ffd700',
+                        border: 'none',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        textAlign: 'left'
+                      }}
+                      onClick={() => handleMannaSndQuickScan('both')}
+                    >
+                      <span>🌐 Scan All Assets</span>
+                      <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>Forex + CME</span>
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'transparent',
+                        color: '#ffd700',
+                        border: 'none',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        textAlign: 'left'
+                      }}
+                      onClick={() => handleMannaSndQuickScan('forex')}
+                    >
+                      <span>💱 Scan Forex Only</span>
+                      <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>FX Pairs</span>
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'transparent',
+                        color: '#ffd700',
+                        border: 'none',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        textAlign: 'left'
+                      }}
+                      onClick={() => handleMannaSndQuickScan('futures')}
+                    >
+                      <span>📊 Scan Futures Only</span>
+                      <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>CME Contracts</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {isSuperAdmin && (
@@ -2429,22 +2525,55 @@ export const AdminPanel: React.FC = () => {
             </button>
 
             {isSuperAdmin && (
-              <button
-                type="button"
-                className="btn-trigger"
-                style={{
-                  marginTop: '10px',
-                  background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                  color: '#000',
-                  fontWeight: 900,
-                  border: 'none',
-                  boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
-                }}
-                onClick={handleMannaSndQuickScan}
-                disabled={isTriggering}
-              >
-                {isTriggering ? 'Scanning Manna SnD...' : '🟡 ONE-CLICK: SCAN ALL ASSETS (MANNA SND)'}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-trigger"
+                  style={{
+                    background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                    color: '#000',
+                    fontWeight: 900,
+                    border: 'none',
+                    boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
+                  }}
+                  onClick={() => handleMannaSndQuickScan('both')}
+                  disabled={isTriggering}
+                >
+                  {isTriggering ? 'Scanning Manna SnD...' : '🟡 ONE-CLICK: SCAN ALL ASSETS (MANNA SND)'}
+                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-trigger"
+                    style={{
+                      flex: 1,
+                      background: 'rgba(255, 215, 0, 0.15)',
+                      color: '#ffd700',
+                      fontWeight: 800,
+                      border: '1px solid #ffd700'
+                    }}
+                    onClick={() => handleMannaSndQuickScan('forex')}
+                    disabled={isTriggering}
+                  >
+                    💱 SCAN FOREX ONLY
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-trigger"
+                    style={{
+                      flex: 1,
+                      background: 'rgba(255, 215, 0, 0.15)',
+                      color: '#ffd700',
+                      fontWeight: 800,
+                      border: '1px solid #ffd700'
+                    }}
+                    onClick={() => handleMannaSndQuickScan('futures')}
+                    disabled={isTriggering}
+                  >
+                    📊 SCAN FUTURES ONLY
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 

@@ -847,17 +847,34 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
         const now = new Date();
         const force = req.body?.force === true || req.body?.force === 'true' || req.query?.force === 'true';
         const mode = (req.body?.mode || req.query?.mode || 'live') as 'live' | 'dry_run';
+        const reqScope = String(req.body?.market || req.query?.market || req.body?.scope || req.query?.scope || 'both').toLowerCase();
         let scope: 'both' | 'futures' | 'forex' = 'both';
+
+        if (reqScope === 'forex') {
+            scope = 'forex';
+        } else if (reqScope === 'futures') {
+            scope = 'futures';
+        } else {
+            scope = 'both';
+        }
 
         if (process.env.NODE_ENV !== 'test' && !force) {
             const isForexOpen = isForexMarketOpen(now);
             const isFuturesOpen = isFuturesMarketOpen(now);
-            if (!isForexOpen && !isFuturesOpen) {
-                return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
-            } else if (!isForexOpen) {
-                scope = 'futures';
-            } else if (!isFuturesOpen) {
-                scope = 'forex';
+            if (scope === 'forex' && !isForexOpen) {
+                return res.status(400).json({ error: 'Cannot scan Forex: Forex market is currently closed. Use force=true to bypass.' });
+            }
+            if (scope === 'futures' && !isFuturesOpen) {
+                return res.status(400).json({ error: 'Cannot scan Futures: CME Futures market is currently closed. Use force=true to bypass.' });
+            }
+            if (scope === 'both') {
+                if (!isForexOpen && !isFuturesOpen) {
+                    return res.status(400).json({ error: 'Cannot scan: Both Forex and Futures markets are currently closed.' });
+                } else if (!isForexOpen) {
+                    scope = 'futures';
+                } else if (!isFuturesOpen) {
+                    scope = 'forex';
+                }
             }
         }
 
