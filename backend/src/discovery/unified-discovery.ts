@@ -51,9 +51,19 @@ export async function discoverUnifiedSetups(
   }
 
   if (marketScope === 'both' || marketScope === 'forex') {
-    // 1. Evaluate EUR/USD first as Macro Dollar Leader
-    let leaderBias: Bias | null = null;
-    let eurCandidates: CandidateSetup[] = [];
+    const isPreLondonFilterActive = await queries.isPreLondonFilterEnabled(targetStrategyId || 'manna_snd');
+    const currentUtcHour = new Date().getUTCHours();
+    const isPreLondonWindow = currentUtcHour >= 5 && currentUtcHour < 7;
+
+    if (isPreLondonFilterActive && isPreLondonWindow) {
+      logger.warn(
+        { utcHour: currentUtcHour },
+        '🛡️ Pre-London Forex Filter ACTIVE (05:00-07:00 UTC): Suppressing Forex setup discovery during low-liquidity rollover.'
+      );
+    } else {
+      // 1. Evaluate EUR/USD first as Macro Dollar Leader
+      let leaderBias: Bias | null = null;
+      let eurCandidates: CandidateSetup[] = [];
 
     if (targetForex.includes('EUR/USD')) {
       for (const strategy of activeStrategies) {
@@ -160,6 +170,7 @@ export async function discoverUnifiedSetups(
     }
 
     forexCandidates.push(...eurCandidates, ...finalFollowerCandidates);
+    }
   }
 
   let futures = futuresCandidates;

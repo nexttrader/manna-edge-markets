@@ -256,34 +256,42 @@ async function runAllTests() {
     assert.strictEqual(midResA.scanned, true, 'Should trigger scan when asset classes have < 2 active setups');
     assert.strictEqual(midResA.marketScope, 'both', 'Should scan both when both asset classes have < 2 setups');
 
-    // Subtest B: Insert 2 futures setups and 2 forex setups (>= 2 per asset class) -> must skip rescan
+    // Subtest B: Insert 2 futures setups and 4 forex setups (>= min per asset class) -> must skip rescan
     await clearAllActive();
-    const dummyFutures1B: EdgeSetup = { ...mockSetup, id: 'kz_mid_f1_b', instrument: 'ES', market: 'futures' };
-    const dummyFutures2B: EdgeSetup = { ...mockSetup, id: 'kz_mid_f2_b', instrument: 'NQ', market: 'futures' };
-    const dummyForex1B: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx1_b', instrument: 'EUR/USD', market: 'forex' };
-    const dummyForex2B: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx2_b', instrument: 'GBP/USD', market: 'forex' };
+    const dummyFutures1B: EdgeSetup = { ...mockSetup, id: 'test_mid_f1_b', instrument: 'ES', market: 'futures', conviction_score: 85 };
+    const dummyFutures2B: EdgeSetup = { ...mockSetup, id: 'test_mid_f2_b', instrument: 'NQ', market: 'futures', conviction_score: 85 };
+    const dummyForex1B: EdgeSetup = { ...mockSetup, id: 'test_mid_fx1_b', instrument: 'EUR/USD', market: 'forex', conviction_score: 85 };
+    const dummyForex2B: EdgeSetup = { ...mockSetup, id: 'test_mid_fx2_b', instrument: 'GBP/USD', market: 'forex', conviction_score: 85 };
+    const dummyForex3B: EdgeSetup = { ...mockSetup, id: 'test_mid_fx3_b', instrument: 'USD/JPY', market: 'forex', conviction_score: 85 };
+    const dummyForex4B: EdgeSetup = { ...mockSetup, id: 'test_mid_fx4_b', instrument: 'AUD/USD', market: 'forex', conviction_score: 85 };
 
     await queries.insertSetup(dummyFutures1B, 'futures');
     await queries.insertSetup(dummyFutures2B, 'futures');
     await queries.insertSetup(dummyForex1B, 'forex');
     await queries.insertSetup(dummyForex2B, 'forex');
+    await queries.insertSetup(dummyForex3B, 'forex');
+    await queries.insertSetup(dummyForex4B, 'forex');
 
     const midResB = await processKillzoneMidpointScan(kzInfo, 'dry_run', openMarketTime);
-    assert.strictEqual(midResB.scanned, false, 'Should NOT rescan when both asset classes have >= 2 active setups on dash');
+    assert.strictEqual(midResB.scanned, false, 'Should NOT rescan when both asset classes have >= min active setups on dash');
 
-    // Subtest C: 1 futures setup, 2 forex setups (futures < 2, forex >= 2) -> must trigger rescan only for 'futures'
+    // Subtest C: 1 futures setup, 4 forex setups (futures < 2, forex >= 4) -> must trigger rescan only for 'futures'
     await clearAllActive();
-    const dummyFutures1C: EdgeSetup = { ...mockSetup, id: 'kz_mid_f1_c', instrument: 'ES', market: 'futures' };
-    const dummyForex1C: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx1_c', instrument: 'EUR/USD', market: 'forex' };
-    const dummyForex2C: EdgeSetup = { ...mockSetup, id: 'kz_mid_fx2_c', instrument: 'GBP/USD', market: 'forex' };
+    const dummyFutures1C: EdgeSetup = { ...mockSetup, id: 'test_mid_f1_c', instrument: 'ES', market: 'futures', conviction_score: 85 };
+    const dummyForex1C: EdgeSetup = { ...mockSetup, id: 'test_mid_fx1_c', instrument: 'EUR/USD', market: 'forex', conviction_score: 85 };
+    const dummyForex2C: EdgeSetup = { ...mockSetup, id: 'test_mid_fx2_c', instrument: 'GBP/USD', market: 'forex', conviction_score: 85 };
+    const dummyForex3C: EdgeSetup = { ...mockSetup, id: 'test_mid_fx3_c', instrument: 'USD/JPY', market: 'forex', conviction_score: 85 };
+    const dummyForex4C: EdgeSetup = { ...mockSetup, id: 'test_mid_fx4_c', instrument: 'AUD/USD', market: 'forex', conviction_score: 85 };
 
     await queries.insertSetup(dummyFutures1C, 'futures');
     await queries.insertSetup(dummyForex1C, 'forex');
     await queries.insertSetup(dummyForex2C, 'forex');
+    await queries.insertSetup(dummyForex3C, 'forex');
+    await queries.insertSetup(dummyForex4C, 'forex');
 
     const midResC = await processKillzoneMidpointScan(kzInfo, 'dry_run', openMarketTime);
     assert.strictEqual(midResC.scanned, true, 'Should trigger scan when futures has < 2 setups');
-    assert.strictEqual(midResC.marketScope, 'futures', 'Should target futures market scope when futures < 2 and forex >= 2');
+    assert.strictEqual(midResC.marketScope, 'futures', 'Should target futures market scope when futures < 2 and forex >= 4');
 
     console.log('✅ TEST 12: Mid-Killzone Booster Rescan Rule (< 2 Per Asset Class Rescans Missing Assets, >= 2 Skips Rescan)');
 

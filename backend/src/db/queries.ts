@@ -317,7 +317,17 @@ export async function getOutcomesByRun(runId: string): Promise<Outcome[]> {
 
 const STRATEGY_SNAPSHOT_PATH = path.resolve(process.cwd(), 'strategy_settings_snapshot.json');
 
-function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean }>): void {
+function saveStrategySnapshotToDisk(snapshot: Record<string, { 
+  enabled?: boolean; 
+  visibleToAdmins?: boolean; 
+  visibleToTraders?: boolean; 
+  halvedFloorTp1Be?: boolean;
+  dailySignalCapEnabled?: boolean;
+  dailySignalCapMax?: number;
+  preLondonFilterEnabled?: boolean;
+  signalCapMarketScope?: 'forex_only' | 'all' | 'futures_only';
+  consecutiveLossHaltEnabled?: boolean;
+}>): void {
   try {
     fs.writeFileSync(STRATEGY_SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2), 'utf8');
   } catch (err) {
@@ -325,7 +335,17 @@ function saveStrategySnapshotToDisk(snapshot: Record<string, { enabled?: boolean
   }
 }
 
-function loadStrategySnapshotFromDisk(): Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean; dailySignalCapEnabled?: boolean; dailySignalCapMax?: number }> {
+function loadStrategySnapshotFromDisk(): Record<string, { 
+  enabled?: boolean; 
+  visibleToAdmins?: boolean; 
+  visibleToTraders?: boolean; 
+  halvedFloorTp1Be?: boolean; 
+  dailySignalCapEnabled?: boolean; 
+  dailySignalCapMax?: number;
+  preLondonFilterEnabled?: boolean;
+  signalCapMarketScope?: 'forex_only' | 'all' | 'futures_only';
+  consecutiveLossHaltEnabled?: boolean;
+}> {
   try {
     if (fs.existsSync(STRATEGY_SNAPSHOT_PATH)) {
       const data = fs.readFileSync(STRATEGY_SNAPSHOT_PATH, 'utf8');
@@ -355,6 +375,9 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       halved_floor_tp1_be INTEGER DEFAULT 0,
       daily_signal_cap_enabled INTEGER DEFAULT 0,
       daily_signal_cap_max INTEGER DEFAULT 2,
+      pre_london_filter_enabled INTEGER DEFAULT 1,
+      signal_cap_market_scope TEXT DEFAULT 'forex_only',
+      consecutive_loss_halt_enabled INTEGER DEFAULT 1,
       updated_at TEXT NOT NULL
     )`);
 
@@ -366,6 +389,15 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
     } catch {}
     try {
       await queryDb(`ALTER TABLE strategy_settings ADD COLUMN daily_signal_cap_max INTEGER DEFAULT 2`);
+    } catch {}
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN pre_london_filter_enabled INTEGER DEFAULT 1`);
+    } catch {}
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN signal_cap_market_scope TEXT DEFAULT 'forex_only'`);
+    } catch {}
+    try {
+      await queryDb(`ALTER TABLE strategy_settings ADD COLUMN consecutive_loss_halt_enabled INTEGER DEFAULT 1`);
     } catch {}
 
     const snapshot = loadStrategySnapshotFromDisk();
@@ -385,12 +417,15 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
         : (d.id === 'manna_snd' ? 1 : 0);
       const capEnabledVal = snap.dailySignalCapEnabled !== undefined ? (snap.dailySignalCapEnabled ? 1 : 0) : 0;
       const capMaxVal = snap.dailySignalCapMax !== undefined ? snap.dailySignalCapMax : 2;
+      const preLondonVal = snap.preLondonFilterEnabled !== undefined ? (snap.preLondonFilterEnabled ? 1 : 0) : 1;
+      const capScopeVal = snap.signalCapMarketScope !== undefined ? snap.signalCapMarketScope : 'forex_only';
+      const lossHaltVal = snap.consecutiveLossHaltEnabled !== undefined ? (snap.consecutiveLossHaltEnabled ? 1 : 0) : 1;
 
       await queryDb(
-        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, daily_signal_cap_enabled, daily_signal_cap_max, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `INSERT INTO strategy_settings (id, name, enabled, visible_to_admins, visible_to_traders, halved_floor_tp1_be, daily_signal_cap_enabled, daily_signal_cap_max, pre_london_filter_enabled, signal_cap_market_scope, consecutive_loss_halt_enabled, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-        [d.id, d.name, enabledVal, adminVal, traderVal, halvedVal, capEnabledVal, capMaxVal]
+        [d.id, d.name, enabledVal, adminVal, traderVal, halvedVal, capEnabledVal, capMaxVal, preLondonVal, capScopeVal, lossHaltVal]
       );
 
       if (snap.halvedFloorTp1Be !== undefined) {
@@ -402,6 +437,15 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       if (snap.dailySignalCapEnabled !== undefined) {
         await queryDb(`UPDATE strategy_settings SET daily_signal_cap_enabled = ?, daily_signal_cap_max = ? WHERE id = ?`, [snap.dailySignalCapEnabled ? 1 : 0, snap.dailySignalCapMax || 2, d.id]);
       }
+      if (snap.preLondonFilterEnabled !== undefined) {
+        await queryDb(`UPDATE strategy_settings SET pre_london_filter_enabled = ? WHERE id = ?`, [snap.preLondonFilterEnabled ? 1 : 0, d.id]);
+      }
+      if (snap.signalCapMarketScope !== undefined) {
+        await queryDb(`UPDATE strategy_settings SET signal_cap_market_scope = ? WHERE id = ?`, [snap.signalCapMarketScope, d.id]);
+      }
+      if (snap.consecutiveLossHaltEnabled !== undefined) {
+        await queryDb(`UPDATE strategy_settings SET consecutive_loss_halt_enabled = ? WHERE id = ?`, [snap.consecutiveLossHaltEnabled ? 1 : 0, d.id]);
+      }
     }
 
     isStrategySettingsSeeded = true;
@@ -410,10 +454,34 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
   }
 }
 
-export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ id: string, name: string, enabled: boolean, visibleToAdmins: boolean, visibleToTraders: boolean, halvedFloorTp1Be?: boolean, dailySignalCapEnabled?: boolean, dailySignalCapMax?: number }[]> {
+export async function getStrategySettings(role?: string, userEmail?: string): Promise<{ 
+  id: string; 
+  name: string; 
+  enabled: boolean; 
+  visibleToAdmins: boolean; 
+  visibleToTraders: boolean; 
+  halvedFloorTp1Be?: boolean; 
+  dailySignalCapEnabled?: boolean; 
+  dailySignalCapMax?: number;
+  preLondonFilterEnabled?: boolean;
+  signalCapMarketScope?: 'forex_only' | 'all' | 'futures_only';
+  consecutiveLossHaltEnabled?: boolean;
+}[]> {
     await ensureStrategySettingsSeeded();
     try {
-        let rows = await queryDb<{ id: string, name: string, enabled: any, visible_to_admins?: any, visible_to_traders?: any, halved_floor_tp1_be?: any, daily_signal_cap_enabled?: any, daily_signal_cap_max?: any }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
+        let rows = await queryDb<{ 
+          id: string; 
+          name: string; 
+          enabled: any; 
+          visible_to_admins?: any; 
+          visible_to_traders?: any; 
+          halved_floor_tp1_be?: any; 
+          daily_signal_cap_enabled?: any; 
+          daily_signal_cap_max?: any;
+          pre_london_filter_enabled?: any;
+          signal_cap_market_scope?: any;
+          consecutive_loss_halt_enabled?: any;
+        }>(`SELECT * FROM strategy_settings WHERE id != 'manna_basic' ORDER BY id ASC`);
         
         const mapped = rows.map(r => ({
             id: r.id,
@@ -423,7 +491,10 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
             visibleToTraders: r.visible_to_traders === undefined || r.visible_to_traders === null ? true : (r.visible_to_traders === 1 || r.visible_to_traders === true || r.visible_to_traders === '1' || r.visible_to_traders === 't'),
             halvedFloorTp1Be: r.halved_floor_tp1_be === undefined || r.halved_floor_tp1_be === null ? false : (r.halved_floor_tp1_be === 1 || r.halved_floor_tp1_be === true || r.halved_floor_tp1_be === '1' || r.halved_floor_tp1_be === 't'),
             dailySignalCapEnabled: r.daily_signal_cap_enabled === undefined || r.daily_signal_cap_enabled === null ? false : (r.daily_signal_cap_enabled === 1 || r.daily_signal_cap_enabled === true || r.daily_signal_cap_enabled === '1' || r.daily_signal_cap_enabled === 't'),
-            dailySignalCapMax: typeof r.daily_signal_cap_max === 'number' ? r.daily_signal_cap_max : 2
+            dailySignalCapMax: typeof r.daily_signal_cap_max === 'number' ? r.daily_signal_cap_max : 2,
+            preLondonFilterEnabled: r.pre_london_filter_enabled === undefined || r.pre_london_filter_enabled === null ? true : (r.pre_london_filter_enabled === 1 || r.pre_london_filter_enabled === true || r.pre_london_filter_enabled === '1' || r.pre_london_filter_enabled === 't'),
+            signalCapMarketScope: (r.signal_cap_market_scope as 'forex_only' | 'all' | 'futures_only') || 'forex_only',
+            consecutiveLossHaltEnabled: r.consecutive_loss_halt_enabled === undefined || r.consecutive_loss_halt_enabled === null ? true : (r.consecutive_loss_halt_enabled === 1 || r.consecutive_loss_halt_enabled === true || r.consecutive_loss_halt_enabled === '1' || r.consecutive_loss_halt_enabled === 't')
         }));
 
         if (role === 'super_admin') {
@@ -434,15 +505,25 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true, dailySignalCapEnabled: false, dailySignalCapMax: 2 },
-            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false, dailySignalCapEnabled: false, dailySignalCapMax: 2 }
+            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true, dailySignalCapEnabled: false, dailySignalCapMax: 2, preLondonFilterEnabled: true, signalCapMarketScope: 'forex_only', consecutiveLossHaltEnabled: true },
+            { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false, dailySignalCapEnabled: false, dailySignalCapMax: 2, preLondonFilterEnabled: true, signalCapMarketScope: 'forex_only', consecutiveLossHaltEnabled: true }
         ];
     }
 }
 
 function syncStrategySnapshot(): void {
   getStrategySettings('super_admin').then(strats => {
-    const snap: Record<string, { enabled?: boolean; visibleToAdmins?: boolean; visibleToTraders?: boolean; halvedFloorTp1Be?: boolean; dailySignalCapEnabled?: boolean; dailySignalCapMax?: number }> = {};
+    const snap: Record<string, { 
+      enabled?: boolean; 
+      visibleToAdmins?: boolean; 
+      visibleToTraders?: boolean; 
+      halvedFloorTp1Be?: boolean; 
+      dailySignalCapEnabled?: boolean; 
+      dailySignalCapMax?: number;
+      preLondonFilterEnabled?: boolean;
+      signalCapMarketScope?: 'forex_only' | 'all' | 'futures_only';
+      consecutiveLossHaltEnabled?: boolean;
+    }> = {};
     for (const s of strats) {
       snap[s.id] = { 
         enabled: s.enabled, 
@@ -450,7 +531,10 @@ function syncStrategySnapshot(): void {
         visibleToTraders: s.visibleToTraders, 
         halvedFloorTp1Be: s.halvedFloorTp1Be,
         dailySignalCapEnabled: s.dailySignalCapEnabled,
-        dailySignalCapMax: s.dailySignalCapMax
+        dailySignalCapMax: s.dailySignalCapMax,
+        preLondonFilterEnabled: s.preLondonFilterEnabled,
+        signalCapMarketScope: s.signalCapMarketScope,
+        consecutiveLossHaltEnabled: s.consecutiveLossHaltEnabled
       };
     }
     saveStrategySnapshotToDisk(snap);
@@ -553,6 +637,133 @@ export async function isDailySignalCapEnabled(strategyId: string = 'manna_snd'):
     } catch {
         return { enabled: false, maxSignals: 2 };
     }
+}
+
+export async function updateStrategyPreLondonFilter(id: string, enabled: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
+    const val = enabled ? 1 : 0;
+    const now = new Date().toISOString();
+    await queryDb(
+      `UPDATE strategy_settings SET pre_london_filter_enabled = ?, updated_at = ? WHERE id = ?`,
+      [val, now, id]
+    );
+    syncStrategySnapshot();
+}
+
+export async function isPreLondonFilterEnabled(strategyId: string = 'manna_snd'): Promise<boolean> {
+    try {
+        const rows = await queryDb<{ pre_london_filter_enabled: any }>(
+            `SELECT pre_london_filter_enabled FROM strategy_settings WHERE id = ?`,
+            [strategyId]
+        );
+        if (rows && rows.length > 0 && rows[0].pre_london_filter_enabled !== undefined && rows[0].pre_london_filter_enabled !== null) {
+            const v = rows[0].pre_london_filter_enabled;
+            return v === 1 || v === true || v === '1' || v === 't';
+        }
+        const snap = loadStrategySnapshotFromDisk();
+        if (snap[strategyId]?.preLondonFilterEnabled !== undefined) {
+            return Boolean(snap[strategyId].preLondonFilterEnabled);
+        }
+        return true; // Default ON to protect Forex
+    } catch {
+        return true;
+    }
+}
+
+export async function updateStrategyConsecutiveLossHalt(id: string, enabled: boolean): Promise<void> {
+    await ensureStrategySettingsSeeded();
+    const val = enabled ? 1 : 0;
+    const now = new Date().toISOString();
+    await queryDb(
+      `UPDATE strategy_settings SET consecutive_loss_halt_enabled = ?, updated_at = ? WHERE id = ?`,
+      [val, now, id]
+    );
+    syncStrategySnapshot();
+}
+
+export async function isConsecutiveLossHaltEnabled(strategyId: string = 'manna_snd'): Promise<boolean> {
+    try {
+        const rows = await queryDb<{ consecutive_loss_halt_enabled: any }>(
+            `SELECT consecutive_loss_halt_enabled FROM strategy_settings WHERE id = ?`,
+            [strategyId]
+        );
+        if (rows && rows.length > 0 && rows[0].consecutive_loss_halt_enabled !== undefined && rows[0].consecutive_loss_halt_enabled !== null) {
+            const v = rows[0].consecutive_loss_halt_enabled;
+            return v === 1 || v === true || v === '1' || v === 't';
+        }
+        const snap = loadStrategySnapshotFromDisk();
+        if (snap[strategyId]?.consecutiveLossHaltEnabled !== undefined) {
+            return Boolean(snap[strategyId].consecutiveLossHaltEnabled);
+        }
+        return true; // Default ON
+    } catch {
+        return true;
+    }
+}
+
+export async function updateStrategySignalCapScope(id: string, scope: 'forex_only' | 'all' | 'futures_only'): Promise<void> {
+    await ensureStrategySettingsSeeded();
+    const now = new Date().toISOString();
+    await queryDb(
+      `UPDATE strategy_settings SET signal_cap_market_scope = ?, updated_at = ? WHERE id = ?`,
+      [scope, now, id]
+    );
+    syncStrategySnapshot();
+}
+
+export async function getSignalCapMarketScope(strategyId: string = 'manna_snd'): Promise<'forex_only' | 'all' | 'futures_only'> {
+    try {
+        const rows = await queryDb<{ signal_cap_market_scope: string }>(
+            `SELECT signal_cap_market_scope FROM strategy_settings WHERE id = ?`,
+            [strategyId]
+        );
+        if (rows && rows.length > 0 && rows[0].signal_cap_market_scope) {
+            return rows[0].signal_cap_market_scope as any;
+        }
+        const snap = loadStrategySnapshotFromDisk();
+        if (snap[strategyId]?.signalCapMarketScope) {
+            return snap[strategyId].signalCapMarketScope as any;
+        }
+        return 'forex_only'; // Default Forex only
+    } catch {
+        return 'forex_only';
+    }
+}
+
+export async function getConsecutiveDailyLossesForInstrument(
+  instrument: string,
+  market: string = 'forex',
+  strategyId: string = 'manna_snd',
+  targetDateET?: string
+): Promise<number> {
+  const dayET = targetDateET || getETCalendarDay();
+  const table = market === 'forex' ? 'forex_edge_setups' : 'edge_setups';
+  try {
+    const rows = await queryDb<any>(`
+      SELECT s.id, s.instrument, s.created_at, s.strategy_id, o.outcome_type, o.realized_pl
+      FROM ${table} s
+      LEFT JOIN outcomes o ON o.setup_id = s.id
+      WHERE s.instrument = ?
+      ORDER BY s.created_at ASC
+    `, [instrument]);
+
+    let consecutiveLosses = 0;
+    for (const r of rows) {
+      const sid = r.strategy_id || 'sentinel_v2';
+      if (sid !== strategyId) continue;
+      const rDay = getETCalendarDay(new Date(r.created_at));
+      if (rDay !== dayET) continue;
+
+      if (r.outcome_type === 'sl_hit') {
+        consecutiveLosses++;
+      } else if (r.outcome_type === 'tp1_hit' || r.outcome_type === 'tp2_hit') {
+        consecutiveLosses = 0;
+      }
+    }
+    return consecutiveLosses;
+  } catch {
+    return 0;
+  }
 }
 
 export function getETCalendarDay(date: Date = new Date()): string {

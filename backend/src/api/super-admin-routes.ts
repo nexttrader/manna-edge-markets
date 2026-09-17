@@ -396,6 +396,15 @@ router.post('/strategies/:id/visibility', async (req: Request, res: Response) =>
     if (req.body?.dailySignalCapEnabled !== undefined) {
       await queries.updateStrategyDailySignalCap(strategyId, Boolean(req.body.dailySignalCapEnabled), Number(req.body.dailySignalCapMax) || 2);
     }
+    if (req.body?.preLondonFilterEnabled !== undefined) {
+      await queries.updateStrategyPreLondonFilter(strategyId, Boolean(req.body.preLondonFilterEnabled));
+    }
+    if (req.body?.signalCapMarketScope !== undefined) {
+      await queries.updateStrategySignalCapScope(strategyId, req.body.signalCapMarketScope);
+    }
+    if (req.body?.consecutiveLossHaltEnabled !== undefined) {
+      await queries.updateStrategyConsecutiveLossHalt(strategyId, Boolean(req.body.consecutiveLossHaltEnabled));
+    }
 
     const updated = await queries.getStrategySettings('super_admin');
     res.json({ success: true, strategies: updated });
@@ -451,6 +460,55 @@ router.post('/strategies/:id/toggle-daily-cap', async (req: Request, res: Respon
     res.json({ success: true, strategies: updated });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to toggle daily signal cap', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/toggle-pre-london-filter', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { enabled } = req.body || {};
+
+    await queries.updateStrategyPreLondonFilter(strategyId, Boolean(enabled));
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to toggle pre-London filter', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/toggle-loss-halt', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { enabled } = req.body || {};
+
+    await queries.updateStrategyConsecutiveLossHalt(strategyId, Boolean(enabled));
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to toggle consecutive loss halt', details: err.message });
+  }
+});
+
+router.post('/strategies/:id/set-cap-scope', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const strategyId = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { scope } = req.body || {};
+
+    if (!['forex_only', 'all', 'futures_only'].includes(scope)) {
+      return res.status(400).json({ error: "Invalid scope. Must be 'forex_only', 'all', or 'futures_only'" });
+    }
+
+    await queries.updateStrategySignalCapScope(strategyId, scope);
+
+    const updated = await queries.getStrategySettings('super_admin');
+    res.json({ success: true, strategies: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to set signal cap market scope', details: err.message });
   }
 });
 

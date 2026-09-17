@@ -51,12 +51,20 @@ export const OPTIMIZED_FLOOR_FACTORS: Record<string, number> = {
   'EUR/USD': 0.60, // 6.0 pips floor (was 5.0 pips)
   'GBP/USD': 1.00, // 12.0 pips floor (preserved, was 6.0 pips)
   'EUR/GBP': 1.00, // 8.0 pips floor (preserved, was 4.0 pips)
+  'USD/JPY': 0.50, // 9.0 pips floor
+  'AUD/USD': 0.50, // 5.0 pips floor
+  'USD/CAD': 0.50, // 5.0 pips floor
+  'EUR/JPY': 0.50, // 11.0 pips floor
+  'GBP/JPY': 0.50, // 12.5 pips floor
 };
 
 /**
  * Calculates a logical stop loss distance for an instrument based on 15M ATR,
  * target risk multiplier, and institutional minimum stop loss floors.
  * Guaranteed to return a non-zero distance.
+ * 
+ * AUDIT RULE: CME Futures floors are strictly locked to 1.0x institutional base floors.
+ * Floor scaling factors apply exclusively to Forex pairs.
  */
 export function getLogicalStopDistance(
   instrument: string,
@@ -76,11 +84,13 @@ export function getLogicalStopDistance(
     ? MIN_STOP_FLOORS[instrument]
     : (market === 'futures' ? 1.0 : (isJpy ? 0.20 : 0.00050));
 
-  const factor = OPTIMIZED_FLOOR_FACTORS[instrument] !== undefined
-    ? OPTIMIZED_FLOOR_FACTORS[instrument]
-    : 0.50;
+  // CME Futures floors are strictly locked to 1.0x institutional base floors.
+  // Floor scaling factors apply exclusively to Forex pairs.
+  const factor = market === 'futures'
+    ? 1.00
+    : (OPTIMIZED_FLOOR_FACTORS[instrument] !== undefined ? OPTIMIZED_FLOOR_FACTORS[instrument] : 0.50);
 
-  const floor = halvedFloor ? (baseFloor * factor) : baseFloor;
+  const floor = (halvedFloor && market === 'forex') ? (baseFloor * factor) : baseFloor;
 
   const distance = Math.max(atrRiskDistance, floor);
   const decimals = getInstrumentDecimals(instrument, market);
@@ -88,7 +98,7 @@ export function getLogicalStopDistance(
 
   // Ensure stop distance is strictly non-zero
   const baseMinNonZero = market === 'futures' ? 0.25 : (isJpy ? 0.08 : 0.00020);
-  const minNonZero = halvedFloor ? (baseMinNonZero * factor) : baseMinNonZero;
+  const minNonZero = (halvedFloor && market === 'forex') ? (baseMinNonZero * factor) : baseMinNonZero;
   return Math.max(rounded, minNonZero);
 }
 

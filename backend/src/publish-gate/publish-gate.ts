@@ -150,46 +150,90 @@ export async function executePublishRun(
         // 2. Dedupe and Select
         const dedupeResult = dedupeAndSelect(effectiveExisting, instCandidates, currentPrice, atr14);
         
-        // 2b. Daily Signal Cap Gate (Enforced only when toggled on)
+        // 2b. Daily Signal Cap Gate & Smart Consecutive Loss Halt (Enforced per market scope & rules)
         if ((dedupeResult.action === 'replace' || dedupeResult.action === 'insert') && dedupeResult.selectedCandidate) {
           const candidateStratId = dedupeResult.selectedCandidate.strategy_id || 'sentinel_v2';
           const capSetting = await queries.isDailySignalCapEnabled(candidateStratId);
+          const capScope = await queries.getSignalCapMarketScope(candidateStratId);
+          const isHaltEnabled = await queries.isConsecutiveLossHaltEnabled(candidateStratId);
 
-          if (capSetting.enabled) {
-            const activeOverride = await queries.getActiveSignalCapOverride(
-              dedupeResult.selectedCandidate.instrument,
-              candidateStratId
-            );
-            const effectiveMaxSignals = activeOverride ? activeOverride.max_signals : capSetting.maxSignals;
+          const marketName = market.name.toLowerCase();
+          const shouldApplyCapToMarket = 
+            capScope === 'all' ||
+            (capScope === 'forex_only' && marketName === 'forex') ||
+            (capScope === 'futures_only' && marketName === 'futures');
 
-            const currentCountToday = await queries.getDailySignalCountForInstrument(
-              dedupeResult.selectedCandidate.instrument,
-              market.name,
-              candidateStratId
-            );
-            if (currentCountToday >= effectiveMaxSignals) {
-              logger.warn({
-                instrument: dedupeResult.selectedCandidate.instrument,
-                strategyId: candidateStratId,
-                currentCountToday,
-                maxSignals: effectiveMaxSignals,
-                hasOverride: Boolean(activeOverride)
-              }, 'PublishGate: Daily signal cap reached for instrument. Blocking 3rd+ continuation signal.');
+          if (shouldApplyCapToMarket) {
+            // 1. Smart Consecutive 2-Loss Halt Check (Protects capital from session tilt)
+            if (isHaltEnabled) {
+              const consecutiveLosses = await queries.getConsecutiveDailyLossesForInstrument(
+                dedupeResult.selectedCandidate.instrument,
+                marketName,
+                candidateStratId
+              );
 
-              await hawkeyeService.logInvalidation({
-                setupId: `capped_${dedupeResult.selectedCandidate.instrument}_${Date.now()}`,
-                instrument: dedupeResult.selectedCandidate.instrument,
-                setupMarket: market.name,
-                runId: runId,
-                reasonCode: 'daily_signal_cap_exceeded',
-                detail: `Asset has already generated ${currentCountToday} signals on this trading day (effective cap is ${effectiveMaxSignals}${activeOverride ? ` [${activeOverride.scope_type.toUpperCase()} override]` : ''}). Suppressed to prevent intraday burnout.`,
-                previousState: 'candidate',
-                newState: 'rejected',
-                createdBy: 'publish_gate'
-              });
+              if (consecutiveLosses >= 2) {
+                logger.warn({
+                  instrument: dedupeResult.selectedCandidate.instrument,
+                  strategyId: candidateStratId,
+                  consecutiveLosses,
+                  market: marketName
+                }, 'PublishGate: Smart 2-Loss Halt triggered for instrument. Halting further signals today.');
 
-              stats.discarded++;
-              continue;
+                await hawkeyeService.logInvalidation({
+                  setupId: `halted_${dedupeResult.selectedCandidate.instrument}_${Date.now()}`,
+                  instrument: dedupeResult.selectedCandidate.instrument,
+                  setupMarket: market.name,
+                  runId: runId,
+                  reasonCode: 'consecutive_loss_halt',
+                  detail: `Asset has incurred ${consecutiveLosses} consecutive stop-outs today. Suppressed by Smart 2-Loss Halt to protect capital.`,
+                  previousState: 'candidate',
+                  newState: 'rejected',
+                  createdBy: 'publish_gate'
+                });
+
+                stats.discarded++;
+                continue;
+              }
+            }
+
+            // 2. Daily Max Signal Count Cap
+            if (capSetting.enabled) {
+              const activeOverride = await queries.getActiveSignalCapOverride(
+                dedupeResult.selectedCandidate.instrument,
+                candidateStratId
+              );
+              const effectiveMaxSignals = activeOverride ? activeOverride.max_signals : capSetting.maxSignals;
+
+              const currentCountToday = await queries.getDailySignalCountForInstrument(
+                dedupeResult.selectedCandidate.instrument,
+                market.name,
+                candidateStratId
+              );
+              if (currentCountToday >= effectiveMaxSignals) {
+                logger.warn({
+                  instrument: dedupeResult.selectedCandidate.instrument,
+                  strategyId: candidateStratId,
+                  currentCountToday,
+                  maxSignals: effectiveMaxSignals,
+                  hasOverride: Boolean(activeOverride)
+                }, 'PublishGate: Daily signal cap reached for instrument. Blocking 3rd+ continuation signal.');
+
+                await hawkeyeService.logInvalidation({
+                  setupId: `capped_${dedupeResult.selectedCandidate.instrument}_${Date.now()}`,
+                  instrument: dedupeResult.selectedCandidate.instrument,
+                  setupMarket: market.name,
+                  runId: runId,
+                  reasonCode: 'daily_signal_cap_exceeded',
+                  detail: `Asset has already generated ${currentCountToday} signals on this trading day (effective cap is ${effectiveMaxSignals}${activeOverride ? ` [${activeOverride.scope_type.toUpperCase()} override]` : ''}). Suppressed to prevent intraday burnout.`,
+                  previousState: 'candidate',
+                  newState: 'rejected',
+                  createdBy: 'publish_gate'
+                });
+
+                stats.discarded++;
+                continue;
+              }
             }
           }
         }
