@@ -1,6 +1,6 @@
 import { getDb } from '../db/database';
 import * as queries from '../db/queries';
-import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
 import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
@@ -85,14 +85,19 @@ export class OutcomeDetector {
           continue;
         }
 
-        let currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const quote = await getLiveQuoteDetails(setup.instrument);
+        let currentPrice = quote?.price || await getLiveCurrentPrice(setup.instrument);
         if (!currentPrice || currentPrice <= 0) {
           // If live price is not available (market closed or API offline), leave active setup untouched
           continue;
         }
+
+        const currentBid = quote?.bid || currentPrice;
+        const currentAsk = quote?.ask || currentPrice;
+        const spread = quote?.spread || 0;
         
-        let maxHigh = currentPrice;
-        let minLow = currentPrice;
+        let maxHigh = currentBid;
+        let minLow = currentBid;
         try {
           const candles = await getLiveCandles(setup.instrument, '1m', 5);
           const entryTimeMs = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
@@ -101,11 +106,17 @@ export class OutcomeDetector {
               ? candles.filter(c => new Date(c.timestamp).getTime() >= entryTimeMs)
               : candles;
             if (postEntryCandles.length > 0) {
-              maxHigh = Math.max(currentPrice, ...postEntryCandles.map(c => c.high));
-              minLow = Math.min(currentPrice, ...postEntryCandles.map(c => c.low));
+              maxHigh = Math.max(currentBid, ...postEntryCandles.map(c => c.high));
+              minLow = Math.min(currentBid, ...postEntryCandles.map(c => c.low));
             }
           }
         } catch { /* ignore candle fetch error */ }
+
+        // Chart candles represent Bid prices. Derive effective Bid and Ask bounds:
+        const maxHighBid = maxHigh;
+        const minLowBid = minLow;
+        const maxHighAsk = maxHigh + spread;
+        const minLowAsk = minLow + spread;
         
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
@@ -119,7 +130,8 @@ export class OutcomeDetector {
         const tp1 = setup.tp1 || (isLong ? (entryPrice + initialRisk * 2.0) : (entryPrice - initialRisk * 2.0));
         const tp2 = setup.tp2 || (isLong ? (entryPrice + initialRisk * 3.0) : (entryPrice - initialRisk * 3.0));
         
-        const maxProfit = isLong ? (maxHigh - entryPrice) : (entryPrice - minLow);
+        // Institutional valuation: Long exits on Bid, Short exits on Ask
+        const maxProfit = isLong ? Math.max(0, maxHighBid - entryPrice) : Math.max(0, entryPrice - minLowAsk);
         const maxR = initialRisk > 0 ? (maxProfit / initialRisk) : 0;
         
         const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'manna_snd');
@@ -141,36 +153,35 @@ export class OutcomeDetector {
         
         let hitDetected = false;
         let outcomeType = '';
-        let executionPrice = currentPrice;
+        let executionPrice = isLong ? currentBid : currentAsk;
         
         // Determine if stop is effectively at break-even.
-        // Only use the explicit is_breakeven flag set by the BE-move logic above.
-        // The old proximity check (stop within 0.01% of entry) was incorrectly flagging
-        // new setups with tight stops as BE — causing SL hits to log as 0R (Break Even)
-        // instead of -1R (Stop Loss).
         const isEffectivelyBEActive = Boolean(setup.is_breakeven);
         const targetR1Active = setup.r_multiple_1 || 2.0;
         const targetR2Active = setup.r_multiple_2 || 3.0;
 
+        // Institutional Bid/Ask Rule:
+        // - LONG exits (Sell order) -> Evaluated strictly on BID
+        // - SHORT exits (Buy order to cover) -> Evaluated strictly on ASK
         if (isLong) {
-          if (currentPrice >= tp2 || maxHigh >= tp2 || maxR >= targetR2Active) {
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentPrice, tp2);
-          } else if (currentPrice >= tp1 || maxHigh >= tp1 || maxR >= targetR1Active) {
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentPrice, tp1);
-          } else if (currentPrice <= setup.stop || minLow <= setup.stop) {
+          if (currentBid >= tp2 || maxHighBid >= tp2 || maxR >= targetR2Active) {
+            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.max(currentBid, tp2);
+          } else if (currentBid >= tp1 || maxHighBid >= tp1 || maxR >= targetR1Active) {
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.max(currentBid, tp1);
+          } else if (currentBid <= setup.stop || minLowBid <= setup.stop) {
             hitDetected = true;
             outcomeType = isEffectivelyBEActive ? 'be_hit' : 'sl_hit';
-            executionPrice = isEffectivelyBEActive ? entryPrice : Math.min(currentPrice, setup.stop);
+            executionPrice = isEffectivelyBEActive ? entryPrice : Math.min(currentBid, setup.stop);
           }
         } else {
-          if (currentPrice <= tp2 || minLow <= tp2 || maxR >= targetR2Active) {
-            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentPrice, tp2);
-          } else if (currentPrice <= tp1 || minLow <= tp1 || maxR >= targetR1Active) {
-            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentPrice, tp1);
-          } else if (currentPrice >= setup.stop || maxHigh >= setup.stop) {
+          if (currentAsk <= tp2 || minLowAsk <= tp2 || maxR >= targetR2Active) {
+            hitDetected = true; outcomeType = 'tp2_hit'; executionPrice = Math.min(currentAsk, tp2);
+          } else if (currentAsk <= tp1 || minLowAsk <= tp1 || maxR >= targetR1Active) {
+            hitDetected = true; outcomeType = 'tp1_hit'; executionPrice = Math.min(currentAsk, tp1);
+          } else if (currentAsk >= setup.stop || maxHighAsk >= setup.stop) {
             hitDetected = true;
             outcomeType = isEffectivelyBEActive ? 'be_hit' : 'sl_hit';
-            executionPrice = isEffectivelyBEActive ? entryPrice : Math.max(currentPrice, setup.stop);
+            executionPrice = isEffectivelyBEActive ? entryPrice : Math.max(currentAsk, setup.stop);
           }
         }
         

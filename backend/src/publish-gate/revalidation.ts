@@ -19,7 +19,8 @@ export function revalidateSetup(
   currentPrice: number,
   atr14: number,
   maxHigh?: number,
-  minLow?: number
+  minLow?: number,
+  quoteDetails?: { bid: number; ask: number; spread?: number }
 ): RevalidationResult {
   // Rule 0: Anti-Mock Data Enforcement — Invalidate any mock/placeholder data instantly
   if (isMockSetup(setup)) {
@@ -31,87 +32,102 @@ export function revalidateSetup(
   }
 
   const isLong = setup.bias === 'long';
+  const spread = quoteDetails?.spread ?? (quoteDetails ? Math.max(0, quoteDetails.ask - quoteDetails.bid) : 0);
+
+  // Institutional Bid/Ask Rule:
+  // - Long trade exits (SL / TP / Invalidation) SELL to close -> evaluate on BID
+  // - Short trade exits (SL / TP / Invalidation) BUY to close -> evaluate on ASK
+  const evalPrice = isLong
+    ? (quoteDetails?.bid ?? currentPrice)
+    : (quoteDetails?.ask ?? currentPrice);
+
+  const effectiveHigh = isLong
+    ? (maxHigh !== undefined ? Math.max(evalPrice, maxHigh) : evalPrice)
+    : (maxHigh !== undefined ? Math.max(evalPrice, maxHigh + spread) : evalPrice);
+
+  const effectiveLow = isLong
+    ? (minLow !== undefined ? Math.min(evalPrice, minLow) : evalPrice)
+    : (minLow !== undefined ? Math.min(evalPrice, minLow + spread) : evalPrice);
+
   
   // Rule 1: sl_breached (active setups only)
   if (setup.signal_state === 'active') {
-    if ((isLong && currentPrice <= setup.stop) || (!isLong && currentPrice >= setup.stop)) {
+    if ((isLong && evalPrice <= setup.stop) || (!isLong && evalPrice >= setup.stop)) {
       return { 
         isValid: false, 
         reason: InvalidationReason.sl_breached, 
-        detail: `Price ${currentPrice} breached SL ${setup.stop}` 
+        detail: `Price ${evalPrice} (${isLong ? 'Bid' : 'Ask'}) breached SL ${setup.stop}` 
       };
     }
   }
 
   if (setup.signal_state === 'awaiting_entry') {
-    const effectiveHigh = maxHigh !== undefined ? Math.max(currentPrice, maxHigh) : currentPrice;
-    const effectiveLow = minLow !== undefined ? Math.min(currentPrice, minLow) : currentPrice;
 
     // Rule 2a: TP reached before entry — the full move has completed without us.
     // Invalidate immediately if price reached either TP1 (+2R) or TP2 (+3R).
     if (isLong) {
-      if (setup.tp1 && (effectiveHigh >= setup.tp1 || currentPrice >= setup.tp1)) {
+      if (setup.tp1 && (effectiveHigh >= setup.tp1 || evalPrice >= setup.tp1)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveHigh} reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
+          detail: `Price ${effectiveHigh} (Bid) reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
         };
       }
-      if (setup.tp2 && (effectiveHigh >= setup.tp2 || currentPrice >= setup.tp2)) {
+      if (setup.tp2 && (effectiveHigh >= setup.tp2 || evalPrice >= setup.tp2)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveHigh} reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
+          detail: `Price ${effectiveHigh} (Bid) reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
         };
       }
     } else {
-      if (setup.tp1 && (effectiveLow <= setup.tp1 || currentPrice <= setup.tp1)) {
+      if (setup.tp1 && (effectiveLow <= setup.tp1 || evalPrice <= setup.tp1)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveLow} reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
+          detail: `Price ${effectiveLow} (Ask) reached TP1 (${setup.tp1}) without filling entry — move completed, pending order invalidated`
         };
       }
-      if (setup.tp2 && (effectiveLow <= setup.tp2 || currentPrice <= setup.tp2)) {
+      if (setup.tp2 && (effectiveLow <= setup.tp2 || evalPrice <= setup.tp2)) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveLow} reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
+          detail: `Price ${effectiveLow} (Ask) reached TP2 (${setup.tp2}) without filling entry — move completed, pending order invalidated`
         };
       }
     }
 
     // Rule 2b: zone_consumed / stop breached before filling entry
     if (isLong) {
-      if (effectiveLow <= setup.stop || currentPrice <= setup.stop) {
+      if (effectiveLow <= setup.stop || evalPrice <= setup.stop) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveLow} breached Stop Loss ${setup.stop} before entry fill — demand zone consumed`
+          detail: `Price ${effectiveLow} (Bid) breached Stop Loss ${setup.stop} before entry fill — demand zone consumed`
         };
       }
-      const blowThrough = setup.entry_zone_low - currentPrice; // positive only if price < zone bottom
+      const blowThrough = setup.entry_zone_low - evalPrice; // positive only if price < zone bottom
       if (blowThrough > 1.5 * atr14) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${currentPrice} crashed ${blowThrough.toFixed(2)} below zone bottom ${setup.entry_zone_low} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — demand zone consumed`
+          detail: `Price ${evalPrice} crashed ${blowThrough.toFixed(2)} below zone bottom ${setup.entry_zone_low} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — demand zone consumed`
         };
       }
     } else {
-      if (effectiveHigh >= setup.stop || currentPrice >= setup.stop) {
+      if (effectiveHigh >= setup.stop || evalPrice >= setup.stop) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${effectiveHigh} breached Stop Loss ${setup.stop} before entry fill — supply zone consumed`
+          detail: `Price ${effectiveHigh} (Ask) breached Stop Loss ${setup.stop} before entry fill — supply zone consumed`
         };
       }
-      const blowThrough = currentPrice - setup.entry_zone_high; // positive only if price > zone top
+      const blowThrough = evalPrice - setup.entry_zone_high; // positive only if price > zone top
       if (blowThrough > 1.5 * atr14) {
         return {
           isValid: false,
           reason: InvalidationReason.price_displaced,
-          detail: `Price ${currentPrice} rallied ${blowThrough.toFixed(2)} above zone top ${setup.entry_zone_high} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — supply zone consumed`
+          detail: `Price ${evalPrice} rallied ${blowThrough.toFixed(2)} above zone top ${setup.entry_zone_high} (> 1.5x ATR ${(atr14 * 1.5).toFixed(2)}) — supply zone consumed`
         };
       }
     }

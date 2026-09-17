@@ -1,6 +1,6 @@
 import { getDb } from '../db/database';
 import * as queries from '../db/queries';
-import { getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
 import { computeATR } from '../discovery/atr';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
@@ -38,34 +38,36 @@ export class LifecycleSync {
       const setups = await queries.getSetupsByState('awaiting_entry');
       
       for (const setup of setups) {
-        const currentPrice = await getLiveCurrentPrice(setup.instrument);
+        const quote = await getLiveQuoteDetails(setup.instrument);
+        const currentPrice = quote?.price || await getLiveCurrentPrice(setup.instrument);
         
         // Skip if price data unavailable — never fill a trade on a bad price feed
         if (!currentPrice || currentPrice <= 0) {
           logger.warn({ instrument: setup.instrument }, 'Skipping entry check: live price unavailable');
           continue;
         }
+
+        const currentBid = quote?.bid || currentPrice;
+        const currentAsk = quote?.ask || currentPrice;
+        const spread = quote?.spread || 0;
         
         const createdTimeMs = new Date(setup.created_at).getTime();
-        let maxHigh = currentPrice;
-        let minLow = currentPrice;
+        let maxHigh = currentBid;
+        let minLow = currentBid;
         let recentCandles: any[] = [];
         try {
           const candles = await getLiveCandles(setup.instrument, '1m', 15);
           if (candles && candles.length > 0) {
             recentCandles = candles;
             // Filter ONLY candles that opened strictly AFTER this setup was created.
-            // The -5000ms window was including the current in-progress candle (opened before setup
-            // creation), whose wick instantly satisfied fill conditions. Strict >= createdTimeMs ensures
-            // only NEW price action (formed after the setup was published) triggers entry fills.
             const postCreationCandles = candles.filter(c => {
               const candleTime = new Date(c.timestamp).getTime();
               return candleTime >= createdTimeMs;
             });
 
             if (postCreationCandles.length > 0) {
-              maxHigh = Math.max(currentPrice, ...postCreationCandles.map(c => c.high));
-              minLow = Math.min(currentPrice, ...postCreationCandles.map(c => c.low));
+              maxHigh = Math.max(currentBid, ...postCreationCandles.map(c => c.high));
+              minLow = Math.min(currentBid, ...postCreationCandles.map(c => c.low));
             }
           }
         } catch (e) {
@@ -76,9 +78,9 @@ export class LifecycleSync {
         const defaultAtr = isForex ? 0.0020 : 3.0;
         const atr14 = recentCandles.length >= 14 ? computeATR(recentCandles, 14) : defaultAtr;
 
-        // 1. PRE-ENTRY INVALIDATION CHECK
+        // 1. PRE-ENTRY INVALIDATION CHECK (Institutional Bid/Ask)
         // If price reached TP1/TP2 or breached SL before ever entering, the move completed or zone failed.
-        const revalResult = revalidateSetup(setup, currentPrice, atr14, maxHigh, minLow);
+        const revalResult = revalidateSetup(setup, currentPrice, atr14, maxHigh, minLow, quote || undefined);
         if (!revalResult.isValid) {
           const market = setup.market || 'futures';
           await queries.updateSetupState(setup.id, market, 'invalidated', {
@@ -117,22 +119,28 @@ export class LifecycleSync {
         }
         
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
-        const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
 
-        // Entry fill check (Limit order execution on live price):
-        // LONG (Limit Buy):  Price must touch/retrace to demand zone top (currentPrice <= setup.entry_zone_high)
-        // SHORT (Limit Sell): Price must touch/retrace to supply zone bottom (currentPrice >= setup.entry_zone_low)
+        // Entry fill check (Limit order execution on live price & wicks):
+        // LONG (Limit Buy): Buying at ASK. Touch demand zone top (Ask <= entry_zone_high)
+        // SHORT (Limit Sell): Selling at BID. Touch supply zone bottom (Bid >= entry_zone_low)
         let isFilled = false;
+        const minLowAsk = minLow + spread;
+        const maxHighBid = maxHigh;
+
         if (isLong) {
-          isFilled = currentPrice <= setup.entry_zone_high && currentPrice > setup.stop;
+          const askHit = currentAsk <= setup.entry_zone_high && currentAsk > setup.stop;
+          const wickHit = minLowAsk <= setup.entry_zone_high && minLowAsk > setup.stop;
+          isFilled = askHit || wickHit;
         } else {
-          isFilled = currentPrice >= setup.entry_zone_low && currentPrice < setup.stop;
+          const bidHit = currentBid >= setup.entry_zone_low && currentBid < setup.stop;
+          const wickHit = maxHighBid >= setup.entry_zone_low && maxHighBid < setup.stop;
+          isFilled = bidHit || wickHit;
         }
 
         if (isFilled) {
-          let executionPrice = currentPrice;
-          if (isLong && currentPrice > setup.entry_zone_high) executionPrice = setup.entry_zone_high;
-          if (!isLong && currentPrice < setup.entry_zone_low) executionPrice = setup.entry_zone_low;
+          let executionPrice = isLong ? currentAsk : currentBid;
+          if (isLong && executionPrice > setup.entry_zone_high) executionPrice = setup.entry_zone_high;
+          if (!isLong && executionPrice < setup.entry_zone_low) executionPrice = setup.entry_zone_low;
 
           const nowTime = new Date();
           const entryTriggeredAt = nowTime;
