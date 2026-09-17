@@ -375,6 +375,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
         }
 
         const finalEntry = roundedEntry;
+        const finalStop = roundedStop;
         const finalTp1 = Number(tp1.toFixed(decimals));
         const finalTp2 = Number(tp2.toFixed(decimals));
 
