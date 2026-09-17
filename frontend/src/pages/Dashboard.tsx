@@ -49,7 +49,7 @@ function saveFilters(filters: object) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, isImpersonating } = useAuth();
+  const { user, originalAdmin, isImpersonating } = useAuth();
   const { maintenance } = useMaintenance();
   const isClientView = user?.role !== 'admin' && user?.role !== 'super_admin';
   const showMaintenanceLock = maintenance.enabled && isClientView;
@@ -58,7 +58,7 @@ export const Dashboard: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const isSuperAdmin = user?.role === 'super_admin' && !isImpersonating;
+  const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
 
   const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
@@ -303,32 +303,34 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="filter-actions-right">
-              <button
-                type="button"
-                className="font-mono"
-                style={{
-                  background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                  color: '#000',
-                  border: 'none',
-                  padding: '7px 16px',
-                  borderRadius: '6px',
-                  fontWeight: 900,
-                  fontSize: '0.82rem',
-                  cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)',
-                  whiteSpace: 'nowrap'
-                }}
-                onClick={() => handleManualMannaScan(false)}
-                disabled={isScanningManna}
-                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
-              >
-                <span>{isScanningManna ? '⏳ Scanning All Assets...' : '🟡 Scan All Assets (Manna SnD)'}</span>
-              </button>
-            </div>
+            {isSuperAdmin && (
+              <div className="filter-actions-right">
+                <button
+                  type="button"
+                  className="font-mono"
+                  style={{
+                    background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                    color: '#000',
+                    border: 'none',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onClick={() => handleManualMannaScan(false)}
+                  disabled={isScanningManna}
+                  title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+                >
+                  <span>{isScanningManna ? '⏳ Scanning All Assets...' : '🟡 Scan All Assets (Manna SnD)'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Secondary Controls: Core Filters */}
@@ -440,29 +442,31 @@ export const Dashboard: React.FC = () => {
             {safeSetups.length === 0 && marketFilter !== 'watchlist' && (
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <SessionScanCountdown />
-                <button
-                  type="button"
-                  className="font-mono"
-                  style={{
-                    background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                    color: '#000',
-                    border: 'none',
-                    padding: '10px 24px',
-                    borderRadius: '8px',
-                    fontWeight: 900,
-                    fontSize: '0.88rem',
-                    cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 0 16px rgba(255, 215, 0, 0.45)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                  onClick={() => handleManualMannaScan(true)}
-                  disabled={isScanningManna}
-                  title="Force a full scan of all Forex & Futures assets for Manna SnD setups"
-                >
-                  <span>{isScanningManna ? '⏳ Scanning All Assets for Manna SnD...' : '🟡 Trigger Manual Manna SnD Scan (All Assets)'}</span>
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{
+                      background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                      color: '#000',
+                      border: 'none',
+                      padding: '10px 24px',
+                      borderRadius: '8px',
+                      fontWeight: 900,
+                      fontSize: '0.88rem',
+                      cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 0 16px rgba(255, 215, 0, 0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                    onClick={() => handleManualMannaScan(true)}
+                    disabled={isScanningManna}
+                    title="Force a full scan of all Forex & Futures assets for Manna SnD setups"
+                  >
+                    <span>{isScanningManna ? '⏳ Scanning All Assets for Manna SnD...' : '🟡 Trigger Manual Manna SnD Scan (All Assets)'}</span>
+                  </button>
+                )}
               </div>
             )}
 

@@ -647,29 +647,31 @@ export const AdminPanel: React.FC = () => {
             <span className="user-badge" style={{ background: isSuperAdmin ? 'rgba(179, 136, 255, 0.2)' : 'rgba(255, 171, 0, 0.2)', border: isSuperAdmin ? '1px solid #b388ff' : '1px solid #ffab00', color: isSuperAdmin ? '#b388ff' : '#ffab00', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
               {isSuperAdmin ? '👑 SUPER ADMIN' : `⚙️ ADMIN: ${user?.name || 'System Admin'}`}
             </span>
-            <button
-              type="button"
-              className="font-mono"
-              style={{
-                background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                color: '#000',
-                border: 'none',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontWeight: 900,
-                fontSize: '0.8rem',
-                cursor: isTriggering ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
-              }}
-              onClick={handleMannaSndQuickScan}
-              disabled={isTriggering}
-              title="Trigger manual Manna SnD scan across all Forex and Futures assets"
-            >
-              <span>{isTriggering ? '⏳ Scanning...' : '🟡 Scan Manna SnD (All Assets)'}</span>
-            </button>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                  color: '#000',
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 900,
+                  fontSize: '0.8rem',
+                  cursor: isTriggering ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
+                }}
+                onClick={handleMannaSndQuickScan}
+                disabled={isTriggering}
+                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+              >
+                <span>{isTriggering ? '⏳ Scanning...' : '🟡 Scan Manna SnD (All Assets)'}</span>
+              </button>
+            )}
 
             {isSuperAdmin && (
               <button
@@ -2426,22 +2428,24 @@ export const AdminPanel: React.FC = () => {
               {isTriggering ? 'Triggering...' : '▶ TRIGGER MANUAL RUN'}
             </button>
 
-            <button
-              type="button"
-              className="btn-trigger"
-              style={{
-                marginTop: '10px',
-                background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                color: '#000',
-                fontWeight: 900,
-                border: 'none',
-                boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
-              }}
-              onClick={handleMannaSndQuickScan}
-              disabled={isTriggering}
-            >
-              {isTriggering ? 'Scanning Manna SnD...' : '🟡 ONE-CLICK: SCAN ALL ASSETS (MANNA SND)'}
-            </button>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                className="btn-trigger"
+                style={{
+                  marginTop: '10px',
+                  background: isTriggering ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                  color: '#000',
+                  fontWeight: 900,
+                  border: 'none',
+                  boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
+                }}
+                onClick={handleMannaSndQuickScan}
+                disabled={isTriggering}
+              >
+                {isTriggering ? 'Scanning Manna SnD...' : '🟡 ONE-CLICK: SCAN ALL ASSETS (MANNA SND)'}
+              </button>
+            )}
           </div>
 
           <div className="admin-card glass-card cb-card">
