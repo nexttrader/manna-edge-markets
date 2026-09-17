@@ -54,21 +54,53 @@ export async function executePublishRun(
   });
   
   try {
-    // ── EUR/USD LEADER PRE-PUBLISH GATE ──
-    // Absolute guarantee: Drop any Dollar follower setup that contradicts EUR/USD
+    // ── DOLLAR BASKET & EUR/USD LEADER PRE-PUBLISH GATE ──
+    // Absolute guarantee: Never publish contradictory Dollar exposure (e.g. USD/JPY SELL alongside GBP/USD SELL)
     let filteredForexCandidates = [...forexCandidates];
+    const positivePairs = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
+    const inversePairs = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
+
+    // 1. Check if EUR/USD is present in candidates
     const eurInCandidates = filteredForexCandidates.find(c => c.instrument.toUpperCase() === 'EUR/USD');
     let eurLeaderBias = eurInCandidates ? eurInCandidates.bias : null;
 
+    const activeForex = await queries.getActiveSetups('forex');
+
+    // 2. If not in candidates, check if EUR/USD is active in the database
     if (!eurLeaderBias) {
-      const activeForex = await queries.getActiveSetups('forex');
       const activeEur = activeForex.find(s => s.instrument.toUpperCase() === 'EUR/USD');
       if (activeEur) eurLeaderBias = activeEur.bias;
     }
 
+    // 3. If still not established, check if ANY active Dollar setup is currently open in DB
+    if (!eurLeaderBias) {
+      const activeDollar = activeForex.find(s => [...positivePairs, ...inversePairs].includes(s.instrument.toUpperCase()));
+      if (activeDollar) {
+        const isInv = inversePairs.includes(activeDollar.instrument.toUpperCase());
+        // If inverse pair is long -> USD is bullish -> EUR/USD would be short
+        eurLeaderBias = isInv ? (activeDollar.bias === 'long' ? 'short' : 'long') : activeDollar.bias;
+      }
+    }
+
+    // 4. If still not established, arbitrate internally among candidates in this publish batch
+    if (!eurLeaderBias) {
+      const dollarBatch = filteredForexCandidates.filter(c => [...positivePairs, ...inversePairs].includes(c.instrument.toUpperCase()));
+      if (dollarBatch.length > 1) {
+        let usdBullishScore = 0;
+        let usdBearishScore = 0;
+        for (const c of dollarBatch) {
+          const isInv = inversePairs.includes(c.instrument.toUpperCase());
+          const isUsdBullish = isInv ? c.bias === 'long' : c.bias === 'short';
+          const score = c.conviction_score || 85;
+          if (isUsdBullish) usdBullishScore += score;
+          else usdBearishScore += score;
+        }
+        eurLeaderBias = usdBullishScore >= usdBearishScore ? 'short' : 'long';
+      }
+    }
+
+    // 5. Enforce correlation against established Dollar benchmark
     if (eurLeaderBias) {
-      const positivePairs = ['GBP/USD', 'AUD/USD', 'NZD/USD'];
-      const inversePairs = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
       filteredForexCandidates = filteredForexCandidates.filter(c => {
         const inst = c.instrument.toUpperCase();
         if (positivePairs.includes(inst) && c.bias !== eurLeaderBias) {
@@ -333,19 +365,23 @@ export async function executePublishRun(
       }
     }
 
-    // ── CORRELATED OUTLIER CONVICTION PENALTY PASS (FUTURES INDICES) ──
-    for (const marketName of ['futures']) {
+    // ── CORRELATED OUTLIER CONVICTION PENALTY PASS (FUTURES INDICES & FOREX DOLLAR) ──
+    for (const marketName of ['futures', 'forex']) {
       try {
         const activeSetups = await queries.getActiveSetups(marketName);
         const groups: Record<string, typeof activeSetups> = {};
-        groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM', 'RTY'].includes(s.instrument.toUpperCase()));
+        if (marketName === 'futures') {
+          groups['indices'] = activeSetups.filter(s => ['ES', 'NQ', 'YM', 'RTY'].includes(s.instrument.toUpperCase()));
+        } else {
+          groups['dollar'] = activeSetups.filter(s => ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY', 'USD/CAD', 'USD/CHF', 'NZD/USD'].includes(s.instrument.toUpperCase()));
+        }
 
         for (const [groupName, groupSetups] of Object.entries(groups)) {
           if (groupSetups.length < 2) continue;
 
           const normalizedLongCount = groupSetups.filter(s => {
             const inst = s.instrument.toUpperCase();
-            if (inst === 'USD/JPY' || inst === 'USD/CAD') return s.bias === 'short';
+            if (['USD/JPY', 'USD/CAD', 'USD/CHF'].includes(inst)) return s.bias === 'short';
             return s.bias === 'long';
           }).length;
 
@@ -356,14 +392,14 @@ export async function executePublishRun(
 
           for (const setup of groupSetups) {
             const inst = setup.instrument.toUpperCase();
-            const setupNormalizedBias = (inst === 'USD/JPY' || inst === 'USD/CAD') ? (setup.bias === 'short' ? 'long' : 'short') : setup.bias;
+            const setupNormalizedBias = (['USD/JPY', 'USD/CAD', 'USD/CHF'].includes(inst)) ? (setup.bias === 'short' ? 'long' : 'short') : setup.bias;
             const isOutlier = setupNormalizedBias !== majorityNormalizedBias;
 
             let metaObj: any = {};
             try { metaObj = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : (setup.metadata || {}); } catch {}
 
             if (isOutlier) {
-              const groupLabel = groupName === 'indices' ? 'Index Futures (ES, NQ, YM, RTY)' : 'Dollar pairs (EUR/USD, GBP/USD, USD/JPY, USD/CAD)';
+              const groupLabel = groupName === 'indices' ? 'Index Futures (ES, NQ, YM, RTY)' : 'Dollar pairs (EUR/USD, GBP/USD, USD/JPY, USD/CAD, AUD/USD)';
               const plainNote = `Conviction score reduced by 15%: This ${setup.bias.toUpperCase()} signal does not align with the general ${majorityNormalizedBias.toUpperCase()} direction of other correlated ${groupLabel}.`;
               
               if (!metaObj.correlation_penalty_applied) {

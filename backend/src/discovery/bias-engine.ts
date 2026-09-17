@@ -83,8 +83,21 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
   const unifiedBiases: Record<string, Bias> = { ...rawBiases };
 
   // ── 1. Equity Indices Group Synchronization (Anchor to ES - S&P 500 Benchmark) ──
-  if (instruments.includes('ES')) {
+  const INDEX_GROUP = ['ES', 'NQ', 'YM', 'RTY'];
+  const hasIndexPairs = instruments.some(inst => INDEX_GROUP.includes(inst.toUpperCase()));
+  if (hasIndexPairs) {
+    if (!rawBiases['ES']) {
+      try {
+        const candles15m = await getLiveCandles('ES', '15m', 50);
+        const candles1h = await getLiveCandles('ES', '1h', 24);
+        const result = calculateRawStructureBias(candles1h, candles15m);
+        rawBiases['ES'] = result.bias;
+      } catch {
+        rawBiases['ES'] = 'long';
+      }
+    }
     const equityMarketIsBullish = rawBiases['ES'] === 'long';
+    if (instruments.includes('ES')) unifiedBiases['ES'] = rawBiases['ES'];
     if (instruments.includes('NQ')) unifiedBiases['NQ'] = equityMarketIsBullish ? 'long' : 'short';
     if (instruments.includes('YM')) unifiedBiases['YM'] = equityMarketIsBullish ? 'long' : 'short';
     if (instruments.includes('RTY')) unifiedBiases['RTY'] = equityMarketIsBullish ? 'long' : 'short';
@@ -98,13 +111,28 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
 
   // ── 3. Dollar Correlation Group (DXY vs EUR/USD, GBP/USD, AUD/USD, USD/JPY, USD/CAD) ──
   // Anchor to EUR/USD (inverse of Dollar strength)
-  if (instruments.includes('EUR/USD')) {
+  const DOLLAR_GROUP = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY', 'USD/CAD', 'USD/CHF', 'NZD/USD'];
+  const hasDollarPairs = instruments.some(inst => DOLLAR_GROUP.includes(inst.toUpperCase()));
+  if (hasDollarPairs) {
+    if (!rawBiases['EUR/USD']) {
+      try {
+        const candles15m = await getLiveCandles('EUR/USD', '15m', 50);
+        const candles1h = await getLiveCandles('EUR/USD', '1h', 24);
+        const result = calculateRawStructureBias(candles1h, candles15m);
+        rawBiases['EUR/USD'] = result.bias;
+      } catch {
+        rawBiases['EUR/USD'] = 'long';
+      }
+    }
     const dollarStrengthIsBullish = rawBiases['EUR/USD'] === 'short'; // If EUR/USD is short, Dollar is bullish
     
+    if (instruments.includes('EUR/USD')) unifiedBiases['EUR/USD'] = rawBiases['EUR/USD'];
     if (instruments.includes('GBP/USD')) unifiedBiases['GBP/USD'] = dollarStrengthIsBullish ? 'short' : 'long';
     if (instruments.includes('AUD/USD')) unifiedBiases['AUD/USD'] = dollarStrengthIsBullish ? 'short' : 'long';
+    if (instruments.includes('NZD/USD')) unifiedBiases['NZD/USD'] = dollarStrengthIsBullish ? 'short' : 'long';
     if (instruments.includes('USD/JPY')) unifiedBiases['USD/JPY'] = dollarStrengthIsBullish ? 'long' : 'short';
     if (instruments.includes('USD/CAD')) unifiedBiases['USD/CAD'] = dollarStrengthIsBullish ? 'long' : 'short';
+    if (instruments.includes('USD/CHF')) unifiedBiases['USD/CHF'] = dollarStrengthIsBullish ? 'long' : 'short';
   }
 
   return unifiedBiases;

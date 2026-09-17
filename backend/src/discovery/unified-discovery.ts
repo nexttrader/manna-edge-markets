@@ -84,11 +84,13 @@ export async function discoverUnifiedSetups(
           leaderBias = activeEur.bias;
         } else if (unifiedBiases['EUR/USD']) {
           leaderBias = unifiedBiases['EUR/USD'];
+        } else {
+          // Direct fallback: derive single source of truth Dollar benchmark
+          const directBiases = await getUnifiedMarketBiases(['EUR/USD']);
+          leaderBias = directBiases['EUR/USD'] || 'long';
         }
       } catch (err) {
-        if (unifiedBiases['EUR/USD']) {
-          leaderBias = unifiedBiases['EUR/USD'];
-        }
+        leaderBias = unifiedBiases['EUR/USD'] || 'long';
       }
     }
 

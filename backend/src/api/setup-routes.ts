@@ -202,16 +202,32 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
 
       const oppSetup = enrichedSetups.find((other: any) => {
         if (other.id === setup.id) return false;
-        const sameInst = other.instrument === setup.instrument;
+        const sInst = (setup.instrument || '').toUpperCase();
+        const oInst = (other.instrument || '').toUpperCase();
+        const sameInst = sInst === oInst;
+
+        const indices = ['ES', 'NQ', 'YM', 'RTY'];
+        const positiveDollar = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
+        const inverseDollar = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
+        const allDollar = [...positiveDollar, ...inverseDollar];
+
         const sameGroup = (
-          (['ES', 'NQ', 'YM'].includes(setup.instrument.toUpperCase()) && ['ES', 'NQ', 'YM'].includes(other.instrument.toUpperCase())) ||
-          (['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(setup.instrument.toUpperCase()) && ['EUR/USD', 'GBP/USD', 'AUD/USD', 'USD/JPY'].includes(other.instrument.toUpperCase()))
+          (indices.includes(sInst) && indices.includes(oInst)) ||
+          (allDollar.includes(sInst) && allDollar.includes(oInst))
         );
         if (!sameInst && !sameGroup) return false;
 
         const otherStrat = other.strategy_id || 'sentinel_v2';
         const myStrat = setup.strategy_id || 'sentinel_v2';
-        return other.bias !== setup.bias && otherStrat !== myStrat;
+        if (otherStrat === myStrat) return false;
+
+        const getNorm = (inst: string, bias: string) => {
+          const b = (bias || 'long').toLowerCase();
+          if (inverseDollar.includes(inst)) return b === 'short' ? 'long' : 'short';
+          return b;
+        };
+
+        return getNorm(sInst, setup.bias) !== getNorm(oInst, other.bias);
       });
 
       let opposingStrategyWarning: string | null = null;

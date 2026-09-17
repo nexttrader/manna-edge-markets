@@ -87,6 +87,110 @@ async function runTests() {
   assert.strictEqual(expectedUsdJpyBias, 'long', 'USD/JPY must invert EUR/USD SHORT to LONG');
   console.log('   ✅ Leader-follower correlation mapping correctly enforces direction.');
 
+  // ── TEST 6: Bias Engine synchronizes Dollar group even when EUR/USD is excluded ──
+  console.log('6️⃣ Testing Bias Engine Dollar synchronization without EUR/USD in input array...');
+  const { getUnifiedMarketBiases } = await import('../discovery/bias-engine');
+  // Pass only GBP/USD and USD/JPY without EUR/USD
+  const partialBiases = await getUnifiedMarketBiases(['GBP/USD', 'USD/JPY']);
+  assert.ok(partialBiases['GBP/USD'], 'GBP/USD bias must be generated');
+  assert.ok(partialBiases['USD/JPY'], 'USD/JPY bias must be generated');
+  // They MUST NOT have the same raw bias (if GBP/USD is short, USD/JPY must be long; if long, short)
+  assert.notStrictEqual(
+    partialBiases['GBP/USD'],
+    partialBiases['USD/JPY'],
+    `Dollar synchronization must ensure GBP/USD (${partialBiases['GBP/USD']}) and USD/JPY (${partialBiases['USD/JPY']}) do not both have the same raw bias`
+  );
+  console.log(`   ✅ getUnifiedMarketBiases automatically synchronized GBP/USD (${partialBiases['GBP/USD']}) and USD/JPY (${partialBiases['USD/JPY']}) without EUR/USD in input.`);
+
+  // ── TEST 7: Pre-Publish Gate blocks contradictory USD/JPY SELL + GBP/USD SELL ──
+  console.log('7️⃣ Testing Pre-Publish Gate blocking contradictory Dollar candidates (USD/JPY SELL + GBP/USD SELL)...');
+  await queryDb(`DELETE FROM forex_edge_setups WHERE id LIKE 'test_%'`);
+  await queryDb(`DELETE FROM edge_setups WHERE id LIKE 'test_%'`);
+  const { executePublishRun } = await import('../publish-gate/publish-gate');
+  const kzInfoTest: KillzoneInfo = {
+    killzone: 'ny_am',
+    score: 90,
+    boundaryET: '08:00 ET',
+    isActive: true
+  };
+
+  const conflictingCandidate1: CandidateSetup = {
+    id: `test_cand_gbp_${Date.now()}`,
+    instrument: 'GBP/USD',
+    bias: 'short', // SELL -> Bullish USD
+    entry_zone_low: 1.3000,
+    entry_zone_high: 1.3010,
+    entry_zone_mid: 1.3005,
+    stop: 1.3030,
+    tp1: 1.2950,
+    tp2: 1.2900,
+    conviction_score: 90,
+    strategy_id: 'manna_snd',
+    run_id: 'test_run'
+  };
+
+  const conflictingCandidate2: CandidateSetup = {
+    id: `test_cand_usdjpy_${Date.now()}`,
+    instrument: 'USD/JPY',
+    bias: 'short', // SELL -> Bearish USD (Contradicts GBP/USD SELL!)
+    entry_zone_low: 155.00,
+    entry_zone_high: 155.10,
+    entry_zone_mid: 155.05,
+    stop: 155.30,
+    tp1: 154.50,
+    tp2: 154.00,
+    conviction_score: 80, // Lower conviction -> MUST BE BLOCKED
+    strategy_id: 'manna_snd',
+    run_id: 'test_run'
+  };
+
+  const pubResult = await executePublishRun(kzInfoTest, [], [conflictingCandidate1, conflictingCandidate2], 'dry_run');
+  // Only the higher conviction candidate (GBP/USD with 90%) should be preserved; conflicting USD/JPY should be blocked
+  assert.strictEqual(pubResult.stats.created, 1, 'Exactly one non-conflicting Dollar candidate must be created');
+  console.log('   ✅ Pre-Publish Gate successfully intercepted and blocked contradictory USD/JPY SELL alongside GBP/USD SELL.');
+
+  // ── TEST 8: Decision Matrix identifies opposing Dollar exposures across inverse pairs ──
+  console.log('8️⃣ Testing Decision Matrix cross-strategy and correlation penalty with inverse pairs...');
+  const { calculateAssetMatrix } = await import('../analytics/decision-matrix');
+  const matrixSetups = [
+    {
+      id: 'mat_setup_1',
+      instrument: 'GBP/USD',
+      market: 'forex',
+      bias: 'short', // SELL
+      entry_zone_low: 1.3000,
+      entry_zone_high: 1.3010,
+      entry_zone_mid: 1.3005,
+      stop: 1.3030,
+      tp1: 1.2950,
+      conviction_score: 90,
+      signal_state: 'awaiting_entry',
+      strategy_id: 'manna_snd'
+    },
+    {
+      id: 'mat_setup_2',
+      instrument: 'USD/JPY',
+      market: 'forex',
+      bias: 'short', // SELL (Opposes GBP/USD SELL on USD!)
+      entry_zone_low: 155.00,
+      entry_zone_high: 155.10,
+      entry_zone_mid: 155.05,
+      stop: 155.30,
+      tp1: 154.50,
+      conviction_score: 85,
+      signal_state: 'awaiting_entry',
+      strategy_id: 'manna_snd'
+    }
+  ];
+
+  const matrixItems = calculateAssetMatrix(matrixSetups);
+  assert.strictEqual(matrixItems.length, 2);
+  const usdjpyItem = matrixItems.find(i => i.instrument === 'USD/JPY');
+  const gbpusdItem = matrixItems.find(i => i.instrument === 'GBP/USD');
+  // Lower ranked setup (USD/JPY) should receive correlation penalty for contradictory exposure
+  assert.ok(usdjpyItem!.priority_score < 85, 'USD/JPY must receive correlation penalty when conflicting with higher-ranked GBP/USD');
+  console.log(`   ✅ Decision Matrix correctly applied correlation penalty to conflicting setup (USD/JPY priority: ${usdjpyItem!.priority_score}).`);
+
   console.log('\n🎉 ALL FOREX LEADER CORRELATION & MIDPOINT SCANNER TESTS PASSED!');
 }
 

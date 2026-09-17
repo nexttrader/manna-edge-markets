@@ -329,6 +329,10 @@ export function calculateAssetMatrixItem(
   };
 }
 
+const POSITIVE_DOLLAR_PAIRS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
+const INVERSE_DOLLAR_PAIRS = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
+const ALL_DOLLAR_PAIRS = [...POSITIVE_DOLLAR_PAIRS, ...INVERSE_DOLLAR_PAIRS];
+
 function areCorrelated(instA: string, instB: string): boolean {
   const a = instA.toUpperCase();
   const b = instB.toUpperCase();
@@ -337,11 +341,19 @@ function areCorrelated(instA: string, instB: string): boolean {
   const indices = ['ES', 'NQ', 'RTY', 'YM'];
   if (indices.includes(a) && indices.includes(b)) return true;
   
-  // USD-based Forex majors
-  const usdMajors = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
-  if (usdMajors.includes(a) && usdMajors.includes(b)) return true;
+  // USD-based Forex majors (both positive & inverse pairs belong to the Dollar basket)
+  if (ALL_DOLLAR_PAIRS.includes(a) && ALL_DOLLAR_PAIRS.includes(b)) return true;
   
   return false;
+}
+
+function getNormalizedDirection(instrument: string, bias: string): 'long' | 'short' {
+  const inst = instrument.toUpperCase();
+  const b = (bias || 'long').toLowerCase() as 'long' | 'short';
+  if (INVERSE_DOLLAR_PAIRS.includes(inst)) {
+    return b === 'short' ? 'long' : 'short';
+  }
+  return b;
 }
 
 export function calculateAssetMatrix(
@@ -372,7 +384,11 @@ export function calculateAssetMatrix(
       );
 
       if (isDiffStrat) {
-        if (a.bias !== b.bias) {
+        const normA = getNormalizedDirection(a.instrument, a.bias);
+        const normB = getNormalizedDirection(b.instrument, b.bias);
+        const isOpposing = normA !== normB;
+
+        if (isOpposing) {
           // Divergence detected on opposing biases:
           const isForexOrEnergy = a.market === 'forex' || a.instrument.includes('/') || a.instrument.toUpperCase() === 'CL';
           const isIndex = ['ES', 'NQ', 'YM', 'RTY'].includes(a.instrument.toUpperCase());
@@ -411,7 +427,7 @@ export function calculateAssetMatrix(
   // Sort descending by priority_score
   items.sort((a, b) => b.priority_score - a.priority_score);
 
-  // Apply Correlation Penalty for duplicate directional exposure in same basket
+  // Apply Correlation Penalty for duplicate or contradictory directional exposure in same basket
   for (let i = 0; i < items.length; i++) {
     const itemA = items[i];
     if (itemA.signal_state !== 'awaiting_entry' && itemA.signal_state !== 'active') continue;
@@ -420,11 +436,21 @@ export function calculateAssetMatrix(
       const itemB = items[j];
       if (itemB.signal_state !== 'awaiting_entry' && itemB.signal_state !== 'active') continue;
 
-      if (itemA.bias === itemB.bias && areCorrelated(itemA.instrument, itemB.instrument)) {
-        // Apply correlation penalty to lower-ranked setup
-        const penalty = 12.0;
-        itemA.priority_score = Number(Math.max(0, itemA.priority_score - penalty).toFixed(1));
-        break; // Only apply penalty once
+      if (areCorrelated(itemA.instrument, itemB.instrument)) {
+        const normA = getNormalizedDirection(itemA.instrument, itemA.bias);
+        const normB = getNormalizedDirection(itemB.instrument, itemB.bias);
+
+        if (normA === normB) {
+          // Duplicate directional exposure in same basket
+          const penalty = 12.0;
+          itemA.priority_score = Number(Math.max(0, itemA.priority_score - penalty).toFixed(1));
+          break;
+        } else {
+          // Contradictory directional exposure against higher-ranked setup in same basket
+          const penalty = 16.0;
+          itemA.priority_score = Number(Math.max(0, itemA.priority_score - penalty).toFixed(1));
+          break;
+        }
       }
     }
   }
