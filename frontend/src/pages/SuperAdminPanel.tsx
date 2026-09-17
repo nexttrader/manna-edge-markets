@@ -610,6 +610,9 @@ export const SuperAdminPanel: React.FC = () => {
   };
 
   const handleSentinelScan = async () => {
+    const ok = window.confirm('⚠️ CONFIRM MANUAL SCAN: Are you sure you want to trigger a manual Sentinel scan?');
+    if (!ok) return;
+
     try {
       setSentinelScanning(true);
       const res = await fetch(`${API_BASE}/api/super-admin/sentinel/scan`, { method: 'POST' });
@@ -626,18 +629,29 @@ export const SuperAdminPanel: React.FC = () => {
 
   const [mannaSndScanning, setMannaSndScanning] = useState(false);
 
-  const handleMannaSndScan = async (force: boolean = false) => {
+  const handleMannaSndScan = async (market: 'both' | 'forex' | 'futures' = 'both', force: boolean = false) => {
+    const scopeLabel = market === 'both' 
+      ? 'ALL ASSETS (Forex & CME Futures)' 
+      : market === 'forex' 
+      ? 'FOREX PAIRS ONLY' 
+      : 'CME FUTURES ONLY';
+    const ok = window.confirm(`⚠️ CONFIRM MANUAL SCAN: Are you sure you want to trigger a manual Manna SnD scan for ${scopeLabel}?`);
+    if (!ok) return;
+
     try {
       setMannaSndScanning(true);
       const res = await fetch(`${API_BASE}/api/super-admin/manna-snd/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force })
+        body: JSON.stringify({ market, force })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Scan failed');
       const stats = data.result?.stats || {};
-      alert(`✅ Manna SnD Scan Completed (All Assets)!\n\n• New Signals Created: ${stats.created || 0}\n• Signals Preserved: ${stats.preserved || 0}\n• Invalidation Check: ${stats.invalidated || 0}\n• Discarded Duplicates: ${stats.discarded || 0}\n• Market Scope: ${data.scope?.toUpperCase() || 'ALL'}`);
+      const total = (stats.futuresDiscovered || 0) + (stats.forexDiscovered || 0);
+      const pub = (stats.futuresPublished || 0) + (stats.forexPublished || 0);
+      const label = market === 'both' ? 'All (Forex + CME)' : market === 'forex' ? 'Forex Only' : 'Futures Only';
+      alert(`✅ Manna SnD Scan Completed (${label})!\n\n• Candidates Analyzed: ${total}\n• Signals Published: ${pub}\n• New Signals: ${stats.created || 0}\n• Preserved: ${stats.preserved || 0}\n• Invalidated: ${stats.invalidated || 0}\n• Scope: ${data.scope?.toUpperCase() || label.toUpperCase()}`);
       fetchSuperAdminData();
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
@@ -684,26 +698,7 @@ export const SuperAdminPanel: React.FC = () => {
             <span className="super-badge">
               🛡️ MASTER PRIVILEGE ACTIVE
             </span>
-            <button
-              type="button"
-              className="font-mono"
-              style={{
-                background: mannaSndScanning ? '#ffab00' : '#ffd700',
-                border: 'none',
-                color: '#000',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                cursor: mannaSndScanning ? 'not-allowed' : 'pointer',
-                fontWeight: 900,
-                fontSize: '0.82rem',
-                boxShadow: '0 0 10px rgba(255, 215, 0, 0.4)'
-              }}
-              onClick={() => handleMannaSndScan(false)}
-              disabled={mannaSndScanning}
-              title="Trigger manual Manna SnD scan across all assets"
-            >
-              {mannaSndScanning ? '⏳ Scanning...' : '🟡 Scan Manna SnD'}
-            </button>
+
             <button
               type="button"
               className="font-mono"
@@ -1748,11 +1743,34 @@ export const SuperAdminPanel: React.FC = () => {
                   <button
                     type="button"
                     className="font-mono"
-                    style={{ background: '#ffd700', color: '#000', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 900, cursor: mannaSndScanning ? 'not-allowed' : 'pointer', boxShadow: '0 0 10px rgba(255, 215, 0, 0.4)' }}
-                    onClick={() => handleMannaSndScan(false)}
+                    style={{ background: mannaSndScanning ? '#ffab00' : '#ffd700', color: '#000', border: 'none', padding: '6px 14px', borderRadius: '6px', fontWeight: 900, cursor: mannaSndScanning ? 'not-allowed' : 'pointer', boxShadow: '0 0 10px rgba(255, 215, 0, 0.4)' }}
+                    onClick={() => handleMannaSndScan('both', false)}
                     disabled={mannaSndScanning}
+                    title="Scan all Forex and Futures assets for Manna SnD setups"
                   >
-                    {mannaSndScanning ? 'Scanning Manna SnD...' : '🟡 Trigger Manual Manna SnD Scan (All Assets)'}
+                    {mannaSndScanning ? 'Scanning All...' : '🌐 Scan All Assets (Manna SnD)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(255, 215, 0, 0.15)', color: '#ffd700', border: '1px solid #ffd700', padding: '6px 14px', borderRadius: '6px', fontWeight: 800, cursor: mannaSndScanning ? 'not-allowed' : 'pointer' }}
+                    onClick={() => handleMannaSndScan('forex', false)}
+                    disabled={mannaSndScanning}
+                    title="Scan Forex pairs only for Manna SnD setups"
+                  >
+                    {mannaSndScanning ? 'Scanning Forex...' : '💱 Scan Forex Only'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="font-mono"
+                    style={{ background: 'rgba(255, 215, 0, 0.15)', color: '#ffd700', border: '1px solid #ffd700', padding: '6px 14px', borderRadius: '6px', fontWeight: 800, cursor: mannaSndScanning ? 'not-allowed' : 'pointer' }}
+                    onClick={() => handleMannaSndScan('futures', false)}
+                    disabled={mannaSndScanning}
+                    title="Scan CME Futures contracts only for Manna SnD setups"
+                  >
+                    {mannaSndScanning ? 'Scanning Futures...' : '📊 Scan Futures Only'}
                   </button>
 
                   <button
@@ -2124,31 +2142,86 @@ export const SuperAdminPanel: React.FC = () => {
 
                     return (
                       <>
-                        <button
-                          type="button"
-                          className="font-mono"
-                          style={{
-                            background: mannaSndScanning ? '#ffab00' : '#ffd700',
-                            color: '#000',
-                            border: '2px solid #ffd700',
-                            padding: '8px 14px',
-                            borderRadius: '8px',
-                            cursor: mannaSndScanning ? 'not-allowed' : 'pointer',
-                            fontWeight: 900,
-                            fontSize: '0.82rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                            boxShadow: '0 0 14px rgba(255, 215, 0, 0.45)'
-                          }}
-                          onClick={() => handleMannaSndScan(false)}
-                          disabled={mannaSndScanning}
-                          title="Trigger manual Manna SnD scan across all Forex and Futures assets"
-                        >
-                          <span>{mannaSndScanning ? '⏳ SCANNING ALL ASSETS...' : '🟡 SCAN ALL ASSETS (MANNA SND)'}</span>
-                          <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>Instant 1H/15M Supply & Demand Run</span>
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%', marginBottom: '4px' }}>
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              flex: '1 1 200px',
+                              background: mannaSndScanning ? '#ffab00' : '#ffd700',
+                              color: '#000',
+                              border: '2px solid #ffd700',
+                              padding: '8px 14px',
+                              borderRadius: '8px',
+                              cursor: mannaSndScanning ? 'not-allowed' : 'pointer',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px',
+                              boxShadow: '0 0 14px rgba(255, 215, 0, 0.45)'
+                            }}
+                            onClick={() => handleMannaSndScan('both', false)}
+                            disabled={mannaSndScanning}
+                            title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+                          >
+                            <span>{mannaSndScanning ? '⏳ SCANNING ALL...' : '🌐 SCAN ALL ASSETS (MANNA SND)'}</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>Forex + CME Futures</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              flex: '1 1 130px',
+                              background: 'rgba(255, 215, 0, 0.12)',
+                              color: '#ffd700',
+                              border: '1.5px solid #ffd700',
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              cursor: mannaSndScanning ? 'not-allowed' : 'pointer',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            onClick={() => handleMannaSndScan('forex', false)}
+                            disabled={mannaSndScanning}
+                            title="Trigger manual Manna SnD scan for Forex pairs only"
+                          >
+                            <span>{mannaSndScanning ? '⏳ SCANNING...' : '💱 FOREX ONLY'}</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>FX Pairs</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="font-mono"
+                            style={{
+                              flex: '1 1 130px',
+                              background: 'rgba(255, 215, 0, 0.12)',
+                              color: '#ffd700',
+                              border: '1.5px solid #ffd700',
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              cursor: mannaSndScanning ? 'not-allowed' : 'pointer',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            onClick={() => handleMannaSndScan('futures', false)}
+                            disabled={mannaSndScanning}
+                            title="Trigger manual Manna SnD scan for CME Futures only"
+                          >
+                            <span>{mannaSndScanning ? '⏳ SCANNING...' : '📊 FUTURES ONLY'}</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>CME Contracts</span>
+                          </button>
+                        </div>
 
                         <button
                           type="button"

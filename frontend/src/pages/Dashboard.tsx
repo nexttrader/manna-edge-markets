@@ -29,8 +29,6 @@ import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCa
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
-import { useAdmin } from '../hooks/useAdmin';
-
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
 
@@ -63,47 +61,7 @@ export const Dashboard: React.FC = () => {
   const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
-  const { triggerMannaSndScan } = useAdmin();
 
-  const [isScanningManna, setIsScanningManna] = useState(false);
-  const [scanBanner, setScanBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [selectedScanScope, setSelectedScanScope] = useState<'both' | 'forex' | 'futures'>('both');
-  const [showScanDropdown, setShowScanDropdown] = useState(false);
-
-  const handleManualMannaScan = async (targetScope: 'both' | 'forex' | 'futures' = selectedScanScope, force: boolean = false) => {
-    try {
-      setIsScanningManna(true);
-      setShowScanDropdown(false);
-      setScanBanner(null);
-      const res = await triggerMannaSndScan(targetScope, 'live', force);
-      if (res.success) {
-        const stats = res.data?.result?.stats;
-        const total = (stats?.futuresDiscovered || 0) + (stats?.forexDiscovered || 0);
-        const pub = (stats?.futuresPublished || 0) + (stats?.forexPublished || 0);
-        const scopeLabel = targetScope === 'both' ? 'All (Forex + CME)' : targetScope === 'forex' ? 'Forex Only' : 'Futures Only';
-        setScanBanner({
-          type: 'success',
-          message: `✅ Manna SnD Scan Complete (${scopeLabel}): ${total} candidates analyzed, ${pub} published.`
-        });
-        await refetch();
-        setTimeout(() => setScanBanner(null), 8000);
-      } else {
-        setScanBanner({
-          type: 'error',
-          message: `⚠️ Manna SnD Scan: ${res.error || 'Scan failed'}`
-        });
-        setTimeout(() => setScanBanner(null), 8000);
-      }
-    } catch (err: any) {
-      setScanBanner({
-        type: 'error',
-        message: `⚠️ Manna SnD Scan Error: ${err.message}`
-      });
-      setTimeout(() => setScanBanner(null), 8000);
-    } finally {
-      setIsScanningManna(false);
-    }
-  };
 
   // ── Load persisted filter preferences from localStorage ──────────────────
   const saved = loadFilters();
@@ -230,32 +188,6 @@ export const Dashboard: React.FC = () => {
         <TrialWelcomeBanner />
         <MarketClosedBanner />
 
-        {scanBanner && (
-          <div 
-            className="font-mono animate-slide-up"
-            style={{
-              padding: '12px 18px',
-              borderRadius: '8px',
-              marginBottom: '16px',
-              background: scanBanner.type === 'success' ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 23, 68, 0.15)',
-              border: scanBanner.type === 'success' ? '1px solid #00e676' : '1px solid #ff1744',
-              color: scanBanner.type === 'success' ? '#00e676' : '#ff5252',
-              fontWeight: 800,
-              fontSize: '0.88rem',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-          >
-            <span>{scanBanner.message}</span>
-            <button 
-              onClick={() => setScanBanner(null)} 
-              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '1rem', marginLeft: '12px' }}
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         {showMaintenanceLock && <ClientMaintenanceBanner />}
 
@@ -307,158 +239,6 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            {isSuperAdmin && (
-              <div className="filter-actions-right" style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="font-mono"
-                    style={{
-                      background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                      color: '#000',
-                      border: 'none',
-                      padding: '7px 14px',
-                      borderRadius: '6px 0 0 6px',
-                      fontWeight: 900,
-                      fontSize: '0.82rem',
-                      cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)',
-                      whiteSpace: 'nowrap'
-                    }}
-                    onClick={() => handleManualMannaScan(selectedScanScope, false)}
-                    disabled={isScanningManna}
-                    title={`Trigger manual Manna SnD scan for ${selectedScanScope === 'both' ? 'All Assets' : selectedScanScope === 'forex' ? 'Forex Only' : 'Futures Only'}`}
-                  >
-                    <span>
-                      {isScanningManna 
-                        ? `⏳ Scanning ${selectedScanScope === 'both' ? 'All Assets' : selectedScanScope === 'forex' ? 'Forex' : 'Futures'}...`
-                        : `🟡 Scan ${selectedScanScope === 'both' ? 'All Assets' : selectedScanScope === 'forex' ? 'Forex' : 'Futures'} (Manna SnD)`
-                      }
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    style={{
-                      background: isScanningManna ? '#e59b00' : 'linear-gradient(135deg, #ffab00 0%, #e59b00 100%)',
-                      color: '#000',
-                      border: 'none',
-                      borderLeft: '1px solid rgba(0,0,0,0.25)',
-                      padding: '7px 10px',
-                      borderRadius: '0 6px 6px 0',
-                      fontWeight: 900,
-                      fontSize: '0.82rem',
-                      cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)'
-                    }}
-                    onClick={() => setShowScanDropdown(prev => !prev)}
-                    disabled={isScanningManna}
-                    title="Select Market Scope: All Assets, Forex Only, or Futures Only"
-                  >
-                    ▾
-                  </button>
-                </div>
-
-                {showScanDropdown && (
-                  <div
-                    className="font-mono animate-slide-up"
-                    style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 6px)',
-                      right: 0,
-                      minWidth: '230px',
-                      background: '#0f0620',
-                      border: '1px solid rgba(255, 215, 0, 0.6)',
-                      borderRadius: '8px',
-                      padding: '8px',
-                      boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9), 0 0 25px rgba(255, 215, 0, 0.3)',
-                      zIndex: 99999,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                  >
-                    <div style={{ fontSize: '0.68rem', fontWeight: 900, color: '#888', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                      ⚡ Select Scan Market Scope
-                    </div>
-                    <button
-                      type="button"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: selectedScanScope === 'both' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
-                        color: selectedScanScope === 'both' ? '#ffd700' : '#e0e0e0',
-                        border: 'none',
-                        padding: '9px 12px',
-                        borderRadius: '6px',
-                        fontSize: '0.82rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                      onClick={() => {
-                        setSelectedScanScope('both');
-                        handleManualMannaScan('both', false);
-                      }}
-                    >
-                      <span>🌐 Scan All Assets</span>
-                      <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Forex + CME</span>
-                    </button>
-                    <button
-                      type="button"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: selectedScanScope === 'forex' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
-                        color: selectedScanScope === 'forex' ? '#ffd700' : '#e0e0e0',
-                        border: 'none',
-                        padding: '9px 12px',
-                        borderRadius: '6px',
-                        fontSize: '0.82rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                      onClick={() => {
-                        setSelectedScanScope('forex');
-                        handleManualMannaScan('forex', false);
-                      }}
-                    >
-                      <span>💱 Scan Forex Only</span>
-                      <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>FX Pairs</span>
-                    </button>
-                    <button
-                      type="button"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: selectedScanScope === 'futures' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
-                        color: selectedScanScope === 'futures' ? '#ffd700' : '#e0e0e0',
-                        border: 'none',
-                        padding: '9px 12px',
-                        borderRadius: '6px',
-                        fontSize: '0.82rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                      onClick={() => {
-                        setSelectedScanScope('futures');
-                        handleManualMannaScan('futures', false);
-                      }}
-                    >
-                      <span>📊 Scan Futures Only</span>
-                      <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>CME Contracts</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Secondary Controls: Core Filters */}
@@ -570,77 +350,6 @@ export const Dashboard: React.FC = () => {
             {safeSetups.length === 0 && marketFilter !== 'watchlist' && (
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <SessionScanCountdown />
-                {isSuperAdmin && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: '4px' }}>
-                    <button
-                      type="button"
-                      className="font-mono"
-                      style={{
-                        background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                        color: '#000',
-                        border: 'none',
-                        padding: '9px 18px',
-                        borderRadius: '7px',
-                        fontWeight: 900,
-                        fontSize: '0.84rem',
-                        cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 0 14px rgba(255, 215, 0, 0.45)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                      onClick={() => handleManualMannaScan('both', true)}
-                      disabled={isScanningManna}
-                      title="Force full Manna SnD scan for ALL Forex & Futures assets"
-                    >
-                      <span>🌐 Scan All Assets</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="font-mono"
-                      style={{
-                        background: isScanningManna ? '#ffab00' : 'rgba(255, 215, 0, 0.15)',
-                        color: '#ffd700',
-                        border: '1px solid #ffd700',
-                        padding: '9px 16px',
-                        borderRadius: '7px',
-                        fontWeight: 900,
-                        fontSize: '0.84rem',
-                        cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                      onClick={() => handleManualMannaScan('forex', true)}
-                      disabled={isScanningManna}
-                      title="Force Manna SnD scan for Forex pairs only"
-                    >
-                      <span>💱 Scan Forex Only</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="font-mono"
-                      style={{
-                        background: isScanningManna ? '#ffab00' : 'rgba(255, 215, 0, 0.15)',
-                        color: '#ffd700',
-                        border: '1px solid #ffd700',
-                        padding: '9px 16px',
-                        borderRadius: '7px',
-                        fontWeight: 900,
-                        fontSize: '0.84rem',
-                        cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                      onClick={() => handleManualMannaScan('futures', true)}
-                      disabled={isScanningManna}
-                      title="Force Manna SnD scan for CME Futures only"
-                    >
-                      <span>📊 Scan Futures Only</span>
-                    </button>
-                  </div>
-                )}
               </div>
             )}
 
