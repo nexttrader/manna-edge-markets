@@ -838,14 +838,15 @@ router.post('/sentinel/scan', async (_req: Request, res: Response) => {
     }
 });
 
-router.post('/manna-snd/scan', async (req: Request, res: Response) => {
+router.all('/manna-snd/scan', async (req: Request, res: Response) => {
     try {
         const { getCurrentKillzone, isForexMarketOpen, isFuturesMarketOpen } = await import('../scheduler/killzone-mapper');
         const { discoverUnifiedSetups } = await import('../discovery/unified-discovery');
         const { executePublishRun } = await import('../publish-gate/publish-gate');
         
         const now = new Date();
-        const force = Boolean(req.body?.force);
+        const force = req.body?.force === true || req.body?.force === 'true' || req.query?.force === 'true';
+        const mode = (req.body?.mode || req.query?.mode || 'live') as 'live' | 'dry_run';
         let scope: 'both' | 'futures' | 'forex' = 'both';
 
         if (process.env.NODE_ENV !== 'test' && !force) {

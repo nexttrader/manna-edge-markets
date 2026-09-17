@@ -791,9 +791,10 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
   }
 });
 
-router.post('/manna-snd/scan', async (req: Request, res: Response) => {
+router.all('/manna-snd/scan', async (req: Request, res: Response) => {
   try {
-    const { mode = 'live', force = false } = req.body || {};
+    const mode = (req.body?.mode || req.query?.mode || 'live') as 'live' | 'dry_run';
+    const force = req.body?.force === true || req.body?.force === 'true' || req.query?.force === 'true';
     const now = new Date();
     let scope: 'both' | 'futures' | 'forex' = 'both';
 

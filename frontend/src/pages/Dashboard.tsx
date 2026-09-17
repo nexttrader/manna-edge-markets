@@ -29,6 +29,7 @@ import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCa
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
+import { useAdmin } from '../hooks/useAdmin';
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
@@ -62,6 +63,43 @@ export const Dashboard: React.FC = () => {
   const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
+  const { triggerMannaSndScan } = useAdmin();
+
+  const [isScanningManna, setIsScanningManna] = useState(false);
+  const [scanBanner, setScanBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const handleManualMannaScan = async (force: boolean = false) => {
+    try {
+      setIsScanningManna(true);
+      setScanBanner(null);
+      const res = await triggerMannaSndScan('live', force);
+      if (res.success) {
+        const stats = res.data?.result?.stats;
+        const total = (stats?.futuresDiscovered || 0) + (stats?.forexDiscovered || 0);
+        const pub = (stats?.futuresPublished || 0) + (stats?.forexPublished || 0);
+        setScanBanner({
+          type: 'success',
+          message: `✅ Manna SnD Scan Complete (${res.data?.scope || 'all'} markets): ${total} candidates analyzed, ${pub} published.`
+        });
+        await refetch();
+        setTimeout(() => setScanBanner(null), 8000);
+      } else {
+        setScanBanner({
+          type: 'error',
+          message: `⚠️ Manna SnD Scan: ${res.error || 'Scan failed'}`
+        });
+        setTimeout(() => setScanBanner(null), 8000);
+      }
+    } catch (err: any) {
+      setScanBanner({
+        type: 'error',
+        message: `⚠️ Manna SnD Scan Error: ${err.message}`
+      });
+      setTimeout(() => setScanBanner(null), 8000);
+    } finally {
+      setIsScanningManna(false);
+    }
+  };
 
   // ── Load persisted filter preferences from localStorage ──────────────────
   const saved = loadFilters();
@@ -188,6 +226,33 @@ export const Dashboard: React.FC = () => {
         <TrialWelcomeBanner />
         <MarketClosedBanner />
 
+        {scanBanner && (
+          <div 
+            className="font-mono animate-slide-up"
+            style={{
+              padding: '12px 18px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              background: scanBanner.type === 'success' ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 23, 68, 0.15)',
+              border: scanBanner.type === 'success' ? '1px solid #00e676' : '1px solid #ff1744',
+              color: scanBanner.type === 'success' ? '#00e676' : '#ff5252',
+              fontWeight: 800,
+              fontSize: '0.88rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <span>{scanBanner.message}</span>
+            <button 
+              onClick={() => setScanBanner(null)} 
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '1rem', marginLeft: '12px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {showMaintenanceLock && <ClientMaintenanceBanner />}
 
         {/* Real-Time Asset Decision Matrix */}
@@ -235,6 +300,33 @@ export const Dashboard: React.FC = () => {
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'watchlist')}
               >
                 ⭐ Watchlist ({watchlistCount})
+              </button>
+            </div>
+
+            <div className="filter-actions-right">
+              <button
+                type="button"
+                className="font-mono"
+                style={{
+                  background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                  color: '#000',
+                  border: 'none',
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  fontWeight: 900,
+                  fontSize: '0.82rem',
+                  cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 0 12px rgba(255, 215, 0, 0.45)',
+                  whiteSpace: 'nowrap'
+                }}
+                onClick={() => handleManualMannaScan(false)}
+                disabled={isScanningManna}
+                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+              >
+                <span>{isScanningManna ? '⏳ Scanning All Assets...' : '🟡 Scan All Assets (Manna SnD)'}</span>
               </button>
             </div>
           </div>
@@ -346,7 +438,32 @@ export const Dashboard: React.FC = () => {
             </p>
 
             {safeSetups.length === 0 && marketFilter !== 'watchlist' && (
-              <SessionScanCountdown />
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                <SessionScanCountdown />
+                <button
+                  type="button"
+                  className="font-mono"
+                  style={{
+                    background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                    color: '#000',
+                    border: 'none',
+                    padding: '10px 24px',
+                    borderRadius: '8px',
+                    fontWeight: 900,
+                    fontSize: '0.88rem',
+                    cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 0 16px rgba(255, 215, 0, 0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onClick={() => handleManualMannaScan(true)}
+                  disabled={isScanningManna}
+                  title="Force a full scan of all Forex & Futures assets for Manna SnD setups"
+                >
+                  <span>{isScanningManna ? '⏳ Scanning All Assets for Manna SnD...' : '🟡 Trigger Manual Manna SnD Scan (All Assets)'}</span>
+                </button>
+              </div>
             )}
 
             {hasActiveFilter && (marketFilter === 'watchlist' || safeSetups.length > 0) && (

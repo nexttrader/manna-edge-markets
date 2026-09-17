@@ -264,31 +264,29 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
               )}
             </div>
 
-            {isAdmin && (
-              <button
-                type="button"
-                className="font-mono"
-                style={{
-                  background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
-                  color: '#000',
-                  border: 'none',
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  fontWeight: 900,
-                  fontSize: '0.78rem',
-                  cursor: isScanningManna ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
-                }}
-                onClick={handleTriggerMannaScan}
-                disabled={isScanningManna}
-                title="Trigger manual Manna SnD scan across all Forex and Futures assets"
-              >
-                <span>{isScanningManna ? '⏳ Scanning...' : '🟡 Scan Manna SnD'}</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="font-mono"
+              style={{
+                background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                color: '#000',
+                border: 'none',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontWeight: 900,
+                fontSize: '0.78rem',
+                cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                boxShadow: '0 0 10px rgba(255, 215, 0, 0.45)'
+              }}
+              onClick={handleTriggerMannaScan}
+              disabled={isScanningManna}
+              title="Trigger manual Manna SnD scan across all Forex and Futures assets"
+            >
+              <span>{isScanningManna ? '⏳ Scanning...' : '🟡 Scan Manna SnD'}</span>
+            </button>
 
             <div className="header-circuit-breaker-wrap">
               <CircuitBreakerIndicator />
@@ -397,6 +395,27 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                 onClick={() => { setShowCalendar(true); setMobileMenuOpen(false); }}
               >
                 📅 Economic Calendar
+              </button>
+
+              <button 
+                className="mobile-nav-item font-mono"
+                style={{
+                  background: isScanningManna ? '#ffab00' : 'linear-gradient(135deg, #ffd700 0%, #ffab00 100%)',
+                  color: '#000',
+                  fontWeight: 900,
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: '8px',
+                  cursor: isScanningManna ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => { handleTriggerMannaScan(); setMobileMenuOpen(false); }}
+                disabled={isScanningManna}
+              >
+                <span>{isScanningManna ? '⏳ Scanning All Assets...' : '🟡 Scan All Assets (Manna SnD)'}</span>
               </button>
 
               <button 
