@@ -739,9 +739,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
               const isWin = reason.includes('TP');
               const cleanReason = reason.replace('_HIT', '').replace('_STOP', '');
-              const exitPriceLabel = exitPriceVal > 0 
-                ? (isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2)) 
-                : '';
+              let exitPriceLabel = '';
+              if (exitPriceVal > 0) {
+                if (showBidAsk) {
+                  const { bid: exitBid, ask: exitAsk } = getBidAskData(setup.instrument, exitPriceVal, serverQuote);
+                  exitPriceLabel = `B:${exitBid.toFixed(4)} / A:${exitAsk.toFixed(4)}`;
+                } else {
+                  exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
+                }
+              }
               markers.push({
                 time: closestRes.time,
                 position: isWin ? 'aboveBar' : 'belowBar',
@@ -921,6 +927,48 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     };
   }, [showBidAsk, currentPrice, serverQuote, setup.instrument, timeframe]);
+
+  // 4b. Refresh exit marker label when Bid/Ask toggle changes (no re-fetch needed)
+  useEffect(() => {
+    if (!isResolved || !resolvedTimestamp || !candleSeriesRef.current) return;
+    const displayCandles = displayCandlesRef.current;
+    if (!displayCandles || displayCandles.length === 0) return;
+
+    try {
+      const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+      let closestRes = displayCandles[displayCandles.length - 1];
+      let minDiff = Infinity;
+      for (const c of displayCandles) {
+        const diff = Math.abs((c.time as number) - resUnix);
+        if (diff < minDiff) { minDiff = diff; closestRes = c; }
+      }
+      if (!closestRes) return;
+
+      const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
+      const isWin = reason.includes('TP');
+      const cleanReason = reason.replace('_HIT', '').replace('_STOP', '');
+      let exitPriceLabel = '';
+      if (exitPriceVal > 0) {
+        if (showBidAsk) {
+          const { bid: exitBid, ask: exitAsk } = getBidAskData(setup.instrument, exitPriceVal, serverQuote);
+          exitPriceLabel = `B:${exitBid.toFixed(4)} / A:${exitAsk.toFixed(4)}`;
+        } else {
+          exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
+        }
+      }
+      const newMarkers = [{
+        time: closestRes.time,
+        position: isWin ? 'aboveBar' : 'belowBar',
+        color: isWin ? '#00e676' : '#ff1744',
+        shape: 'circle',
+        text: exitPriceLabel ? `🏁 ${cleanReason} (${exitPriceLabel})` : `🏁 ${cleanReason}`,
+        size: 2,
+      }];
+      if (seriesMarkersRef.current) {
+        try { seriesMarkersRef.current.setMarkers(newMarkers); } catch {}
+      }
+    } catch {}
+  }, [showBidAsk, serverQuote, isResolved, resolvedTimestamp, exitPriceVal, isForex, setup.instrument, setup.outcome_type, setup.invalidation_reason]);
 
   const drawZones = useCallback(() => {
     if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
@@ -1106,9 +1154,16 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const entryY = entryPriceVal > 0 ? getY(entryPriceVal) : null;
 
         if (entryX !== null && entryX > 0 && entryX < width) {
-          const priceText = entryPriceVal > 0 
-            ? (isForex ? entryPriceVal.toFixed(entryPriceVal < 2 ? 5 : 3) : entryPriceVal.toFixed(2))
-            : 'Zone';
+          // Compute bid/ask at entry for badge display
+          let priceText: string;
+          if (showBidAsk && entryPriceVal > 0) {
+            const { bid: entryBid, ask: entryAsk } = getBidAskData(setup.instrument, entryPriceVal, serverQuote);
+            priceText = `B:${entryBid.toFixed(4)} / A:${entryAsk.toFixed(4)}`;
+          } else {
+            priceText = entryPriceVal > 0
+              ? (isForex ? entryPriceVal.toFixed(entryPriceVal < 2 ? 5 : 3) : entryPriceVal.toFixed(2))
+              : 'Zone';
+          }
 
           // Subtle vertical entry guideline
           ctx.save();
@@ -1238,7 +1293,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }
       } catch {}
     }
-  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, entryMid, isLong, isForex, isResolved, isPending, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz]);
+  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, entryMid, isLong, isForex, isResolved, isPending, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz, showBidAsk, serverQuote]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
