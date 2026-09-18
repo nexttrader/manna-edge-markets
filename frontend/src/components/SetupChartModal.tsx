@@ -165,6 +165,44 @@ export function getBidAskData(
   return { bid, ask, spread: effectiveSpread, decimals, unit };
 }
 
+/**
+ * Returns the bid & ask prices for a fill, anchored to the CORRECT side.
+ *
+ * Market mechanics:
+ *   ENTRY  LONG  → you buy  at the ASK  (ask = fillPrice, bid = fillPrice - spread)
+ *   ENTRY  SHORT → you sell at the BID  (bid = fillPrice, ask = fillPrice + spread)
+ *   EXIT   LONG  → you sell at the BID  (bid = fillPrice, ask = fillPrice + spread)
+ *   EXIT   SHORT → you buy  at the ASK  (ask = fillPrice, bid = fillPrice - spread)
+ *
+ * Returns { bid, ask, filledSide: 'bid'|'ask', spread }
+ */
+export function getDirectionalBidAsk(
+  instrument: string,
+  fillPrice: number,
+  isLong: boolean,
+  isEntry: boolean,
+  quote?: { bid?: number; ask?: number; spread?: number } | null
+): { bid: number; ask: number; filledSide: 'bid' | 'ask'; spread: number; decimals: number } {
+  const { spread, decimals } = getBidAskData(instrument, fillPrice, quote);
+
+  // Determine which side was actually filled
+  // Entry long  → ASK filled  |  Entry short → BID filled
+  // Exit  long  → BID filled  |  Exit  short → ASK filled
+  const fillsAtAsk = (isEntry && isLong) || (!isEntry && !isLong);
+
+  let bid: number;
+  let ask: number;
+  if (fillsAtAsk) {
+    ask = fillPrice;
+    bid = fillPrice - spread;
+  } else {
+    bid = fillPrice;
+    ask = fillPrice + spread;
+  }
+
+  return { bid, ask, filledSide: fillsAtAsk ? 'ask' : 'bid', spread, decimals };
+}
+
 export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -742,8 +780,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               let exitPriceLabel = '';
               if (exitPriceVal > 0) {
                 if (showBidAsk) {
-                  const { bid: exitBid, ask: exitAsk } = getBidAskData(setup.instrument, exitPriceVal, serverQuote);
-                  exitPriceLabel = `B:${exitBid.toFixed(4)} / A:${exitAsk.toFixed(4)}`;
+                  const { bid: exitBid, ask: exitAsk, filledSide: exitSide } = getDirectionalBidAsk(
+                    setup.instrument, exitPriceVal, isLong, false, serverQuote
+                  );
+                  // Long exits at BID, Short exits at ASK
+                  exitPriceLabel = exitSide === 'bid'
+                    ? `BID(EXIT):${exitBid.toFixed(4)} ASK:${exitAsk.toFixed(4)}`
+                    : `ASK(EXIT):${exitAsk.toFixed(4)} BID:${exitBid.toFixed(4)}`;
                 } else {
                   exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
                 }
@@ -950,8 +993,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       let exitPriceLabel = '';
       if (exitPriceVal > 0) {
         if (showBidAsk) {
-          const { bid: exitBid, ask: exitAsk } = getBidAskData(setup.instrument, exitPriceVal, serverQuote);
-          exitPriceLabel = `B:${exitBid.toFixed(4)} / A:${exitAsk.toFixed(4)}`;
+          const { bid: exitBid, ask: exitAsk, filledSide: exitSide } = getDirectionalBidAsk(
+            setup.instrument, exitPriceVal, isLong, false, serverQuote
+          );
+          exitPriceLabel = exitSide === 'bid'
+            ? `BID(EXIT):${exitBid.toFixed(4)} ASK:${exitAsk.toFixed(4)}`
+            : `ASK(EXIT):${exitAsk.toFixed(4)} BID:${exitBid.toFixed(4)}`;
         } else {
           exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
         }
@@ -1154,11 +1201,21 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const entryY = entryPriceVal > 0 ? getY(entryPriceVal) : null;
 
         if (entryX !== null && entryX > 0 && entryX < width) {
-          // Compute bid/ask at entry for badge display
+          // Compute bid/ask at entry for badge display using correct fill-side logic
           let priceText: string;
+          let bidAskLine: string | null = null; // second line shown when toggle is ON
           if (showBidAsk && entryPriceVal > 0) {
-            const { bid: entryBid, ask: entryAsk } = getBidAskData(setup.instrument, entryPriceVal, serverQuote);
-            priceText = `B:${entryBid.toFixed(4)} / A:${entryAsk.toFixed(4)}`;
+            const { bid: entryBid, ask: entryAsk, filledSide } = getDirectionalBidAsk(
+              setup.instrument, entryPriceVal, isLong, true, serverQuote
+            );
+            // Highlight the side that was actually hit at fill
+            if (filledSide === 'ask') {
+              priceText = `ASK (FILLED): ${entryAsk.toFixed(4)}`;
+              bidAskLine = `BID at fill:  ${entryBid.toFixed(4)}`;
+            } else {
+              priceText = `BID (FILLED): ${entryBid.toFixed(4)}`;
+              bidAskLine = `ASK at fill:  ${entryAsk.toFixed(4)}`;
+            }
           } else {
             priceText = entryPriceVal > 0
               ? (isForex ? entryPriceVal.toFixed(entryPriceVal < 2 ? 5 : 3) : entryPriceVal.toFixed(2))
@@ -1228,12 +1285,15 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             ctx.stroke();
 
             // 5. Draw Entry Price Badge Pill right beside the blob
-            const badgeText = `${isPending ? '🎯 TARGET' : (isLong ? '▲' : '▼')} ENTRY: ${priceText}`;
+            // Two-line pill when bid/ask toggle is ON, single line otherwise
+            const line1 = `${isPending ? '🎯 TARGET' : (isLong ? '▲' : '▼')} ENTRY: ${priceText}`;
             ctx.font = 'bold 12px monospace';
-            const badgeTextWidth = ctx.measureText(badgeText).width;
             const badgePaddingX = 8;
-            const badgeH = 20;
-            const badgeW = badgeTextWidth + badgePaddingX * 2;
+            const lineH = 16;
+            const badgeH = bidAskLine ? lineH * 2 + 10 : 20;
+            const line1W = ctx.measureText(line1).width;
+            const line2W = bidAskLine ? ctx.measureText(bidAskLine).width : 0;
+            const badgeW = Math.max(line1W, line2W) + badgePaddingX * 2;
 
             // Position badge to the right if space permits, else to the left
             let pillX = entryX + 16;
@@ -1256,8 +1316,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             ctx.fill();
             ctx.stroke();
 
+            // Line 1 — filled side (bold, highlighted colour)
             ctx.fillStyle = blobColor;
-            ctx.fillText(badgeText, pillX + badgePaddingX, pillY + badgeH - 5);
+            ctx.font = 'bold 12px monospace';
+            ctx.fillText(line1, pillX + badgePaddingX, pillY + lineH - 2);
+
+            // Line 2 — other side (dimmer, normal weight)
+            if (bidAskLine) {
+              ctx.fillStyle = isLight ? 'rgba(100,100,100,0.85)' : 'rgba(180,180,180,0.75)';
+              ctx.font = '11px monospace';
+              ctx.fillText(bidAskLine, pillX + badgePaddingX, pillY + lineH * 2 + 2);
+            }
 
             ctx.restore();
           }
