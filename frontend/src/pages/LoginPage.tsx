@@ -488,6 +488,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialMode }) => {
           </form>
         )}
 
+        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              login('client@mannaedge.com', 'trader', 'Institutional Client (Demo)', 'futures_forex', false, true, 14, false, '2026-10-02T09:54:46.391Z');
+              navigate('/dashboard');
+            }}
+            style={{
+              width: '100%',
+              padding: '11px 16px',
+              borderRadius: '8px',
+              border: '1px solid rgba(0, 229, 255, 0.4)',
+              background: 'linear-gradient(135deg, rgba(0, 229, 255, 0.12), rgba(0, 112, 243, 0.12))',
+              color: '#00e5ff',
+              fontWeight: 800,
+              cursor: 'pointer',
+              fontSize: '0.88rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span>⚡</span>
+            <span>1-Click Client Demo Access (Explore Full Site)</span>
+          </button>
+        </div>
+
         <div className="login-footer">
           <Link to="/" className="back-link font-mono">← Back to Public Home</Link>
           <span className="copyright font-mono">© 2026 MANNA EDGE MARKETS</span>

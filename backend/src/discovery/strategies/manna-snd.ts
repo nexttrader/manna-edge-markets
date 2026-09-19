@@ -75,7 +75,7 @@ export class MannaSndStrategy implements IStrategyEngine {
    * Find fresh Supply and Demand imbalance zones in candle history with candle index
    * Formations: RBR (Rally-Base-Rally), DBR (Drop-Base-Rally), RBD (Rally-Base-Drop), DBD (Drop-Base-Drop)
    */
-  private findZonesWithIndex(candles: Candle[]): (Zone & { index: number })[] {
+  private findZonesWithIndex(candles: Candle[], minDepartureAtrMultiple: number = 0, atr: number = 0): (Zone & { index: number })[] {
     const zones: (Zone & { index: number })[] = [];
     if (candles.length < 5) return zones;
 
@@ -92,6 +92,13 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         const allBase = baseTypes.every(t => t === 'base');
         if (!allBase) continue;
+
+        const departureCandle = candles[i + baseCount];
+        // Enforce institutional displacement: departure body must reflect genuine imbalance
+        if (atr > 0 && minDepartureAtrMultiple > 0 && departureCandle) {
+          const departureBody = Math.abs(departureCandle.close - departureCandle.open);
+          if (departureBody < atr * minDepartureAtrMultiple) continue;
+        }
 
         const baseTime = baseCandles[0].timestamp;
 
@@ -126,8 +133,8 @@ export class MannaSndStrategy implements IStrategyEngine {
     return zones;
   }
 
-  private findZones(candles: Candle[]): Zone[] {
-    return this.findZonesWithIndex(candles);
+  private findZones(candles: Candle[], minDepartureAtrMultiple: number = 0, atr: number = 0): Zone[] {
+    return this.findZonesWithIndex(candles, minDepartureAtrMultiple, atr);
   }
 
   /**
@@ -309,6 +316,13 @@ export class MannaSndStrategy implements IStrategyEngine {
 
     for (const instrument of instruments) {
       try {
+        // Session-Specific Asset Alignment:
+        // Exclude USD/CAD during London open (02:00-05:00 EST / 06:00-09:00 UTC)
+        // Canadian and US interbank desks are offline, generating 0% WR illiquid chop in London.
+        if (market === 'forex' && (killzone.killzone || '').toLowerCase().includes('london') && instrument === 'USD/CAD') {
+          continue;
+        }
+
         const candles15m = await getLiveCandles(instrument, '15m', 50);
         const candles1h = await getLiveCandles(instrument, '1h', 120);
         if (candles15m.length < 10 || candles1h.length < 10) continue;
@@ -351,7 +365,9 @@ export class MannaSndStrategy implements IStrategyEngine {
         }
 
         // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
-        const m15Zones = this.findZones(candles15m);
+        // Enforce institutional departure displacement (body >= 1.0x ATR14 for Forex, 0.75x for Futures)
+        const minDepartureMult = market === 'forex' ? 1.0 : 0.75;
+        const m15Zones = this.findZones(candles15m, minDepartureMult, atr14);
 
         if (allowedAction === 'BUY') {
           // 15M Entry Zone MUST sit strictly BETWEEN 1H Demand distal and 1H Supply proximal boundaries

@@ -38,8 +38,12 @@ export async function discoverForexSetups(killzone: KillzoneInfo, runId: string,
         const entry_zone_low = entry_zone_mid - (atr14 * 0.15);
         const entry_zone_high = entry_zone_mid + (atr14 * 0.15);
         
-        // Targets based on R-multiples
-        const risk = Math.abs(entry_zone_mid - stop);
+        // FIX: Calculate risk using the FLOORED stop distance, not raw ATR stop.
+        // Raw ATR stop can be < the institutional floor, producing TP1 levels
+        // inside the stop zone (e.g. 3-pip raw risk -> 6-pip TP1 < 10-pip floor stop).
+        const { getLogicalStopDistance } = await import('./stop-loss-rules');
+        const flooredStopDistance = getLogicalStopDistance(instrument, atr14, Math.abs(entry_zone_mid - stop), 'forex', false);
+        const risk = flooredStopDistance;
         const tp1 = bias === 'long' ? entry_zone_mid + (risk * 2) : entry_zone_mid - (risk * 2);
         const tp2 = bias === 'long' ? entry_zone_mid + (risk * 3) : entry_zone_mid - (risk * 3);
         

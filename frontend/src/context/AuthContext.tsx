@@ -51,6 +51,24 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('demo') === 'true' || searchParams.get('demo') === 'client') {
+          return {
+            id: 'usr_client_demo',
+            name: 'Institutional Client (Demo)',
+            email: 'client@mannaedge.com',
+            role: 'trader',
+            tier: 'futures_forex',
+            marketAccess: 'all',
+            mustChangePassword: false,
+            isTrial: true,
+            trialDaysRemaining: 14,
+            trialExpired: false,
+            trialExpiresAt: '2026-10-02T09:54:46.391Z'
+          };
+        }
+      }
       const saved = localStorage.getItem('manna_user');
       return saved ? JSON.parse(saved) : null;
     } catch {

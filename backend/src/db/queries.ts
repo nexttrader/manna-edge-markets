@@ -414,7 +414,7 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
       const traderVal = snap.visibleToTraders !== undefined ? (snap.visibleToTraders ? 1 : 0) : 1;
       const halvedVal = snap.halvedFloorTp1Be !== undefined 
         ? (snap.halvedFloorTp1Be ? 1 : 0) 
-        : (d.id === 'manna_snd' ? 1 : 0);
+        : 0;
       const capEnabledVal = snap.dailySignalCapEnabled !== undefined ? (snap.dailySignalCapEnabled ? 1 : 0) : 0;
       const capMaxVal = snap.dailySignalCapMax !== undefined ? snap.dailySignalCapMax : 2;
       const preLondonVal = snap.preLondonFilterEnabled !== undefined ? (snap.preLondonFilterEnabled ? 1 : 0) : 1;
@@ -430,8 +430,8 @@ export async function ensureStrategySettingsSeeded(): Promise<void> {
 
       if (snap.halvedFloorTp1Be !== undefined) {
         await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = ? WHERE id = ?`, [snap.halvedFloorTp1Be ? 1 : 0, d.id]);
-      } else if (d.id === 'manna_snd') {
-        await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = 1 WHERE id = 'manna_snd' AND (halved_floor_tp1_be IS NULL OR halved_floor_tp1_be = 0)`);
+      } else {
+        await queryDb(`UPDATE strategy_settings SET halved_floor_tp1_be = 0 WHERE id = ? AND halved_floor_tp1_be IS NULL`, [d.id]);
       }
 
       if (snap.dailySignalCapEnabled !== undefined) {
@@ -505,7 +505,7 @@ export async function getStrategySettings(role?: string, userEmail?: string): Pr
         return mapped.filter(s => !hiddenIds.includes(s.id));
     } catch {
         return [
-            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: true, dailySignalCapEnabled: false, dailySignalCapMax: 2, preLondonFilterEnabled: true, signalCapMarketScope: 'forex_only', consecutiveLossHaltEnabled: true },
+            { id: 'manna_snd', name: 'Manna SnD', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false, dailySignalCapEnabled: false, dailySignalCapMax: 2, preLondonFilterEnabled: true, signalCapMarketScope: 'forex_only', consecutiveLossHaltEnabled: true },
             { id: 'sentinel_v2', name: 'Manna Elite v1.2', enabled: true, visibleToAdmins: true, visibleToTraders: true, halvedFloorTp1Be: false, dailySignalCapEnabled: false, dailySignalCapMax: 2, preLondonFilterEnabled: true, signalCapMarketScope: 'forex_only', consecutiveLossHaltEnabled: true }
         ];
     }

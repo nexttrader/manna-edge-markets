@@ -26,33 +26,34 @@ async function runTests() {
   const eurGbpOptimized = getLogicalStopDistance('EUR/GBP', 0.0001, 0.0002, 'forex', true);
   const audUsdOptimized = getLogicalStopDistance('AUD/USD', 0.0001, 0.0002, 'forex', true);
 
-  assert.strictEqual(eurUsdOptimized, 0.0006, 'Optimized EUR/USD floor must be 6.0 pips (0.0006)');
-  assert.strictEqual(usdJpyOptimized, 0.09, 'Halved USD/JPY floor must be 9.0 pips (0.09)');
-  assert.strictEqual(gbpUsdOptimized, 0.0012, 'Preserved GBP/USD floor must be 12.0 pips (0.0012)');
-  assert.strictEqual(eurGbpOptimized, 0.0008, 'Preserved EUR/GBP floor must be 8.0 pips (0.0008)');
-  assert.strictEqual(audUsdOptimized, 0.0005, 'Halved AUD/USD floor must be 5.0 pips (0.0005)');
-  console.log('  ✓ Data-backed optimized floors verified: 6.0 pips EUR/USD, 12.0 pips GBP/USD, 8.0 pips EUR/GBP, 9.0 pips USD/JPY, 5.0 pips AUD/USD');
+  // FIX #4: Assertions updated to match restored institutional floors (all factors = 1.00)
+  assert.strictEqual(eurUsdOptimized, 0.0010, 'Restored EUR/USD floor must be 10.0 pips (0.0010)');
+  assert.strictEqual(usdJpyOptimized, 0.18,   'Restored USD/JPY floor must be 18.0 pips (0.18)');
+  assert.strictEqual(gbpUsdOptimized, 0.0012, 'Restored GBP/USD floor must be 12.0 pips (0.0012)');
+  assert.strictEqual(eurGbpOptimized, 0.0008, 'Restored EUR/GBP floor must be 8.0 pips (0.0008)');
+  assert.strictEqual(audUsdOptimized, 0.0010, 'Restored AUD/USD floor must be 10.0 pips (0.0010)');
+  console.log('  ✓ Institutional floors verified: 10p EUR/USD, 12p GBP/USD, 8p EUR/GBP, 18p USD/JPY, 10p AUD/USD');
 
   // TEST 2: Database Persistence & Toggle Reversion
   console.log('\nTest 2: Verifying Setting Toggle, Persistence & Default Value...');
   await queries.ensureStrategySettingsSeeded();
 
-  // Check default for manna_snd is true (as requested: turned ON by default)
+  // FIX #4: Default is now OFF (false) — halved floor disabled after September audit
   const defaultVal = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
-  assert.strictEqual(defaultVal, true, 'manna_snd should have halved_floor_tp1_be = true by default');
-  console.log('  ✓ Default state for manna_snd is ON (true)');
+  assert.strictEqual(defaultVal, false, 'manna_snd should have halved_floor_tp1_be = false by default (disabled after Sep audit)');
+  console.log('  ✓ Default state for manna_snd is OFF (false) — institutional floor active');
 
-  // Turn toggle OFF -> verify revert
-  await queries.updateStrategyHalvedFloorTp1Be('manna_snd', false);
-  const turnedOffVal = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
-  assert.strictEqual(turnedOffVal, false, 'manna_snd should reflect turned OFF state');
-  console.log('  ✓ Successfully turned toggle OFF (reverted to standard rules)');
-
-  // Turn toggle back ON -> verify active
+  // Turn toggle ON -> verify active
   await queries.updateStrategyHalvedFloorTp1Be('manna_snd', true);
   const turnedOnVal = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
   assert.strictEqual(turnedOnVal, true, 'manna_snd should reflect turned ON state');
-  console.log('  ✓ Successfully turned toggle back ON (optimized mode active)');
+  console.log('  ✓ Successfully turned toggle ON (test only)');
+
+  // Turn toggle back OFF -> verify reverted
+  await queries.updateStrategyHalvedFloorTp1Be('manna_snd', false);
+  const turnedOffVal = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
+  assert.strictEqual(turnedOffVal, false, 'manna_snd should reflect turned OFF state');
+  console.log('  ✓ Successfully restored toggle to OFF (institutional rules active)');
 
   // TEST 3: Outcome Detector BE Trigger Logic Verification
   console.log('\nTest 3: Verifying Break-Even Logic with Toggle ON vs OFF...');

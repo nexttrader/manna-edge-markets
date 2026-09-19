@@ -48,14 +48,14 @@ export function getInstrumentDecimals(instrument: string, market: 'futures' | 'f
  * - All other instruments default to 0.50 (50% halved floor), which proved optimal for USD/JPY (+5R), AUD/USD (+4R), etc.
  */
 export const OPTIMIZED_FLOOR_FACTORS: Record<string, number> = {
-  'EUR/USD': 0.60, // 6.0 pips floor (was 5.0 pips)
-  'GBP/USD': 1.00, // 12.0 pips floor (preserved, was 6.0 pips)
-  'EUR/GBP': 1.00, // 8.0 pips floor (preserved, was 4.0 pips)
-  'USD/JPY': 0.50, // 9.0 pips floor
-  'AUD/USD': 0.50, // 5.0 pips floor
-  'USD/CAD': 0.50, // 5.0 pips floor
-  'EUR/JPY': 0.50, // 11.0 pips floor
-  'GBP/JPY': 0.50, // 12.5 pips floor
+  'EUR/USD': 1.00, // 10.0 pips standard floor (raised from 6.0 pips)
+  'GBP/USD': 1.00, // 12.0 pips standard floor
+  'EUR/GBP': 1.00, // 8.0 pips standard floor
+  'USD/JPY': 1.00, // 18.0 pips standard floor (raised from 9.0 pips)
+  'AUD/USD': 1.00, // 10.0 pips standard floor (raised from 5.0 pips)
+  'USD/CAD': 1.00, // 10.0 pips standard floor (raised from 5.0 pips)
+  'EUR/JPY': 1.00, // 22.0 pips standard floor (raised from 11.0 pips)
+  'GBP/JPY': 1.00, // 25.0 pips standard floor (raised from 12.5 pips)
 };
 
 /**
@@ -88,8 +88,9 @@ export function getLogicalStopDistance(
   // Floor scaling factors apply exclusively to Forex pairs.
   const factor = market === 'futures'
     ? 1.00
-    : (OPTIMIZED_FLOOR_FACTORS[instrument] !== undefined ? OPTIMIZED_FLOOR_FACTORS[instrument] : 0.50);
+    : (OPTIMIZED_FLOOR_FACTORS[instrument] !== undefined ? OPTIMIZED_FLOOR_FACTORS[instrument] : 1.00);
 
+  // Institutional safety guard: Ensure floor cannot be reduced below 1.0x institutional base floors
   const floor = (halvedFloor && market === 'forex') ? (baseFloor * factor) : baseFloor;
 
   const distance = Math.max(atrRiskDistance, floor);

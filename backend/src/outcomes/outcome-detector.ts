@@ -134,8 +134,8 @@ export class OutcomeDetector {
         const maxProfit = isLong ? Math.max(0, maxHighBid - entryPrice) : Math.max(0, entryPrice - minLowAsk);
         const maxR = initialRisk > 0 ? (maxProfit / initialRisk) : 0;
         
-        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'manna_snd');
-        const beCriteriaReached = !isTp1BeOnly && (maxR >= 1.0);
+        // Old BE rule: As soon as trade reaches +1.0R open profit, move Stop Loss to Break-Even (entryPrice)
+        const beCriteriaReached = maxR >= 1.0;
         if (!setup.is_breakeven && beCriteriaReached) {
           setup.is_breakeven = 1;
           setup.initial_stop = origStop;
@@ -196,8 +196,10 @@ export class OutcomeDetector {
                 : -1.0; // sl_hit hard-capped at -1.0R
           
           const risk = Math.abs(entryPrice - origStop);
-          let mae = outcomeType === 'sl_hit' ? 1.0 : 0.3;
-          let mfe = outcomeType === 'tp2_hit' ? (setup.r_multiple_2 || 3.0) : outcomeType === 'tp1_hit' ? (setup.r_multiple_1 || 2.0) : 0.4;
+          // FIX #7: Default to null — fabricated fallback values corrupt historical analytics.
+          // If excursion service fails, store null so bad records are identifiable and excludable.
+          let mae: number | null = null;
+          let mfe: number | null = null;
           let highestRecorded = maxHigh;
           let lowestRecorded = minLow;
           const entryTime = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : new Date().getTime();
@@ -233,8 +235,8 @@ export class OutcomeDetector {
             strategy_id: setup.strategy_id || 'sentinel_v2',
             outcome_type: outcomeType,
             realized_pl: realizedPL,
-            mae: Number(mae.toFixed(4)),
-            mfe: Number(mfe.toFixed(4)),
+            mae: mae !== null ? Number(mae.toFixed(4)) : null,
+            mfe: mfe !== null ? Number(mfe.toFixed(4)) : null,
             highest_price: highestRecorded,
             lowest_price: lowestRecorded,
             bars_held: barsHeld,
@@ -382,7 +384,9 @@ export class OutcomeDetector {
           });
           
           logger.info({ setupId: setup.id, instrument: setup.instrument }, 'Runner retraced to Break Even after TP1. Initial 2R log retained.');
-          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: setup.r_multiple_1 || 2.0 } });
+          // FIX #8: Emit be_hit for runner BE exit — tp1_hit was already booked at TP1.
+          // Emitting tp1_hit again inflates analytics. This is a 0R delta event.
+          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'be_hit', realized_pl: 0 } });
         }
       }
     } catch (err) {
