@@ -111,7 +111,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
             const distal = Math.min(...baseCandles.map(c => c.low));
-            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime, index: i });
+            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime, index: i + baseCount });
           }
         }
 
@@ -124,7 +124,7 @@ export class MannaSndStrategy implements IStrategyEngine {
           if (formation) {
             const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
             const distal = Math.max(...baseCandles.map(c => c.high));
-            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime, index: i });
+            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime, index: i + baseCount });
           }
         }
       }
@@ -150,10 +150,11 @@ export class MannaSndStrategy implements IStrategyEngine {
 
     const currentPrice = candles[candles.length - 1].close;
 
-    // 1. Scan for any historical 3-candle Leg-In -> Base -> Leg-Out zones on the correct side of price
+    // 1. Scan for any historical fresh 3-candle Leg-In -> Base -> Leg-Out zones on the correct side of price
     const allZones = this.findZonesWithIndex(candles).filter(z => {
       if (z.type !== type) return false;
-      return type === 'demand' ? z.proximal <= currentPrice : z.proximal >= currentPrice;
+      if (type === 'demand' ? z.proximal > currentPrice : z.proximal < currentPrice) return false;
+      return this.isFreshZone(z, candles, z.index);
     });
 
     if (allZones.length > 0) {
@@ -175,10 +176,11 @@ export class MannaSndStrategy implements IStrategyEngine {
       for (let i = candles.length - 2; i >= 1; i--) {
         const c = candles[i];
         if (c.low <= currentPrice) {
+          const proximal = Math.max(c.open, c.close);
           const subsequent = candles.slice(i + 1);
-          const cutThrough = subsequent.some(sub => sub.low < c.low);
+          // Verify no subsequent candle cut through the proximal line
+          const cutThrough = subsequent.some(sub => sub.low < proximal);
           if (!cutThrough) {
-            const proximal = Math.max(c.open, c.close);
             const distal = c.low;
             const legIn = candles[i - 1];
             const isLegInDrop = legIn.close <= legIn.open;
@@ -367,15 +369,17 @@ export class MannaSndStrategy implements IStrategyEngine {
         // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
         // Enforce institutional departure displacement (body >= 1.0x ATR14 for Forex, 0.75x for Futures)
         const minDepartureMult = market === 'forex' ? 1.0 : 0.75;
-        const m15Zones = this.findZones(candles15m, minDepartureMult, atr14);
+        const m15Zones = this.findZonesWithIndex(candles15m, minDepartureMult, atr14);
 
         if (allowedAction === 'BUY') {
           // 15M Entry Zone MUST sit strictly BETWEEN 1H Demand distal and 1H Supply proximal boundaries
+          // and MUST be fresh (no subsequent candles cutting through proximal line)
           const demandInCurve = m15Zones.filter(z => 
             z.type === 'demand' && 
             z.proximal <= currentPrice &&
             z.distal >= htfDemand.distal &&
-            z.proximal <= htfSupply.proximal
+            z.proximal <= htfSupply.proximal &&
+            this.isFreshZone(z, candles15m, z.index)
           );
 
           const zone: Zone = demandInCurve.length > 0
@@ -507,11 +511,13 @@ export class MannaSndStrategy implements IStrategyEngine {
           });
         } else if (allowedAction === 'SELL') {
           // 15M Entry Zone MUST sit strictly BETWEEN 1H Supply distal and 1H Demand proximal boundaries
+          // and MUST be fresh (no subsequent candles cutting through proximal line)
           const supplyInCurve = m15Zones.filter(z => 
             z.type === 'supply' && 
             z.proximal >= currentPrice &&
             z.distal <= htfSupply.distal &&
-            z.proximal >= htfDemand.proximal
+            z.proximal >= htfDemand.proximal &&
+            this.isFreshZone(z, candles15m, z.index)
           );
 
           const zone: Zone = supplyInCurve.length > 0

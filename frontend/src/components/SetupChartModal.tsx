@@ -1103,7 +1103,26 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
         const boxHeight = Math.max(12, Math.abs(bottomY - topY));
         const startX = getX(activeDemandTime);
-        const boxWidth = width - startX;
+
+        // Cap endX if trade resolved or if price breached below distal floor
+        let endX = width;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = resolvedX;
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const baseUnix = activeDemandTime ? Math.floor(new Date(activeDemandTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            if ((c.time as number) > baseUnix && c.low < Math.min(activeDemandProx, activeDemandDist)) {
+              const bX = getCandleX(c.time as number);
+              if (bX !== null && bX > startX) { endX = bX; break; }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
 
         ctx.save();
         ctx.fillStyle = isLight ? 'rgba(0, 176, 96, 0.05)' : 'rgba(0, 230, 118, 0.06)';
@@ -1133,7 +1152,26 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
         const boxHeight = Math.max(12, Math.abs(bottomY - topY));
         const startX = getX(activeSupplyTime);
-        const boxWidth = width - startX;
+
+        // Cap endX if trade resolved or if price breached above distal ceiling
+        let endX = width;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = resolvedX;
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const baseUnix = activeSupplyTime ? Math.floor(new Date(activeSupplyTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            if ((c.time as number) > baseUnix && c.high > Math.max(activeSupplyProx, activeSupplyDist)) {
+              const bX = getCandleX(c.time as number);
+              if (bX !== null && bX > startX) { endX = bX; break; }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
 
         ctx.save();
         ctx.fillStyle = isLight ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255, 23, 68, 0.06)';
@@ -1162,8 +1200,40 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const topY = Math.min(y1, y2);
         const boxHeight = Math.max(3, Math.abs(y2 - y1));
         const zoneBaseTime = metadata.entry_zone_base_time || setup.created_at || (setup as any).createdAt;
-        const startX = getX(zoneBaseTime);
-        const boxWidth = width - startX;
+        let startX = getX(zoneBaseTime);
+        if ((startX === null || startX === undefined) && setup.created_at) {
+          startX = getX(setup.created_at);
+        }
+        if (startX === null || startX === undefined) {
+          startX = 0;
+        }
+
+        // Cap endX at trade resolution or when price penetrates distal boundary
+        let endX = width;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = resolvedX;
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const zoneBaseUnix = zoneBaseTime ? Math.floor(new Date(zoneBaseTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            const cUnix = c.time as number;
+            if (cUnix > zoneBaseUnix) {
+              const isBreached = isLong ? c.low < entryLow : c.high > entryHigh;
+              if (isBreached) {
+                const breachX = getCandleX(cUnix);
+                if (breachX !== null && breachX > startX) {
+                  endX = breachX;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
 
         ctx.save();
         ctx.fillStyle = isLong
