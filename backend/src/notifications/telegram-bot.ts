@@ -322,9 +322,10 @@ class TelegramBotService {
 
       // Check if asset display is turned off for clients & admins
       if (setup?.instrument) {
-        const disabledAssets = await getDisabledDisplayAssets();
+        const setupKz = (setup as any).killzone_origin;
+        const disabledAssets = await getDisabledDisplayAssets(setupKz);
         if (disabledAssets.includes(setup.instrument)) {
-          logger.debug({ key, instrument: setup.instrument }, 'Telegram notification suppressed: Asset display is turned OFF for public/clients');
+          logger.debug({ key, instrument: setup.instrument, session: setupKz }, 'Telegram notification suppressed: Asset display is turned OFF for public/clients in this session');
           return;
         }
       }

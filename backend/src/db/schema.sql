@@ -411,6 +411,7 @@ CREATE TABLE IF NOT EXISTS asset_settings (
     market TEXT NOT NULL,
     name TEXT NOT NULL,
     display_enabled INTEGER NOT NULL DEFAULT 1,
+    allowed_sessions TEXT DEFAULT '["all"]',
     tracking_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

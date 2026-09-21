@@ -1062,8 +1062,10 @@ router.get('/assets', async (_req: Request, res: Response) => {
       };
     });
 
+    const currentKz = getCurrentKillzone();
     const displayedCount = assets.filter(a => a.display_enabled).length;
     const hiddenCount = assets.filter(a => !a.display_enabled).length;
+    const activeCurrentSessionCount = assets.filter(a => a.is_active_current_session).length;
 
     res.json({
       success: true,
@@ -1072,6 +1074,9 @@ router.get('/assets', async (_req: Request, res: Response) => {
         totalAssets: assets.length,
         displayedCount,
         hiddenCount,
+        activeCurrentSessionCount,
+        currentSession: currentKz.killzone,
+        currentSessionName: currentKz.name,
         allTrackingActive: true
       }
     });
@@ -1094,6 +1099,38 @@ router.put('/assets/toggle-display', async (req: Request, res: Response) => {
     res.json({ success: true, symbol: cleanSym, display_enabled, assets: updated });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to update asset display setting', details: err.message });
+  }
+});
+
+router.put('/assets/sessions', async (req: Request, res: Response) => {
+  try {
+    const { symbol, allowed_sessions } = req.body || {};
+    if (!symbol || typeof symbol !== 'string') {
+      return res.status(400).json({ error: 'Body must contain { symbol: string, allowed_sessions: string[] }' });
+    }
+    if (!Array.isArray(allowed_sessions)) {
+      return res.status(400).json({ error: 'allowed_sessions must be an array of session names' });
+    }
+    const cleanSym = decodeURIComponent(symbol).trim();
+    const updated = await queries.setAssetSessions(cleanSym, allowed_sessions);
+    res.json({ success: true, symbol: cleanSym, allowed_sessions, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update asset allowed sessions', details: err.message });
+  }
+});
+
+router.put('/assets/:symbol(*)/sessions', async (req: Request, res: Response) => {
+  try {
+    const rawSym = req.params.symbol;
+    const symbol = decodeURIComponent(Array.isArray(rawSym) ? rawSym[0] : rawSym).trim();
+    const { allowed_sessions } = req.body || {};
+    if (!Array.isArray(allowed_sessions)) {
+      return res.status(400).json({ error: 'allowed_sessions must be an array of session names' });
+    }
+    const updated = await queries.setAssetSessions(symbol, allowed_sessions);
+    res.json({ success: true, symbol, allowed_sessions, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update asset allowed sessions', details: err.message });
   }
 });
 
@@ -1137,6 +1174,28 @@ router.post('/assets/bulk-toggle', async (req: Request, res: Response) => {
     res.json({ success: true, assets: updated });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to bulk update asset display settings', details: err.message });
+  }
+});
+
+router.post('/assets/bulk-sessions', async (req: Request, res: Response) => {
+  try {
+    const { market, symbols, allowed_sessions } = req.body || {};
+    if (!Array.isArray(allowed_sessions)) {
+      return res.status(400).json({ error: 'Body must contain { allowed_sessions: string[] }' });
+    }
+    const updated = await queries.bulkSetAssetSessions({ market, symbols }, allowed_sessions);
+    res.json({ success: true, assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to bulk update asset sessions', details: err.message });
+  }
+});
+
+router.post('/assets/apply-agreed-matrix', async (req: Request, res: Response) => {
+  try {
+    const updated = await queries.applyDefaultSessionMatrix();
+    res.json({ success: true, message: 'Agreed session matrix applied successfully across all assets.', assets: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to apply agreed session matrix', details: err.message });
   }
 });
 

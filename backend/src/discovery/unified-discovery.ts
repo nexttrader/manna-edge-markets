@@ -15,7 +15,8 @@ export async function discoverUnifiedSetups(
   runId: string,
   marketScope: 'both' | 'futures' | 'forex' = 'both',
   excludedInstruments: string[] = [],
-  targetStrategyId?: string
+  targetStrategyId?: string,
+  bypassSessionFilter: boolean = false
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
   // 1. Single Source of Truth: Compute Unified Biases ONCE for all target instruments
   const allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
@@ -39,8 +40,9 @@ export async function discoverUnifiedSetups(
     }
   }
 
-  const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
-  const targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i));
+  const sessionDisabled = bypassSessionFilter ? [] : await queries.getDisabledDisplayAssets(killzone.killzone);
+  const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
+  const targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
 
   // 2. Execute selected strategy engines
   if (marketScope === 'both' || marketScope === 'futures') {

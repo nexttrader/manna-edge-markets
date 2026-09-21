@@ -551,10 +551,12 @@ export async function initializeDatabase(): Promise<void> {
                         market TEXT NOT NULL,
                         name TEXT NOT NULL,
                         display_enabled INTEGER NOT NULL DEFAULT 1,
+                        allowed_sessions TEXT DEFAULT '["all"]',
                         tracking_enabled INTEGER NOT NULL DEFAULT 1,
                         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
+                    ALTER TABLE asset_settings ADD COLUMN IF NOT EXISTS allowed_sessions TEXT DEFAULT '["all"]';
 
                     CREATE TABLE IF NOT EXISTS signal_audit_reports (
                         id TEXT PRIMARY KEY,
@@ -796,10 +798,12 @@ export async function initializeDatabase(): Promise<void> {
         market TEXT NOT NULL,
         name TEXT NOT NULL,
         display_enabled INTEGER NOT NULL DEFAULT 1,
+        allowed_sessions TEXT DEFAULT '["all"]',
         tracking_enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`);
+      try { db.exec(`ALTER TABLE asset_settings ADD COLUMN allowed_sessions TEXT DEFAULT '["all"]'`); } catch {}
 
       const defaultAssets = [
         { symbol: 'ES', market: 'futures', name: 'E-mini S&P 500' },

@@ -3,6 +3,7 @@ import path from 'path';
 import { queryDb } from './database';
 import { EdgeSetup, InvalidationAudit, PublishRun, Outcome } from '../discovery/types';
 import { saveSignalsSnapshot } from './signal-snapshot-restore';
+import { getCurrentKillzone } from '../scheduler/killzone-mapper';
 
 // ── Active Setup Queries ──
 
@@ -1654,14 +1655,44 @@ export interface AssetSetting {
   market: string;
   name: string;
   display_enabled: boolean;
+  allowed_sessions: string[];
+  is_active_current_session?: boolean;
+  current_session?: string;
   tracking_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
 
+export interface AssetSnapshotEntry {
+  display_enabled: boolean;
+  allowed_sessions: string[];
+}
+
 const ASSET_SNAPSHOT_PATH = path.resolve(process.cwd(), 'asset_settings_snapshot.json');
 
-const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = [
+export const DEFAULT_ASSET_SESSIONS: Record<string, string[]> = {
+  // Forex
+  'EUR/USD': ['all'],
+  'GBP/USD': ['all'],
+  'USD/JPY': ['all'],
+  'AUD/USD': ['all'],
+  'EUR/GBP': ['london', 'ny_am'],
+  'GBP/JPY': ['asia', 'london'],
+  'EUR/JPY': ['asia', 'london'],
+  'USD/CAD': ['ny_am', 'ny_pm'],
+
+  // Futures
+  'CL': ['london', 'ny_am', 'ny_pm'],
+  'NQ': ['london', 'ny_am', 'ny_pm'],
+  'RTY': ['ny_am', 'ny_pm'],
+  'SI': ['london', 'ny_am'],
+  'ZN': ['london', 'ny_am'],
+  'ES': ['ny_am', 'ny_pm'],
+  'YM': ['ny_am', 'ny_pm'],
+  'GC': ['london', 'ny_am'],
+};
+
+export const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = [
   { symbol: 'ES', market: 'futures', name: 'E-mini S&P 500' },
   { symbol: 'NQ', market: 'futures', name: 'E-mini Nasdaq 100' },
   { symbol: 'YM', market: 'futures', name: 'E-mini Dow Jones' },
@@ -1680,7 +1711,14 @@ const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = 
   { symbol: 'EUR/JPY', market: 'forex', name: 'Euro / Japanese Yen' },
 ];
 
-function saveAssetSnapshotToDisk(assetMap: Record<string, boolean>): void {
+export function isSessionMatch(allowedSessions: string[] | undefined, targetSession: string): boolean {
+  if (!allowedSessions || !Array.isArray(allowedSessions) || allowedSessions.length === 0) return false;
+  const normalized = allowedSessions.map(s => String(s).toLowerCase().trim());
+  if (normalized.includes('all')) return true;
+  return normalized.includes((targetSession || '').toLowerCase().trim());
+}
+
+function saveAssetSnapshotToDisk(assetMap: Record<string, AssetSnapshotEntry | boolean>): void {
   try {
     fs.writeFileSync(ASSET_SNAPSHOT_PATH, JSON.stringify(assetMap, null, 2), 'utf8');
   } catch (err) {
@@ -1688,11 +1726,28 @@ function saveAssetSnapshotToDisk(assetMap: Record<string, boolean>): void {
   }
 }
 
-function loadAssetSnapshotFromDisk(): Record<string, boolean> {
+function loadAssetSnapshotFromDisk(): Record<string, AssetSnapshotEntry> {
   try {
     if (fs.existsSync(ASSET_SNAPSHOT_PATH)) {
       const data = fs.readFileSync(ASSET_SNAPSHOT_PATH, 'utf8');
-      return JSON.parse(data);
+      const raw = JSON.parse(data);
+      const res: Record<string, AssetSnapshotEntry> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === 'boolean') {
+          res[k] = {
+            display_enabled: v,
+            allowed_sessions: DEFAULT_ASSET_SESSIONS[k] || ['all']
+          };
+        } else if (v && typeof v === 'object') {
+          res[k] = {
+            display_enabled: (v as any).display_enabled ?? true,
+            allowed_sessions: Array.isArray((v as any).allowed_sessions)
+              ? (v as any).allowed_sessions
+              : (DEFAULT_ASSET_SESSIONS[k] || ['all'])
+          };
+        }
+      }
+      return res;
     }
   } catch (err) {
     console.error('Failed to load asset settings snapshot from disk:', err);
@@ -1710,35 +1765,69 @@ export async function ensureAssetSettingsSeeded(): Promise<void> {
       market TEXT NOT NULL,
       name TEXT NOT NULL,
       display_enabled INTEGER NOT NULL DEFAULT 1,
+      allowed_sessions TEXT DEFAULT '["all"]',
       tracking_enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // Migration guard: ensure allowed_sessions column exists in existing tables
+    try {
+      await queryDb(`ALTER TABLE asset_settings ADD COLUMN allowed_sessions TEXT DEFAULT '["all"]'`);
+    } catch { /* Column already exists */ }
+
     const snapshot = loadAssetSnapshotFromDisk();
 
     // Check if table has existing records
-    const existing = await queryDb<{ symbol: string }>(`SELECT symbol FROM asset_settings`);
+    const existing = await queryDb<{ symbol: string; allowed_sessions?: string }>(`SELECT symbol, allowed_sessions FROM asset_settings`);
     const existingSymbols = new Set((existing || []).map(r => r.symbol));
 
     for (const a of DEFAULT_ASSETS) {
+      const snapEntry = snapshot[a.symbol];
+      const defaultSessions = snapEntry?.allowed_sessions || DEFAULT_ASSET_SESSIONS[a.symbol] || ['all'];
       if (!existingSymbols.has(a.symbol)) {
-        const isDisplay = a.symbol in snapshot ? (snapshot[a.symbol] ? 1 : 0) : 1;
+        const isDisplay = snapEntry !== undefined ? (snapEntry.display_enabled ? 1 : 0) : 1;
         await queryDb(
-          `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `INSERT INTO asset_settings (symbol, market, name, display_enabled, allowed_sessions, tracking_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT (symbol) DO NOTHING`,
-          [a.symbol, a.market, a.name, isDisplay]
+          [a.symbol, a.market, a.name, isDisplay, JSON.stringify(defaultSessions)]
         );
+      } else {
+        // If existing record has empty or unseeded allowed_sessions, backfill with agreed default
+        const existingRecord = existing.find(e => e.symbol === a.symbol);
+        if (!existingRecord?.allowed_sessions || existingRecord.allowed_sessions === '["all"]') {
+          if (DEFAULT_ASSET_SESSIONS[a.symbol]) {
+            await queryDb(
+              `UPDATE asset_settings SET allowed_sessions = ? WHERE symbol = ?`,
+              [JSON.stringify(DEFAULT_ASSET_SESSIONS[a.symbol]), a.symbol]
+            );
+          }
+        }
       }
     }
 
-    // If snapshot had items and we are initializing, sync db to snapshot
-    const currentRows = await queryDb<{ symbol: string; display_enabled: any }>(`SELECT symbol, display_enabled FROM asset_settings`);
+    // Sync snapshot to DB
+    const currentRows = await queryDb<{ symbol: string; display_enabled: any; allowed_sessions?: string }>(
+      `SELECT symbol, display_enabled, allowed_sessions FROM asset_settings`
+    );
     if (currentRows && currentRows.length > 0) {
-      const map: Record<string, boolean> = {};
+      const map: Record<string, AssetSnapshotEntry> = {};
       for (const r of currentRows) {
-        map[r.symbol] = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
+        let sessions: string[] = ['all'];
+        if (r.allowed_sessions) {
+          try {
+            sessions = typeof r.allowed_sessions === 'string' ? JSON.parse(r.allowed_sessions) : r.allowed_sessions;
+          } catch {
+            sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+          }
+        } else {
+          sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+        }
+        map[r.symbol] = {
+          display_enabled: r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't',
+          allowed_sessions: sessions,
+        };
       }
       saveAssetSnapshotToDisk(map);
     }
@@ -1752,49 +1841,93 @@ export async function ensureAssetSettingsSeeded(): Promise<void> {
 export async function getAssetSettings(): Promise<AssetSetting[]> {
   await ensureAssetSettingsSeeded();
   try {
+    const currentKz = getCurrentKillzone().killzone;
     const rows = await queryDb<{
       symbol: string;
       market: string;
       name: string;
       display_enabled: number | boolean | string;
+      allowed_sessions?: string;
       tracking_enabled: number | boolean | string;
       created_at: string;
       updated_at: string;
     }>(
-      `SELECT symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at
+      `SELECT symbol, market, name, display_enabled, allowed_sessions, tracking_enabled, created_at, updated_at
        FROM asset_settings ORDER BY market ASC, symbol ASC`
     );
-    return rows.map(r => ({
-      symbol: r.symbol,
-      market: r.market,
-      name: r.name,
-      display_enabled: r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't',
-      tracking_enabled: r.tracking_enabled === 1 || r.tracking_enabled === true || r.tracking_enabled === '1' || r.tracking_enabled === 't',
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    }));
+    return rows.map(r => {
+      let sessions: string[] = ['all'];
+      if (r.allowed_sessions) {
+        try {
+          sessions = typeof r.allowed_sessions === 'string' ? JSON.parse(r.allowed_sessions) : r.allowed_sessions;
+        } catch {
+          sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+        }
+      } else {
+        sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+      }
+      const isMasterEnabled = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
+      const isSessionActive = isMasterEnabled && isSessionMatch(sessions, currentKz);
+
+      return {
+        symbol: r.symbol,
+        market: r.market,
+        name: r.name,
+        display_enabled: isMasterEnabled,
+        allowed_sessions: sessions,
+        is_active_current_session: isSessionActive,
+        current_session: currentKz,
+        tracking_enabled: r.tracking_enabled === 1 || r.tracking_enabled === true || r.tracking_enabled === '1' || r.tracking_enabled === 't',
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      };
+    });
   } catch (err) {
     console.error('Error fetching asset_settings:', err);
-    return DEFAULT_ASSETS.map(a => ({
-      symbol: a.symbol,
-      market: a.market,
-      name: a.name,
-      display_enabled: true,
-      tracking_enabled: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
+    const currentKz = getCurrentKillzone().killzone;
+    return DEFAULT_ASSETS.map(a => {
+      const sessions = DEFAULT_ASSET_SESSIONS[a.symbol] || ['all'];
+      return {
+        symbol: a.symbol,
+        market: a.market,
+        name: a.name,
+        display_enabled: true,
+        allowed_sessions: sessions,
+        is_active_current_session: isSessionMatch(sessions, currentKz),
+        current_session: currentKz,
+        tracking_enabled: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    });
   }
 }
 
-export async function getDisabledDisplayAssets(): Promise<string[]> {
+export async function getDisabledDisplayAssets(currentSession?: string): Promise<string[]> {
   try {
     await ensureAssetSettingsSeeded();
-    const rows = await queryDb<{ symbol: string; display_enabled: any }>(
-      `SELECT symbol, display_enabled FROM asset_settings`
+    const session = currentSession || getCurrentKillzone().killzone;
+    const rows = await queryDb<{ symbol: string; display_enabled: any; allowed_sessions?: string }>(
+      `SELECT symbol, display_enabled, allowed_sessions FROM asset_settings`
     );
     return rows
-      .filter(r => r.display_enabled === 0 || r.display_enabled === false || r.display_enabled === '0' || r.display_enabled === 'f')
+      .filter(r => {
+        const isMaster = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
+        if (!isMaster) return true;
+
+        let sessions: string[] = ['all'];
+        if (r.allowed_sessions) {
+          try {
+            sessions = typeof r.allowed_sessions === 'string' ? JSON.parse(r.allowed_sessions) : r.allowed_sessions;
+          } catch {
+            sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+          }
+        } else {
+          sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
+        }
+
+        return !isSessionMatch(sessions, session);
+      })
       .map(r => r.symbol);
   } catch {
     return [];
@@ -1810,8 +1943,28 @@ export async function setAssetDisplay(symbol: string, displayEnabled: boolean): 
     [val, now, symbol.trim()]
   );
   const all = await getAssetSettings();
-  const map: Record<string, boolean> = {};
-  for (const a of all) map[a.symbol] = a.display_enabled;
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
+  saveAssetSnapshotToDisk(map);
+  return all;
+}
+
+export async function setAssetSessions(symbol: string, allowedSessions: string[]): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const cleanSym = symbol.trim();
+  const validSessions = Array.isArray(allowedSessions) ? allowedSessions.map(s => s.toLowerCase().trim()).filter(Boolean) : ['all'];
+  const now = new Date().toISOString();
+  await queryDb(
+    `UPDATE asset_settings SET allowed_sessions = ?, updated_at = ? WHERE symbol = ?`,
+    [JSON.stringify(validSessions), now, cleanSym]
+  );
+  const all = await getAssetSettings();
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
   saveAssetSnapshotToDisk(map);
   return all;
 }
@@ -1843,29 +1996,88 @@ export async function bulkSetAssetDisplay(
   }
 
   const all = await getAssetSettings();
-  const map: Record<string, boolean> = {};
-  for (const a of all) map[a.symbol] = a.display_enabled;
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
   saveAssetSnapshotToDisk(map);
   return all;
 }
 
-export async function registerCustomAsset(symbol: string, market: string, name: string): Promise<AssetSetting[]> {
+export async function bulkSetAssetSessions(
+  filter: { market?: string; symbols?: string[] },
+  allowedSessions: string[]
+): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const validSessions = Array.isArray(allowedSessions) ? allowedSessions.map(s => s.toLowerCase().trim()).filter(Boolean) : ['all'];
+  const jsonSessions = JSON.stringify(validSessions);
+  const now = new Date().toISOString();
+
+  if (filter.symbols && filter.symbols.length > 0) {
+    const placeholders = filter.symbols.map(() => '?').join(',');
+    await queryDb(
+      `UPDATE asset_settings SET allowed_sessions = ?, updated_at = ? WHERE symbol IN (${placeholders})`,
+      [jsonSessions, now, ...filter.symbols]
+    );
+  } else if (filter.market) {
+    await queryDb(
+      `UPDATE asset_settings SET allowed_sessions = ?, updated_at = ? WHERE LOWER(market) = LOWER(?)`,
+      [jsonSessions, now, filter.market.trim()]
+    );
+  } else {
+    await queryDb(
+      `UPDATE asset_settings SET allowed_sessions = ?, updated_at = ?`,
+      [jsonSessions, now]
+    );
+  }
+
+  const all = await getAssetSettings();
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
+  saveAssetSnapshotToDisk(map);
+  return all;
+}
+
+export async function applyDefaultSessionMatrix(): Promise<AssetSetting[]> {
+  await ensureAssetSettingsSeeded();
+  const now = new Date().toISOString();
+  for (const [symbol, sessions] of Object.entries(DEFAULT_ASSET_SESSIONS)) {
+    await queryDb(
+      `UPDATE asset_settings SET allowed_sessions = ?, updated_at = ? WHERE symbol = ?`,
+      [JSON.stringify(sessions), now, symbol]
+    );
+  }
+  const all = await getAssetSettings();
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
+  saveAssetSnapshotToDisk(map);
+  return all;
+}
+
+export async function registerCustomAsset(symbol: string, market: string, name: string, allowedSessions: string[] = ['all']): Promise<AssetSetting[]> {
   await ensureAssetSettingsSeeded();
   const cleanSym = symbol.trim().toUpperCase();
   const cleanMarket = market.trim().toLowerCase();
   const cleanName = (name || cleanSym).trim();
   const now = new Date().toISOString();
+  const sessions = JSON.stringify(allowedSessions && allowedSessions.length > 0 ? allowedSessions : ['all']);
 
   await queryDb(
-    `INSERT INTO asset_settings (symbol, market, name, display_enabled, tracking_enabled, created_at, updated_at)
-     VALUES (?, ?, ?, 1, 1, ?, ?)
+    `INSERT INTO asset_settings (symbol, market, name, display_enabled, allowed_sessions, tracking_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, 1, ?, 1, ?, ?)
      ON CONFLICT (symbol) DO UPDATE SET name = ?, market = ?, updated_at = ?`,
-    [cleanSym, cleanMarket, cleanName, now, now, cleanName, cleanMarket, now]
+    [cleanSym, cleanMarket, cleanName, sessions, now, now, cleanName, cleanMarket, now]
   );
 
   const all = await getAssetSettings();
-  const map: Record<string, boolean> = {};
-  for (const a of all) map[a.symbol] = a.display_enabled;
+  const map: Record<string, AssetSnapshotEntry> = {};
+  for (const a of all) {
+    map[a.symbol] = { display_enabled: a.display_enabled, allowed_sessions: a.allowed_sessions };
+  }
   saveAssetSnapshotToDisk(map);
   return all;
 }

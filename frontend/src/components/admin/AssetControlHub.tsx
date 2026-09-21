@@ -7,6 +7,9 @@ export interface AssetStat {
   market: string;
   name: string;
   display_enabled: boolean;
+  allowed_sessions?: string[];
+  is_active_current_session?: boolean;
+  current_session?: string;
   tracking_enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -32,13 +35,16 @@ interface AssetControlResponse {
     totalAssets: number;
     displayedCount: number;
     hiddenCount: number;
+    activeCurrentSessionCount?: number;
+    currentSession?: string;
+    currentSessionName?: string;
     allTrackingActive: boolean;
   };
 }
 
 export const AssetControlHub: React.FC = () => {
   const [assets, setAssets] = useState<AssetStat[]>([]);
-  const [summary, setSummary] = useState<{ totalAssets: number; displayedCount: number; hiddenCount: number } | null>(null);
+  const [summary, setSummary] = useState<AssetControlResponse['summary'] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [savingSymbol, setSavingSymbol] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -151,6 +157,83 @@ export const AssetControlHub: React.FC = () => {
     }
   };
 
+  const handleToggleSession = async (symbol: string, targetSession: string) => {
+    const asset = assets.find(a => a.symbol === symbol);
+    if (!asset) return;
+
+    const currentSessions = asset.allowed_sessions || ['all'];
+    let nextSessions: string[] = [];
+
+    if (targetSession === 'all') {
+      nextSessions = currentSessions.includes('all') ? ['asia', 'london', 'ny_am', 'ny_pm'] : ['all'];
+    } else {
+      if (currentSessions.includes('all')) {
+        const allFour = ['asia', 'london', 'ny_am', 'ny_pm'];
+        nextSessions = allFour.filter(s => s !== targetSession);
+      } else {
+        if (currentSessions.includes(targetSession)) {
+          nextSessions = currentSessions.filter(s => s !== targetSession);
+        } else {
+          nextSessions = [...currentSessions, targetSession];
+          if (['asia', 'london', 'ny_am', 'ny_pm'].every(s => nextSessions.includes(s))) {
+            nextSessions = ['all'];
+          }
+        }
+      }
+    }
+
+    if (nextSessions.length === 0) {
+      nextSessions = ['all'];
+    }
+
+    setSavingSymbol(symbol);
+    setAssets(prev => prev.map(a => a.symbol === symbol ? { ...a, allowed_sessions: nextSessions } : a));
+
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/assets/sessions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, allowed_sessions: nextSessions })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.assets) setAssets(json.assets);
+        else await fetchAssets();
+      } else {
+        await fetchAssets();
+      }
+    } catch {
+      await fetchAssets();
+    } finally {
+      setSavingSymbol(null);
+    }
+  };
+
+  const handleApplyAgreedMatrix = async () => {
+    if (!confirm('Apply the agreed session matrix across all assets? (Forex JPY crosses -> Asia & London, USD/CAD -> NY AM/PM, Equity Indices -> NY AM/PM, Gold -> London/NY AM, Majors -> All Sessions)')) {
+      return;
+    }
+    setSavingSymbol('matrix');
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/assets/apply-agreed-matrix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.assets) setAssets(json.assets);
+        alert(json.message || 'Agreed session matrix applied successfully!');
+      } else {
+        alert('Failed to apply session matrix');
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setSavingSymbol(null);
+      await fetchAssets();
+    }
+  };
+
   const handleAddCustomAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSymbol.trim()) return;
@@ -236,11 +319,17 @@ export const AssetControlHub: React.FC = () => {
 
         <div className="asset-hub-metric-card info">
           <div className="metric-header">
-            <span className="metric-icon">🛡️</span>
-            <span className="metric-title">TRACKING INTEGRITY</span>
+            <span className="metric-icon">🕒</span>
+            <span className="metric-title">CURRENT KILLZONE SESSION</span>
           </div>
-          <div className="metric-value text-cyan">ACTIVE (24/7)</div>
-          <div className="metric-sub">Signals, Stops, Hits & R Recorded Continuously</div>
+          <div className="metric-value text-cyan">
+            {summary?.currentSessionName || (summary?.currentSession ? summary.currentSession.toUpperCase().replace('_', ' ') : 'ACTIVE')}
+          </div>
+          <div className="metric-sub">
+            {summary?.activeCurrentSessionCount !== undefined
+              ? `${summary.activeCurrentSessionCount} of ${assets.length} Assets Active This Session`
+              : 'Session-Aware Governance Active'}
+          </div>
         </div>
       </div>
 
@@ -307,6 +396,15 @@ export const AssetControlHub: React.FC = () => {
         <div className="toolbar-right">
           <button
             className="action-btn secondary"
+            onClick={handleApplyAgreedMatrix}
+            disabled={savingSymbol === 'matrix'}
+            title="Reset all assets to agreed session schedules"
+            style={{ background: 'rgba(99, 102, 241, 0.15)', borderColor: '#6366f1', color: '#a5b4fc' }}
+          >
+            🕒 Reset to Agreed Sessions
+          </button>
+          <button
+            className="action-btn secondary"
             onClick={() => handleBulkToggle(undefined, true)}
             disabled={savingSymbol === 'bulk'}
             title="Display all assets across all markets"
@@ -370,7 +468,9 @@ export const AssetControlHub: React.FC = () => {
                     key={asset.symbol}
                     asset={asset}
                     isSaving={savingSymbol === asset.symbol}
+                    currentSession={summary?.currentSession}
                     onToggle={() => handleToggleDisplay(asset.symbol, asset.display_enabled)}
+                    onToggleSession={(session) => handleToggleSession(asset.symbol, session)}
                   />
                 ))}
                 {futuresAssets.length === 0 && (
@@ -412,7 +512,9 @@ export const AssetControlHub: React.FC = () => {
                     key={asset.symbol}
                     asset={asset}
                     isSaving={savingSymbol === asset.symbol}
+                    currentSession={summary?.currentSession}
                     onToggle={() => handleToggleDisplay(asset.symbol, asset.display_enabled)}
+                    onToggleSession={(session) => handleToggleSession(asset.symbol, session)}
                   />
                 ))}
                 {forexAssets.length === 0 && (
@@ -505,11 +607,17 @@ export const AssetControlHub: React.FC = () => {
 interface AssetControlCardProps {
   asset: AssetStat;
   isSaving: boolean;
+  currentSession?: string;
   onToggle: () => void;
+  onToggleSession: (session: string) => void;
 }
 
-const AssetControlCard: React.FC<AssetControlCardProps> = ({ asset, isSaving, onToggle }) => {
+const AssetControlCard: React.FC<AssetControlCardProps> = ({ asset, isSaving, currentSession, onToggle, onToggleSession }) => {
   const isDisplayed = asset.display_enabled;
+  const allowedSessions = asset.allowed_sessions || ['all'];
+  const isAll = allowedSessions.includes('all');
+  const activeKz = currentSession || asset.current_session || 'ny_am';
+
   const stats = asset.stats || {
     totalSetups: 0,
     activeSetups: 0,
@@ -522,14 +630,21 @@ const AssetControlCard: React.FC<AssetControlCardProps> = ({ asset, isSaving, on
 
   const isProfitable = (stats.totalRealizedR || 0) >= 0;
 
+  const sessionsList = [
+    { key: 'asia', label: 'Asia (20:00–02:00 ET)' },
+    { key: 'london', label: 'London (02:00–08:00 ET)' },
+    { key: 'ny_am', label: 'NY AM (08:00–14:00 ET)' },
+    { key: 'ny_pm', label: 'NY PM (14:00–20:00 ET)' },
+  ];
+
   return (
     <div className={`asset-card ${isDisplayed ? 'displayed' : 'hidden-mode'}`}>
       <div className="asset-card-top">
         <div className="asset-symbol-info">
           <div className="symbol-row">
             <span className="symbol-ticker">{asset.symbol}</span>
-            <span className={`visibility-pill ${isDisplayed ? 'live' : 'stealth'}`}>
-              {isDisplayed ? '🟢 Client Visible' : '🕶️ Stealth Mode'}
+            <span className={`visibility-pill ${isDisplayed ? (asset.is_active_current_session ? 'live' : 'stealth') : 'stealth'}`}>
+              {!isDisplayed ? '🕶️ Stealth Mode' : asset.is_active_current_session ? '🟢 Live in Session' : '⏱️ Scheduled'}
             </span>
           </div>
           <div className="symbol-name">{asset.name}</div>
@@ -546,6 +661,43 @@ const AssetControlCard: React.FC<AssetControlCardProps> = ({ asset, isSaving, on
             />
             <span className="slider round"></span>
           </label>
+        </div>
+      </div>
+
+      {/* Session Scheduling Controls */}
+      <div className="asset-sessions-wrapper">
+        <div className="asset-sessions-header">
+          <span>🕒 SESSION SCHEDULE</span>
+          <span className={`session-live-tag ${!isDisplayed ? 'stealth' : asset.is_active_current_session ? 'active' : 'inactive'}`}>
+            {!isDisplayed ? 'Stealth' : asset.is_active_current_session ? `● Live in ${activeKz.toUpperCase().replace('_', ' ')}` : `○ Inactive in ${activeKz.toUpperCase().replace('_', ' ')}`}
+          </span>
+        </div>
+        <div className="session-pills-row">
+          <button
+            type="button"
+            className={`session-pill-btn ${isAll ? 'active' : ''}`}
+            onClick={() => onToggleSession('all')}
+            disabled={isSaving}
+            title="Active across all killzone trading sessions"
+          >
+            All
+          </button>
+          {sessionsList.map(s => {
+            const isMatch = isAll || allowedSessions.map(x => x.toLowerCase()).includes(s.key);
+            const isCurrentMatch = activeKz.toLowerCase() === s.key;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                className={`session-pill-btn ${isMatch ? 'active' : ''} ${isMatch && isCurrentMatch ? 'current-match' : ''}`}
+                onClick={() => onToggleSession(s.key)}
+                disabled={isSaving}
+                title={`Toggle active status during ${s.label}`}
+              >
+                {s.key.toUpperCase().replace('_', ' ')}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -596,7 +748,7 @@ const AssetControlCard: React.FC<AssetControlCardProps> = ({ asset, isSaving, on
       <div className="asset-card-footer">
         {isDisplayed ? (
           <span className="footer-notice displayed-note">
-            ✓ Displayed on client dashboard, admin feed, and Telegram alerts.
+            ✓ Displayed on client dashboard and alerts when active in scheduled sessions ({allowedSessions.join(', ').toUpperCase().replace(/_/g, ' ')}).
           </span>
         ) : (
           <span className="footer-notice stealth-note">
