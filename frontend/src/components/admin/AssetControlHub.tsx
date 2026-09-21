@@ -210,7 +210,7 @@ export const AssetControlHub: React.FC = () => {
   };
 
   const handleApplyAgreedMatrix = async () => {
-    if (!confirm('Apply the agreed session matrix across all assets? (Forex JPY crosses -> Asia & London, USD/CAD -> NY AM/PM, Equity Indices -> NY AM/PM, Gold -> London/NY AM, Majors -> All Sessions)')) {
+    if (!confirm('Apply the agreed session matrix? (Forex session-aware: JPY crosses -> Asia & London, USD/CAD -> NY AM/PM, EUR/GBP -> London/NY AM, Majors -> All Sessions. Futures -> Kept as is across all sessions)')) {
       return;
     }
     setSavingSymbol('matrix');

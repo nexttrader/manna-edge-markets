@@ -1671,7 +1671,7 @@ export interface AssetSnapshotEntry {
 const ASSET_SNAPSHOT_PATH = path.resolve(process.cwd(), 'asset_settings_snapshot.json');
 
 export const DEFAULT_ASSET_SESSIONS: Record<string, string[]> = {
-  // Forex
+  // Forex (Session-Aware: Active during designated liquidity killzones)
   'EUR/USD': ['all'],
   'GBP/USD': ['all'],
   'USD/JPY': ['all'],
@@ -1681,15 +1681,15 @@ export const DEFAULT_ASSET_SESSIONS: Record<string, string[]> = {
   'EUR/JPY': ['asia', 'london'],
   'USD/CAD': ['ny_am', 'ny_pm'],
 
-  // Futures
-  'CL': ['london', 'ny_am', 'ny_pm'],
-  'NQ': ['london', 'ny_am', 'ny_pm'],
-  'RTY': ['ny_am', 'ny_pm'],
-  'SI': ['london', 'ny_am'],
-  'ZN': ['london', 'ny_am'],
-  'ES': ['ny_am', 'ny_pm'],
-  'YM': ['ny_am', 'ny_pm'],
-  'GC': ['london', 'ny_am'],
+  // Futures (Kept As Is: Unrestricted across all sessions)
+  'CL': ['all'],
+  'NQ': ['all'],
+  'RTY': ['all'],
+  'SI': ['all'],
+  'ZN': ['all'],
+  'ES': ['all'],
+  'YM': ['all'],
+  'GC': ['all'],
 };
 
 export const DEFAULT_ASSETS: Array<{ symbol: string; market: string; name: string }> = [
@@ -1867,7 +1867,8 @@ export async function getAssetSettings(): Promise<AssetSetting[]> {
         sessions = DEFAULT_ASSET_SESSIONS[r.symbol] || ['all'];
       }
       const isMasterEnabled = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
-      const isSessionActive = isMasterEnabled && isSessionMatch(sessions, currentKz);
+      const isForex = r.symbol.includes('/');
+      const isSessionActive = isMasterEnabled && (!isForex || isSessionMatch(sessions, currentKz));
 
       return {
         symbol: r.symbol,
@@ -1887,13 +1888,14 @@ export async function getAssetSettings(): Promise<AssetSetting[]> {
     const currentKz = getCurrentKillzone().killzone;
     return DEFAULT_ASSETS.map(a => {
       const sessions = DEFAULT_ASSET_SESSIONS[a.symbol] || ['all'];
+      const isFx = a.symbol.includes('/');
       return {
         symbol: a.symbol,
         market: a.market,
         name: a.name,
         display_enabled: true,
         allowed_sessions: sessions,
-        is_active_current_session: isSessionMatch(sessions, currentKz),
+        is_active_current_session: !isFx || isSessionMatch(sessions, currentKz),
         current_session: currentKz,
         tracking_enabled: true,
         created_at: new Date().toISOString(),
@@ -1914,6 +1916,10 @@ export async function getDisabledDisplayAssets(currentSession?: string): Promise
       .filter(r => {
         const isMaster = r.display_enabled === 1 || r.display_enabled === true || r.display_enabled === '1' || r.display_enabled === 't';
         if (!isMaster) return true;
+
+        // Session-aware gating applies strictly to Forex; Futures are kept as is across all trading sessions
+        const isForex = r.symbol.includes('/');
+        if (!isForex) return false;
 
         let sessions: string[] = ['all'];
         if (r.allowed_sessions) {
