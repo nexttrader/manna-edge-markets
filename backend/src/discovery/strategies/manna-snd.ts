@@ -237,6 +237,41 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
+   * Check if a Drop-Base-Drop (DBD) supply zone has broken through an opposing
+   * demand zone (RBR or DBR) situated to its left (prior to the DBD).
+   */
+  private hasBrokenOpposingDemand(
+    supplyZone: Zone & { index: number },
+    candles: Candle[],
+    allZones: (Zone & { index: number })[]
+  ): boolean {
+    const opposingDemandZones = allZones.filter(z =>
+      z.type === 'demand' &&
+      (z.formation === 'Rally-Base-Rally' || z.formation === 'Drop-Base-Rally') &&
+      z.index < supplyZone.index &&
+      z.proximal < supplyZone.proximal
+    );
+
+    if (opposingDemandZones.length === 0) return false;
+
+    for (const demandZone of opposingDemandZones) {
+      // 1. Verify opposing demand was intact before this DBD formed
+      const candlesBeforeDbd = candles.slice(demandZone.index + 1, supplyZone.index);
+      const brokenBefore = candlesBeforeDbd.some(c => c.close < demandZone.proximal || c.low < demandZone.distal);
+      if (brokenBefore) continue;
+
+      // 2. Verify the DBD departure / subsequent move broke through the opposing demand
+      const candlesAfterDbd = candles.slice(supplyZone.index);
+      const brokeThrough = candlesAfterDbd.some(c => c.close < demandZone.proximal || c.low < demandZone.distal);
+      if (brokeThrough) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Determine HTF (1H) Curve Location relative to fresh HTF RBR, DBR, RBD, DBD zones without cutting through candles
    */
   private getCurveLocation(currentPrice: number, htfCandles: Candle[], atr: number): { location: 'low' | 'high' | 'middle'; htfZone: Zone; htfDemand: Zone; htfSupply: Zone } {
@@ -246,18 +281,29 @@ export class MannaSndStrategy implements IStrategyEngine {
     const freshDemandZones = indexedZones.filter(z => z.type === 'demand' && z.proximal <= currentPrice && this.isFreshZone(z, htfCandles, z.index));
     
     // 2. Look UP and to the LEFT for nearest fresh Supply zone (lowest proximal line above currentPrice without candle cut-throughs)
-    const freshSupplyZones = indexedZones.filter(z => z.type === 'supply' && z.proximal >= currentPrice && this.isFreshZone(z, htfCandles, z.index));
+    // - RBD (Rally-Base-Drop) rules remain intact as reversal origins
+    // - DBD (Drop-Base-Drop) is allowed ONLY if it broke through an opposing RBR or DBR demand zone to its left
+    const freshSupplyZones = indexedZones.filter(z => {
+      if (z.type !== 'supply' || z.proximal < currentPrice) return false;
+      if (!this.isFreshZone(z, htfCandles, z.index)) return false;
+
+      // Keep RBD rules intact: RBD is always valid as an institutional swing reversal origin
+      if (z.formation === 'Rally-Base-Drop') return true;
+
+      // Allow DBD only if it has broken through an opposing RBR or DBR on the left
+      if (z.formation === 'Drop-Base-Drop') {
+        return this.hasBrokenOpposingDemand(z, htfCandles, indexedZones);
+      }
+
+      return false;
+    });
 
     const nearestDemand = freshDemandZones.length > 0 
       ? freshDemandZones.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, freshDemandZones[0])
       : this.findFallbackZone(htfCandles, 'demand', atr);
 
     const nearestSupply = freshSupplyZones.length > 0 
-      ? freshSupplyZones.sort((a, b) => {
-          if (a.formation === 'Rally-Base-Drop' && b.formation !== 'Rally-Base-Drop') return -1;
-          if (b.formation === 'Rally-Base-Drop' && a.formation !== 'Rally-Base-Drop') return 1;
-          return a.proximal - b.proximal;
-        })[0]
+      ? freshSupplyZones.sort((a, b) => a.proximal - b.proximal)[0]
       : this.findFallbackZone(htfCandles, 'supply', atr);
 
     // Calculate percentage range between fresh Demand & fresh Supply
