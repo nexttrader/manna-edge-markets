@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './AdminPanel.css';
+import '../components/admin/ui/AdminDesignSystem.css';
+import { AdminHeader } from '../components/admin/ui/AdminHeader';
+import type { AdminTabConfig } from '../components/admin/ui/AdminHeader';
+import { AdminLandingTiles } from '../components/admin/ui/AdminLandingTiles';
+import { AdminCommandCenter } from '../components/admin/ui/AdminCommandCenter';
 import { MetricsPanel } from '../components/MetricsPanel';
 import { useAdmin, usePublishRuns, useSystemStatus, useStrategies } from '../hooks/useAdmin';
 import { useAnalytics } from '../hooks/useAnalytics';
@@ -212,7 +217,28 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const [adminTab, setAdminTab] = useState<'users' | 'engine' | 'analytics' | 'history' | 'support'>('users');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialAdminTab = (searchParams.get('tab') as any) || 'overview';
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'engine' | 'analytics' | 'history' | 'support'>(initialAdminTab);
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+
+  const handleSelectTab = (tab: string) => {
+    setAdminTab(tab as any);
+    setSearchParams({ tab }, { replace: true });
+  };
+
+  const handleCommandAction = (actionId: string) => {
+    if (actionId === 'manna_scan') {
+      triggerMannaSndScan();
+      alert('⚡ Manna SnD Scan initiated!');
+    } else if (actionId === 'scan_asia' || actionId === 'scan_london' || actionId === 'scan_ny_am' || actionId === 'scan_ny_pm') {
+      triggerRun('live', 'ALL');
+      alert('⚡ Live Session Scan initiated!');
+    } else if (actionId === 'health_check') {
+      handleRunManualHealthCheck();
+    }
+  };
+
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
@@ -662,157 +688,65 @@ export const AdminPanel: React.FC = () => {
   const lastScheduled = analytics?.lastScheduledScan;
   const triggers = analytics?.triggers;
 
+  const adminTabsConfig: AdminTabConfig[] = [
+    { id: 'overview', label: 'Mission Control', icon: '🎛️' },
+    { id: 'users', label: 'User Accounts', icon: '👤', count: usersList.length, color: '#ffab00' },
+    { id: 'engine', label: 'Strategy Engine & Scans', icon: '⚡', count: activeSetupsList.length, color: '#00e5ff' },
+    { id: 'analytics', label: 'Conviction & Outcomes', icon: '🎯', count: recentOutcomes.length, color: '#e056fd' },
+    { id: 'history', label: 'Run History & Audits', icon: '📜', count: runs.length, color: '#00e676' },
+    { id: 'support', label: 'Support Centre', icon: '🎫', alertCount: supportUnreadCount, color: '#ffd700' },
+  ];
+
   return (
-    <div className="admin-panel">
-      <header className="admin-header glass-card">
-        <div className="container header-container">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Link to="/" className="back-btn">← Back to Dashboard</Link>
-            <h1 className="admin-title">Manna Edge Markets — Strategy & Performance Admin Desk</h1>
-          </div>
-          <div className="admin-user-profile font-mono" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span className="user-badge" style={{ background: isSuperAdmin ? 'rgba(179, 136, 255, 0.2)' : 'rgba(255, 171, 0, 0.2)', border: isSuperAdmin ? '1px solid #b388ff' : '1px solid #ffab00', color: isSuperAdmin ? '#b388ff' : '#ffab00', padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800 }}>
-              {isSuperAdmin ? '👑 SUPER ADMIN' : `⚙️ ADMIN: ${user?.name || 'System Admin'}`}
-            </span>
+    <div className="console-unified-shell admin-panel">
+      <AdminHeader
+        currentConsole="admin"
+        userName={user?.name || 'System Admin'}
+        userEmail={user?.email}
+        isSuperAdminUser={isSuperAdmin}
+        tabs={adminTabsConfig}
+        activeTab={adminTab}
+        onSelectTab={handleSelectTab}
+        onOpenCommandCenter={() => setIsCommandCenterOpen(true)}
+        onLogout={() => { logout(); navigate('/login'); }}
+      />
 
+      <AdminCommandCenter
+        isOpen={isCommandCenterOpen}
+        onClose={() => setIsCommandCenterOpen(false)}
+        currentConsole="admin"
+        isSuperAdminUser={isSuperAdmin}
+        onSelectTab={handleSelectTab}
+        onTriggerAction={handleCommandAction}
+      />
 
-            {isSuperAdmin && (
-              <button
-                type="button"
-                className="font-mono"
-                style={{
-                  background: 'rgba(179, 136, 255, 0.2)',
-                  border: '1px solid #b388ff',
-                  color: '#b388ff',
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 800,
-                  fontSize: '0.82rem'
-                }}
-                onClick={() => navigate('/vault-5287')}
-              >
-                👁️ Switch to Super Admin View
-              </button>
-            )}
-            <button 
-              className="btn-logout font-mono" 
-              style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
-              onClick={() => { logout(); navigate('/login'); }}
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container admin-main">
-        {/* Admin Section Tabs Navigation */}
-        <div className="admin-nav-tabs glass-card font-mono" style={{ display: 'flex', gap: '8px', padding: '10px 14px', marginBottom: '24px', background: 'var(--kdt-purple-card)', border: '1px solid var(--kdt-purple-border)', borderRadius: '10px', overflowX: 'auto' }}>
-          <button
-            type="button"
-            className={`admin-tab-btn ${adminTab === 'users' ? 'active' : ''}`}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '6px',
-              border: adminTab === 'users' ? '1px solid #ffab00' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: adminTab === 'users' ? 'rgba(255, 171, 0, 0.18)' : 'transparent',
-              color: adminTab === 'users' ? '#ffab00' : '#ccc',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '0.88rem'
+      <main className="container admin-main" style={{ maxWidth: '1540px', padding: '20px 24px' }}>
+        {/* MISSION CONTROL: LANDING SECTION TILES */}
+        {adminTab === 'overview' && (
+          <AdminLandingTiles
+            currentConsole="admin"
+            onNavigateTab={handleSelectTab}
+            adminData={{
+              activeSetupsCount: activeSetupsList.length,
+              usersCount: usersList.length,
+              recentOutcomesCount: recentOutcomes.length,
+              runsCount: runs.length,
+              unreadSupportCount: supportUnreadCount,
+              systemHealth: systemHealth,
+              circuitBreakerActive: Boolean(status?.circuitBreaker?.tripped),
+              onTriggerMannaScan: () => {
+                triggerMannaSndScan();
+                alert('⚡ Manna SnD Scan triggered!');
+              },
+              onRunHealthCheck: handleRunManualHealthCheck
             }}
-            onClick={() => setAdminTab('users')}
-          >
-            👤 User Accounts ({usersList.length})
-          </button>
+          />
+        )}
 
-          <button
-            type="button"
-            className={`admin-tab-btn ${adminTab === 'engine' ? 'active' : ''}`}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '6px',
-              border: adminTab === 'engine' ? '1px solid #00e5ff' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: adminTab === 'engine' ? 'rgba(0, 229, 255, 0.18)' : 'transparent',
-              color: adminTab === 'engine' ? '#00e5ff' : '#ccc',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '0.88rem'
-            }}
-            onClick={() => setAdminTab('engine')}
-          >
-            ⚡ Strategy Engine &amp; Manual Scans
-          </button>
-
-          <button
-            type="button"
-            className={`admin-tab-btn ${adminTab === 'analytics' ? 'active' : ''}`}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '6px',
-              border: adminTab === 'analytics' ? '1px solid #e056fd' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: adminTab === 'analytics' ? 'rgba(224, 86, 253, 0.18)' : 'transparent',
-              color: adminTab === 'analytics' ? '#e056fd' : '#ccc',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '0.88rem'
-            }}
-            onClick={() => setAdminTab('analytics')}
-          >
-            🎯 Conviction &amp; Outcomes ({recentOutcomes.length})
-          </button>
-
-          <button
-            type="button"
-            className={`admin-tab-btn ${adminTab === 'history' ? 'active' : ''}`}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '6px',
-              border: adminTab === 'history' ? '1px solid #00e676' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: adminTab === 'history' ? 'rgba(0, 230, 118, 0.18)' : 'transparent',
-              color: adminTab === 'history' ? '#00e676' : '#ccc',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '0.88rem'
-            }}
-            onClick={() => setAdminTab('history')}
-          >
-            📜 Run History &amp; Audits ({runs.length})
-          </button>
-
-          <button
-            type="button"
-            className={`admin-tab-btn ${adminTab === 'support' ? 'active' : ''}`}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '6px',
-              border: adminTab === 'support' ? '1px solid #ffd700' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: adminTab === 'support' ? 'rgba(255,215,0,0.18)' : 'transparent',
-              color: adminTab === 'support' ? '#ffd700' : '#ccc',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '0.88rem',
-              position: 'relative'
-            }}
-            onClick={() => setAdminTab('support')}
-          >
-            🎫 Support Centre
-            {supportUnreadCount > 0 && (
-              <span style={{
-                position: 'absolute', top: -6, right: -6,
-                background: '#ff3b3b', color: '#fff',
-                fontSize: '0.6rem', fontWeight: 900,
-                minWidth: 16, height: 16, borderRadius: 8,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: '0 3px'
-              }}>{supportUnreadCount}</span>
-            )}
-          </button>
-        </div>
-
-        {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
-        <MaintenanceControlCard />
+        {/* SYSTEM MAINTENANCE & HEALTH CONTROLS (Displayed in Sub-Sections) */}
+        {adminTab !== 'overview' && (
+          <>
+            <MaintenanceControlCard />
 
         {/* AUTOMATED SYSTEM HEALTH DIAGNOSTICS CARD (MINIMIZED BY DEFAULT) */}
         <div className="glass-card font-mono" style={{ padding: '14px 18px', marginBottom: '24px', borderRadius: '10px', background: 'rgba(0, 230, 118, 0.04)', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
@@ -896,6 +830,8 @@ export const AdminPanel: React.FC = () => {
             </div>
           )}
         </div>
+        </>
+        )}
 
         {/* TAB 1: User Impersonation & Account Management Desk */}
         {adminTab === 'users' && (

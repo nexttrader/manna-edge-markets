@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './SuperAdminPanel.css';
+import '../components/admin/ui/AdminDesignSystem.css';
+import { AdminHeader } from '../components/admin/ui/AdminHeader';
+import type { AdminTabConfig } from '../components/admin/ui/AdminHeader';
+import { AdminLandingTiles } from '../components/admin/ui/AdminLandingTiles';
+import { AdminCommandCenter } from '../components/admin/ui/AdminCommandCenter';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
@@ -10,14 +15,33 @@ import { AssetControlHub } from '../components/admin/AssetControlHub';
 import { formatETDate, formatETTime } from '../utils/time';
 
 export const SuperAdminPanel: React.FC = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialActiveTab = (searchParams.get('tab') as any) || 'overview';
 
-  const handleReturnToAdmin = () => {
-    navigate('/admin');
+  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'notifications'>(initialActiveTab);
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+
+  const handleSelectTab = (tab: string) => {
+    setActiveTab(tab as any);
+    setSearchParams({ tab }, { replace: true });
+    if (tab === 'notifications') {
+      fetchNotifSettings();
+    } else if (tab === 'client_accuracy') {
+      fetchClientAccuracy();
+    }
   };
 
-  const [activeTab, setActiveTab] = useState<'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'notifications'>('assets');
+  const handleCommandAction = (actionId: string) => {
+    if (actionId === 'download_audit_pdf') {
+      downloadReportPdf();
+    } else if (actionId === 'refresh_twelve_data') {
+      fetchTwelveDataUsage(true);
+      alert('🔄 Twelve Data credits refreshed!');
+    }
+  };
+
   const [data, setData] = useState<any>(null);
   const [strategiesList, setStrategiesList] = useState<any[]>([]);
 
@@ -682,304 +706,164 @@ export const SuperAdminPanel: React.FC = () => {
   const marketing = data?.marketing || {};
   const heatmap = data?.heatmap || {};
 
+  const superAdminTabsConfig: AdminTabConfig[] = [
+    { id: 'overview', label: 'Mission Control', icon: '🎛️' },
+    { id: 'assets', label: 'Asset & Signal Visibility', icon: '🎯', color: '#6366f1' },
+    { id: 'strategy_comparison', label: 'Strategy Analytics', icon: '⚔️', color: '#ffab00' },
+    { id: 'sentinel', label: 'Manna Elite Tuning', icon: '🤖', count: sentinelSetups.length, color: '#ce93d8' },
+    { id: 'roster', label: 'User & Admin Roster', icon: '👥', count: roster.length, color: '#b388ff' },
+    { id: 'notifications', label: 'Notification Governance', icon: '📡', color: '#29b6f6' },
+    { id: 'strategies', label: 'Strategy Controls', icon: '⚙️', count: strategiesList.length, color: '#ffab00' },
+    { id: 'marketing', label: 'Marketing & Funnel', icon: '📈', color: '#00e676' },
+    { id: 'heatmap', label: 'Usage Heatmap', icon: '📊', color: '#00e5ff' },
+    { id: 'admin_audit', label: 'Admin Audit', icon: '🛡️', count: adminLogs.length, color: '#ffab00' },
+    { id: 'client_accuracy', label: 'Client Accuracy', icon: '🏷️', color: '#00e676' },
+  ];
+
   return (
-    <div className="super-admin-panel">
-      {/* Secret Super Admin Header */}
-      <header className="super-admin-header font-mono">
-        <div className="super-header-container">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Link to="/" className="back-btn" style={{ color: '#b388ff' }}>← Back to Public Home</Link>
-            <h1 className="super-title">
-              👁️ MANNA EDGE — MANNA ELITE V1.2 &amp; MASTER SUPER ADMIN DESK
-            </h1>
-          </div>
+    <div className="console-unified-shell super-admin-panel">
+      <AdminHeader
+        currentConsole="super_admin"
+        userName={user?.name || 'Super Admin'}
+        userEmail={user?.email}
+        isSuperAdminUser={true}
+        tabs={superAdminTabsConfig}
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onOpenCommandCenter={() => setIsCommandCenterOpen(true)}
+        onLogout={() => { logout(); navigate('/login'); }}
+        twelveDataUsage={twelveDataUsage}
+        onRefreshTwelveData={() => fetchTwelveDataUsage(true)}
+      />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span className="super-badge">
-              🛡️ MASTER PRIVILEGE ACTIVE
-            </span>
+      <AdminCommandCenter
+        isOpen={isCommandCenterOpen}
+        onClose={() => setIsCommandCenterOpen(false)}
+        currentConsole="super_admin"
+        isSuperAdminUser={true}
+        onSelectTab={handleSelectTab}
+        onTriggerAction={handleCommandAction}
+      />
 
-            <button
-              type="button"
-              className="font-mono"
-              style={{
-                background: 'rgba(255, 171, 0, 0.2)',
-                border: '1px solid #ffab00',
-                color: '#ffab00',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 800,
-                fontSize: '0.82rem'
-              }}
-              onClick={handleReturnToAdmin}
-            >
-              ⚙️ Switch to Admin View
-            </button>
-            <button 
-              className="btn-logout font-mono" 
-              style={{ background: 'rgba(255, 23, 68, 0.2)', border: '1px solid #ff1744', color: '#ff1744', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}
-              onClick={() => { logout(); navigate('/login'); }}
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+      <main className="container" style={{ maxWidth: '1540px', margin: '20px auto', padding: '0 24px' }}>
+        {/* LANDING SECTION: MISSION CONTROL DESTINATION TILES */}
+        {activeTab === 'overview' && (
+          <AdminLandingTiles
+            currentConsole="super_admin"
+            onNavigateTab={handleSelectTab}
+            vaultData={{
+              sentinelSetupsCount: sentinelSetups.length,
+              sentinelWinRate: sentinelAnalytics?.winRate || 0,
+              estimatedMRR: marketing.estimatedMRR || 0,
+              onlineTradersCount: metrics.onlineCount || 0,
+              rosterCount: roster.length,
+              strategiesCount: strategiesList.length,
+              adminLogsCount: adminLogs.length,
+              auditReportNumber: auditReport?.report_number || auditReport?.reportNumber,
+              onDownloadAuditPdf: () => downloadReportPdf(),
+              onTriggerTwelveDataRefresh: () => fetchTwelveDataUsage(true)
+            }}
+          />
+        )}
 
-      <main className="container" style={{ maxWidth: '1400px', margin: '24px auto', padding: '0 20px' }}>
-        {/* LIVE FOREX MARKET FEED & API CREDITS BANNER */}
-        <div className="font-mono" style={{
-          background: 'linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(124, 77, 255, 0.08) 100%)',
-          border: '1px solid rgba(0, 229, 255, 0.3)',
-          borderRadius: '10px',
-          padding: '12px 18px',
-          marginBottom: '18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '1.4rem' }}>⚡</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#00e5ff', letterSpacing: '0.02em' }}>
-                PRIMARY FEED: IC MARKETS CTRADER (FOREX UNLIMITED) &amp; IBKR/YAHOO (FUTURES)
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#a0aec0' }}>
-                IC Markets Raw ECN Spreads • Twelve Data Reserve Quota preserved
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Credits Left Today
-              </div>
-              <div style={{
-                fontSize: '1.15rem',
-                fontWeight: 900,
-                color: (twelveDataUsage?.credits_left_today ?? 800) < 100 ? '#ff1744' : '#00e676'
-              }}>
-                {twelveDataUsage ? `${twelveDataUsage.credits_left_today} / ${twelveDataUsage.plan_daily_limit}` : 'Checking...'}
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Used Today (Min Usage)
-              </div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e0e0e0' }}>
-                {twelveDataUsage ? `${twelveDataUsage.daily_usage} used (${twelveDataUsage.current_usage}/${twelveDataUsage.plan_limit} min)` : '...'}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => fetchTwelveDataUsage(true)}
-              style={{
-                background: 'rgba(0, 229, 255, 0.15)',
-                border: '1px solid #00e5ff',
-                color: '#00e5ff',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-              title="Refresh live Twelve Data credits"
-            >
-              🔄 Refresh
-            </button>
-          </div>
-        </div>
-
-        {/* High-Level Executive Summary Cards */}
-        <div className="stat-grid-4 font-mono">
-          <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
-            <div className="stat-box-title">🎯 Manna Elite v1.2 Signals</div>
-            <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelSetups.length}</div>
-          </div>
-
-          <div className="stat-box" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.05)' }}>
-            <div className="stat-box-title">🏆 Manna Elite v1.2 Win Rate</div>
-            <div className="stat-box-value" style={{ color: '#00e676' }}>{sentinelAnalytics?.winRate || 0}%</div>
-          </div>
-
-          <div className="stat-box" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
-            <div className="stat-box-title">💵 Estimated MRR</div>
-            <div className="stat-box-value" style={{ color: '#00e5ff' }}>${marketing.estimatedMRR || 0}</div>
-          </div>
-
-          <div className="stat-box" style={{ borderColor: '#ffab00', background: 'rgba(255, 171, 0, 0.05)' }}>
-            <div className="stat-box-title">🟢 Currently Online</div>
-            <div className="stat-box-value" style={{ color: '#ffab00' }}>{metrics.onlineCount || 0}</div>
-          </div>
-        </div>
-
-        {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
-        <MaintenanceControlCard />
-
-        {/* Quick-Access: Telegram Notification Controls */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-          <button
-            type="button"
-            className="font-mono"
-            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); setTimeout(() => { document.getElementById('notif-tab-section')?.scrollIntoView({ behavior: 'smooth' }); }, 50); }}
-            style={{
+        {/* SUBTAB HEADER CONTROLS (Displayed when navigating into submodules) */}
+        {activeTab !== 'overview' && (
+          <>
+            {/* LIVE FOREX MARKET FEED & API CREDITS BANNER */}
+            <div className="font-mono" style={{
+              background: 'linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(124, 77, 255, 0.08) 100%)',
+              border: '1px solid rgba(0, 229, 255, 0.3)',
+              borderRadius: '10px',
+              padding: '12px 18px',
+              marginBottom: '18px',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              padding: '8px 18px',
-              background: 'rgba(41, 182, 246, 0.12)',
-              border: '1px solid #29b6f6',
-              borderRadius: '8px',
-              color: '#29b6f6',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              letterSpacing: '0.03em'
-            }}
-          >
-            📡 Telegram Notification Toggles →
-          </button>
-        </div>
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.4rem' }}>⚡</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#00e5ff', letterSpacing: '0.02em' }}>
+                    PRIMARY FEED: IC MARKETS CTRADER (FOREX UNLIMITED) &amp; IBKR/YAHOO (FUTURES)
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#a0aec0' }}>
+                    IC Markets Raw ECN Spreads • Twelve Data Reserve Quota preserved
+                  </div>
+                </div>
+              </div>
 
-        <div className="super-nav-tabs font-mono">
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'assets' ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'assets' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-              color: activeTab === 'assets' ? '#a5b4fc' : '#ccc',
-              fontWeight: activeTab === 'assets' ? 800 : 600
-            }}
-            onClick={() => setActiveTab('assets')}
-          >
-            🎯 Asset &amp; Signal Visibility
-          </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Credits Left Today
+                  </div>
+                  <div style={{
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: (twelveDataUsage?.credits_left_today ?? 800) < 100 ? '#ff1744' : '#00e676'
+                  }}>
+                    {twelveDataUsage ? `${twelveDataUsage.credits_left_today} / ${twelveDataUsage.plan_daily_limit}` : 'Checking...'}
+                  </div>
+                </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'strategy_comparison' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'strategy_comparison' ? 'rgba(255, 171, 0, 0.25)' : 'transparent',
-              color: activeTab === 'strategy_comparison' ? '#ffab00' : '#ccc',
-              fontWeight: activeTab === 'strategy_comparison' ? 800 : 600
-            }}
-            onClick={() => setActiveTab('strategy_comparison')}
-          >
-            ⚔️ Strategy Analytics &amp; Results
-          </button>
+                <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Used Today (Min Usage)
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e0e0e0' }}>
+                    {twelveDataUsage ? `${twelveDataUsage.daily_usage} used (${twelveDataUsage.current_usage}/${twelveDataUsage.plan_limit} min)` : '...'}
+                  </div>
+                </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'sentinel' ? '1px solid #ce93d8' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'sentinel' ? 'rgba(156, 39, 176, 0.2)' : 'transparent',
-              color: activeTab === 'sentinel' ? '#ce93d8' : '#ccc'
-            }}
-            onClick={() => setActiveTab('sentinel')}
-          >
-            🤖 Manna Elite v1.2 Engine Tuning ({sentinelSetups.length})
-          </button>
+                <button
+                  type="button"
+                  onClick={() => fetchTwelveDataUsage(true)}
+                  style={{
+                    background: 'rgba(0, 229, 255, 0.15)',
+                    border: '1px solid #00e5ff',
+                    color: '#00e5ff',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title="Refresh live Twelve Data credits"
+                >
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'roster' || activeTab === 'governance' ? '1px solid #b388ff' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'roster' || activeTab === 'governance' ? 'rgba(179, 136, 255, 0.2)' : 'transparent',
-              color: activeTab === 'roster' || activeTab === 'governance' ? '#b388ff' : '#ccc'
-            }}
-            onClick={() => setActiveTab('roster')}
-          >
-            👥 User &amp; Admin Roster ({roster.length})
-          </button>
+            {/* High-Level Executive Summary Cards */}
+            <div className="stat-grid-4 font-mono">
+              <div className="stat-box" style={{ borderColor: '#ce93d8', background: 'rgba(156, 39, 176, 0.05)' }}>
+                <div className="stat-box-title">🎯 Manna Elite v1.2 Signals</div>
+                <div className="stat-box-value" style={{ color: '#ce93d8' }}>{sentinelSetups.length}</div>
+              </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'notifications' ? '1px solid #29b6f6' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'notifications' ? 'rgba(41, 182, 246, 0.2)' : 'transparent',
-              color: activeTab === 'notifications' ? '#29b6f6' : '#ccc'
-            }}
-            onClick={() => { setActiveTab('notifications'); fetchNotifSettings(); }}
-          >
-            📡 Notification Governance
-          </button>
+              <div className="stat-box" style={{ borderColor: '#00e676', background: 'rgba(0, 230, 118, 0.05)' }}>
+                <div className="stat-box-title">🏆 Manna Elite v1.2 Win Rate</div>
+                <div className="stat-box-value" style={{ color: '#00e676' }}>{sentinelAnalytics?.winRate || 0}%</div>
+              </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'strategies' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'strategies' ? 'rgba(255, 171, 0, 0.2)' : 'transparent',
-              color: activeTab === 'strategies' ? '#ffab00' : '#ccc'
-            }}
-            onClick={() => setActiveTab('strategies')}
-          >
-            ⚙️ Strategy Governance ({strategiesList.length})
-          </button>
+              <div className="stat-box" style={{ borderColor: '#00e5ff', background: 'rgba(0, 229, 255, 0.05)' }}>
+                <div className="stat-box-title">💵 Estimated MRR</div>
+                <div className="stat-box-value" style={{ color: '#00e5ff' }}>${marketing.estimatedMRR || 0}</div>
+              </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'marketing' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'marketing' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
-              color: activeTab === 'marketing' ? '#00e676' : '#ccc'
-            }}
-            onClick={() => setActiveTab('marketing')}
-          >
-            📈 Marketing &amp; Conversion
-          </button>
+              <div className="stat-box" style={{ borderColor: '#ffab00', background: 'rgba(255, 171, 0, 0.05)' }}>
+                <div className="stat-box-title">🟢 Currently Online</div>
+                <div className="stat-box-value" style={{ color: '#ffab00' }}>{metrics.onlineCount || 0}</div>
+              </div>
+            </div>
 
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'heatmap' ? '1px solid #00e5ff' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'heatmap' ? 'rgba(0, 229, 255, 0.2)' : 'transparent',
-              color: activeTab === 'heatmap' ? '#00e5ff' : '#ccc'
-            }}
-            onClick={() => setActiveTab('heatmap')}
-          >
-            📊 Usage Heatmap
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'admin_audit' ? '1px solid #ffab00' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'admin_audit' ? 'rgba(255, 171, 0, 0.2)' : 'transparent',
-              color: activeTab === 'admin_audit' ? '#ffab00' : '#ccc'
-            }}
-            onClick={() => setActiveTab('admin_audit')}
-          >
-            🛡️ Admin Audit ({adminLogs.length})
-          </button>
-
-          <button
-            type="button"
-            className="super-tab-btn"
-            style={{
-              border: activeTab === 'client_accuracy' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.1)',
-              background: activeTab === 'client_accuracy' ? 'rgba(0, 230, 118, 0.2)' : 'transparent',
-              color: activeTab === 'client_accuracy' ? '#00e676' : '#ccc'
-            }}
-            onClick={() => { setActiveTab('client_accuracy'); fetchClientAccuracy(); }}
-          >
-            🏷️ Client Accuracy
-          </button>
-        </div>
+            {/* SYSTEM MAINTENANCE MODE CONTROL CARD */}
+            <MaintenanceControlCard />
+          </>
+        )}
 
         {/* TAB: Asset & Signal Visibility Hub */}
         {activeTab === 'assets' && (
