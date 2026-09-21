@@ -886,7 +886,13 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
         const runId = `manna_snd_manual_${Date.now()}`;
         const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
         const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
-        res.json({ success: true, result, runId, scope });
+        const enrichedStats = {
+            ...result.stats,
+            futuresDiscovered: futures.length,
+            forexDiscovered: forex.length,
+            totalCandidates: futures.length + forex.length
+        };
+        res.json({ success: true, result: { ...result, stats: enrichedStats }, runId, scope });
     } catch (err: any) {
         res.status(500).json({ error: 'Manna SnD manual scan failed', details: err.message });
     }

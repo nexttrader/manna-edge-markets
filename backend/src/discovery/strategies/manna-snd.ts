@@ -413,8 +413,8 @@ export class MannaSndStrategy implements IStrategyEngine {
         }
 
         // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
-        // Enforce institutional departure displacement (body >= 1.0x ATR14 for Forex, 0.75x for Futures)
-        const minDepartureMult = market === 'forex' ? 1.0 : 0.75;
+        // Enforce institutional departure displacement (body >= 0.65x ATR14 for Forex, 0.75x for Futures)
+        const minDepartureMult = market === 'forex' ? 0.65 : 0.75;
         const m15Zones = this.findZonesWithIndex(candles15m, minDepartureMult, atr14);
 
         if (allowedAction === 'BUY') {

@@ -106,8 +106,8 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
   const activeFuturesCount = setups.filter(s => (s.market || '').toLowerCase() === 'futures' && (s.signal_state === 'active' || s.signal_state === 'awaiting_entry')).length;
   const activeForexCount = setups.filter(s => (s.market || '').toLowerCase() === 'forex' && (s.signal_state === 'active' || s.signal_state === 'awaiting_entry')).length;
 
-  const hasLowFutures = isFuturesOpen && activeFuturesCount <= 2;
-  const hasLowForex = isForexOpen && activeForexCount <= 2;
+  const hasLowFutures = isFuturesOpen && activeFuturesCount < 2;
+  const hasLowForex = isForexOpen && activeForexCount < 4;
   const isLowSignals = hasLowFutures || hasLowForex;
 
   // Check if we are currently before the midpoint of the active session

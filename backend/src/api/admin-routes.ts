@@ -785,7 +785,13 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
     const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, effectiveScope, [], strategyId);
     
     const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
-    res.json(result);
+    const enrichedStats = {
+      ...result.stats,
+      futuresDiscovered: futures.length,
+      forexDiscovered: forex.length,
+      totalCandidates: futures.length + forex.length
+    };
+    res.json({ ...result, stats: enrichedStats });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
@@ -837,7 +843,13 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
     const runId = `manna_snd_manual_${Date.now()}`;
     const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
     const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
-    res.json({ success: true, result, runId, scope });
+    const enrichedStats = {
+      ...result.stats,
+      futuresDiscovered: futures.length,
+      forexDiscovered: forex.length,
+      totalCandidates: futures.length + forex.length
+    };
+    res.json({ success: true, result: { ...result, stats: enrichedStats }, runId, scope });
   } catch (error: any) {
     res.status(500).json({ error: 'Manna SnD manual scan failed', details: error?.message || String(error) });
   }

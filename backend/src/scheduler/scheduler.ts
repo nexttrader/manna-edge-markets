@@ -10,9 +10,10 @@ let scheduledTasks: cron.ScheduledTask[] = [];
 export function startScheduler(
     onKillzoneBoundary: (kz: KillzoneInfo) => Promise<void>,
     onKillzoneMidpoint?: (kz: KillzoneInfo) => Promise<void>,
-    onEarlyForexScan?: (kz: KillzoneInfo) => Promise<void>
+    onEarlyForexScan?: (kz: KillzoneInfo) => Promise<void>,
+    onForexSessionScan?: (kz: KillzoneInfo) => Promise<void>
 ): void {
-    // 1. Killzone Start Boundaries (02:00, 08:00, 13:00/14:00, 20:00 ET)
+    // 1. Killzone Start Boundaries - Futures Bell (02:00, 08:00, 14:00, 20:00 ET)
     const boundaries: Array<{ cron: string; expected: Killzone }> = [
         { cron: '0 2 * * *', expected: 'london' },
         { cron: '0 8 * * *', expected: 'ny_am' },
@@ -35,6 +36,35 @@ export function startScheduler(
                     }
                 } catch (error) {
                     console.error(`Error in onKillzoneBoundary handler for ${b.expected}:`, error);
+                }
+            }
+        }, {
+            timezone: 'America/New_York'
+        });
+        
+        scheduledTasks.push(task);
+    });
+
+    // 1b. Forex Post-Open Session Boundaries (5 mins after open: 02:05, 08:05, 14:05, 20:05 ET)
+    // Allows the opening 5-minute candle to close and establish initial displacement & order-flow
+    const forexSessionBoundaries: Array<{ cron: string; expected: Killzone; label: string }> = [
+        { cron: '5 2 * * *', expected: 'london', label: '02:05 ET (London +5m)' },
+        { cron: '5 8 * * *', expected: 'ny_am',  label: '08:05 ET (NY AM +5m)' },
+        { cron: '5 14 * * *', expected: 'ny_pm', label: '14:05 ET (NY PM +5m)' },
+        { cron: '5 20 * * *', expected: 'asia',  label: '20:05 ET (Asia +5m)' }
+    ];
+
+    forexSessionBoundaries.forEach(b => {
+        const task = cron.schedule(b.cron, async () => {
+            const now = new Date();
+            const kzInfo = mapTimestampToKillzone(now);
+            console.log(`⏱️ Forex Session (+5m post-open) boundary cron triggered for ${b.expected} (${b.label}) at ${now.toISOString()}`);
+            
+            if (onForexSessionScan && kzInfo && kzInfo.killzone === b.expected) {
+                try {
+                    await onForexSessionScan(kzInfo);
+                } catch (error) {
+                    console.error(`Error in onForexSessionScan handler for ${b.expected}:`, error);
                 }
             }
         }, {

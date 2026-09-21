@@ -137,44 +137,21 @@ async function startServer() {
 
         logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
         startScheduler(
-            // 1. Killzone Start Handler
+            // 1. Killzone Start Handler (Futures bell on the hour :00 ET)
             async (kzInfo) => {
-                logger.info({ killzone: kzInfo.killzone }, 'Killzone start boundary triggered');
+                logger.info({ killzone: kzInfo.killzone }, 'Killzone start boundary triggered for Futures');
                 try {
                     const now = new Date();
-                    const isForexOpen = isForexMarketOpen(now);
                     const isFuturesOpen = isFuturesMarketOpen(now);
-                    
-                    let scope: 'both' | 'futures' | 'forex' | null = 'both';
-                    if (!isForexOpen && !isFuturesOpen) {
-                        scope = null;
-                    } else if (isForexOpen && !isFuturesOpen) {
-                        scope = 'forex';
-                    } else if (!isForexOpen && isFuturesOpen) {
-                        scope = 'futures';
-                    }
-
-                    // If NY AM early Forex scan has already executed today, restrict 08:00 ET scan to Futures only
-                    const earlyStatus = earlyScanService.getStatus(now);
-                    if (kzInfo.killzone === 'ny_am' && earlyStatus.hasCompletedToday) {
-                        if (scope === 'both') {
-                            scope = 'futures';
-                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; 08:00 ET scan restricted to Futures only.');
-                        } else if (scope === 'forex') {
-                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; skipping 08:00 ET Forex scan.');
-                            return;
-                        }
-                    }
-                    
-                    if (!scope) {
-                        logger.info('Skipping Killzone boundary scan: Both Forex and Futures markets are closed.');
+                    if (!isFuturesOpen) {
+                        logger.info('Skipping Killzone start scan: Futures market is closed.');
                         return;
                     }
 
-                    const runId = `run_${Date.now()}`;
-                    const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope);
-                    const result = await executePublishRun(kzInfo, futures, forex, 'live', 'scheduled');
-                    logger.info({ result, scope }, 'Killzone boundary publish run completed');
+                    const runId = `run_futures_${Date.now()}`;
+                    const { futures } = await discoverUnifiedSetups(kzInfo, runId, 'futures');
+                    const result = await executePublishRun(kzInfo, futures, [], 'live', 'scheduled');
+                    logger.info({ result }, 'Futures Killzone boundary publish run completed');
                 } catch (err) {
                     logger.error({ err }, 'Killzone boundary handler failed');
                 }
@@ -205,6 +182,33 @@ async function startServer() {
                     logger.info({ result }, 'Early Forex scan publish run completed successfully');
                 } catch (err) {
                     logger.error({ err }, 'Early Forex boundary handler failed');
+                }
+            },
+            // 4. Forex Post-Open Scan Handler (5 mins after session open: 02:05, 08:05, 14:05, 20:05 ET)
+            // Allows the first 5M candle to close and establish initial displacement & order-flow
+            async (kzInfo) => {
+                logger.info({ killzone: kzInfo.killzone }, '⏱️ Forex post-open (+5m) session boundary triggered');
+                try {
+                    const now = new Date();
+                    const isForexOpen = isForexMarketOpen(now);
+                    if (!isForexOpen) {
+                        logger.info('Skipping Forex post-open scan: Forex market is closed.');
+                        return;
+                    }
+
+                    // If NY AM early Forex scan has already executed today, skip post-open scan
+                    const earlyStatus = earlyScanService.getStatus(now);
+                    if (kzInfo.killzone === 'ny_am' && earlyStatus.hasCompletedToday) {
+                        logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; skipping 08:05 ET Forex scan.');
+                        return;
+                    }
+
+                    const runId = `run_forex_${Date.now()}`;
+                    const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex');
+                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled');
+                    logger.info({ result }, 'Forex post-open (+5m) publish run completed');
+                } catch (err) {
+                    logger.error({ err }, 'Forex post-open (+5m) boundary handler failed');
                 }
             }
         );

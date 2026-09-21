@@ -495,10 +495,23 @@ export const AdminPanel: React.FC = () => {
       const res = await triggerMannaSndScan(market, 'live', false);
       if (res.success) {
         const stats = res.data?.result?.stats || {};
-        const total = (stats.futuresDiscovered || 0) + (stats.forexDiscovered || 0);
-        const pub = (stats.futuresPublished || 0) + (stats.forexPublished || 0);
+        const total = stats.totalCandidates !== undefined
+          ? stats.totalCandidates
+          : ((stats.futuresDiscovered || 0) + (stats.forexDiscovered || 0) || (stats.created || 0) + (stats.preserved || 0) + (stats.discarded || 0));
+        const pub = stats.created !== undefined ? stats.created : ((stats.futuresPublished || 0) + (stats.forexPublished || 0));
+        const preserved = stats.preserved || 0;
+        const discarded = stats.discarded || 0;
+        const invalidated = stats.invalidated || 0;
         const label = market === 'both' ? 'All (Forex + CME)' : market === 'forex' ? 'Forex Only' : 'Futures Only';
-        alert(`✅ Manna SnD Scan Completed (${label})!\n\n• Candidates Analyzed: ${total}\n• Signals Published: ${pub}\n• Scope: ${res.data?.scope?.toUpperCase() || 'ALL'}`);
+        alert(
+          `✅ Manna SnD Scan Completed (${label})!\n\n` +
+          `• Candidates Evaluated: ${total}\n` +
+          `• New Signals Published: ${pub}\n` +
+          `• Active Signals Preserved: ${preserved}\n` +
+          `• Candidates Filtered/Discarded: ${discarded}\n` +
+          (invalidated > 0 ? `• Signals Invalidated: ${invalidated}\n` : '') +
+          `• Scope: ${res.data?.scope?.toUpperCase() || label.toUpperCase()}`
+        );
         await refetchActiveSetups();
         await refetchAnalytics();
       } else {
