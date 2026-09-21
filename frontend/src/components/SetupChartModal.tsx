@@ -480,16 +480,28 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
+        const width = chartContainerRef.current.clientWidth;
+        const height = chartContainerRef.current.clientHeight;
+        if (width > 0 && height > 0) {
+          chartRef.current.applyOptions({ width, height });
+        }
       }
     };
     window.addEventListener('resize', handleResize);
 
+    let resizeObserver: ResizeObserver | null = null;
+    if (chartContainerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -1443,9 +1455,20 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     timeScale.subscribeVisibleLogicalRangeChange(drawZones);
 
     window.addEventListener('resize', drawZones);
+    let resizeObserver: ResizeObserver | null = null;
+    if (chartContainerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        drawZones();
+      });
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     return () => {
       try { timeScale.unsubscribeVisibleLogicalRangeChange(drawZones); } catch {}
       window.removeEventListener('resize', drawZones);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
     };
   }, [drawZones]);
 
@@ -1457,7 +1480,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   return createPortal(
     <div className="chart-modal-backdrop font-sans">
       <div className={`chart-modal-content animate-fade-in theme-${theme}`}>
-        {/* Fullscreen Header */}
+        {/* Fullscreen Header (Tier 1: Trade Info & Window Actions) */}
         <div className="chart-modal-header">
           <div className="header-left">
             <h2 className="chart-symbol font-mono">{setup.instrument}</h2>
@@ -1481,29 +1504,33 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             {/* Status Badge */}
             {isPending && (
               <span className="state-status-tag pending font-mono">
-                ⏳ PENDING ENTRY (NOT ENTERED YET)
+                ⏳ <span className="full-label">PENDING ENTRY (NOT ENTERED YET)</span><span className="short-label">PENDING</span>
               </span>
             )}
             {isRunner && (
               <span className="state-status-tag runner font-mono">
-                🏃 ACTIVE RUNNER (TP1 +2R LOGGED · TRACKING TP2)
+                🏃 <span className="full-label">ACTIVE RUNNER (TP1 +2R LOGGED · TRACKING TP2)</span><span className="short-label">RUNNER (+2R)</span>
               </span>
             )}
             {isActive && (
               <span className="state-status-tag active font-mono">
-                🔥 ACTIVE TRADE (IN POSITION)
+                🔥 <span className="full-label">ACTIVE TRADE (IN POSITION)</span><span className="short-label">ACTIVE</span>
               </span>
             )}
             {isResolved && (
               <span className="state-status-tag resolved font-mono">
-                🏁 RESOLVED TRADE
+                🏁 <span className="full-label">RESOLVED TRADE</span><span className="short-label">RESOLVED</span>
               </span>
             )}
 
             <span className="market-tag font-mono">{(setup.market || 'futures').toUpperCase()}</span>
-            <span className="kz-tag font-mono">{(setup.killzone_origin || 'NY AM').toUpperCase()} SESSION</span>
-            <span className="font-mono" style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(0, 230, 118, 0.12)', color: '#00e676', border: '1px solid rgba(0, 230, 118, 0.4)', fontSize: '0.74rem', fontWeight: 800 }}>
-              ⚡ {feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS RAW ECN' : 'FUTURES FEED')}
+            <span className="kz-tag font-mono">
+              <span className="full-label">{(setup.killzone_origin || 'NY AM').toUpperCase()} SESSION</span>
+              <span className="short-label">{(setup.killzone_origin || 'NY AM').toUpperCase()}</span>
+            </span>
+            <span className="feed-tag font-mono">
+              ⚡ <span className="full-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS RAW ECN' : 'FUTURES FEED')}</span>
+              <span className="short-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS' : 'FUTURES')}</span>
             </span>
           </div>
 
@@ -1535,6 +1562,27 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
             </button>
 
+            {/* Pinned Close Button */}
+            <button className="close-btn font-mono" onClick={onClose} title="Close Chart (ESC)">
+              <span className="full-label">✕ CLOSE (ESC)</span>
+              <span className="short-label">✕ CLOSE</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Chart Navigation Toolbar (Tier 2: Multi-Timeframe, Zoom, Bid/Ask) */}
+        <div className="chart-modal-toolbar">
+          <div className="toolbar-left">
+            {/* Multi-Timeframe Selector */}
+            <div className="tf-selector font-mono">
+              <button className={timeframe === '1m' ? 'active' : ''} onClick={() => setTimeframe('1m')} title="1 Minute Scalp">1M</button>
+              <button className={timeframe === '5m' ? 'active' : ''} onClick={() => setTimeframe('5m')} title="5 Minute Precision">5M</button>
+              <button className={timeframe === '15m' ? 'active' : ''} onClick={() => setTimeframe('15m')} title="15 Minute Execution (Entry Logic)">15M ★</button>
+              <button className={timeframe === '1h' ? 'active' : ''} onClick={() => setTimeframe('1h')} title="1 Hour Market Structure">1H</button>
+              <button className={timeframe === '4h' ? 'active' : ''} onClick={() => setTimeframe('4h')} title="4 Hour Trend Context">4H</button>
+              <button className={timeframe === '1d' ? 'active' : ''} onClick={() => setTimeframe('1d')} title="Daily Macro View">1D</button>
+            </div>
+
             {/* Zoom & Scroll Toolbar */}
             <div className="zoom-toolbar font-mono">
               <button className="zoom-btn" onClick={() => handleZoom(true)} title="Zoom In">🔍 +</button>
@@ -1550,16 +1598,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               </button>
             </div>
 
-            {/* Multi-Timeframe Selector */}
-            <div className="tf-selector font-mono">
-              <button className={timeframe === '1m' ? 'active' : ''} onClick={() => setTimeframe('1m')} title="1 Minute Scalp">1M</button>
-              <button className={timeframe === '5m' ? 'active' : ''} onClick={() => setTimeframe('5m')} title="5 Minute Precision">5M</button>
-              <button className={timeframe === '15m' ? 'active' : ''} onClick={() => setTimeframe('15m')} title="15 Minute Execution (Entry Logic)">15M ★</button>
-              <button className={timeframe === '1h' ? 'active' : ''} onClick={() => setTimeframe('1h')} title="1 Hour Market Structure">1H</button>
-              <button className={timeframe === '4h' ? 'active' : ''} onClick={() => setTimeframe('4h')} title="4 Hour Trend Context">4H</button>
-              <button className={timeframe === '1d' ? 'active' : ''} onClick={() => setTimeframe('1d')} title="Daily Macro View">1D</button>
-            </div>
-
             {/* Bid / Ask Price Lines Toggle Button */}
             <button
               type="button"
@@ -1570,10 +1608,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               <span className="bid-ask-icon">⚖️</span>
               <span>BID / ASK: {showBidAsk ? 'ON' : 'OFF'}</span>
             </button>
+          </div>
 
-            <button className="close-btn font-mono" onClick={onClose}>
-              ✕ CLOSE (ESC)
-            </button>
+          <div className="toolbar-right">
+            <span className="chart-shortcuts-hint font-mono">
+              [ESC] Close • Scroll to zoom • Drag to pan
+            </span>
           </div>
         </div>
 
