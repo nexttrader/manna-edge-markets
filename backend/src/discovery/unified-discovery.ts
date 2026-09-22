@@ -55,12 +55,13 @@ export async function discoverUnifiedSetups(
   if (marketScope === 'both' || marketScope === 'forex') {
     const isPreLondonFilterActive = await queries.isPreLondonFilterEnabled(targetStrategyId || 'manna_snd');
     const currentUtcHour = new Date().getUTCHours();
-    const isPreLondonWindow = currentUtcHour >= 5 && currentUtcHour < 7;
+    // Pre-London filter strictly protects against low-liquidity rollover PRIOR to London open (killzone !== 'london')
+    const isPreLondonWindow = killzone.killzone !== 'london' && (currentUtcHour >= 4 && currentUtcHour < 7);
 
     if (isPreLondonFilterActive && isPreLondonWindow) {
       logger.warn(
-        { utcHour: currentUtcHour },
-        '🛡️ Pre-London Forex Filter ACTIVE (05:00-07:00 UTC): Suppressing Forex setup discovery during low-liquidity rollover.'
+        { utcHour: currentUtcHour, killzone: killzone.killzone },
+        '🛡️ Pre-London Forex Filter ACTIVE: Suppressing Forex setup discovery during pre-session low-liquidity rollover.'
       );
     } else {
       // 1. Evaluate EUR/USD first as Macro Dollar Leader
