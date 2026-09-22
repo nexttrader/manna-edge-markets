@@ -1,81 +1,225 @@
+/* ==========================================================================
+   KILLZONE CLOCK & INSTITUTIONAL SCAN TRACKER
+   Accurately and prominently showcases live master ET time, active session,
+   last completed scan, and next upcoming scan with dual-cadence times.
+   ========================================================================== */
+
 .killzone-clock {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
-  padding: 6px 16px;
-  border-radius: 8px;
-  background: rgba(14, 6, 28, 0.6);
-  border: 1px solid var(--kdt-purple-border);
+  padding: 6px 18px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(20, 9, 38, 0.88) 0%, rgba(14, 6, 28, 0.94) 100%);
+  border: 1px solid rgba(201, 168, 76, 0.32);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.38), 0 0 14px rgba(180, 130, 255, 0.08);
+  backdrop-filter: blur(12px);
+  position: relative;
+  max-width: 100%;
 }
 
-.clock-left {
+/* Individual Sections */
+.clock-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* ── 1. ACTIVE SESSION & MASTER ET CLOCK ── */
+.clock-session-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-status-cluster {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .kz-indicator {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background-color: var(--text-muted);
+  transition: all 0.3s ease;
 }
 
 .kz-indicator.active {
-  background-color: var(--green);
-  box-shadow: 0 0 10px var(--green);
-  animation: pulse 2s infinite;
+  background-color: #00e676;
+  box-shadow: 0 0 10px #00e676, 0 0 4px #00e676;
+  animation: pulse-green 2s infinite ease-in-out;
+}
+
+.kz-indicator.peak-glow {
+  box-shadow: 0 0 14px #00e676, 0 0 6px #00e676, inset 0 0 3px #ffffff;
+}
+
+.kz-indicator.closed {
+  background-color: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+
+@keyframes pulse-green {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 10px #00e676, 0 0 4px #00e676;
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.92);
+    box-shadow: 0 0 4px #00e676;
+  }
+}
+
+.session-badge-wrapper {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
 }
 
 .kz-name {
   font-family: var(--font-headline);
   font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   color: var(--kdt-gold);
+  text-transform: uppercase;
+}
+
+.session-range-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--kdt-white-muted);
+  opacity: 0.85;
 }
 
 .clock-time {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--kdt-white);
-  margin-left: 2px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
 }
 
+/* ── DIVIDER ── */
 .clock-divider {
   width: 1px;
-  height: 18px;
-  background: var(--kdt-purple-border);
+  height: 22px;
+  background: linear-gradient(180deg, rgba(180, 130, 255, 0.08), rgba(201, 168, 76, 0.38), rgba(180, 130, 255, 0.08));
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
-.clock-next-scan {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+/* ── PILL BADGES ── */
+.scan-pill-badge {
+  font-family: var(--font-headline);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
-.scan-label {
-  font-family: var(--font-label);
+.last-scan-badge {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+}
+
+.next-scan-badge {
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--kdt-gold-light);
+  border: 1px solid rgba(201, 168, 76, 0.4);
+}
+
+.midpoint-badge {
+  background: rgba(255, 193, 7, 0.15);
+  color: var(--amber);
+  border: 1px solid rgba(255, 193, 7, 0.45);
+}
+
+/* ── SCAN DETAILS ── */
+.scan-info-block {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.scan-primary-title {
+  font-family: var(--font-headline);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f1edfa;
+}
+
+.scan-target-gold {
+  color: var(--kdt-gold-light);
+  font-weight: 800;
+}
+
+.scan-secondary-detail {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
   color: var(--kdt-white-muted);
 }
 
-.scan-target {
-  font-family: var(--font-headline);
-  color: var(--kdt-gold);
-  font-weight: 700;
+.text-gold-muted {
+  color: rgba(223, 196, 107, 0.8);
 }
 
+/* ── 2. LAST SCAN PILLS ── */
+.scan-elapsed-pill {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.scan-count-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #00e676;
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ── 3. NEXT SCAN COUNTDOWN (PROMINENT GLOW) ── */
 .scan-countdown {
   font-family: var(--font-mono);
-  color: var(--kdt-gold);
-  font-weight: 700;
-  background: rgba(201, 168, 76, 0.12);
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(201, 168, 76, 0.35);
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--kdt-gold-light);
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.08) 100%);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(201, 168, 76, 0.55);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.22), inset 0 0 6px rgba(201, 168, 76, 0.1);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* ── 4. MIDPOINT RESCAN ALERT PILL ── */
+.clock-midpoint-scan {
+  gap: 8px;
 }
 
 .text-warning-amber {
@@ -85,22 +229,25 @@
 
 .rescan-countdown-amber {
   color: var(--amber) !important;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
   font-weight: 700;
   background: var(--amber-dim) !important;
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px dashed rgba(255, 193, 7, 0.55) !important;
+  border: 1px dashed rgba(255, 193, 7, 0.6) !important;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.25);
 }
 
 @keyframes rescan-flash {
   0%, 100% {
     opacity: 1;
-    border-color: rgba(255, 193, 7, 0.8);
+    border-color: rgba(255, 193, 7, 0.85);
     box-shadow: 0 0 10px rgba(255, 193, 7, 0.4);
   }
   50% {
-    opacity: 0.4;
-    border-color: rgba(255, 193, 7, 0.2);
+    opacity: 0.45;
+    border-color: rgba(255, 193, 7, 0.25);
     box-shadow: 0 0 2px rgba(255, 193, 7, 0.05);
   }
 }
@@ -109,28 +256,212 @@
   animation: rescan-flash 1.8s infinite ease-in-out;
 }
 
-@media (max-width: 640px) {
+/* ── 5. SCHEDULE INFO TOGGLE BUTTON ── */
+.clock-schedule-toggle-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(180, 130, 255, 0.25);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--kdt-gold);
+  transition: all 0.2s ease;
+  padding: 0;
+  margin-left: 2px;
+}
+
+.clock-schedule-toggle-btn:hover {
+  background: rgba(201, 168, 76, 0.2);
+  border-color: var(--kdt-gold);
+  transform: scale(1.08);
+}
+
+/* ── MODAL: INSTITUTIONAL SCHEDULE POPUP ── */
+.schedule-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(6, 2, 12, 0.78);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.schedule-modal {
+  background: #140926;
+  border: 1px solid var(--kdt-gold);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 580px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(201, 168, 76, 0.15);
+  color: #ffffff;
+}
+
+.schedule-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(201, 168, 76, 0.2);
+}
+
+.schedule-modal-header h3 {
+  font-size: 1.05rem;
+  color: var(--kdt-gold);
+  font-weight: 800;
+  margin: 0;
+}
+
+.schedule-modal-close {
+  background: none;
+  border: none;
+  color: var(--kdt-white-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: color 0.2s ease;
+}
+
+.schedule-modal-close:hover {
+  color: #ffffff;
+}
+
+.schedule-note-banner {
+  background: rgba(201, 168, 76, 0.08);
+  border-left: 3px solid var(--kdt-gold);
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--kdt-white-muted);
+  margin-bottom: 16px;
+  border-radius: 0 6px 6px 0;
+}
+
+.schedule-note-banner code {
+  color: var(--kdt-gold-light);
+  font-weight: 700;
+}
+
+.schedule-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.schedule-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.3fr 1fr 1.1fr 1fr;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(180, 130, 255, 0.08);
+  font-size: 0.78rem;
+  align-items: center;
+}
+
+.schedule-row.header-row {
+  background: rgba(201, 168, 76, 0.12);
+  border-color: rgba(201, 168, 76, 0.25);
+  font-weight: 800;
+  color: var(--kdt-gold);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
+.schedule-row.active-row {
+  background: rgba(0, 230, 118, 0.08);
+  border-color: rgba(0, 230, 118, 0.4);
+}
+
+.session-col {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.bell-col {
+  color: var(--kdt-gold-light);
+  font-weight: 700;
+}
+
+.fx-col {
+  color: #00e5ff;
+  font-weight: 700;
+}
+
+.schedule-footer-notes {
+  font-size: 0.72rem;
+  color: var(--kdt-white-muted);
+  line-height: 1.5;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.schedule-footer-notes p {
+  margin: 4px 0;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN (TABLET & MOBILE)
+   ========================================================================== */
+
+@media (max-width: 1024px) {
   .killzone-clock {
-    gap: 8px;
-    padding: 4px 10px;
+    gap: 10px;
+    padding: 6px 14px;
     flex-wrap: wrap;
     justify-content: center;
   }
   .kz-name {
-    font-size: 0.85rem;
+    font-size: 0.88rem;
   }
   .clock-time {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
   }
-  .clock-divider {
-    display: none;
-  }
-  .clock-next-scan {
-    font-size: 0.75rem;
-  }
-  .scan-countdown, .rescan-countdown-amber {
-    padding: 1px 6px;
-    font-size: 0.75rem;
+  .scan-countdown {
+    font-size: 0.82rem;
+    padding: 2px 8px;
   }
 }
 
+@media (max-width: 768px) {
+  .killzone-clock {
+    gap: 8px;
+    padding: 8px 10px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .clock-section {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .clock-divider {
+    width: 100%;
+    height: 1px;
+    margin: 2px 0;
+    background: rgba(180, 130, 255, 0.12);
+  }
+  .schedule-row {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+    font-size: 0.7rem;
+    padding: 6px 8px;
+  }
+}

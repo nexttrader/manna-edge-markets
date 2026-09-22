@@ -89,6 +89,7 @@ export interface PublishRun {
     setups_preserved: number;
     summary_json?: string;
     error_detail?: string;
+    trigger_type?: 'scheduled' | 'manual' | string;
     created_at: string;
 }
 

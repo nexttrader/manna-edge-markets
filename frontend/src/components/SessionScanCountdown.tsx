@@ -11,10 +11,10 @@ interface Boundary {
 }
 
 const DEFAULT_BOUNDARIES: Boundary[] = [
-  { name: 'London Open', hour: 2, minute: 0, et: '02:00 ET' },
-  { name: 'NY AM Open', hour: 8, minute: 0, et: '08:00 ET' },
-  { name: 'NY PM Open', hour: 14, minute: 0, et: '14:00 ET' },
-  { name: 'Asia Open', hour: 20, minute: 0, et: '20:00 ET' }
+  { name: 'London Open (02:00 CME • 02:05 FX)', hour: 2, minute: 0, et: '02:00 ET' },
+  { name: 'NY AM Open (08:00 CME • 08:05 FX)', hour: 8, minute: 0, et: '08:00 ET' },
+  { name: 'NY PM Open (14:00 CME • 14:05 FX)', hour: 14, minute: 0, et: '14:00 ET' },
+  { name: 'Asia Open (20:00 CME • 20:05 FX)', hour: 20, minute: 0, et: '20:00 ET' }
 ];
 
 export const SessionScanCountdown: React.FC = () => {

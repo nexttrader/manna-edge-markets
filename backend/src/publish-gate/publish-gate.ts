@@ -29,7 +29,8 @@ export async function executePublishRun(
   futuresCandidates: CandidateSetup[],
   forexCandidates: CandidateSetup[],
   mode: RunMode,
-  triggerType: 'scheduled' | 'manual' = 'scheduled'
+  triggerType: 'scheduled' | 'manual' = 'scheduled',
+  marketScope?: 'futures' | 'forex' | 'both'
 ): Promise<PublishGateResult> {
   const runId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
@@ -41,12 +42,23 @@ export async function executePublishRun(
   
   const stats = { created: 0, invalidated: 0, preserved: 0, discarded: 0 };
   const errors: string[] = [];
+
+  const resolvedMarket = marketScope || (
+    futuresCandidates.length > 0 && forexCandidates.length > 0
+      ? 'both'
+      : futuresCandidates.length > 0
+      ? 'futures'
+      : forexCandidates.length > 0
+      ? 'forex'
+      : 'both'
+  );
   
   // Create the publish run record
   await queries.createPublishRun({
     id: runId,
     run_timestamp: new Date().toISOString(),
     killzone: killzone.killzone,
+    market: resolvedMarket,
     run_mode: actualMode,
     run_state: 'running',
     trigger_type: triggerType,

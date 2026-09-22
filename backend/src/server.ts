@@ -150,7 +150,7 @@ async function startServer() {
 
                     const runId = `run_futures_${Date.now()}`;
                     const { futures } = await discoverUnifiedSetups(kzInfo, runId, 'futures');
-                    const result = await executePublishRun(kzInfo, futures, [], 'live', 'scheduled');
+                    const result = await executePublishRun(kzInfo, futures, [], 'live', 'scheduled', 'futures');
                     logger.info({ result }, 'Futures Killzone boundary publish run completed');
                 } catch (err) {
                     logger.error({ err }, 'Killzone boundary handler failed');
@@ -178,7 +178,7 @@ async function startServer() {
 
                     const runId = `run_early_forex_${Date.now()}`;
                     const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex');
-                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled');
+                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled', 'forex');
                     logger.info({ result }, 'Early Forex scan publish run completed successfully');
                 } catch (err) {
                     logger.error({ err }, 'Early Forex boundary handler failed');
@@ -205,7 +205,7 @@ async function startServer() {
 
                     const runId = `run_forex_${Date.now()}`;
                     const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex');
-                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled');
+                    const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled', 'forex');
                     logger.info({ result }, 'Forex post-open (+5m) publish run completed');
                 } catch (err) {
                     logger.error({ err }, 'Forex post-open (+5m) boundary handler failed');

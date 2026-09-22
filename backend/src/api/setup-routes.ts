@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
 import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
-import { getCurrentKillzone } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
+import { earlyScanService } from '../scheduler/early-scan-service';
 import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
@@ -485,6 +486,72 @@ router.get('/diagnostics/ibkr', (req: Request, res: Response) => {
     res.json(getIBKRGatewayStatus());
   } catch (error: any) {
     res.status(500).json({ error: error.message || String(error) });
+  }
+});
+
+router.get('/scan-status', async (_req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const currentKz = getCurrentKillzone(now);
+    const nextBoundary = getNextKillzoneBoundary(now);
+    
+    // Fetch last completed publish runs from DB
+    const recentRuns = await queries.getRecentPublishRuns(10);
+    const lastRun = recentRuns.find((r: any) => r.run_state !== 'running' && r.run_state !== 'failed') || (recentRuns.length > 0 ? recentRuns[0] : null);
+    const lastScheduledRun = recentRuns.find((r: any) => (r.trigger_type === 'scheduled' || !r.trigger_type) && r.run_state !== 'running') || null;
+    const lastManualRun = recentRuns.find((r: any) => r.trigger_type === 'manual' && r.run_state !== 'running') || null;
+
+    // Dynamic pre-news scan status
+    const earlyStatus = earlyScanService.getStatus(now);
+
+    res.json({
+      success: true,
+      serverTime: now.toISOString(),
+      currentKillzone: currentKz,
+      nextBoundary,
+      lastRun: lastRun ? {
+        id: lastRun.id,
+        run_timestamp: lastRun.run_timestamp,
+        created_at: lastRun.created_at,
+        killzone: lastRun.killzone,
+        market: lastRun.market,
+        trigger_type: lastRun.trigger_type || 'scheduled',
+        run_mode: lastRun.run_mode,
+        run_state: lastRun.run_state,
+        setups_created: lastRun.setups_created || 0,
+        setups_invalidated: lastRun.setups_invalidated || 0,
+        setups_preserved: lastRun.setups_preserved || 0
+      } : null,
+      lastScheduledRun: lastScheduledRun ? {
+        id: lastScheduledRun.id,
+        run_timestamp: lastScheduledRun.run_timestamp,
+        created_at: lastScheduledRun.created_at,
+        killzone: lastScheduledRun.killzone,
+        market: lastScheduledRun.market,
+        trigger_type: 'scheduled',
+        setups_created: lastScheduledRun.setups_created || 0
+      } : null,
+      lastManualRun: lastManualRun ? {
+        id: lastManualRun.id,
+        run_timestamp: lastManualRun.run_timestamp,
+        created_at: lastManualRun.created_at,
+        killzone: lastManualRun.killzone,
+        market: lastManualRun.market,
+        trigger_type: 'manual',
+        setups_created: lastManualRun.setups_created || 0
+      } : null,
+      earlyScan: {
+        hasEarlyScanToday: earlyStatus.hasEarlyScanToday,
+        isEarlyScanNeeded: earlyStatus.isEarlyScanNeeded,
+        hasCompletedToday: earlyStatus.hasCompletedToday,
+        scanHour: earlyStatus.scanHour,
+        scanMinute: earlyStatus.scanMinute,
+        earlyScanTimeET: earlyStatus.earlyScanTimeET,
+        isStandardTimeScan: earlyStatus.isStandardTimeScan
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || String(error) });
   }
 });
 
