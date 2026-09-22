@@ -31,9 +31,6 @@ export function startScheduler(
                 try {
                     await onKillzoneBoundary(kzInfo);
                     await autoGenerateSessionPerformanceReports(b.expected);
-                    if (b.expected === 'ny_am') {
-                        earlyScanService.markCompleted(now);
-                    }
                 } catch (error) {
                     console.error(`Error in onKillzoneBoundary handler for ${b.expected}:`, error);
                 }

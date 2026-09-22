@@ -207,6 +207,9 @@ async function startServer() {
                     const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex');
                     const result = await executePublishRun(kzInfo, [], forex, 'live', 'scheduled', 'forex');
                     logger.info({ result }, 'Forex post-open (+5m) publish run completed');
+                    if (kzInfo.killzone === 'ny_am') {
+                        earlyScanService.markCompleted(now);
+                    }
                 } catch (err) {
                     logger.error({ err }, 'Forex post-open (+5m) boundary handler failed');
                 }
