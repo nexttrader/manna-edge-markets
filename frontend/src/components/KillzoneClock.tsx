@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './KillzoneClock.css';
 import { type EdgeSetup } from '../types';
 import { API_BASE } from '../config';
@@ -370,7 +371,7 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
       </button>
 
       {/* ── MODAL: INSTITUTIONAL SCAN SCHEDULE BREAKDOWN ── */}
-      {showScheduleInfo && (
+      {showScheduleInfo && typeof document !== 'undefined' && createPortal(
         <div className="schedule-modal-overlay" onClick={() => setShowScheduleInfo(false)}>
           <div className="schedule-modal glass-card font-mono" onClick={e => e.stopPropagation()}>
             <div className="schedule-modal-header">
@@ -424,7 +425,8 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
