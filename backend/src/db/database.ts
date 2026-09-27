@@ -121,7 +121,9 @@ export async function initializeDatabase(): Promise<void> {
                     // These were incorrectly written by the snapshot restore fallback (entry_zone_mid was used
                     // as a placeholder), causing the signal card to show a fake "Exact Fill" price.
                     `UPDATE edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`,
-                    `UPDATE forex_edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`
+                    `UPDATE forex_edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`,
+                    `CREATE TABLE IF NOT EXISTS superadmin_edge_setups (id TEXT PRIMARY KEY, instrument TEXT NOT NULL, market TEXT DEFAULT 'forex', created_at TEXT NOT NULL, created_by_run TEXT, killzone_origin TEXT NOT NULL, killzone_origin_at TEXT, bias TEXT NOT NULL, entry_zone_low DOUBLE PRECISION NOT NULL, entry_zone_high DOUBLE PRECISION NOT NULL, entry_zone_mid DOUBLE PRECISION NOT NULL, stop DOUBLE PRECISION NOT NULL, tp1 DOUBLE PRECISION NOT NULL, tp2 DOUBLE PRECISION, r_multiple_1 DOUBLE PRECISION, r_multiple_2 DOUBLE PRECISION, signal_state TEXT NOT NULL DEFAULT 'awaiting_entry', superseded INTEGER DEFAULT 0, invalidation_reason TEXT, invalidation_detail TEXT, entry_triggered_at TEXT, tradable INTEGER DEFAULT 1, conviction_score DOUBLE PRECISION, liquidity_score DOUBLE PRECISION, strategy_id TEXT DEFAULT 'elite_fractal', strategy_tier TEXT DEFAULT 'elite', metadata TEXT, resolved_at TEXT, state_machine_state TEXT DEFAULT 'IDLE', state_machine_phase TEXT DEFAULT 'SCANNING', state_changed_at TEXT)`,
+                    `CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`
                 ];
                 for (const sql of safeAlters) {
                     try { await client.query(sql); } catch (_) { /* column/index/query safe execution */ }
@@ -735,6 +737,43 @@ export async function initializeDatabase(): Promise<void> {
         created_at TEXT NOT NULL
       )`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_vps_trade_sync_setup ON vps_trade_sync(setup_id)`);
+    } catch {}
+
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS superadmin_edge_setups (
+        id TEXT PRIMARY KEY,
+        instrument TEXT NOT NULL,
+        market TEXT DEFAULT 'forex',
+        created_at TEXT NOT NULL,
+        created_by_run TEXT,
+        killzone_origin TEXT NOT NULL,
+        killzone_origin_at TEXT,
+        bias TEXT NOT NULL,
+        entry_zone_low REAL NOT NULL,
+        entry_zone_high REAL NOT NULL,
+        entry_zone_mid REAL NOT NULL,
+        stop REAL NOT NULL,
+        tp1 REAL NOT NULL,
+        tp2 REAL,
+        r_multiple_1 REAL,
+        r_multiple_2 REAL,
+        signal_state TEXT NOT NULL DEFAULT 'awaiting_entry',
+        superseded INTEGER DEFAULT 0,
+        invalidation_reason TEXT,
+        invalidation_detail TEXT,
+        entry_triggered_at TEXT,
+        tradable INTEGER DEFAULT 1,
+        conviction_score REAL,
+        liquidity_score REAL,
+        strategy_id TEXT DEFAULT 'elite_fractal',
+        strategy_tier TEXT DEFAULT 'elite',
+        metadata TEXT,
+        resolved_at TEXT,
+        state_machine_state TEXT DEFAULT 'IDLE',
+        state_machine_phase TEXT DEFAULT 'SCANNING',
+        state_changed_at TEXT
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`);
     } catch {}
 
     // ── Notification Feature Toggles ─────────────────────────────────────────

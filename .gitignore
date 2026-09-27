@@ -37,3 +37,4 @@ backend/reports/
 # Temporary analysis scratch directory
 .scratch/
 scratch/
+.antigravity/

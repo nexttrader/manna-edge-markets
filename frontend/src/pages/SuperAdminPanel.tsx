@@ -13,6 +13,7 @@ import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCa
 import { StrategyComparisonDashboard } from '../components/admin/StrategyComparisonDashboard';
 import { AssetControlHub } from '../components/admin/AssetControlHub';
 import { formatETDate, formatETTime } from '../utils/time';
+import { ExclusiveSignalsDashboard } from '../components/admin/ExclusiveSignalsDashboard';
 
 export const SuperAdminPanel: React.FC = () => {
   const { user, logout } = useAuth();
@@ -20,7 +21,7 @@ export const SuperAdminPanel: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialActiveTab = (searchParams.get('tab') as any) || 'overview';
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'notifications'>(initialActiveTab);
+  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'exclusive_signals' | 'notifications'>(initialActiveTab);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
 
   const handleSelectTab = (tab: string) => {
@@ -718,6 +719,7 @@ export const SuperAdminPanel: React.FC = () => {
     { id: 'heatmap', label: 'Usage Heatmap', icon: '📊', color: '#00e5ff' },
     { id: 'admin_audit', label: 'Admin Audit', icon: '🛡️', count: adminLogs.length, color: '#ffab00' },
     { id: 'client_accuracy', label: 'Client Accuracy', icon: '🏷️', color: '#00e676' },
+    { id: 'exclusive_signals', label: 'Classified Intel', icon: '🛡️', color: '#8b5cf6' },
   ];
 
   return (
@@ -3299,6 +3301,12 @@ export const SuperAdminPanel: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'exclusive_signals' && (
+        <div style={{ padding: '0' }}>
+          <ExclusiveSignalsDashboard />
         </div>
       )}
 

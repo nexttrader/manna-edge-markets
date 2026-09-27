@@ -6,6 +6,7 @@ export interface StrategyMeta {
   tier: 'basic' | 'pro' | 'elite';
   description: string;
   enabled: boolean;
+  visibility?: 'public' | 'admin' | 'superadmin_only';
 }
 
 export interface IStrategyEngine {

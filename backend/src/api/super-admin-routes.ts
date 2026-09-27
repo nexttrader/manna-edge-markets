@@ -10,6 +10,8 @@ import { outcomeDetector } from '../outcomes/outcome-detector';
 import { signalAuditService } from '../analytics/signal-audit-service';
 import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
 import { telegramBotService } from '../notifications/telegram-bot';
+import { instrumentStateTelemetry, DASHBOARD_PHASES } from '../discovery/strategies/elite-fractal';
+
 
 const router = express.Router();
 
@@ -2055,5 +2057,105 @@ router.get('/twelve-data-usage', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================================================
+// ELITE FRACTAL EXCLUSIVE SIGNALS — SuperAdmin only
+// =============================================================================
+
+router.get('/exclusive-signals', async (req: Request, res: Response) => {
+  try {
+    const rows = await queryDb<any>(
+      `SELECT * FROM superadmin_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry','active') ORDER BY created_at DESC LIMIT 50`
+    );
+    return res.json({ success: true, signals: rows, count: rows.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/exclusive-signals/history', async (req: Request, res: Response) => {
+  try {
+    const rows = await queryDb<any>(
+      `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded') ORDER BY created_at DESC LIMIT 30`
+    );
+    return res.json({ success: true, signals: rows, count: rows.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/exclusive-signals/state-machine', async (req: Request, res: Response) => {
+  try {
+    const telemetry = Array.from(instrumentStateTelemetry.entries()).map(([_instrument, data]) => ({
+      ...data
+    }));
+    return res.json({
+      success: true,
+      telemetry,
+      phases: DASHBOARD_PHASES,
+      totalTracking: telemetry.length,
+      byPhase: {
+        scanning:    telemetry.filter(t => t.phase === 'SCANNING').length,
+        candidate:   telemetry.filter(t => t.phase === 'CANDIDATE').length,
+        validated:   telemetry.filter(t => t.phase === 'VALIDATED').length,
+        entryReady:  telemetry.filter(t => t.phase === 'ENTRY_READY').length,
+        rejected:    telemetry.filter(t => t.phase === 'REJECTED').length
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/exclusive-signals/analytics', async (req: Request, res: Response) => {
+  try {
+    const allSignals = await queryDb<any>(`SELECT * FROM superadmin_edge_setups ORDER BY created_at DESC LIMIT 200`);
+    const closed = allSignals.filter((s: any) => s.signal_state === 'resolved');
+    const wins = closed.filter((s: any) => {
+      try { const meta = JSON.parse(s.metadata || '{}'); return meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit'; } catch { return false; }
+    });
+    const winRate = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(1) : null;
+    const avgConviction = allSignals.length > 0
+      ? (allSignals.reduce((sum: number, s: any) => sum + (s.conviction_score || 0), 0) / allSignals.length).toFixed(1)
+      : null;
+    const byInstrument = allSignals.reduce((acc: any, s: any) => {
+      if (!acc[s.instrument]) acc[s.instrument] = { total: 0, active: 0, resolved: 0 };
+      acc[s.instrument].total++;
+      if (['awaiting_entry','active'].includes(s.signal_state)) acc[s.instrument].active++;
+      if (s.signal_state === 'resolved') acc[s.instrument].resolved++;
+      return acc;
+    }, {});
+    return res.json({ success: true, analytics: { totalSignals: allSignals.length, activeSignals: allSignals.filter((s: any) => ['awaiting_entry','active'].includes(s.signal_state)).length, closedSignals: closed.length, winRate, avgConviction, byInstrument, strategyId: 'elite_fractal' } });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/exclusive-signals/scan', async (req: Request, res: Response) => {
+  try {
+    const { runEliteFractalScanCycle } = await import('../scheduler/elite-fractal-scanner');
+    const result = await runEliteFractalScanCycle();
+    return res.json({
+      success: true,
+      result: { ...result, runId: `ef_manual_${Date.now()}` },
+      message: `Elite Fractal scan complete. ${result.created} signal(s) published from ${result.scanned} instruments scanned.`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message, details: err.stack?.slice(0, 300) });
+  }
+});
+
+router.delete('/exclusive-signals/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+    await queryDb(`UPDATE superadmin_edge_setups SET signal_state='invalidated', superseded=1, invalidation_reason=?, resolved_at=? WHERE id=?`,
+      [reason||'manual_dismiss', new Date().toISOString(), id]);
+    return res.json({ success: true, id });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
+
 

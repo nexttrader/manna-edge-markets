@@ -1,0 +1,17 @@
+# Project Scope & Tech Stack Constraints
+
+## Project Identity
+- Name: Manna Edge Markets 2.0 (MANNEDFINDER 2.0)
+- Domain: Institutional Market Killzone Discovery Engine & Automated Trading Desk (Forex & Futures)
+
+## Explicit Technology Stack
+- Languages: TypeScript, JavaScript (Node.js, React 19)
+- Frontend: Vite, React 19, Lightweight Charts, React Router 7, Vanilla CSS
+- Backend: Express, Better-SQLite3, PostgreSQL (pg), node-cron, Puppeteer, cTrader-ts, @stoqey/ib
+- Market Feeds: Yahoo Finance, TwelveData, cTrader Open API, Interactive Brokers (IBKR TWS API)
+
+## Boundaries & Constraints
+- Do NOT load, reference, or apply rules for mobile frameworks (Android/Gradle/Kotlin/Java, iOS/Swift/Xcode).
+- Do NOT load or reference Firebase / Cloud Firestore / GCP mobile backend schemas.
+- Do NOT load or reference life sciences, bioinformatics, or genomics databases (PDB, AlphaFold, UniProt, BLAST, etc.).
+- Maintain strict focus on TypeScript web performance, institutional trading math (Risk/Reward, Killzones, MAE/MFE), and clean full-stack architecture.

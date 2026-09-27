@@ -31,6 +31,7 @@ import userManagementRoutes from './api/user-management-routes';
 import { startSubscriptionScheduler } from './scheduler/subscription-cron';
 import { telegramBotService } from './notifications/telegram-bot';
 import { earlyScanService } from './scheduler/early-scan-service';
+import { startEliteFractalContinuousScanner, stopEliteFractalContinuousScanner } from './scheduler/elite-fractal-scanner';
 
 const logger = createLogger('server');
 const app = express();
@@ -134,6 +135,9 @@ async function startServer() {
 
         logger.info('Initializing Telegram Bot Service...');
         telegramBotService.init();
+
+        logger.info('🛡️ Starting Elite Fractal Continuous Scanner (every 5 minutes)...');
+        startEliteFractalContinuousScanner();
 
         logger.info('Starting scheduler with Killzone Boundary & Midpoint triggers...');
         startScheduler(
@@ -240,6 +244,7 @@ async function startServer() {
             }
             lifecycleSync.stop();
             outcomeDetector.stop();
+            stopEliteFractalContinuousScanner();
             stopScheduler();
             process.exit(0);
         };
