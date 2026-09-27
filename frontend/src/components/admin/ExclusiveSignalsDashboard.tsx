@@ -115,6 +115,38 @@ const InstrumentTelemetryCard: React.FC<{
           {t.convictionScore.toFixed(1)}% conviction
         </div>
       )}
+      {(t.entryZoneLow != null || t.stop != null || t.tp1 != null) && (
+        <div style={{
+          background: 'rgba(0,0,0,0.35)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: '6px',
+          padding: '4px 6px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '4px',
+          textAlign: 'center',
+          marginTop: '2px'
+        }}>
+          <div>
+            <div style={{ fontSize: '0.55rem', color: '#94a3b8', textTransform: 'uppercase' }}>Entry</div>
+            <div style={{ fontSize: '0.66rem', fontWeight: 800, color: '#e2e8f0', fontFamily: 'monospace' }}>
+              {fmtPrice(t.entryZoneLow || t.h1PoiLevel, t.instrument.includes('/') ? 'forex' : 'futures')}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.55rem', color: '#f87171', textTransform: 'uppercase' }}>Stop</div>
+            <div style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f87171', fontFamily: 'monospace' }}>
+              {fmtPrice(t.stop || t.m15SwingHigh, t.instrument.includes('/') ? 'forex' : 'futures')}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.55rem', color: '#34d399', textTransform: 'uppercase' }}>Target (2R)</div>
+            <div style={{ fontSize: '0.66rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace' }}>
+              {fmtPrice(t.tp1, t.instrument.includes('/') ? 'forex' : 'futures')}
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <span style={{ fontSize: '0.6rem', color: '#64748b' }}>
           {t.lastScannedAt ? `Scan: ${new Date(t.lastScannedAt).toLocaleTimeString()}` : '—'}
@@ -223,17 +255,19 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
         </div>
 
         {/* Levels Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           {[
-            { label: 'Entry Low',  value: fmtPrice(signal.entry_zone_low,  signal.market), color: '#e2e8f0' },
-            { label: 'Entry High', value: fmtPrice(signal.entry_zone_high, signal.market), color: '#e2e8f0' },
-            { label: 'Stop Loss',  value: fmtPrice(signal.stop,            signal.market), color: '#f87171' },
-            { label: 'TP1 (2R)',   value: fmtPrice(signal.tp1,             signal.market), color: '#34d399' },
-            { label: 'TP2 (3.5R)', value: fmtPrice(signal.tp2,             signal.market), color: '#10b981' }
+            { label: 'Entry Low',   value: fmtPrice(signal.entry_zone_low,  signal.market), color: '#e2e8f0', sub: 'Zone Floor' },
+            { label: 'Entry Mid',   value: fmtPrice(signal.entry_zone_mid,  signal.market), color: '#38bdf8', sub: 'Primary Fill' },
+            { label: 'Entry High',  value: fmtPrice(signal.entry_zone_high, signal.market), color: '#e2e8f0', sub: 'Zone Ceiling' },
+            { label: 'Stop Loss',   value: fmtPrice(signal.stop,            signal.market), color: '#f87171', sub: 'Inval Level' },
+            { label: 'TP1 (+2.0R)', value: fmtPrice(signal.tp1,             signal.market), color: '#34d399', sub: 'Target 1' },
+            { label: 'TP2 (+3.5R)', value: fmtPrice(signal.tp2,             signal.market), color: '#10b981', sub: 'Target 2' }
           ].map(item => (
-            <div key={item.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.65rem', color: '#718096', textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</div>
-              <div style={{ fontSize: '0.88rem', fontWeight: 800, color: item.color, fontFamily: 'monospace' }}>{item.value}</div>
+            <div key={item.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 12px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontSize: '0.62rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 700 }}>{item.label}</div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: item.color, fontFamily: 'monospace' }}>{item.value}</div>
+              <div style={{ fontSize: '0.55rem', color: '#64748b', marginTop: '2px' }}>{item.sub}</div>
             </div>
           ))}
         </div>

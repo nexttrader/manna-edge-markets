@@ -248,20 +248,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    if (state.m1OCs && state.m1OCs.length >= 2) {
+    if (state.m1OCs && state.m1OCs.length >= 1) {
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
-    } else if (state.m1OCs && state.m1OCs.length === 1) {
-      this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
-      return null;
+      return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
     } else {
       this.transitionTo(instrument, StateMachineState.M1_SCANNING);
       return null;
     }
-
-    if ((state.state as string) === StateMachineState.ENTRY_READY) {
-      return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
-    }
-    return null;
   }
 
   // ============================================================================
@@ -367,12 +360,16 @@ export class EliteFractalStrategy implements IStrategyEngine {
     validOCs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (validOCs.length === 0) return { foundPattern: true, data: { m1OCs: [] } };
-    if (validOCs.length === 1) return { foundPattern: true, data: { m1OCs: [validOCs[0]] } };
 
-    const top2 = validOCs.slice(0, 2);
+    const top = validOCs.slice(0, 2);
     return {
       foundPattern: true,
-      data: { m1OCs: top2, m1FinalOCPOIType: top2[0].poiType, m1FinalOCSwingHigh: top2[0].swingHigh, m1FVGMiddleHigh: top2[0].fvgMiddleHigh }
+      data: {
+        m1OCs: top,
+        m1FinalOCPOIType: top[0].poiType,
+        m1FinalOCSwingHigh: top[0].swingHigh,
+        m1FVGMiddleHigh: top[0].fvgMiddleHigh
+      }
     };
   }
 
@@ -500,7 +497,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
       stop = round(entryHigh * (1 + bufferPct * 3));
     }
 
-    const stopDistance = Math.abs(stop - entryMid);
+    // Ensure stop is strictly above entry for bearish SHORT trade
+    if (stop <= entryHigh) {
+      stop = round(entryHigh * (1 + bufferPct * 3));
+    }
+
+    const minStopDist = isForex ? 0.0005 : 1.5;
+    const stopDistance = Math.max(Math.abs(stop - entryMid), minStopDist);
     const tp1 = round(entryMid - (2 * stopDistance));
     const tp2 = round(entryMid - (3.5 * stopDistance));
     const rMultiple1 = parseFloat((Math.abs(entryMid - tp1) / stopDistance).toFixed(2));
