@@ -57,25 +57,90 @@ const PhaseCard: React.FC<{ phase: string; label: string; icon: string; count: n
   );
 };
 
-const InstrumentTelemetryCard: React.FC<{ t: StateMachineTelemetry }> = ({ t }) => {
+const InstrumentTelemetryCard: React.FC<{
+  t: StateMachineTelemetry;
+  onViewChart: (t: StateMachineTelemetry) => void;
+}> = ({ t, onViewChart }) => {
   const colors = PHASE_COLORS[t.phase] || PHASE_COLORS.SCANNING;
   const isHot = t.phase === 'ENTRY_READY' || t.phase === 'VALIDATED';
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div style={{
-      background: isHot ? colors.bg : 'rgba(15,20,35,0.7)',
-      border: `1px solid ${isHot ? colors.border : 'rgba(255,255,255,0.07)'}`,
-      borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '5px', position: 'relative', overflow: 'hidden'
-    }}>
-      {isHot && <div style={{ position: 'absolute', top: 0, right: 0, width: '3px', height: '100%', background: colors.dot, borderRadius: '0 10px 10px 0' }} />}
+    <div
+      onClick={() => onViewChart(t)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: isHot
+          ? (hovered ? 'rgba(25,18,55,0.95)' : colors.bg)
+          : (hovered ? 'rgba(30,25,50,0.85)' : 'rgba(15,20,35,0.7)'),
+        border: `1px solid ${hovered ? '#a78bfa' : (isHot ? colors.border : 'rgba(255,255,255,0.07)')}`,
+        borderRadius: '10px',
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? '0 4px 14px rgba(139,92,246,0.25)' : 'none'
+      }}
+    >
+      {isHot && (
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '100%', background: colors.dot, borderRadius: '0 10px 10px 0' }} />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#e2e8f0', fontFamily: 'monospace' }}>{t.instrument}</span>
-        <span style={{ fontSize: '0.62rem', background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text, borderRadius: '20px', padding: '2px 8px', fontWeight: 700 }}>{t.phase}</span>
+        <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#e2e8f0', fontFamily: 'monospace' }}>{t.instrument}</span>
+        <span style={{ fontSize: '0.62rem', background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text, borderRadius: '20px', padding: '2px 8px', fontWeight: 700 }}>
+          {t.phase}
+        </span>
       </div>
-      <div style={{ fontSize: '0.72rem', color: colors.text, fontWeight: 600 }}>{STATE_LABELS[t.state] || t.state}</div>
-      {t.h1PoiType && <div style={{ fontSize: '0.65rem', color: '#718096' }}>H1: {t.h1PoiType} @ {t.h1PoiLevel?.toFixed(5) || '—'}</div>}
-      {(t.m1OcCount != null && t.m1OcCount > 0) && <div style={{ fontSize: '0.65rem', color: '#718096' }}>M1 OCs: {t.m1OcCount}/2</div>}
-      {t.convictionScore && <div style={{ fontSize: '0.65rem', color: colors.text, fontWeight: 700 }}>{t.convictionScore.toFixed(1)}% conviction</div>}
-      <div style={{ fontSize: '0.6rem', color: '#4a5568' }}>Scan: {t.lastScannedAt ? new Date(t.lastScannedAt).toLocaleTimeString() : '—'}</div>
+      <div style={{ fontSize: '0.74rem', color: colors.text, fontWeight: 700 }}>
+        {STATE_LABELS[t.state] || t.state}
+      </div>
+      {t.h1PoiType && (
+        <div style={{ fontSize: '0.66rem', color: '#94a3b8' }}>
+          H1: <strong style={{ color: '#cbd5e1' }}>{t.h1PoiType}</strong> {t.h1PoiLevel ? `@ ${t.h1PoiLevel.toFixed(4)}` : ''}
+        </div>
+      )}
+      {(t.m1OcCount != null && t.m1OcCount > 0) && (
+        <div style={{ fontSize: '0.66rem', color: '#94a3b8' }}>
+          M1 OCs: <strong style={{ color: '#34d399' }}>{t.m1OcCount}/2 Formed</strong>
+        </div>
+      )}
+      {t.convictionScore && (
+        <div style={{ fontSize: '0.66rem', color: colors.text, fontWeight: 800 }}>
+          {t.convictionScore.toFixed(1)}% conviction
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <span style={{ fontSize: '0.6rem', color: '#64748b' }}>
+          {t.lastScannedAt ? `Scan: ${new Date(t.lastScannedAt).toLocaleTimeString()}` : '—'}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewChart(t);
+          }}
+          style={{
+            background: isHot ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.06)',
+            border: `1px solid ${isHot ? 'rgba(167,139,250,0.5)' : 'rgba(255,255,255,0.12)'}`,
+            color: isHot ? '#c084fc' : '#cbd5e1',
+            borderRadius: '6px',
+            padding: '3px 8px',
+            fontSize: '0.65rem',
+            cursor: 'pointer',
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}
+        >
+          📊 Live Chart
+        </button>
+      </div>
     </div>
   );
 };
@@ -235,7 +300,47 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
   const { signals, historySignals, telemetry, analytics, phaseCount, loading, scanning, lastUpdated, triggerScan, dismissSignal } = useExclusiveSignals();
   const [activeSection, setActiveSection] = useState<'live' | 'telemetry' | 'analytics' | 'history'>('live');
   const [scanningMarket, setScanningMarket] = useState<'both' | 'forex' | 'futures'>('both');
-  const [historyChartSignal, setHistoryChartSignal] = useState<EdgeSetup | null>(null);
+  const [activeChartSetup, setActiveChartSetup] = useState<EdgeSetup | null>(null);
+
+  const handleOpenTelemetryChart = (t: StateMachineTelemetry) => {
+    const existingSignal = signals.find(s => s.instrument === t.instrument) || historySignals.find(s => s.instrument === t.instrument);
+    if (existingSignal) {
+      setActiveChartSetup(existingSignal);
+      return;
+    }
+
+    const isFx = t.instrument.includes('/') || ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'EUR/GBP', 'EUR/JPY', 'GBP/JPY'].includes(t.instrument);
+    const mockSetup: EdgeSetup = {
+      id: `telemetry_${t.instrument.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`,
+      instrument: t.instrument,
+      market: isFx ? 'forex' : 'futures',
+      bias: 'short',
+      killzone_origin: 'live',
+      created_at: t.stateChangedAt || new Date().toISOString(),
+      signal_state: t.phase === 'ENTRY_READY' ? 'awaiting_entry' : 'active',
+      entry_zone_low: t.entryZoneLow || 0,
+      entry_zone_high: t.entryZoneHigh || 0,
+      entry_zone_mid: ((t.entryZoneLow || 0) + (t.entryZoneHigh || 0)) / 2 || 0,
+      stop: t.stop || t.m15SwingHigh || 0,
+      tp1: t.tp1 || 0,
+      r_multiple_1: 2.0,
+      conviction_score: t.convictionScore,
+      strategy_id: 'elite_fractal',
+      strategy_tier: 'elite',
+      metadata: JSON.stringify({
+        strategy: 'elite_fractal',
+        phases: {
+          h1POIType: t.h1PoiType,
+          h1POILevel: t.h1PoiLevel,
+          m15SwingHigh: t.m15SwingHigh,
+          m1OCCount: t.m1OcCount
+        },
+        telemetryState: t.state,
+        telemetryPhase: t.phase
+      })
+    };
+    setActiveChartSetup(mockSetup);
+  };
 
   const handleScan = async () => {
     try {
@@ -357,11 +462,46 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       {/* TELEMETRY */}
       {activeSection === 'telemetry' && (
         <div>
+          {/* Informational Live Chart Inspection Banner */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(30,15,60,0.85) 0%, rgba(15,10,35,0.85) 100%)',
+            border: '1px solid rgba(139,92,246,0.3)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '1.3rem' }}>📈</span>
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#e2e8f0' }}>
+                  Interactive Live Multi-Timeframe Chart Inspection
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                  Click on any instrument card or click <strong>📊 Live Chart</strong> to inspect real-time candles across H1, M15, M5, and M1 to verify state progression.
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#34d399', fontWeight: 700, background: 'rgba(16,185,129,0.1)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.3)' }}>
+              ● Live Feeds Connected
+            </div>
+          </div>
+
           {hotInstruments.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontSize: '0.72rem', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px', fontWeight: 700 }}>🔥 Hot — Entry Ready / Validated ({hotInstruments.length})</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-                {hotInstruments.map(t => <InstrumentTelemetryCard key={t.instrument} t={t} />)}
+                {hotInstruments.map(t => (
+                  <InstrumentTelemetryCard
+                    key={t.instrument}
+                    t={t}
+                    onViewChart={handleOpenTelemetryChart}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -371,7 +511,13 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               <div style={{ color: '#4a5568', fontSize: '0.8rem', padding: '20px 0' }}>No telemetry data yet. Continuous scanner runs every 5 minutes.</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
-                {coldInstruments.map(t => <InstrumentTelemetryCard key={t.instrument} t={t} />)}
+                {coldInstruments.map(t => (
+                  <InstrumentTelemetryCard
+                    key={t.instrument}
+                    t={t}
+                    onViewChart={handleOpenTelemetryChart}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -493,7 +639,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <button
-                      onClick={() => setHistoryChartSignal(signal)}
+                      onClick={() => setActiveChartSetup(signal)}
                       style={{
                         background: 'rgba(139,92,246,0.15)',
                         border: '1px solid rgba(139,92,246,0.4)',
@@ -516,9 +662,9 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* History Chart Modal */}
-      {historyChartSignal && (
-        <SetupChartModal setup={historyChartSignal} onClose={() => setHistoryChartSignal(null)} />
+      {/* Universal Live Multi-Timeframe Chart Modal (Telemetry, Signals, History) */}
+      {activeChartSetup && (
+        <SetupChartModal setup={activeChartSetup} onClose={() => setActiveChartSetup(null)} />
       )}
     </div>
   );
