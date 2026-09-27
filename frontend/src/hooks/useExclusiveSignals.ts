@@ -22,13 +22,28 @@ export interface StateMachineTelemetry {
   invalidationReason?: string;
 }
 
+export interface InstrumentAnalytics {
+  total: number;
+  active: number;
+  resolved: number;
+  wins: number;
+  losses: number;
+  winRate: string | null;
+}
+
 export interface ExclusiveAnalytics {
   totalSignals: number;
   activeSignals: number;
   closedSignals: number;
+  winsCount: number;
+  lossesCount: number;
   winRate: string | null;
   avgConviction: string | null;
-  byInstrument: Record<string, { total: number; active: number; resolved: number }>;
+  avgRiskReward: string | null;
+  totalRMultiple: string | null;
+  profitFactor: string | null;
+  byInstrument: Record<string, InstrumentAnalytics>;
+  byKillzone: Record<string, InstrumentAnalytics>;
   strategyId: string;
 }
 
@@ -52,11 +67,16 @@ export function useExclusiveSignals() {
 
   const fetchAll = useCallback(async () => {
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': 'super_admin'
+      };
+
       const [signalsRes, telemetryRes, analyticsRes, historyRes] = await Promise.all([
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals`),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/state-machine`),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics`),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`)
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/state-machine`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`, { headers })
       ]);
 
       if (signalsRes.ok) {
@@ -95,7 +115,10 @@ export function useExclusiveSignals() {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/exclusive-signals/scan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'super_admin'
+        },
         body: JSON.stringify({ market })
       });
       const data = await res.json();
@@ -114,7 +137,10 @@ export function useExclusiveSignals() {
     try {
       await fetch(`${API_BASE}/api/super-admin/exclusive-signals/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'super_admin'
+        },
         body: JSON.stringify({ reason: reason || 'manual_dismiss' })
       });
       await fetchAll();

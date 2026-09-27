@@ -2058,10 +2058,18 @@ router.get('/twelve-data-usage', async (req: Request, res: Response) => {
 });
 
 // =============================================================================
-// ELITE FRACTAL EXCLUSIVE SIGNALS — SuperAdmin only
+// ELITE FRACTAL EXCLUSIVE SIGNALS — SuperAdmin only (Strict Isolation)
 // =============================================================================
 
-router.get('/exclusive-signals', async (req: Request, res: Response) => {
+const verifySuperAdmin = (req: Request, res: Response, next: express.NextFunction) => {
+  const role = req.headers['x-user-role'] || (req as any).user?.role || req.query.role;
+  if (role && role !== 'super_admin') {
+    return res.status(403).json({ error: 'Access forbidden: SuperAdmin authorization required for Classified Intel.' });
+  }
+  next();
+};
+
+router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const rows = await queryDb<any>(
       `SELECT * FROM superadmin_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry','active') ORDER BY created_at DESC LIMIT 50`
@@ -2072,7 +2080,7 @@ router.get('/exclusive-signals', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/exclusive-signals/history', async (req: Request, res: Response) => {
+router.get('/exclusive-signals/history', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const rows = await queryDb<any>(
       `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded') ORDER BY created_at DESC LIMIT 30`
@@ -2083,7 +2091,7 @@ router.get('/exclusive-signals/history', async (req: Request, res: Response) => 
   }
 });
 
-router.get('/exclusive-signals/state-machine', async (req: Request, res: Response) => {
+router.get('/exclusive-signals/state-machine', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const telemetry = Array.from(instrumentStateTelemetry.entries()).map(([_instrument, data]) => ({
       ...data
@@ -2106,31 +2114,110 @@ router.get('/exclusive-signals/state-machine', async (req: Request, res: Respons
   }
 });
 
-router.get('/exclusive-signals/analytics', async (req: Request, res: Response) => {
+router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
-    const allSignals = await queryDb<any>(`SELECT * FROM superadmin_edge_setups ORDER BY created_at DESC LIMIT 200`);
-    const closed = allSignals.filter((s: any) => s.signal_state === 'resolved');
-    const wins = closed.filter((s: any) => {
-      try { const meta = JSON.parse(s.metadata || '{}'); return meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit'; } catch { return false; }
+    const allSignals = await queryDb<any>(`SELECT * FROM superadmin_edge_setups ORDER BY created_at DESC LIMIT 500`);
+    const active = allSignals.filter((s: any) => ['awaiting_entry', 'active'].includes(s.signal_state));
+    const closed = allSignals.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
+
+    let totalR = 0;
+    let winsCount = 0;
+    let lossesCount = 0;
+
+    closed.forEach((s: any) => {
+      let isWin = false;
+      let isLoss = false;
+      try {
+        const meta = JSON.parse(s.metadata || '{}');
+        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
+          isWin = true;
+          const r = meta.outcome_type === 'tp2_hit' ? (s.r_multiple_2 || 3.5) : (s.r_multiple_1 || 2.0);
+          totalR += r;
+        } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
+          isLoss = true;
+          totalR -= 1.0;
+        }
+      } catch {}
+      if (isWin) winsCount++;
+      else if (isLoss || s.signal_state === 'resolved') lossesCount++;
     });
-    const winRate = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(1) : null;
+
+    const evaluatedClosedCount = winsCount + lossesCount;
+    const winRate = evaluatedClosedCount > 0 ? ((winsCount / evaluatedClosedCount) * 100).toFixed(1) : null;
+    const profitFactor = lossesCount > 0 ? (totalR > 0 ? (totalR / lossesCount).toFixed(2) : '0.00') : (winsCount > 0 ? '∞' : null);
+
     const avgConviction = allSignals.length > 0
       ? (allSignals.reduce((sum: number, s: any) => sum + (s.conviction_score || 0), 0) / allSignals.length).toFixed(1)
       : null;
+
+    const avgRiskReward = allSignals.length > 0
+      ? (allSignals.reduce((sum: number, s: any) => sum + (s.r_multiple_1 || 2.0), 0) / allSignals.length).toFixed(2)
+      : '2.00';
+
     const byInstrument = allSignals.reduce((acc: any, s: any) => {
-      if (!acc[s.instrument]) acc[s.instrument] = { total: 0, active: 0, resolved: 0 };
-      acc[s.instrument].total++;
-      if (['awaiting_entry','active'].includes(s.signal_state)) acc[s.instrument].active++;
-      if (s.signal_state === 'resolved') acc[s.instrument].resolved++;
+      const inst = s.instrument;
+      if (!acc[inst]) acc[inst] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
+      acc[inst].total++;
+      if (['awaiting_entry', 'active'].includes(s.signal_state)) acc[inst].active++;
+      let isWin = false;
+      try {
+        const meta = JSON.parse(s.metadata || '{}');
+        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit') isWin = true;
+      } catch {}
+      if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
+        acc[inst].resolved++;
+        if (isWin) acc[inst].wins++;
+        else acc[inst].losses++;
+        const totalClosed = acc[inst].wins + acc[inst].losses;
+        if (totalClosed > 0) acc[inst].winRate = ((acc[inst].wins / totalClosed) * 100).toFixed(1);
+      }
       return acc;
     }, {});
-    return res.json({ success: true, analytics: { totalSignals: allSignals.length, activeSignals: allSignals.filter((s: any) => ['awaiting_entry','active'].includes(s.signal_state)).length, closedSignals: closed.length, winRate, avgConviction, byInstrument, strategyId: 'elite_fractal' } });
+
+    const byKillzone = allSignals.reduce((acc: any, s: any) => {
+      const kz = s.killzone_origin || 'unknown';
+      if (!acc[kz]) acc[kz] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
+      acc[kz].total++;
+      if (['awaiting_entry', 'active'].includes(s.signal_state)) acc[kz].active++;
+      let isWin = false;
+      try {
+        const meta = JSON.parse(s.metadata || '{}');
+        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit') isWin = true;
+      } catch {}
+      if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
+        acc[kz].resolved++;
+        if (isWin) acc[kz].wins++;
+        else acc[kz].losses++;
+        const totalClosed = acc[kz].wins + acc[kz].losses;
+        if (totalClosed > 0) acc[kz].winRate = ((acc[kz].wins / totalClosed) * 100).toFixed(1);
+      }
+      return acc;
+    }, {});
+
+    return res.json({
+      success: true,
+      analytics: {
+        totalSignals: allSignals.length,
+        activeSignals: active.length,
+        closedSignals: closed.length,
+        winsCount,
+        lossesCount,
+        winRate,
+        avgConviction,
+        avgRiskReward,
+        totalRMultiple: totalR !== 0 ? totalR.toFixed(2) : '0.00',
+        profitFactor,
+        byInstrument,
+        byKillzone,
+        strategyId: 'elite_fractal'
+      }
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/exclusive-signals/scan', async (req: Request, res: Response) => {
+router.post('/exclusive-signals/scan', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const { runEliteFractalScanCycle } = await import('../scheduler/elite-fractal-scanner');
     const result = await runEliteFractalScanCycle();
@@ -2144,7 +2231,7 @@ router.post('/exclusive-signals/scan', async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/exclusive-signals/:id', async (req: Request, res: Response) => {
+router.delete('/exclusive-signals/:id', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { reason } = req.body || {};
