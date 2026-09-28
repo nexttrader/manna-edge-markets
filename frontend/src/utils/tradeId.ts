@@ -16,6 +16,11 @@ export function formatTelegramTradeId(setup: { id?: string; instrument?: string 
   if (!setup || !setup.id) return '#SND-0001';
   const sym = cleanSymbol(setup.instrument || '');
   const rawId = setup.id.replace(/^test_/, '');
+  if (rawId.startsWith('ef_')) {
+    const parts = rawId.split('_');
+    const hash = parts[parts.length - 1].toUpperCase();
+    return `#EF-${sym}-${hash}`;
+  }
   const parts = rawId.split('-');
   const suffix = parts.length > 1
     ? parts[0].substring(0, 4).toUpperCase()

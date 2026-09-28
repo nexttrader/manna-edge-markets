@@ -369,6 +369,75 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
         );
         if (existing.length > 0) continue;
 
+        // POST-STOP COOLDOWN: skip if this instrument took a stop loss within the last 60 minutes
+        // Prevents entering repeatedly into adverse momentum
+        const recentLoss = await queryDb<{ id: string }>(
+          `SELECT id FROM superadmin_edge_setups 
+           WHERE instrument = ? 
+             AND signal_state = 'resolved' 
+             AND (invalidation_reason = 'sl_hit' OR metadata LIKE '%sl_hit%')
+             AND resolved_at >= ?`,
+          [candidate.instrument, new Date(Date.now() - 60 * 60 * 1000).toISOString()]
+        );
+        if (recentLoss.length > 0) {
+          logger.info({ instrument: candidate.instrument }, 'EliteFractal: Skipping setup — instrument in 60-minute post-stop cooldown');
+          continue;
+        }
+
+        // Validate live current price before executing trade
+        let currentPrice = 0;
+        try {
+          const quote = await getLiveQuoteDetails(candidate.instrument);
+          currentPrice = quote?.price || await getLiveCurrentPrice(candidate.instrument) || 0;
+        } catch {}
+
+        if (currentPrice <= 0) {
+          logger.warn({ instrument: candidate.instrument }, 'EliteFractal: No live price available — skipping execution');
+          continue;
+        }
+
+        // BEARISH SELL SAFETY GUARDS:
+        // 1. Current price must NEVER be at or above the stop loss!
+        if (currentPrice >= candidate.stop) {
+          logger.warn(
+            { instrument: candidate.instrument, currentPrice, stop: candidate.stop },
+            'EliteFractal: REJECTED — current price is already at/above Stop Loss'
+          );
+          continue;
+        }
+
+        // 2. Current price must not have already reached TP1
+        if (currentPrice <= candidate.tp1) {
+          logger.warn(
+            { instrument: candidate.instrument, currentPrice, tp1: candidate.tp1 },
+            'EliteFractal: REJECTED — current price has already reached or passed TP1'
+          );
+          continue;
+        }
+
+        // 3. Current price must be within reasonable distance of the entry zone
+        const entryMax = candidate.entry_zone_high * (candidate.market === 'forex' ? 1.0015 : 1.005);
+        if (currentPrice > entryMax) {
+          logger.warn(
+            { instrument: candidate.instrument, currentPrice, entryMax },
+            'EliteFractal: REJECTED — price is above entry zone threshold'
+          );
+          continue;
+        }
+
+        const execPrice = currentPrice;
+        const initialStop = candidate.stop;
+        const risk = Math.abs(execPrice - initialStop);
+        const minRisk = candidate.market === 'forex' ? 0.0003 : 1.5;
+
+        if (risk < minRisk) {
+          logger.warn({ instrument: candidate.instrument, risk }, 'EliteFractal: Risk too small — skipping');
+          continue;
+        }
+
+        const tp1 = Number((execPrice - 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
+        const tp2 = Number((execPrice - 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
+
         const id = `ef_${candidate.instrument.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const ts = new Date().toISOString();
 
@@ -377,9 +446,10 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
         try { metaObj = JSON.parse(candidate.metadata || '{}'); } catch {}
         metaObj.session_found = killzone.killzone;
         metaObj.session_found_at = ts;
+        metaObj.trade_id = id;
         const enrichedMetadata = JSON.stringify(metaObj);
 
-        // INSTANT MARKET EXECUTION: Trade enters immediately upon M1 confirmation close
+        // INSTANT MARKET EXECUTION: Trade enters immediately at current market price
         await queryDb(
           `INSERT INTO superadmin_edge_setups (
             id, instrument, market, created_at, created_by_run,
@@ -403,20 +473,20 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
             candidate.bias,
             candidate.entry_zone_low,
             candidate.entry_zone_high,
-            candidate.entry_zone_mid,
-            candidate.stop,
-            candidate.tp1,
-            candidate.tp2 ?? null,
-            candidate.r_multiple_1 ?? null,
-            candidate.r_multiple_2 ?? null,
+            execPrice, // entry_zone_mid anchored to execPrice
+            initialStop,
+            tp1,
+            tp2,
+            2.0,
+            3.5,
             candidate.conviction_score ?? null,
             candidate.liquidity_score ?? null,
             candidate.strategy_id ?? 'elite_fractal',
             candidate.strategy_tier ?? 'elite',
             enrichedMetadata,
             ts, // entry_triggered_at: filled immediately
-            candidate.entry_zone_mid, // entry_price_recorded: executed at market
-            candidate.stop, // initial_stop
+            execPrice, // entry_price_recorded: executed at live market price
+            initialStop, // initial_stop
             'ENTRY_READY',
             'ENTRY_READY',
             ts
@@ -425,8 +495,8 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
 
         created++;
         logger.info(
-          { instrument: candidate.instrument, market, conviction: candidate.conviction_score, execPrice: candidate.entry_zone_mid, sessionFound: killzone.killzone },
-          `🛡️ EliteFractal: New exclusive signal published with MARKET EXECUTION entry for ${candidate.instrument}`
+          { id, instrument: candidate.instrument, market, conviction: candidate.conviction_score, execPrice, stop: initialStop, tp1, tp2, sessionFound: killzone.killzone },
+          `🛡️ EliteFractal: New exclusive signal published with verified MARKET EXECUTION entry for ${candidate.instrument}`
         );
       }
     }

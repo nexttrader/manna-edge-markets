@@ -41,6 +41,17 @@ function fmtPrice(v: number | undefined, market?: string): string {
   return market === 'forex' ? v.toFixed(5) : v.toFixed(2);
 }
 
+function formatTradeId(id: string | undefined): string {
+  if (!id) return '#EF-—';
+  const parts = id.split('_');
+  if (parts.length >= 4) {
+    const symbol = parts.slice(1, parts.length - 2).join('').toUpperCase();
+    const hash = parts[parts.length - 1].toUpperCase();
+    return `#EF-${symbol}-${hash}`;
+  }
+  return `#${id.slice(0, 14).toUpperCase()}`;
+}
+
 const PhaseCard: React.FC<{ phase: string; label: string; icon: string; count: number; active: boolean }> = ({ phase, label, icon, count, active }) => {
   const colors = PHASE_COLORS[phase] || PHASE_COLORS.SCANNING;
   return (
@@ -307,6 +318,11 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
               </span>
               {/* Strategy badge */}
               <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.62rem', fontWeight: 700 }}>ELITE FRACTAL</span>
+
+              {/* Unique Trade ID */}
+              <span style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.35)', color: '#38bdf8', borderRadius: '20px', padding: '2px 9px', fontSize: '0.64rem', fontFamily: 'monospace', fontWeight: 800 }}>
+                {formatTradeId(signal.id)}
+              </span>
 
               {/* State badge */}
               {isRunner ? (
@@ -1286,7 +1302,10 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                 return (
                   <div key={signal.id} style={{ background: 'rgba(15,20,35,0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '4px', padding: '1px 6px', fontFamily: 'monospace', fontWeight: 800 }}>
+                          {formatTradeId(signal.id)}
+                        </span>
                         <span style={{ fontWeight: 800, fontSize: '0.9rem', fontFamily: 'monospace' }}>{signal.instrument}</span>
                         <span style={{ fontSize: '0.72rem', color: '#718096' }}>{signal.market?.toUpperCase()}</span>
                         {isTp2 ? (

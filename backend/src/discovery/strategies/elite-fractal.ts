@@ -240,17 +240,30 @@ export class EliteFractalStrategy implements IStrategyEngine {
     this.transitionTo(instrument, m5Scan.jumpToState);
     if ((state.state as string) !== StateMachineState.M5_SWING_CONFIRMED) return null;
 
-    // Step 4: M1 retrospective scan
-    const m1Candles = await fetchCandles(instrument, '1m', 200);
-    if (m1Candles.length < 40) return null;
+    // Step 4: M1 retrospective scan — entry trigger must be recent and fresh!
+    const m1Candles = await fetchCandles(instrument, '1m', 100);
+    if (m1Candles.length < 25) return null;
+
+    // Guard: check that recent price action hasn't broken above the M15 swing high
+    if (state.m15SwingHigh) {
+      const recentHigh = Math.max(...m1Candles.slice(-10).map(c => c.high));
+      if (recentHigh >= state.m15SwingHigh) {
+        this.transitionTo(instrument, StateMachineState.INVALIDATED);
+        return null;
+      }
+    }
 
     const m1Scan = this.retrospectiveScanM1(m1Candles, state);
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    if (state.m1OCs && state.m1OCs.length >= 1) {
+    // STRICT VERIFICATION: Require 2 confirmed M1 displacement OCs before ENTRY_READY!
+    if (state.m1OCs && state.m1OCs.length >= 2) {
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
       return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
+    } else if (state.m1OCs && state.m1OCs.length === 1) {
+      this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
+      return null;
     } else {
       this.transitionTo(instrument, StateMachineState.M1_SCANNING);
       return null;
@@ -347,7 +360,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const afterTime = state.m5ConfirmationTime || 0;
     const validOCs: OCDetails[] = [];
 
-    for (let i = 1; i <= Math.min(100, candles.length - 3); i++) {
+    // Only look back up to 25 M1 candles — entry trigger MUST be recent and active
+    for (let i = 1; i <= Math.min(25, candles.length - 3); i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
       const ts = new Date(candle.timestamp).getTime();
