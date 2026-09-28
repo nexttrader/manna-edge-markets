@@ -187,6 +187,14 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         metaObj.lowest_price = lowestPrice;
         metaObj.duration_min = durationMin;
 
+        // Capture exit session using killzone mapping
+        try {
+          const { mapTimestampToKillzone } = await import('./killzone-mapper');
+          const exitKz = mapTimestampToKillzone(new Date(now));
+          metaObj.session_exited = exitKz?.killzone || 'unknown';
+          metaObj.session_exited_at = now;
+        } catch {}
+
         await queryDb(
           `UPDATE superadmin_edge_setups 
            SET signal_state = 'resolved', 
@@ -286,15 +294,24 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
       const candidates = await strategy.evaluateSetups(killzone, runId, market, instruments, allBiases);
 
       for (const candidate of candidates) {
-        // Dedup: skip if active/runner signal already exists for this instrument
+        // Dedup: skip if active/awaiting_entry signal already exists for this instrument.
+        // IMPORTANT: 'runner' state means TP1 was already hit — scanner IS ALLOWED to
+        // find a fresh new setup for the same instrument while the runner is riding to TP2.
         const existing = await queryDb<{ id: string }>(
-          `SELECT id FROM superadmin_edge_setups WHERE instrument = ? AND signal_state IN ('awaiting_entry','active','runner') AND superseded = 0`,
+          `SELECT id FROM superadmin_edge_setups WHERE instrument = ? AND signal_state IN ('awaiting_entry','active') AND superseded = 0`,
           [candidate.instrument]
         );
         if (existing.length > 0) continue;
 
         const id = `ef_${candidate.instrument.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const ts = new Date().toISOString();
+
+        // Enrich metadata with session_found (which killzone the signal was discovered in)
+        let metaObj: any = {};
+        try { metaObj = JSON.parse(candidate.metadata || '{}'); } catch {}
+        metaObj.session_found = killzone.killzone;
+        metaObj.session_found_at = ts;
+        const enrichedMetadata = JSON.stringify(metaObj);
 
         // INSTANT MARKET EXECUTION: Trade enters immediately upon M1 confirmation close
         await queryDb(
@@ -330,7 +347,7 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
             candidate.liquidity_score ?? null,
             candidate.strategy_id ?? 'elite_fractal',
             candidate.strategy_tier ?? 'elite',
-            candidate.metadata ?? null,
+            enrichedMetadata,
             ts, // entry_triggered_at: filled immediately
             candidate.entry_zone_mid, // entry_price_recorded: executed at market
             candidate.stop, // initial_stop
@@ -342,7 +359,7 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
 
         created++;
         logger.info(
-          { instrument: candidate.instrument, market, conviction: candidate.conviction_score, execPrice: candidate.entry_zone_mid },
+          { instrument: candidate.instrument, market, conviction: candidate.conviction_score, execPrice: candidate.entry_zone_mid, sessionFound: killzone.killzone },
           `🛡️ EliteFractal: New exclusive signal published with MARKET EXECUTION entry for ${candidate.instrument}`
         );
       }

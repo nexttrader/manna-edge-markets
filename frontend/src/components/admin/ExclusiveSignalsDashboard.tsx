@@ -178,11 +178,88 @@ const InstrumentTelemetryCard: React.FC<{
   );
 };
 
-const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string) => void }> = ({ signal, onDismiss }) => {
+// Session display helper (mirrors backend killzone-mapper logic)
+function getSessionFromTime(isoStr?: string | null): string {
+  if (!isoStr) return '—';
+  try {
+    const d = new Date(isoStr);
+    const etHour = parseInt(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(d),
+      10
+    );
+    if (etHour >= 20 || etHour < 2) return 'Asia';
+    if (etHour >= 2 && etHour < 8)  return 'London';
+    if (etHour >= 8 && etHour < 14) return 'NY AM';
+    if (etHour >= 14 && etHour < 20) return 'NY PM';
+    return '—';
+  } catch { return '—'; }
+}
+
+const SESSION_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  'Asia':    { bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.5)',  text: '#fbbf24' },
+  'London':  { bg: 'rgba(56,189,248,0.15)',  border: 'rgba(56,189,248,0.5)',  text: '#38bdf8' },
+  'NY AM':   { bg: 'rgba(34,197,94,0.15)',   border: 'rgba(34,197,94,0.5)',   text: '#4ade80' },
+  'NY PM':   { bg: 'rgba(168,85,247,0.15)',  border: 'rgba(168,85,247,0.5)',  text: '#c084fc' },
+};
+
+const SessionBadge: React.FC<{ label: string; session: string; dim?: boolean }> = ({ label, session, dim }) => {
+  const colors = SESSION_COLORS[session] || { bg: 'rgba(100,116,139,0.15)', border: 'rgba(100,116,139,0.4)', text: '#94a3b8' };
+  return (
+    <span style={{
+      background: dim ? 'rgba(255,255,255,0.05)' : colors.bg,
+      border: `1px solid ${dim ? 'rgba(255,255,255,0.1)' : colors.border}`,
+      color: dim ? '#718096' : colors.text,
+      borderRadius: '6px',
+      padding: '2px 8px',
+      fontSize: '0.62rem',
+      fontWeight: 700,
+      whiteSpace: 'nowrap'
+    }}>
+      {label}: {session}
+    </span>
+  );
+};
+
+const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string) => void; isRunner?: boolean }> = ({ signal, onDismiss, isRunner }) => {
   const [dismissing, setDismissing] = useState(false);
   const [showChart, setShowChart] = useState(false);
-  const isShort = signal.bias === 'short';
+  const isForex = signal.market === 'forex';
   const meta = (() => { try { return JSON.parse(signal.metadata || '{}'); } catch { return {}; } })();
+
+  // Market-based theming — FOREX = violet/purple, FUTURES = cyan/blue
+  const marketTheme = isForex
+    ? {
+        bg:      'linear-gradient(135deg, rgba(20,12,50,0.97) 0%, rgba(32,16,72,0.97) 100%)',
+        border:  'rgba(139,92,246,0.5)',
+        accent:  '#8b5cf6',
+        accentLight: '#a78bfa',
+        accentBg: 'rgba(139,92,246,0.15)',
+        accentText: '#a78bfa',
+        marketLabel: '💱 FOREX',
+        labelBg: 'rgba(139,92,246,0.15)',
+        labelBorder: 'rgba(139,92,246,0.5)',
+        labelColor: '#a78bfa'
+      }
+    : {
+        bg:      'linear-gradient(135deg, rgba(10,20,50,0.97) 0%, rgba(10,30,65,0.97) 100%)',
+        border:  'rgba(56,189,248,0.5)',
+        accent:  '#0ea5e9',
+        accentLight: '#38bdf8',
+        accentBg: 'rgba(56,189,248,0.15)',
+        accentText: '#38bdf8',
+        marketLabel: '📊 FUTURES',
+        labelBg: 'rgba(56,189,248,0.15)',
+        labelBorder: 'rgba(56,189,248,0.5)',
+        labelColor: '#38bdf8'
+      };
+
+  const runnerTheme = {
+    bg:     'linear-gradient(135deg, rgba(80,30,15,0.98) 0%, rgba(55,20,8,0.98) 100%)',
+    border: 'rgba(251,146,60,0.6)',
+    accent: '#f97316',
+  };
+
+  const theme = isRunner ? runnerTheme : marketTheme;
 
   const handleDismiss = async () => {
     if (!confirm('Dismiss this exclusive signal?')) return;
@@ -191,77 +268,114 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
     setDismissing(false);
   };
 
+  // Derive session labels
+  const sessionFound = meta.session_found
+    ? (meta.session_found === 'ny_am' ? 'NY AM' : meta.session_found === 'ny_pm' ? 'NY PM' : meta.session_found.charAt(0).toUpperCase() + meta.session_found.slice(1))
+    : getSessionFromTime(signal.created_at);
+
+  const sessionExited = meta.session_exited
+    ? (meta.session_exited === 'ny_am' ? 'NY AM' : meta.session_exited === 'ny_pm' ? 'NY PM' : meta.session_exited.charAt(0).toUpperCase() + meta.session_exited.slice(1))
+    : (signal.resolved_at ? getSessionFromTime(signal.resolved_at) : null);
+
+  const entryTime = signal.entry_triggered_at || signal.created_at;
+  const exitTime  = signal.resolved_at;
+
   return (
     <>
       <div style={{
-        background: 'linear-gradient(135deg, rgba(20,15,45,0.95) 0%, rgba(30,20,60,0.95) 100%)',
-        border: '1px solid rgba(139,92,246,0.4)', borderLeft: '4px solid #8b5cf6', borderRadius: '12px', padding: '18px 20px', position: 'relative'
+        background: theme.bg,
+        border: `1px solid ${theme.border}`,
+        borderLeft: isRunner ? `5px solid ${runnerTheme.accent}` : `5px solid ${isForex ? '#8b5cf6' : '#0ea5e9'}`,
+        borderRadius: '12px',
+        padding: '14px 16px',
+        position: 'relative',
+        overflow: 'hidden'
       }}>
-        {/* Card Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 900, fontSize: '1.15rem', color: '#e2e8f0', fontFamily: 'monospace' }}>{signal.instrument}</span>
-              <span style={{ background: isShort ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)', border: `1px solid ${isShort ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.5)'}`, color: isShort ? '#f87171' : '#34d399', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: 800 }}>{isShort ? '▼ SELL' : '▲ BUY'}</span>
-              <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 700 }}>ELITE FRACTAL</span>
-              {signal.signal_state === 'runner' ? (
-                <span style={{ background: 'rgba(168,85,247,0.18)', border: '1px solid rgba(168,85,247,0.5)', color: '#c084fc', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800 }}>
-                  🏃 RUNNER (+2.0R BOOKED · STOP @ BE)
+
+        {/* ── ROW 1: Header ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+          {/* Left: instrument + badges */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#e2e8f0', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                {signal.instrument}
+              </span>
+              <span style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#f87171', borderRadius: '20px', padding: '2px 10px', fontSize: '0.7rem', fontWeight: 800 }}>▼ SELL</span>
+              {/* Market badge */}
+              <span style={{ background: marketTheme.labelBg, border: `1px solid ${marketTheme.labelBorder}`, color: marketTheme.labelColor, borderRadius: '20px', padding: '2px 10px', fontSize: '0.66rem', fontWeight: 800 }}>
+                {marketTheme.marketLabel}
+              </span>
+              {/* Strategy badge */}
+              <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.62rem', fontWeight: 700 }}>ELITE FRACTAL</span>
+
+              {/* State badge */}
+              {isRunner ? (
+                <span style={{ background: 'rgba(249,115,22,0.18)', border: '1px solid rgba(249,115,22,0.6)', color: '#fb923c', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f97316', boxShadow: '0 0 6px #f97316', display: 'inline-block' }} />
+                  🏃 RUNNER · TP1 (+2R) BOOKED · STOP @ BE
                 </span>
               ) : signal.signal_state === 'active' ? (
                 <span style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.5)', color: '#34d399', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
-                  ACTIVE · MARKET EXECUTED @ {fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market)}
+                  ACTIVE
                 </span>
               ) : (
                 <span style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.5)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800 }}>
-                  ⏳ PENDING MARKET FILL
+                  ⏳ PENDING FILL
                 </span>
               )}
 
-              {/* Live Price Tag */}
+              {/* Live Price chip */}
               {signal.current_price && (
-                <span style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.5)', color: '#38bdf8', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.4)', color: '#38bdf8', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8', display: 'inline-block', boxShadow: '0 0 6px #38bdf8' }} />
-                  LIVE PRICE: {fmtPrice(signal.current_price, signal.market)}
+                  ● {fmtPrice(signal.current_price, signal.market)}
                 </span>
               )}
             </div>
 
-            {/* Entry Time & Exit Time row */}
-            <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span>{signal.market?.toUpperCase()} · {(signal.killzone_origin || '').toUpperCase().replace('_', ' ')}</span>
-              <span>⚡ <strong>Entry Time:</strong> {signal.entry_triggered_at ? formatETTime(signal.entry_triggered_at) : (signal.created_at ? formatETTime(signal.created_at) : '—')}</span>
-              {signal.resolved_at && (
-                <span style={{ color: '#f87171' }}>🏁 <strong>Exit Time:</strong> {formatETTime(signal.resolved_at)}</span>
+            {/* ── Timing & Session Row ── */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                ⚡ <strong style={{ color: '#94a3b8' }}>Entry:</strong> {entryTime ? formatETTime(entryTime) : '—'}
+              </span>
+              {exitTime && (
+                <span style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                  🏁 <strong style={{ color: '#f87171' }}>Exit:</strong> {formatETTime(exitTime)}
+                </span>
               )}
+              <SessionBadge label="Found" session={sessionFound} />
+              {sessionExited && <SessionBadge label="Exited" session={sessionExited} />}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+
+          {/* Right: conviction + buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {signal.conviction_score && (
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#a78bfa', fontFamily: 'monospace' }}>{signal.conviction_score.toFixed(1)}%</div>
-                <div style={{ fontSize: '0.62rem', color: '#718096', textTransform: 'uppercase' }}>Conviction</div>
+              <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '6px 10px' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isForex ? '#a78bfa' : '#38bdf8', fontFamily: 'monospace' }}>
+                  {signal.conviction_score.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.55rem', color: '#718096', textTransform: 'uppercase' }}>Conviction</div>
               </div>
             )}
             <button
               onClick={() => setShowChart(true)}
               style={{
-                background: 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)',
-                border: '1px solid rgba(167,139,250,0.6)',
-                color: '#f5f3ff',
+                background: isForex ? 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)' : 'linear-gradient(135deg, #0369a1 0%, #075985 100%)',
+                border: `1px solid ${isForex ? 'rgba(167,139,250,0.6)' : 'rgba(56,189,248,0.5)'}`,
+                color: '#f0f9ff',
                 borderRadius: '8px',
-                padding: '8px 14px',
+                padding: '6px 12px',
                 cursor: 'pointer',
-                fontSize: '0.75rem',
+                fontSize: '0.72rem',
                 fontWeight: 800,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 10px rgba(124,58,237,0.3)'
+                gap: '5px'
               }}
             >
-              📊 Full Chart (H1 · M15 · M5 · M1)
+              📊 Chart
             </button>
             <button
               onClick={handleDismiss}
@@ -271,127 +385,121 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
                 border: '1px solid rgba(239,68,68,0.3)',
                 color: '#f87171',
                 borderRadius: '8px',
-                padding: '8px 12px',
+                padding: '6px 10px',
                 cursor: 'pointer',
                 fontSize: '0.72rem',
                 fontWeight: 700
               }}
             >
-              ✕ Dismiss
+              ✕
             </button>
           </div>
         </div>
 
-        {/* LIVE RR / OPEN PnL BANNER (Like Manna SnD setup card) */}
-        {(signal.signal_state === 'active' || signal.signal_state === 'runner') && (signal.unrealizedR !== undefined || signal.current_price) && (
+        {/* ── LIVE RR BANNER (active/runner trades only) ── */}
+        {(signal.signal_state === 'active' || isRunner) && (signal.unrealizedR !== undefined || signal.current_price) && (
           <div style={{
             background: (signal.unrealizedR ?? 0) >= 0
-              ? 'linear-gradient(90deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.08) 100%)'
-              : 'linear-gradient(90deg, rgba(239,68,68,0.2) 0%, rgba(185,28,28,0.08) 100%)',
-            border: `1px solid ${(signal.unrealizedR ?? 0) >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)'}`,
-            borderRadius: '10px',
-            padding: '10px 16px',
+              ? 'linear-gradient(90deg, rgba(16,185,129,0.18) 0%, transparent 100%)'
+              : 'linear-gradient(90deg, rgba(239,68,68,0.18) 0%, transparent 100%)',
+            border: `1px solid ${(signal.unrealizedR ?? 0) >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+            borderRadius: '8px',
+            padding: '7px 14px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '14px',
-            boxShadow: (signal.unrealizedR ?? 0) >= 0 ? '0 2px 12px rgba(16,185,129,0.15)' : '0 2px 12px rgba(239,68,68,0.15)'
+            marginBottom: '10px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '1.25rem' }}>{signal.is_breakeven ? '🛡️' : (signal.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{isRunner ? '🏃' : (signal.is_breakeven ? '🛡️' : ((signal.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'))}</span>
               <div>
-                <div style={{ fontSize: '0.74rem', fontWeight: 800, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  LIVE RR: {signal.is_breakeven ? <span style={{ color: '#fbbf24', marginLeft: '6px' }}>(RISK FREE · STOP AT BE)</span> : null}
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171', textTransform: 'uppercase' }}>
+                  LIVE RR {isRunner ? '— RUNNER (TP1 secured, riding TP2)' : signal.is_breakeven ? '— RISK FREE' : ''}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Dynamic real-time excursion tracking</div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontFamily: 'monospace' }}>
-              <span style={{ fontSize: '1.35rem', fontWeight: 900, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171' }}>
                 {(signal.unrealizedR ?? 0) > 0 ? '+' : ''}{(signal.unrealizedR ?? 0).toFixed(2)}R
               </span>
               {signal.current_price && (
-                <span style={{ fontSize: '0.78rem', color: '#cbd5e1', background: 'rgba(0,0,0,0.3)', padding: '3px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  Price: {fmtPrice(signal.current_price, signal.market)}
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '2px 7px', borderRadius: '5px' }}>
+                  {fmtPrice(signal.current_price, signal.market)}
                 </span>
               )}
             </div>
           </div>
         )}
 
-        {/* Levels Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+        {/* ── PRICE LEVELS — Column grid (like Manna SnD) ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, 1fr)',
+          gap: '8px',
+          marginBottom: '10px'
+        }}>
           {[
-            { label: 'Market Exec Fill', value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#38bdf8', sub: 'Executed Fill' },
-            { label: 'Live Price',       value: fmtPrice(signal.current_price || signal.entry_zone_mid, signal.market),         color: '#34d399', sub: 'Current Market' },
-            { label: 'Entry Low',        value: fmtPrice(signal.entry_zone_low,  signal.market),                                color: '#e2e8f0', sub: 'Zone Floor' },
-            { label: 'Entry High',       value: fmtPrice(signal.entry_zone_high, signal.market),                                color: '#e2e8f0', sub: 'Zone Ceiling' },
-            { label: 'Stop Loss',        value: fmtPrice(signal.stop,            signal.market),                                color: '#f87171', sub: signal.is_breakeven ? 'Locked at BE' : 'Inval Level' },
-            { label: 'TP1 (+2.0R)',      value: fmtPrice(signal.tp1,             signal.market),                                color: '#34d399', sub: 'Target 1' },
-            { label: 'TP2 (+3.5R)',      value: fmtPrice(signal.tp2,             signal.market),                                color: '#10b981', sub: 'Target 2' }
+            { label: 'Entry Fill',   value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#e2e8f0',  sub: 'Market Exec' },
+            { label: 'Stop Loss',    value: fmtPrice(signal.stop, signal.market),                                           color: '#f87171',  sub: isRunner || signal.is_breakeven ? 'Locked @ BE' : 'Invalidation' },
+            { label: 'TP1 (+2.0R)', value: fmtPrice(signal.tp1, signal.market),                                            color: '#34d399',  sub: isRunner ? '✓ Booked' : 'Target 1' },
+            { label: 'TP2 (+3.5R)', value: fmtPrice(signal.tp2, signal.market),                                            color: '#10b981',  sub: isRunner ? '← Active' : 'Target 2' },
+            { label: 'Live Price',   value: signal.current_price ? fmtPrice(signal.current_price, signal.market) : '—',    color: '#38bdf8',  sub: 'Real-time' },
           ].map(item => (
-            <div key={item.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 12px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontSize: '0.62rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 700 }}>{item.label}</div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: item.color, fontFamily: 'monospace' }}>{item.value}</div>
-              <div style={{ fontSize: '0.55rem', color: '#64748b', marginTop: '2px' }}>{item.sub}</div>
+            <div key={item.label} style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '0.58rem', color: '#718096', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 700 }}>{item.label}</div>
+              <div style={{ fontSize: '0.88rem', fontWeight: 900, color: item.color, fontFamily: 'monospace' }}>{item.value}</div>
+              <div style={{ fontSize: '0.52rem', color: '#4a5568', marginTop: '2px' }}>{item.sub}</div>
             </div>
           ))}
         </div>
 
-        {/* 4-Timeframe State Verification Breakdown */}
+        {/* ── 4TF State Verification (compact) ── */}
         <div style={{
-          background: 'rgba(10,8,25,0.7)',
-          border: '1px solid rgba(139,92,246,0.25)',
-          borderRadius: '10px',
-          padding: '12px 14px',
-          marginBottom: '10px'
+          background: 'rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255,255,255,0.05)',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginBottom: '8px'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              ⚡ State Machine Progression & Fractal Verification
+          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>⚡ 4TF Verified:</span>
+          {[
+            { label: 'H1', detail: meta.phases?.h1POIType || 'POI' },
+            { label: 'M15', detail: 'Reversal' },
+            { label: 'M5', detail: 'Swing ✓' },
+            { label: `M1 (${meta.phases?.m1OCCount || 2}/2 OCs)`, detail: meta.phases?.finalOCPOIType || 'OC' },
+          ].map(phase => (
+            <span key={phase.label} style={{
+              background: 'rgba(16,185,129,0.1)',
+              border: '1px solid rgba(16,185,129,0.3)',
+              color: '#34d399',
+              borderRadius: '6px',
+              padding: '2px 8px',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              whiteSpace: 'nowrap'
+            }}>
+              ✓ {phase.label} — {phase.detail}
             </span>
-            <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>
-              All 4 Stages Verified ✓
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-            {/* H1 */}
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 10px', border: '1px solid rgba(139,92,246,0.15)' }}>
-              <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 700 }}>1. H1 CONTEXT</div>
-              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>✓ {meta.phases?.h1POIType || 'POI'} Tapped</div>
-              <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px' }}>Level: {meta.phases?.h1POILevel ? fmtPrice(meta.phases.h1POILevel, signal.market) : 'Tapped'}</div>
-            </div>
-            {/* M15 */}
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 10px', border: '1px solid rgba(139,92,246,0.15)' }}>
-              <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 700 }}>2. M15 SETUP</div>
-              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>✓ Reversal Confirmed</div>
-              <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px' }}>Swing: {meta.phases?.m15SwingHigh ? fmtPrice(meta.phases.m15SwingHigh, signal.market) : 'Formed'}</div>
-            </div>
-            {/* M5 */}
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 10px', border: '1px solid rgba(139,92,246,0.15)' }}>
-              <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 700 }}>3. M5 CONFIRMATION</div>
-              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>✓ Swing Structure</div>
-              <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px' }}>Bearish Liquidity Sweep</div>
-            </div>
-            {/* M1 */}
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 10px', border: '1px solid rgba(139,92,246,0.15)' }}>
-              <div style={{ fontSize: '0.62rem', color: '#94a3b8', fontWeight: 700 }}>4. M1 ENTRY TRIGGER</div>
-              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#10b981', marginTop: '2px' }}>⚡ {meta.phases?.m1OCCount || 2}/2 OCs Aligned</div>
-              <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px' }}>Trigger: {meta.phases?.finalOCPOIType || 'Displacement'}</div>
-            </div>
-          </div>
+          ))}
         </div>
 
+        {/* ── Rationale ── */}
         {meta.selection_rationale && (
-          <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', lineHeight: 1.5 }}>{meta.selection_rationale}</div>
+          <div style={{ fontSize: '0.67rem', color: '#4a5568', lineHeight: 1.5 }}>{meta.selection_rationale}</div>
         )}
       </div>
 
-      {/* Full Chart Modal */}
-      {showChart && (
-        <SetupChartModal setup={signal} onClose={() => setShowChart(false)} />
-      )}
+      {showChart && <SetupChartModal setup={signal} onClose={() => setShowChart(false)} />}
     </>
   );
 };
@@ -415,7 +523,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
     getExportUrl
   } = useExclusiveSignals();
 
-  const [activeSection, setActiveSection] = useState<'live' | 'calendar' | 'telemetry' | 'analytics' | 'history' | 'export'>('live');
+  const [activeSection, setActiveSection] = useState<'live' | 'runners' | 'calendar' | 'telemetry' | 'analytics' | 'history' | 'export'>('live');
   const [scanningMarket, setScanningMarket] = useState<'both' | 'forex' | 'futures'>('both');
   const [activeChartSetup, setActiveChartSetup] = useState<EdgeSetup | null>(null);
   const [resettingBaseline, setResettingBaseline] = useState(false);
@@ -592,35 +700,142 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       {/* SECTION TABS */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.07)', paddingBottom: '12px', overflowX: 'auto' }}>
         {[
-          { id: 'live',      label: `⚡ Live Signals (${signals.length})` },
+          { id: 'live',      label: `⚡ Live Signals (${signals.filter(s => s.signal_state !== 'runner').length})` },
+          { id: 'runners',   label: `🏃 Runners (${signals.filter(s => s.signal_state === 'runner').length})` },
           { id: 'calendar',  label: `📅 Calendar (${outcomes.length})` },
-          { id: 'telemetry', label: `🔭 Instrument Telemetry (${telemetry.length})` },
-          { id: 'analytics', label: `📈 Standalone Analytics` },
+          { id: 'telemetry', label: `🔭 Telemetry (${telemetry.length})` },
+          { id: 'analytics', label: `📈 Analytics` },
           { id: 'history',   label: `📋 History (${historySignals.length})` },
-          { id: 'export',    label: `📥 Export Logs (CSV)` }
+          { id: 'export',    label: `📥 Export (CSV)` }
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveSection(tab.id as any)} style={{ background: activeSection === tab.id ? 'rgba(139,92,246,0.2)' : 'transparent', border: `1px solid ${activeSection === tab.id ? 'rgba(139,92,246,0.5)' : 'transparent'}`, color: activeSection === tab.id ? '#a78bfa' : '#718096', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, transition: 'all 0.2s', whiteSpace: 'nowrap' }}>{tab.label}</button>
+          <button
+            key={tab.id}
+            onClick={() => setActiveSection(tab.id as any)}
+            style={{
+              background: activeSection === tab.id
+                ? (tab.id === 'runners' ? 'rgba(249,115,22,0.2)' : 'rgba(139,92,246,0.2)')
+                : 'transparent',
+              border: `1px solid ${activeSection === tab.id ? (tab.id === 'runners' ? 'rgba(249,115,22,0.5)' : 'rgba(139,92,246,0.5)') : 'transparent'}`,
+              color: activeSection === tab.id ? (tab.id === 'runners' ? '#fb923c' : '#a78bfa') : '#718096',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+          >{tab.label}</button>
         ))}
       </div>
 
-      {/* LIVE SIGNALS */}
-      {activeSection === 'live' && (
-        <div>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px', color: '#4a5568' }}>Loading exclusive signals...</div>
-          ) : signals.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px', background: 'rgba(15,20,40,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🛡️</div>
-              <div style={{ color: '#718096', fontWeight: 700 }}>No active exclusive signals</div>
-              <div style={{ color: '#4a5568', fontSize: '0.78rem', marginTop: '8px' }}>Run an Elite Fractal scan to generate signals, or wait for the next scheduled continuous scan.</div>
+      {/* LIVE SIGNALS (active / awaiting_entry only — NOT runners) */}
+      {activeSection === 'live' && (() => {
+        const activeSignals = signals.filter(s => s.signal_state !== 'runner');
+        const fxSignals  = activeSignals.filter(s => s.market === 'forex');
+        const futSignals = activeSignals.filter(s => s.market === 'futures');
+        return (
+          <div>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#4a5568' }}>Loading exclusive signals...</div>
+            ) : activeSignals.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', background: 'rgba(15,20,40,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🛡️</div>
+                <div style={{ color: '#718096', fontWeight: 700 }}>No active exclusive signals</div>
+                <div style={{ color: '#4a5568', fontSize: '0.78rem', marginTop: '8px' }}>Run an Elite Fractal scan to generate signals, or wait for the next scheduled continuous scan.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* FUTURES column group */}
+                {futSignals.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📊 Futures Signals</span>
+                      <span style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '20px', padding: '1px 10px', fontSize: '0.7rem' }}>{futSignals.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: '14px' }}>
+                      {futSignals.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} />)}
+                    </div>
+                  </div>
+                )}
+                {/* FOREX column group */}
+                {fxSignals.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>💱 Forex Signals</span>
+                      <span style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '20px', padding: '1px 10px', fontSize: '0.7rem' }}>{fxSignals.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: '14px' }}>
+                      {fxSignals.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* RUNNERS TAB — Signals that hit TP1 and are riding towards TP2 */}
+      {activeSection === 'runners' && (() => {
+        const runnerSignals = signals.filter(s => s.signal_state === 'runner');
+        const fxRunners  = runnerSignals.filter(s => s.market === 'forex');
+        const futRunners = runnerSignals.filter(s => s.market === 'futures');
+        return (
+          <div>
+            {/* Runner explanation banner */}
+            <div style={{
+              background: 'linear-gradient(90deg, rgba(249,115,22,0.15) 0%, rgba(251,146,60,0.08) 100%)',
+              border: '1px solid rgba(249,115,22,0.4)',
+              borderRadius: '10px',
+              padding: '12px 18px',
+              marginBottom: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '1.3rem' }}>🏃</span>
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#fb923c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Runner Portfolio — TP1 Banked · Riding TP2</div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>These setups have hit TP1 (+2R). Stop is locked at Break-Even. Scanner is FREE to find fresh setups for these instruments.</div>
+              </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {signals.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} />)}
-            </div>
-          )}
-        </div>
-      )}
+
+            {runnerSignals.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', background: 'rgba(15,20,40,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🏃</div>
+                <div style={{ color: '#718096', fontWeight: 700 }}>No runner signals</div>
+                <div style={{ color: '#4a5568', fontSize: '0.78rem', marginTop: '8px' }}>Runners appear here when active signals hit TP1 (+2R). Stop is then moved to breakeven while targeting TP2 (+3.5R).</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {futRunners.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📊 Futures Runners</span>
+                      <span style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: '20px', padding: '1px 10px', fontSize: '0.7rem', color: '#fb923c' }}>{futRunners.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: '14px' }}>
+                      {futRunners.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} isRunner />)}
+                    </div>
+                  </div>
+                )}
+                {fxRunners.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>💱 Forex Runners</span>
+                      <span style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: '20px', padding: '1px 10px', fontSize: '0.7rem', color: '#fb923c' }}>{fxRunners.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: '14px' }}>
+                      {fxRunners.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} isRunner />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* CALENDAR SECTION */}
       {activeSection === 'calendar' && (
