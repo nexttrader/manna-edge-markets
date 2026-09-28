@@ -90,8 +90,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         }
 
         if (candles && candles.length > 0) {
-          const post = candles.filter((c: any) => new Date(c.timestamp).getTime() >= (entryMs - 60000));
-          const candlesToCheck = post.length > 0 ? post : candles;
+          // Only include candles from entry time onward — not before!
+          // Using entryMs - 60000 was pulling in pre-entry candle wicks which falsely triggered SL checks.
+          const post = candles.filter((c: any) => new Date(c.timestamp).getTime() >= entryMs);
+          const candlesToCheck = post.length > 0 ? post : candles.slice(-3); // fallback: last 3 candles only
           maxHigh = Math.max(currentAsk, ...candlesToCheck.map((c: any) => c.high));
           minLow = Math.min(currentBid, ...candlesToCheck.map((c: any) => c.low));
         }

@@ -227,7 +227,12 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     Object.assign(state, m15Scan.data || {});
     this.transitionTo(instrument, m15Scan.jumpToState);
-    if (state.state !== StateMachineState.M15_REVERSAL_CONFIRMED) return null;
+
+    // Allow both M15_REVERSAL_CONFIRMED (strongest) and M15_OC_FORMED (valid setup stage)
+    // to proceed to M5 confirmation — M15_OC_FORMED is a legitimate bearish setup initiation.
+    const m15StateOk = state.state === StateMachineState.M15_REVERSAL_CONFIRMED ||
+                       state.state === StateMachineState.M15_OC_FORMED;
+    if (!m15StateOk) return null;
 
     // Step 3: M5 retrospective scan
     const m5Candles = await fetchCandles(instrument, '5m', 180);
@@ -257,13 +262,11 @@ export class EliteFractalStrategy implements IStrategyEngine {
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    // STRICT VERIFICATION: Require 2 confirmed M1 displacement OCs before ENTRY_READY!
-    if (state.m1OCs && state.m1OCs.length >= 2) {
+    // Require at least 1 confirmed M1 displacement OC for ENTRY_READY.
+    // 2 OCs gives higher conviction (bonus conviction score) but 1 is sufficient.
+    if (state.m1OCs && state.m1OCs.length >= 1) {
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
       return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
-    } else if (state.m1OCs && state.m1OCs.length === 1) {
-      this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
-      return null;
     } else {
       this.transitionTo(instrument, StateMachineState.M1_SCANNING);
       return null;
@@ -320,7 +323,11 @@ export class EliteFractalStrategy implements IStrategyEngine {
         return {
           foundPattern: true,
           jumpToState: StateMachineState.M15_OC_FORMED,
-          data: { m15POI: { type: POIType.ORDER_BLOCK, priceLevel: oc.high, candleIndex: idx, timestamp: candle.timestamp, high: oc.high, low: oc.low } }
+          data: {
+            m15POI: { type: POIType.ORDER_BLOCK, priceLevel: oc.high, candleIndex: idx, timestamp: candle.timestamp, high: oc.high, low: oc.low },
+            m15ConfirmationTime: new Date(candle.timestamp).getTime(), // anchor M5 afterTime
+            m15SwingHigh: oc.swingHigh  // use OC high as swing reference for invalidation guard
+          }
         };
       }
     }
@@ -424,21 +431,26 @@ export class EliteFractalStrategy implements IStrategyEngine {
     let foundPOI = false;
     let poiType: POIType = POIType.SWING_HIGH;
 
+    // First pass: collect the high/low range of the setup candles leading into the displacement
+    // AND check for a POI (FVG or swing high) among those setup candles.
+    // We MUST accumulate highs/lows regardless of whether a POI is found so setupHigh is valid.
     for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
       const c = candles[i];
+      // Always accumulate range — this was the bug: break fired before accumulation
+      setupHigh = Math.max(setupHigh, c.high);
+      setupLow = Math.min(setupLow, c.low);
       const fvg = this.detectFVG(candles, i, 'BEARISH');
       const swing = this.detectSwingHighAt(candles, i);
       if (fvg || swing) {
         foundPOI = true;
         poiType = fvg ? POIType.FVG : POIType.SWING_HIGH;
-        break;
+        // Do NOT break — keep accumulating to ensure setupHigh covers full setup range
       }
-      setupHigh = Math.max(setupHigh, c.high);
-      setupLow = Math.min(setupLow, c.low);
     }
 
     if (!foundPOI || setupHigh === -Infinity) return null;
 
+    // Confirm: the bodies of the setup candles must sit above the displacement candle's close
     const setupCandles = Array.from({ length: Math.min(3, displacementIdx) }, (_, k) => candles[displacementIdx - 1 - k]);
     const allBodiesAbove = setupCandles.every(c => Math.min(c.open, c.close) > displacement.close);
     if (!allBodiesAbove) return null;
