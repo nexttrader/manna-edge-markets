@@ -3,6 +3,7 @@ import { useExclusiveSignals, type StateMachineTelemetry, type InstrumentAnalyti
 import { type EdgeSetup } from '../../types';
 import { formatETTime } from '../../utils/time';
 import { SetupChartModal } from '../SetupChartModal';
+import { ExpandableCalendar } from '../ExpandableCalendar';
 
 // Phase color map
 const PHASE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -217,13 +218,22 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
                   ⏳ PENDING MARKET FILL
                 </span>
               )}
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '4px' }}>
-              {signal.market?.toUpperCase()} · {(signal.killzone_origin || '').toUpperCase().replace('_', ' ')} · Signal: {signal.created_at ? formatETTime(signal.created_at) : '—'}
-              {signal.entry_triggered_at && (
-                <span style={{ color: '#34d399', marginLeft: '8px', fontWeight: 700 }}>
-                  ⚡ Executed: {formatETTime(signal.entry_triggered_at)}
+
+              {/* Live Price Tag */}
+              {signal.current_price && (
+                <span style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.5)', color: '#38bdf8', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8', display: 'inline-block', boxShadow: '0 0 6px #38bdf8' }} />
+                  LIVE PRICE: {fmtPrice(signal.current_price, signal.market)}
                 </span>
+              )}
+            </div>
+
+            {/* Entry Time & Exit Time row */}
+            <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>{signal.market?.toUpperCase()} · {(signal.killzone_origin || '').toUpperCase().replace('_', ' ')}</span>
+              <span>⚡ <strong>Entry Time:</strong> {signal.entry_triggered_at ? formatETTime(signal.entry_triggered_at) : (signal.created_at ? formatETTime(signal.created_at) : '—')}</span>
+              {signal.resolved_at && (
+                <span style={{ color: '#f87171' }}>🏁 <strong>Exit Time:</strong> {formatETTime(signal.resolved_at)}</span>
               )}
             </div>
           </div>
@@ -272,15 +282,53 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
           </div>
         </div>
 
+        {/* LIVE RR / OPEN PnL BANNER (Like Manna SnD setup card) */}
+        {(signal.signal_state === 'active' || signal.signal_state === 'runner') && (signal.unrealizedR !== undefined || signal.current_price) && (
+          <div style={{
+            background: (signal.unrealizedR ?? 0) >= 0
+              ? 'linear-gradient(90deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.08) 100%)'
+              : 'linear-gradient(90deg, rgba(239,68,68,0.2) 0%, rgba(185,28,28,0.08) 100%)',
+            border: `1px solid ${(signal.unrealizedR ?? 0) >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)'}`,
+            borderRadius: '10px',
+            padding: '10px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '14px',
+            boxShadow: (signal.unrealizedR ?? 0) >= 0 ? '0 2px 12px rgba(16,185,129,0.15)' : '0 2px 12px rgba(239,68,68,0.15)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '1.25rem' }}>{signal.is_breakeven ? '🛡️' : (signal.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'}</span>
+              <div>
+                <div style={{ fontSize: '0.74rem', fontWeight: 800, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  LIVE RR: {signal.is_breakeven ? <span style={{ color: '#fbbf24', marginLeft: '6px' }}>(RISK FREE · STOP AT BE)</span> : null}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Dynamic real-time excursion tracking</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: '1.35rem', fontWeight: 900, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171' }}>
+                {(signal.unrealizedR ?? 0) > 0 ? '+' : ''}{(signal.unrealizedR ?? 0).toFixed(2)}R
+              </span>
+              {signal.current_price && (
+                <span style={{ fontSize: '0.78rem', color: '#cbd5e1', background: 'rgba(0,0,0,0.3)', padding: '3px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  Price: {fmtPrice(signal.current_price, signal.market)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Levels Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           {[
-            { label: 'Market Exec Fill', value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#38bdf8', sub: 'Executed at Market' },
-            { label: 'Entry Low',   value: fmtPrice(signal.entry_zone_low,  signal.market), color: '#e2e8f0', sub: 'Zone Floor' },
-            { label: 'Entry High',  value: fmtPrice(signal.entry_zone_high, signal.market), color: '#e2e8f0', sub: 'Zone Ceiling' },
-            { label: 'Stop Loss',   value: fmtPrice(signal.stop,            signal.market), color: '#f87171', sub: signal.is_breakeven ? 'Locked at BE' : 'Inval Level' },
-            { label: 'TP1 (+2.0R)', value: fmtPrice(signal.tp1,             signal.market), color: '#34d399', sub: 'Target 1' },
-            { label: 'TP2 (+3.5R)', value: fmtPrice(signal.tp2,             signal.market), color: '#10b981', sub: 'Target 2' }
+            { label: 'Market Exec Fill', value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#38bdf8', sub: 'Executed Fill' },
+            { label: 'Live Price',       value: fmtPrice(signal.current_price || signal.entry_zone_mid, signal.market),         color: '#34d399', sub: 'Current Market' },
+            { label: 'Entry Low',        value: fmtPrice(signal.entry_zone_low,  signal.market),                                color: '#e2e8f0', sub: 'Zone Floor' },
+            { label: 'Entry High',       value: fmtPrice(signal.entry_zone_high, signal.market),                                color: '#e2e8f0', sub: 'Zone Ceiling' },
+            { label: 'Stop Loss',        value: fmtPrice(signal.stop,            signal.market),                                color: '#f87171', sub: signal.is_breakeven ? 'Locked at BE' : 'Inval Level' },
+            { label: 'TP1 (+2.0R)',      value: fmtPrice(signal.tp1,             signal.market),                                color: '#34d399', sub: 'Target 1' },
+            { label: 'TP2 (+3.5R)',      value: fmtPrice(signal.tp2,             signal.market),                                color: '#10b981', sub: 'Target 2' }
           ].map(item => (
             <div key={item.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 12px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
               <div style={{ fontSize: '0.62rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 700 }}>{item.label}</div>
@@ -349,10 +397,69 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
 };
 
 export const ExclusiveSignalsDashboard: React.FC = () => {
-  const { signals, historySignals, telemetry, analytics, phaseCount, loading, scanning, lastUpdated, triggerScan, dismissSignal } = useExclusiveSignals();
-  const [activeSection, setActiveSection] = useState<'live' | 'telemetry' | 'analytics' | 'history'>('live');
+  const {
+    signals,
+    historySignals,
+    outcomes,
+    telemetry,
+    analytics,
+    phaseCount,
+    analyticsScope,
+    setAnalyticsScope,
+    loading,
+    scanning,
+    lastUpdated,
+    triggerScan,
+    dismissSignal,
+    resetAnalytics,
+    getExportUrl
+  } = useExclusiveSignals();
+
+  const [activeSection, setActiveSection] = useState<'live' | 'calendar' | 'telemetry' | 'analytics' | 'history' | 'export'>('live');
   const [scanningMarket, setScanningMarket] = useState<'both' | 'forex' | 'futures'>('both');
   const [activeChartSetup, setActiveChartSetup] = useState<EdgeSetup | null>(null);
+  const [resettingBaseline, setResettingBaseline] = useState(false);
+
+  // CSV Export Filter State
+  const [exportStartDate, setExportStartDate] = useState<string>('');
+  const [exportEndDate, setExportEndDate] = useState<string>('');
+  const [exportSinceReset, setExportSinceReset] = useState<boolean>(false);
+
+  const handleResetBaseline = async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data') => {
+    let msg = 'Are you sure you want to reset the analytics baseline to NOW? All performance metrics will calculate from this point forward.';
+    if (action === 'clear_baseline') msg = 'Revert to All-Time history analytics baseline?';
+    if (action === 'wipe_test_data') msg = '⚠️ CAUTION: This will permanently delete all test trade setups from the Elite Fractal database table. Proceed?';
+    if (!confirm(msg)) return;
+    setResettingBaseline(true);
+    try {
+      const res = await resetAnalytics(action);
+      alert(`✅ ${res?.message || 'Baseline updated'}`);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    } finally {
+      setResettingBaseline(false);
+    }
+  };
+
+  const handleSetPreset = (preset: 'today' | '7d' | '30d' | 'all') => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    if (preset === 'today') {
+      setExportStartDate(todayStr);
+      setExportEndDate(todayStr);
+    } else if (preset === '7d') {
+      const past = new Date(now.getTime() - 7 * 86400000);
+      setExportStartDate(past.toISOString().slice(0, 10));
+      setExportEndDate(todayStr);
+    } else if (preset === '30d') {
+      const past = new Date(now.getTime() - 30 * 86400000);
+      setExportStartDate(past.toISOString().slice(0, 10));
+      setExportEndDate(todayStr);
+    } else if (preset === 'all') {
+      setExportStartDate('');
+      setExportEndDate('');
+    }
+  };
 
   const handleOpenTelemetryChart = (t: StateMachineTelemetry) => {
     const existingSignal = signals.find(s => s.instrument === t.instrument) || historySignals.find(s => s.instrument === t.instrument);
@@ -418,7 +525,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               <div style={{ fontSize: '0.75rem', color: '#6b46c1', fontWeight: 600 }}>4-Timeframe Fractal Alignment · Bearish SELL Setups · SuperAdmin Exclusive</div>
             </div>
           </div>
-          <div style={{ fontSize: '0.7rem', color: '#718096' }}>⚠️ This section is not visible to admins or traders. Signal cards and analytics are 100% isolated from public dashboards.</div>
+          <div style={{ fontSize: '0.7rem', color: '#718096' }}>⚠️ This section is not visible to admins or traders. Signal cards, calendar, and analytics are 100% isolated from public dashboards.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <select value={scanningMarket} onChange={e => setScanningMarket(e.target.value as any)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(139,92,246,0.3)', color: '#a78bfa', borderRadius: '8px', padding: '8px 12px', fontSize: '0.78rem', cursor: 'pointer' }}>
@@ -447,6 +554,8 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             { label: 'Total Generated', value: analytics.totalSignals,                                 color: '#a78bfa', icon: '📊' },
             { label: 'Win Rate',        value: analytics.winRate        ? `${analytics.winRate}%`        : '—', color: '#fbbf24', icon: '🎯' },
             { label: 'Net Banked R',    value: analytics.totalRMultiple ? `${analytics.totalRMultiple}R` : '0.00R', color: '#34d399', icon: '💰' },
+            { label: 'Avg MAE',         value: analytics.avgMAE         ? `${analytics.avgMAE}R`         : '—', color: '#f87171', icon: '🔻' },
+            { label: 'Avg MFE',         value: analytics.avgMFE         ? `${analytics.avgMFE}R`         : '—', color: '#10b981', icon: '🚀' },
             { label: 'Profit Factor',   value: analytics.profitFactor   ? analytics.profitFactor         : '—', color: '#60a5fa', icon: '📈' },
             { label: 'Avg Conviction',  value: analytics.avgConviction  ? `${analytics.avgConviction}%`  : '—', color: '#f472b6', icon: '🧠' },
           ].map(item => (
@@ -481,14 +590,16 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       </div>
 
       {/* SECTION TABS */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.07)', paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.07)', paddingBottom: '12px', overflowX: 'auto' }}>
         {[
           { id: 'live',      label: `⚡ Live Signals (${signals.length})` },
+          { id: 'calendar',  label: `📅 Calendar (${outcomes.length})` },
           { id: 'telemetry', label: `🔭 Instrument Telemetry (${telemetry.length})` },
           { id: 'analytics', label: `📈 Standalone Analytics` },
-          { id: 'history',   label: `📋 History (${historySignals.length})` }
+          { id: 'history',   label: `📋 History (${historySignals.length})` },
+          { id: 'export',    label: `📥 Export Logs (CSV)` }
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveSection(tab.id as any)} style={{ background: activeSection === tab.id ? 'rgba(139,92,246,0.2)' : 'transparent', border: `1px solid ${activeSection === tab.id ? 'rgba(139,92,246,0.5)' : 'transparent'}`, color: activeSection === tab.id ? '#a78bfa' : '#718096', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, transition: 'all 0.2s' }}>{tab.label}</button>
+          <button key={tab.id} onClick={() => setActiveSection(tab.id as any)} style={{ background: activeSection === tab.id ? 'rgba(139,92,246,0.2)' : 'transparent', border: `1px solid ${activeSection === tab.id ? 'rgba(139,92,246,0.5)' : 'transparent'}`, color: activeSection === tab.id ? '#a78bfa' : '#718096', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, transition: 'all 0.2s', whiteSpace: 'nowrap' }}>{tab.label}</button>
         ))}
       </div>
 
@@ -508,6 +619,42 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               {signals.map(signal => <ExclusiveSignalCard key={signal.id} signal={signal} onDismiss={dismissSignal} />)}
             </div>
           )}
+        </div>
+      )}
+
+      {/* CALENDAR SECTION */}
+      {activeSection === 'calendar' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(20,15,45,0.95) 0%, rgba(30,20,60,0.95) 100%)',
+            border: '1px solid rgba(139,92,246,0.4)',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.2rem' }}>📅</span>
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Elite Fractal Performance Calendar
+                </span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                Daily trading session breakdown, realized trade outcomes, R-multiples, and win/loss journaling strictly isolated for SuperAdmin.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 800, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', padding: '4px 12px', borderRadius: '20px' }}>
+                Recorded Trades: {outcomes.length}
+              </span>
+            </div>
+          </div>
+
+          <ExpandableCalendar outcomes={outcomes} strategyFilter="elite_fractal" />
         </div>
       )}
 
@@ -579,15 +726,178 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       {/* DEDICATED ANALYTICS SECTION */}
       {activeSection === 'analytics' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '12px', padding: '16px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <span style={{ fontSize: '1.2rem' }}>🔒</span>
-              <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Strictly Segregated Strategy Analytics
-              </span>
+          {/* Quarantine Notice & Baseline Control Bar */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(20,15,45,0.95) 0%, rgba(25,15,55,0.95) 100%)',
+            border: '1px solid rgba(139,92,246,0.4)',
+            borderRadius: '12px',
+            padding: '18px 22px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '1.25rem' }}>🔒</span>
+                <span style={{ fontWeight: 900, fontSize: '1rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Strictly Segregated Strategy Analytics & Baseline Controls
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                These performance metrics are computed exclusively from the <code>superadmin_edge_setups</code> registry. They are completely quarantined from public client dashboards and standard admin reports.
+              </div>
+              <div style={{ marginTop: '8px', fontSize: '0.72rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ background: 'rgba(255,255,255,0.06)', padding: '3px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  Current Baseline: <strong style={{ color: analytics?.resetAt ? '#38bdf8' : '#fbbf24' }}>{analytics?.resetAt ? formatETTime(analytics.resetAt) : 'All-Time History'}</strong>
+                </span>
+                <span style={{ color: '#64748b' }}>•</span>
+                <span style={{ color: '#94a3b8' }}>Scope: <strong style={{ color: '#a78bfa', textTransform: 'uppercase' }}>{analyticsScope === 'baseline' ? 'Since Baseline Reset' : 'All-Time'}</strong></span>
+              </div>
             </div>
-            <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
-              These performance metrics are computed exclusively from the <code>superadmin_edge_setups</code> registry. They are completely quarantined from public client dashboards and standard admin reports.
+
+            {/* Scope Toggle & Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+              {/* Scope Switcher */}
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', padding: '3px' }}>
+                <button
+                  onClick={() => setAnalyticsScope('baseline')}
+                  style={{
+                    background: analyticsScope === 'baseline' ? 'rgba(139,92,246,0.4)' : 'transparent',
+                    border: 'none',
+                    color: analyticsScope === 'baseline' ? '#e2e8f0' : '#718096',
+                    borderRadius: '6px',
+                    padding: '5px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📍 Since Reset Point
+                </button>
+                <button
+                  onClick={() => setAnalyticsScope('all_time')}
+                  style={{
+                    background: analyticsScope === 'all_time' ? 'rgba(139,92,246,0.4)' : 'transparent',
+                    border: 'none',
+                    color: analyticsScope === 'all_time' ? '#e2e8f0' : '#718096',
+                    borderRadius: '6px',
+                    padding: '5px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🌐 All-Time History
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => handleResetBaseline('set_baseline')}
+                  disabled={resettingBaseline}
+                  style={{
+                    background: 'rgba(56,189,248,0.15)',
+                    border: '1px solid rgba(56,189,248,0.4)',
+                    color: '#38bdf8',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  🔄 Reset Baseline (Now)
+                </button>
+                <button
+                  onClick={() => handleResetBaseline('clear_baseline')}
+                  disabled={resettingBaseline || !analytics?.resetAt}
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: analytics?.resetAt ? '#e2e8f0' : '#64748b',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: resettingBaseline || !analytics?.resetAt ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  ↩️ Clear Baseline
+                </button>
+                <button
+                  onClick={() => handleResetBaseline('wipe_test_data')}
+                  disabled={resettingBaseline}
+                  style={{
+                    background: 'rgba(239,68,68,0.12)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#f87171',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  🗑️ Wipe Test Data
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Excursion & Strategy KPIs */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', padding: '16px 18px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#f87171', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+                🔻 Avg MAE (Adverse Excursion)
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#f87171', fontFamily: 'monospace' }}>
+                {analytics?.avgMAE ? `${analytics.avgMAE}R` : '—'}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
+                Average worst adverse price deviation against entry before trade resolution.
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '12px', padding: '16px 18px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#34d399', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+                🚀 Avg MFE (Favorable Excursion)
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#34d399', fontFamily: 'monospace' }}>
+                {analytics?.avgMFE ? `${analytics.avgMFE}R` : '—'}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
+                Average peak favorable profit expansion reached during setup lifespan.
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '12px', padding: '16px 18px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#fbbf24', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+                🎯 Closed Win Rate
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'monospace' }}>
+                {analytics?.winRate ? `${analytics.winRate}%` : '—'}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
+                Wins: {analytics?.winsCount || 0} · Losses: {analytics?.lossesCount || 0}
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '12px', padding: '16px 18px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#38bdf8', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+                💰 Realized R-Multiple
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#38bdf8', fontFamily: 'monospace' }}>
+                {analytics?.totalRMultiple ? `${analytics.totalRMultiple}R` : '0.00R'}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '4px' }}>
+                Profit Factor: {analytics?.profitFactor || '—'}
+              </div>
             </div>
           </div>
 
@@ -743,6 +1053,201 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* EXPORT LOGS (CSV) SECTION */}
+      {activeSection === 'export' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(20,15,45,0.95) 0%, rgba(30,20,60,0.95) 100%)',
+            border: '1px solid rgba(139,92,246,0.4)',
+            borderRadius: '12px',
+            padding: '20px 24px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '1.4rem' }}>📥</span>
+              <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Elite Fractal Institutional Trade Log Export (CSV)
+              </span>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#cbd5e1', lineHeight: 1.5, maxWidth: '850px' }}>
+              Export complete institutional audit logs for Elite Fractal setups. Includes exact execution timestamps, fill prices, initial and trailing stops, TP1, TP2, realized R, <strong>MAE (Maximum Adverse Excursion in R)</strong>, <strong>MFE (Maximum Favorable Excursion in R)</strong>, holding duration, and 4TF state progression data.
+            </div>
+          </div>
+
+          {/* Export Filter Form */}
+          <div style={{
+            background: 'rgba(15,20,35,0.7)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '12px',
+            padding: '20px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px'
+          }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              ⚙️ Export Filter & Date Range Selection
+            </div>
+
+            {/* Quick Presets */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px', fontWeight: 700 }}>
+                Quick Range Presets:
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'today', label: 'Today' },
+                  { id: '7d',    label: 'Last 7 Days' },
+                  { id: '30d',   label: 'Last 30 Days' },
+                  { id: 'all',   label: 'All Time' }
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleSetPreset(p.id as any)}
+                    style={{
+                      background: 'rgba(139,92,246,0.15)',
+                      border: '1px solid rgba(139,92,246,0.3)',
+                      color: '#c084fc',
+                      borderRadius: '6px',
+                      padding: '6px 14px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date Pickers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', fontWeight: 700 }}>
+                  Start Date (UTC)
+                </label>
+                <input
+                  type="date"
+                  value={exportStartDate}
+                  onChange={e => setExportStartDate(e.target.value)}
+                  style={{
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(139,92,246,0.4)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', fontWeight: 700 }}>
+                  End Date (UTC)
+                </label>
+                <input
+                  type="date"
+                  value={exportEndDate}
+                  onChange={e => setExportEndDate(e.target.value)}
+                  style={{
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(139,92,246,0.4)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Baseline Checkbox */}
+            {analytics?.resetAt && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                <input
+                  type="checkbox"
+                  checked={exportSinceReset}
+                  onChange={e => setExportSinceReset(e.target.checked)}
+                  style={{ width: '16px', height: '16px', accentColor: '#8b5cf6' }}
+                />
+                <span>Only export setups logged since baseline reset ({formatETTime(analytics.resetAt)})</span>
+              </label>
+            )}
+
+            {/* Download CTA */}
+            <div style={{ paddingTop: '8px' }}>
+              <a
+                href={getExportUrl(exportStartDate, exportEndDate, exportSinceReset)}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: '1px solid rgba(52,211,153,0.5)',
+                  color: '#ffffff',
+                  borderRadius: '10px',
+                  padding: '12px 24px',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>📥 Download Trade Logs (CSV)</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Export Schema Information */}
+          <div style={{
+            background: 'rgba(15,20,35,0.5)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: '10px',
+            padding: '16px 20px',
+            fontSize: '0.72rem',
+            color: '#94a3b8'
+          }}>
+            <div style={{ fontWeight: 800, color: '#cbd5e1', marginBottom: '6px', textTransform: 'uppercase' }}>
+              📋 24 Exported Schema Fields Included in CSV:
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '6px', fontFamily: 'monospace' }}>
+              <div>• Trade ID</div>
+              <div>• Instrument</div>
+              <div>• Market (Forex/Futures)</div>
+              <div>• Direction (SHORT)</div>
+              <div>• Killzone Origin</div>
+              <div>• Signal Time (UTC)</div>
+              <div>• Entry Time (UTC)</div>
+              <div>• Exit Time (UTC)</div>
+              <div>• Entry Fill Price</div>
+              <div>• Initial Stop</div>
+              <div>• Final Trailing Stop</div>
+              <div>• TP1 (+2.0R)</div>
+              <div>• TP2 (+3.5R)</div>
+              <div>• Exit Fill Price</div>
+              <div>• Outcome Type</div>
+              <div>• Realized R-Multiple</div>
+              <div>• MAE (Maximum Adverse Excursion in R)</div>
+              <div>• MFE (Maximum Favorable Excursion in R)</div>
+              <div>• Duration (Minutes)</div>
+              <div>• Conviction Score (%)</div>
+              <div>• H1 POI Context</div>
+              <div>• M15 Swing Level</div>
+              <div>• M1 OC Count</div>
+              <div>• Execution Status</div>
+            </div>
+          </div>
         </div>
       )}
 

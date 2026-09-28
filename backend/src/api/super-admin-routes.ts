@@ -2079,7 +2079,46 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
     const rows = await queryDb<any>(
       `SELECT * FROM superadmin_edge_setups WHERE superseded = 0 AND signal_state IN ('active','runner','awaiting_entry') ORDER BY created_at DESC LIMIT 50`
     );
-    return res.json({ success: true, signals: rows, count: rows.length });
+
+    const { getLiveCurrentPrice, getLiveQuoteDetails } = await import('../discovery/yahoo-provider');
+
+    const enriched = await Promise.all(rows.map(async (s: any) => {
+      let currentPrice = 0;
+      try {
+        const quote = await getLiveQuoteDetails(s.instrument);
+        currentPrice = quote?.price || await getLiveCurrentPrice(s.instrument) || 0;
+      } catch {}
+
+      if (!currentPrice || currentPrice <= 0) {
+        currentPrice = s.entry_price_recorded || s.entry_zone_mid;
+      }
+
+      const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
+      const initialStop = s.initial_stop || s.stop;
+      const risk = Math.abs(entryPrice - initialStop);
+
+      let unrealizedR = 0;
+      let unrealizedPL = 0;
+
+      // Sell setups (bearish bias): profit is downward
+      if (risk > 0 && currentPrice > 0) {
+        const diff = entryPrice - currentPrice;
+        unrealizedR = Number((diff / risk).toFixed(2));
+        unrealizedPL = Number(diff.toFixed(s.market === 'forex' ? 5 : 2));
+      }
+
+      return {
+        ...s,
+        current_price: currentPrice,
+        unrealizedR,
+        unrealizedPL,
+        entry_price_recorded: entryPrice,
+        initial_stop: initialStop,
+        entry_triggered_at: s.entry_triggered_at || s.created_at
+      };
+    }));
+
+    return res.json({ success: true, signals: enriched, count: enriched.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -2087,10 +2126,191 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
 
 router.get('/exclusive-signals/history', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
-    const rows = await queryDb<any>(
-      `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded') ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 50`
-    );
-    return res.json({ success: true, signals: rows, count: rows.length });
+    const { start_date, end_date, since_reset } = req.query;
+
+    let resetAt: string | null = null;
+    try {
+      const resetRows = await queryDb<any>(`SELECT value FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      if (resetRows.length > 0 && resetRows[0].value) resetAt = resetRows[0].value;
+    } catch {}
+
+    let sql = `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded')`;
+    const params: any[] = [];
+
+    if (since_reset === 'true' && resetAt) {
+      sql += ` AND created_at >= ?`;
+      params.push(resetAt);
+    }
+    if (start_date) {
+      sql += ` AND created_at >= ?`;
+      params.push(new Date(String(start_date)).toISOString());
+    }
+    if (end_date) {
+      const endIso = new Date(new Date(String(end_date)).getTime() + 86400000).toISOString();
+      sql += ` AND created_at <= ?`;
+      params.push(endIso);
+    }
+
+    sql += ` ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 100`;
+
+    const rows = await queryDb<any>(sql, params);
+    return res.json({ success: true, signals: rows, resetAt, count: rows.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { since_reset } = req.query;
+    let resetAt: string | null = null;
+    try {
+      const resetRows = await queryDb<any>(`SELECT value FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      if (resetRows.length > 0 && resetRows[0].value) resetAt = resetRows[0].value;
+    } catch {}
+
+    let sql = `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('resolved','invalidated')`;
+    const params: any[] = [];
+    if (since_reset === 'true' && resetAt) {
+      sql += ` AND created_at >= ?`;
+      params.push(resetAt);
+    }
+    sql += ` ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 500`;
+
+    const rows = await queryDb<any>(sql, params);
+    const outcomes = rows.map((s: any) => {
+      let meta: any = {};
+      try { meta = JSON.parse(s.metadata || '{}'); } catch {}
+      const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
+      const initialStop = s.initial_stop || s.stop;
+      const realizedR = s.realized_r !== null && s.realized_r !== undefined ? s.realized_r : (meta.realized_r !== undefined ? meta.realized_r : (s.invalidation_reason === 'tp2_hit' ? 3.5 : s.invalidation_reason === 'tp1_hit' ? 2.0 : s.invalidation_reason === 'be_hit' ? 0.0 : -1.0));
+
+      return {
+        id: s.id,
+        setup_id: s.id,
+        instrument: s.instrument,
+        market: s.market || 'forex',
+        bias: s.bias || 'short',
+        strategy_id: 'elite_fractal',
+        conviction_score: s.conviction_score || 85,
+        outcome_type: s.invalidation_reason || meta.outcome_type || 'resolved',
+        realized_r: realizedR,
+        realized_pl: realizedR,
+        entry_price: entryPrice,
+        entry_price_recorded: entryPrice,
+        initial_stop: initialStop,
+        stop: s.stop,
+        tp1: s.tp1,
+        tp2: s.tp2,
+        r_multiple_1: s.r_multiple_1 || 2.0,
+        r_multiple_2: s.r_multiple_2 || 3.5,
+        execution_price: s.exit_price || meta.exit_price || (realizedR > 0 ? s.tp1 : s.stop),
+        execution_time: s.resolved_at || s.created_at,
+        time_signaled: s.created_at,
+        time_entered: s.entry_triggered_at || s.created_at,
+        time_exited: s.resolved_at || s.created_at,
+        duration_min: s.duration_min || meta.duration_min,
+        holding_duration_min: s.duration_min || meta.duration_min,
+        killzone_origin: s.killzone_origin,
+        created_at: s.created_at,
+        setup_market: s.market,
+        invalidation_reason: s.invalidation_reason || meta.outcome_type,
+        trade_id: s.id,
+        metadata: s.metadata
+      };
+    });
+
+    return res.json({ success: true, outcomes, resetAt, count: outcomes.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/exclusive-signals/export', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const startDate = req.query.start_date ? String(req.query.start_date) : null;
+    const endDate = req.query.end_date ? String(req.query.end_date) : null;
+    const sinceReset = req.query.since_reset === 'true';
+
+    let resetAt: string | null = null;
+    try {
+      const resetRows = await queryDb<any>(`SELECT value FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      if (resetRows.length > 0 && resetRows[0].value) resetAt = resetRows[0].value;
+    } catch {}
+
+    let sql = `SELECT * FROM superadmin_edge_setups WHERE 1=1`;
+    const params: any[] = [];
+
+    if (sinceReset && resetAt) {
+      sql += ` AND created_at >= ?`;
+      params.push(resetAt);
+    }
+    if (startDate) {
+      sql += ` AND created_at >= ?`;
+      params.push(new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      const endIso = new Date(new Date(endDate).getTime() + 86400000).toISOString();
+      sql += ` AND created_at <= ?`;
+      params.push(endIso);
+    }
+    sql += ` ORDER BY created_at DESC LIMIT 2000`;
+
+    const rows = await queryDb<any>(sql, params);
+
+    let csv = 'Trade ID,Instrument,Market,Direction,Killzone,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Entry Price,Initial Stop,Final Stop,TP1 (2R),TP2 (3.5R),Exit Price,Outcome Type,Realized R,MAE (R),MFE (R),Duration (Min),Conviction (%),H1 POI,M15 Level,M1 OCs,Status\n';
+
+    rows.forEach((s: any) => {
+      let meta: any = {};
+      try { meta = JSON.parse(s.metadata || '{}'); } catch {}
+      const entryPrice = s.entry_price_recorded || s.entry_zone_mid || '';
+      const exitPrice = s.exit_price || meta.exit_price || '';
+      const outcome = s.invalidation_reason || meta.outcome_type || s.signal_state;
+      const realizedR = s.realized_r !== null && s.realized_r !== undefined ? s.realized_r : (meta.realized_r !== undefined ? meta.realized_r : '');
+      const mae = s.mae !== null && s.mae !== undefined ? s.mae : (meta.mae_r !== undefined ? meta.mae_r : '');
+      const mfe = s.mfe !== null && s.mfe !== undefined ? s.mfe : (meta.mfe_r !== undefined ? meta.mfe_r : '');
+      const dur = s.duration_min !== null && s.duration_min !== undefined ? s.duration_min : (meta.duration_min !== undefined ? meta.duration_min : '');
+      const h1Poi = meta.phases?.h1POIType || '';
+      const m15Level = meta.phases?.m15SwingHigh || '';
+      const m1Count = meta.phases?.m1OCCount || '';
+
+      csv += `"${s.id}","${s.instrument}","${s.market}","${(s.bias || 'short').toUpperCase()}","${s.killzone_origin || ''}","${s.created_at || ''}","${s.entry_triggered_at || ''}","${s.resolved_at || ''}",${entryPrice},${s.initial_stop || s.stop},${s.stop},${s.tp1},${s.tp2 || ''},${exitPrice},"${outcome}",${realizedR},${mae},${mfe},${dur},${s.conviction_score || ''},"${h1Poi}","${m15Level}","${m1Count}","${s.signal_state}"\n`;
+    });
+
+    const filename = `elite_fractal_trades_${Date.now()}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csv);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to export trades CSV', details: err.message });
+  }
+});
+
+router.post('/exclusive-signals/reset-analytics', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { action = 'set_baseline' } = req.body || {};
+    const now = new Date().toISOString();
+
+    if (action === 'clear_baseline') {
+      await queryDb(`DELETE FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      return res.json({ success: true, message: 'Analytics baseline cleared. Now calculating all-time metrics.', resetAt: null });
+    }
+
+    if (action === 'wipe_test_data') {
+      await queryDb(`DELETE FROM superadmin_edge_setups`);
+      await queryDb(`DELETE FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      return res.json({ success: true, message: 'All test trade data purged cleanly. Fresh tracking initiated.', resetAt: null });
+    }
+
+    // Default action: set_baseline
+    await queryDb(`DELETE FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+    await queryDb(`INSERT INTO superadmin_strategy_settings (key, value, updated_at) VALUES ('elite_fractal_reset_at', ?, ?)`, [now, now]);
+
+    return res.json({ 
+      success: true, 
+      message: `Analytics baseline reset successfully to ${now}. All metrics will calculate from this point forward.`,
+      resetAt: now 
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -2121,20 +2341,46 @@ router.get('/exclusive-signals/state-machine', verifySuperAdmin, async (req: Req
 
 router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
-    const allSignals = await queryDb<any>(`SELECT * FROM superadmin_edge_setups ORDER BY created_at DESC LIMIT 500`);
+    const { scope = 'baseline' } = req.query;
+
+    let resetAt: string | null = null;
+    try {
+      const resetRows = await queryDb<any>(`SELECT value FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
+      if (resetRows.length > 0 && resetRows[0].value) resetAt = resetRows[0].value;
+    } catch {}
+
+    let sql = `SELECT * FROM superadmin_edge_setups`;
+    const params: any[] = [];
+    if (scope !== 'all_time' && resetAt) {
+      sql += ` WHERE created_at >= ?`;
+      params.push(resetAt);
+    }
+    sql += ` ORDER BY created_at DESC LIMIT 500`;
+
+    const allSignals = await queryDb<any>(sql, params);
     const active = allSignals.filter((s: any) => ['awaiting_entry', 'active', 'runner'].includes(s.signal_state));
     const closed = allSignals.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
 
     let totalR = 0;
     let winsCount = 0;
     let lossesCount = 0;
+    let totalMae = 0;
+    let maeCount = 0;
+    let totalMfe = 0;
+    let mfeCount = 0;
 
     closed.forEach((s: any) => {
       let isWin = false;
       let isLoss = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp2_hit') {
+        if (s.mae !== null && s.mae !== undefined) { totalMae += s.mae; maeCount++; }
+        else if (meta.mae_r !== undefined) { totalMae += meta.mae_r; maeCount++; }
+
+        if (s.mfe !== null && s.mfe !== undefined) { totalMfe += s.mfe; mfeCount++; }
+        else if (meta.mfe_r !== undefined) { totalMfe += meta.mfe_r; mfeCount++; }
+
+        if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
           isWin = true;
           totalR += (s.r_multiple_2 || 3.5);
         } else if (meta.outcome_type === 'tp1_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
@@ -2163,15 +2409,18 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
       ? (allSignals.reduce((sum: number, s: any) => sum + (s.r_multiple_1 || 2.0), 0) / allSignals.length).toFixed(2)
       : '2.00';
 
+    const avgMAE = maeCount > 0 ? (totalMae / maeCount).toFixed(2) : null;
+    const avgMFE = mfeCount > 0 ? (totalMfe / mfeCount).toFixed(2) : null;
+
     const byInstrument = allSignals.reduce((acc: any, s: any) => {
       const inst = s.instrument;
       if (!acc[inst]) acc[inst] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
       acc[inst].total++;
-      if (['awaiting_entry', 'active'].includes(s.signal_state)) acc[inst].active++;
+      if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[inst].active++;
       let isWin = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit') isWin = true;
+        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) isWin = true;
       } catch {}
       if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
         acc[inst].resolved++;
@@ -2187,11 +2436,11 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
       const kz = s.killzone_origin || 'unknown';
       if (!acc[kz]) acc[kz] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
       acc[kz].total++;
-      if (['awaiting_entry', 'active'].includes(s.signal_state)) acc[kz].active++;
+      if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[kz].active++;
       let isWin = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit') isWin = true;
+        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) isWin = true;
       } catch {}
       if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
         acc[kz].resolved++;
@@ -2214,10 +2463,14 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
         winRate,
         avgConviction,
         avgRiskReward,
+        avgMAE,
+        avgMFE,
         totalRMultiple: totalR !== 0 ? totalR.toFixed(2) : '0.00',
         profitFactor,
         byInstrument,
         byKillzone,
+        resetAt,
+        scope: resetAt && scope !== 'all_time' ? 'since_reset' : 'all_time',
         strategyId: 'elite_fractal'
       }
     });

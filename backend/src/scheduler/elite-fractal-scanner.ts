@@ -6,6 +6,7 @@ import { mapTimestampToKillzone, isForexMarketOpen, isFuturesMarketOpen } from '
 import { queryDb } from '../db/database';
 import { createLogger } from '../telemetry/logger';
 import { getLiveQuoteDetails, getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
+import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 
 const logger = createLogger('EliteFractalScanner');
 
@@ -17,6 +18,7 @@ let isEvaluatingOutcomes = false;
 /**
  * Evaluates active and runner setups in superadmin_edge_setups against live prices.
  * - Detects TP1 (+2.0R), TP2 (+3.5R), Stop Loss (-1.0R), and Break-Even (0.0R).
+ * - Computes MAE (Maximum Adverse Excursion) and MFE (Maximum Favorable Excursion).
  * - All Elite Fractal setups are SELL (short).
  * - When TP1 is hit, moves setup to 'runner' with stop moved to Break Even (entry_price_recorded).
  * - When TP2 is hit, marks setup as 'resolved' with outcome_type = 'tp2_hit'.
@@ -107,10 +109,11 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         metaObj.outcome_type = 'tp1_hit';
         metaObj.tp1_hit_at = now;
         metaObj.realized_r = setup.r_multiple_1 || 2.0;
+        metaObj.mfe_r = setup.r_multiple_1 || 2.0;
 
         await queryDb(
-          `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, metadata = ? WHERE id = ?`,
-          [entryPrice, stopPrice, JSON.stringify(metaObj), setup.id]
+          `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
+          [entryPrice, stopPrice, setup.r_multiple_1 || 2.0, JSON.stringify(metaObj), setup.id]
         );
 
         logger.info(
@@ -135,20 +138,86 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         const now = new Date().toISOString();
         let metaObj: any = {};
         try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
+
+        const entryTime = setup.entry_triggered_at || setup.created_at || now;
+        const entryMs = new Date(entryTime).getTime();
+        const exitMs = new Date(now).getTime();
+        const durationMin = Number((Math.max(1, exitMs - entryMs) / 60000).toFixed(1));
+
+        let maeR: number | null = null;
+        let mfeR: number | null = null;
+        let highestPrice: number | null = maxHigh;
+        let lowestPrice: number | null = minLow;
+
+        const risk = Math.abs(entryPrice - (setup.initial_stop || stopPrice));
+
+        try {
+          const excursion = await calculateTradeExcursion({
+            instrument: setup.instrument,
+            bias: 'short',
+            entryPrice,
+            initialStop: setup.initial_stop || stopPrice,
+            entryTime,
+            exitTime: now,
+            exitPrice
+          });
+          if (excursion) {
+            maeR = excursion.maeR;
+            mfeR = excursion.mfeR;
+            highestPrice = excursion.highestPrice;
+            lowestPrice = excursion.lowestPrice;
+          }
+        } catch {
+          // Fallback excursion calculation from recorded wick extremes
+          if (risk > 0) {
+            const maxAdverse = Math.max(0, maxHigh - entryPrice);
+            const maxFavorable = Math.max(0, entryPrice - minLow);
+            maeR = Number((maxAdverse / risk).toFixed(2));
+            mfeR = Number((maxFavorable / risk).toFixed(2));
+          }
+        }
+
         metaObj.outcome_type = outcomeType;
         metaObj.exit_price = exitPrice;
         metaObj.exit_time = now;
         metaObj.realized_r = realizedR;
+        metaObj.mae_r = maeR;
+        metaObj.mfe_r = mfeR;
+        metaObj.highest_price = highestPrice;
+        metaObj.lowest_price = lowestPrice;
+        metaObj.duration_min = durationMin;
 
         await queryDb(
-          `UPDATE superadmin_edge_setups SET signal_state = 'resolved', resolved_at = ?, invalidation_reason = ?, metadata = ? WHERE id = ?`,
-          [now, outcomeType, JSON.stringify(metaObj), setup.id]
+          `UPDATE superadmin_edge_setups 
+           SET signal_state = 'resolved', 
+               resolved_at = ?, 
+               invalidation_reason = ?, 
+               exit_price = ?, 
+               realized_r = ?, 
+               mae = ?, 
+               mfe = ?, 
+               duration_min = ?, 
+               exit_reason = ?, 
+               metadata = ? 
+           WHERE id = ?`,
+          [
+            now,
+            outcomeType,
+            exitPrice,
+            realizedR,
+            maeR,
+            mfeR,
+            durationMin,
+            outcomeType,
+            JSON.stringify(metaObj),
+            setup.id
+          ]
         );
 
         resolved++;
         logger.info(
-          { instrument: setup.instrument, outcomeType, realizedR, exitPrice },
-          `🏁 EliteFractal: Signal resolved with ${outcomeType} (${realizedR}R)`
+          { instrument: setup.instrument, outcomeType, realizedR, exitPrice, maeR, mfeR, durationMin },
+          `🏁 EliteFractal: Signal resolved with ${outcomeType} (${realizedR}R) [MAE: ${maeR}R, MFE: ${mfeR}R, ${durationMin}m]`
         );
       }
     }

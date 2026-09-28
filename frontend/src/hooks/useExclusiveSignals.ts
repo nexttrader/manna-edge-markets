@@ -40,10 +40,14 @@ export interface ExclusiveAnalytics {
   winRate: string | null;
   avgConviction: string | null;
   avgRiskReward: string | null;
+  avgMAE: string | null;
+  avgMFE: string | null;
   totalRMultiple: string | null;
   profitFactor: string | null;
   byInstrument: Record<string, InstrumentAnalytics>;
   byKillzone: Record<string, InstrumentAnalytics>;
+  resetAt: string | null;
+  scope: 'since_reset' | 'all_time';
   strategyId: string;
 }
 
@@ -58,9 +62,11 @@ export interface PhaseCount {
 export function useExclusiveSignals() {
   const [signals, setSignals] = useState<EdgeSetup[]>([]);
   const [historySignals, setHistorySignals] = useState<EdgeSetup[]>([]);
+  const [outcomes, setOutcomes] = useState<any[]>([]);
   const [telemetry, setTelemetry] = useState<StateMachineTelemetry[]>([]);
   const [analytics, setAnalytics] = useState<ExclusiveAnalytics | null>(null);
   const [phaseCount, setPhaseCount] = useState<PhaseCount>({ scanning: 0, candidate: 0, validated: 0, entryReady: 0, rejected: 0 });
+  const [analyticsScope, setAnalyticsScope] = useState<'baseline' | 'all_time'>('baseline');
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -72,11 +78,12 @@ export function useExclusiveSignals() {
         'x-user-role': 'super_admin'
       };
 
-      const [signalsRes, telemetryRes, analyticsRes, historyRes] = await Promise.all([
+      const [signalsRes, telemetryRes, analyticsRes, historyRes, outcomesRes] = await Promise.all([
         fetch(`${API_BASE}/api/super-admin/exclusive-signals`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/state-machine`, { headers }),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics`, { headers }),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`, { headers })
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics?scope=${analyticsScope}`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/outcomes`, { headers })
       ]);
 
       if (signalsRes.ok) {
@@ -96,13 +103,17 @@ export function useExclusiveSignals() {
         const data = await historyRes.json();
         setHistorySignals(data.signals || []);
       }
+      if (outcomesRes.ok) {
+        const data = await outcomesRes.json();
+        setOutcomes(data.outcomes || []);
+      }
       setLastUpdated(new Date().toISOString());
     } catch (err) {
       console.warn('ExclusiveSignals: fetch error', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [analyticsScope]);
 
   useEffect(() => {
     fetchAll();
@@ -149,5 +160,48 @@ export function useExclusiveSignals() {
     }
   }, [fetchAll]);
 
-  return { signals, historySignals, telemetry, analytics, phaseCount, loading, scanning, lastUpdated, refetch: fetchAll, triggerScan, dismissSignal };
+  const resetAnalytics = useCallback(async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/exclusive-signals/reset-analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'super_admin'
+        },
+        body: JSON.stringify({ action })
+      });
+      const data = await res.json();
+      await fetchAll();
+      return data;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to reset analytics');
+    }
+  }, [fetchAll]);
+
+  const getExportUrl = useCallback((startDate?: string, endDate?: string, sinceReset?: boolean) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    if (sinceReset) params.set('since_reset', 'true');
+    return `${API_BASE}/api/super-admin/exclusive-signals/export?${params.toString()}`;
+  }, []);
+
+  return {
+    signals,
+    historySignals,
+    outcomes,
+    telemetry,
+    analytics,
+    phaseCount,
+    analyticsScope,
+    setAnalyticsScope,
+    loading,
+    scanning,
+    lastUpdated,
+    refetch: fetchAll,
+    triggerScan,
+    dismissSignal,
+    resetAnalytics,
+    getExportUrl
+  };
 }

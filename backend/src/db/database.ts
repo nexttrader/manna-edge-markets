@@ -127,6 +127,13 @@ export async function initializeDatabase(): Promise<void> {
                     `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS entry_price_recorded DOUBLE PRECISION`,
                     `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
                     `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS initial_stop DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS mae DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS mfe DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS duration_min DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS exit_price DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS realized_r DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS exit_reason TEXT`,
+                    `CREATE TABLE IF NOT EXISTS superadmin_strategy_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`,
                     `UPDATE superadmin_edge_setups SET signal_state = 'active', entry_triggered_at = COALESCE(entry_triggered_at, created_at), entry_price_recorded = COALESCE(entry_price_recorded, entry_zone_mid), initial_stop = COALESCE(initial_stop, stop) WHERE signal_state = 'awaiting_entry'`
                 ];
                 for (const sql of safeAlters) {
@@ -777,10 +784,16 @@ export async function initializeDatabase(): Promise<void> {
         state_machine_phase TEXT DEFAULT 'SCANNING',
         state_changed_at TEXT
       )`);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`);
       try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN entry_price_recorded REAL`); } catch {}
       try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
       try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN mae REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN mfe REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN duration_min REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN exit_price REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN realized_r REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN exit_reason TEXT`); } catch {}
+      try { db.exec(`CREATE TABLE IF NOT EXISTS superadmin_strategy_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`); } catch {}
       try { db.exec(`UPDATE superadmin_edge_setups SET signal_state = 'active', entry_triggered_at = COALESCE(entry_triggered_at, created_at), entry_price_recorded = COALESCE(entry_price_recorded, entry_zone_mid), initial_stop = COALESCE(initial_stop, stop) WHERE signal_state = 'awaiting_entry'`); } catch {}
     } catch {}
 
