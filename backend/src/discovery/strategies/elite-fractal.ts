@@ -262,11 +262,14 @@ export class EliteFractalStrategy implements IStrategyEngine {
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    // Require at least 1 confirmed M1 displacement OC for ENTRY_READY.
-    // 2 OCs gives higher conviction (bonus conviction score) but 1 is sufficient.
-    if (state.m1OCs && state.m1OCs.length >= 1) {
+    // ENTRY_READY requires 2 successive OCs from M1 POIs (enforced inside retrospectiveScanM1).
+    // If only 1 OC found or OCs not in succession → M1_OC_CONFIRMED (monitor for second OC).
+    if (state.m1OCs && state.m1OCs.length >= 2) {
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
       return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
+    } else if (state.m1OCs && state.m1OCs.length === 1) {
+      this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
+      return null;
     } else {
       this.transitionTo(instrument, StateMachineState.M1_SCANNING);
       return null;
@@ -367,7 +370,9 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const afterTime = state.m5ConfirmationTime || 0;
     const validOCs: OCDetails[] = [];
 
-    // Only look back up to 25 M1 candles — entry trigger MUST be recent and active
+    // Scan the last 25 M1 candles for bearish OCs.
+    // Each OC must have its own M1 POI (FVG or swing high) above the displacement candle —
+    // this is already enforced inside detectBearishOC which looks up to 8 candles back for a POI.
     for (let i = 1; i <= Math.min(25, candles.length - 3); i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
@@ -378,18 +383,56 @@ export class EliteFractalStrategy implements IStrategyEngine {
       if (oc?.complete && !oc.swingHighBroken) validOCs.push(oc);
     }
 
-    validOCs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // Sort by most recent displacement first
+    validOCs.sort((a, b) => b.displacementIdx - a.displacementIdx);
 
-    if (validOCs.length === 0) return { foundPattern: true, data: { m1OCs: [] } };
+    if (validOCs.length === 0) {
+      return { foundPattern: true, data: { m1OCs: [] } };
+    }
 
-    const top = validOCs.slice(0, 2);
+    if (validOCs.length === 1) {
+      // Only 1 OC found — not enough for ENTRY_READY, hold at M1_OC_CONFIRMED
+      return {
+        foundPattern: true,
+        data: {
+          m1OCs: [validOCs[0]],
+          m1FinalOCPOIType: validOCs[0].poiType,
+          m1FinalOCSwingHigh: validOCs[0].swingHigh,
+          m1FVGMiddleHigh: validOCs[0].fvgMiddleHigh
+        }
+      };
+    }
+
+    // SUCCESSION CHECK: The two most recent OCs must be within 6 M1 candles of each other.
+    // This ensures OC2 formed right after OC1 — successive bearish displacement from M1 POIs,
+    // not two isolated OCs scattered randomly across 25 minutes.
+    const oc1 = validOCs[0]; // most recent
+    const oc2 = validOCs[1]; // second most recent
+    const candlesBetween = oc1.displacementIdx - oc2.displacementIdx; // oc1 is newer (higher idx)
+    // Note: after sorting desc by displacementIdx, oc1.idx > oc2.idx so diff is positive
+    const successionWindow = 6; // within 6 M1 candles = within ~6 minutes
+
+    if (Math.abs(candlesBetween) > successionWindow) {
+      // OCs are too far apart — not in succession. Wait for oc1 to get a successor.
+      return {
+        foundPattern: true,
+        data: {
+          m1OCs: [oc1],
+          m1FinalOCPOIType: oc1.poiType,
+          m1FinalOCSwingHigh: oc1.swingHigh,
+          m1FVGMiddleHigh: oc1.fvgMiddleHigh
+        }
+      };
+    }
+
+    // Both OCs are successive and each anchored to its own M1 POI — ENTRY_READY!
     return {
       foundPattern: true,
       data: {
-        m1OCs: top,
-        m1FinalOCPOIType: top[0].poiType,
-        m1FinalOCSwingHigh: top[0].swingHigh,
-        m1FVGMiddleHigh: top[0].fvgMiddleHigh
+        m1OCs: [oc1, oc2],
+        m1FinalOCPOIType: oc1.poiType,
+        m1FinalOCSwingHigh: oc1.swingHigh,
+        m1FVGMiddleHigh: oc1.fvgMiddleHigh
       }
     };
   }
