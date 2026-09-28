@@ -399,33 +399,77 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
         {/* ── LIVE RR BANNER (active/runner trades only) ── */}
         {(signal.signal_state === 'active' || isRunner) && (signal.unrealizedR !== undefined || signal.current_price) && (
           <div style={{
-            background: (signal.unrealizedR ?? 0) >= 0
-              ? 'linear-gradient(90deg, rgba(16,185,129,0.18) 0%, transparent 100%)'
-              : 'linear-gradient(90deg, rgba(239,68,68,0.18) 0%, transparent 100%)',
-            border: `1px solid ${(signal.unrealizedR ?? 0) >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
-            borderRadius: '8px',
-            padding: '7px 14px',
+            background: isRunner
+              ? 'linear-gradient(90deg, rgba(249,115,22,0.18) 0%, rgba(20,15,40,0.6) 100%)'
+              : (signal.unrealizedR ?? 0) >= 0
+                ? 'linear-gradient(90deg, rgba(16,185,129,0.18) 0%, transparent 100%)'
+                : 'linear-gradient(90deg, rgba(239,68,68,0.18) 0%, transparent 100%)',
+            border: `1px solid ${isRunner ? 'rgba(249,115,22,0.45)' : (signal.unrealizedR ?? 0) >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+            borderRadius: '10px',
+            padding: '10px 14px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '10px'
+            marginBottom: '10px',
+            flexWrap: 'wrap',
+            gap: '8px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>{isRunner ? '🏃' : (signal.is_breakeven ? '🛡️' : ((signal.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'))}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '1.3rem' }}>{isRunner ? '🏃' : (signal.is_breakeven ? '🛡️' : ((signal.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'))}</span>
               <div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171', textTransform: 'uppercase' }}>
-                  LIVE RR {isRunner ? '— RUNNER (TP1 secured, riding TP2)' : signal.is_breakeven ? '— RISK FREE' : ''}
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: isRunner ? '#fb923c' : (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  {isRunner ? 'RUNNER IN PLAY' : 'LIVE RR'}
+                  {isRunner && (
+                    <span style={{ background: 'rgba(34,197,94,0.18)', border: '1px solid rgba(34,197,94,0.4)', color: '#4ade80', borderRadius: '4px', padding: '1px 6px', fontSize: '0.62rem', fontWeight: 900 }}>
+                      ✓ TP1 (+2.00R) SECURED
+                    </span>
+                  )}
+                  {signal.is_breakeven && !isRunner && (
+                    <span style={{ background: 'rgba(56,189,248,0.18)', border: '1px solid rgba(56,189,248,0.4)', color: '#38bdf8', borderRadius: '4px', padding: '1px 6px', fontSize: '0.62rem' }}>
+                      RISK-FREE
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                  {isRunner
+                    ? `Stop locked @ Break-Even (${fmtPrice(signal.stop, signal.market)}) · Current Runner Float: ${(signal.unrealizedR ?? 0) > 0 ? '+' : ''}${(signal.unrealizedR ?? 0).toFixed(2)}R · Aiming for TP2 (+3.50R)`
+                    : `Current Price: ${fmtPrice(signal.current_price, signal.market)} · Target 1: ${fmtPrice(signal.tp1, signal.market)} (+2.0R)`
+                  }
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontFamily: 'monospace' }}>
-              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171' }}>
-                {(signal.unrealizedR ?? 0) > 0 ? '+' : ''}{(signal.unrealizedR ?? 0).toFixed(2)}R
-              </span>
-              {signal.current_price && (
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '2px 7px', borderRadius: '5px' }}>
-                  {fmtPrice(signal.current_price, signal.market)}
-                </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontFamily: 'monospace' }}>
+              {isRunner ? (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: '0.62rem', color: '#4ade80', textTransform: 'uppercase', fontWeight: 800 }}>Banked Profit</span>
+                      <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#4ade80' }}>+2.00R</span>
+                    </div>
+                    <span style={{ color: '#64748b', fontSize: '1.2rem' }}>+</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: '0.62rem', color: '#fb923c', textTransform: 'uppercase', fontWeight: 800 }}>Runner Float</span>
+                      <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fb923c' }}>
+                        {(signal.unrealizedR ?? 0) > 0 ? '+' : ''}{(signal.unrealizedR ?? 0).toFixed(2)}R
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Total Locked + Float: <strong style={{ color: '#38bdf8' }}>+{(2.0 + Math.max(0, signal.unrealizedR ?? 0)).toFixed(2)}R</strong>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 900, color: (signal.unrealizedR ?? 0) >= 0 ? '#34d399' : '#f87171' }}>
+                    {(signal.unrealizedR ?? 0) > 0 ? '+' : ''}{(signal.unrealizedR ?? 0).toFixed(2)}R
+                  </span>
+                  {signal.current_price && (
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '3px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      {fmtPrice(signal.current_price, signal.market)}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>

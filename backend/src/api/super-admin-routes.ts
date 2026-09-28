@@ -2132,7 +2132,7 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
       }
 
       // Auto-resolve any setup/runner that has reached or exceeded TP2 (+3.5R)
-      if (unrealizedR >= r2 || (tp2 !== null && currentPrice <= tp2)) {
+      if (unrealizedR >= r2 || (tp2 !== null && currentPrice <= tp2) || (s.mfe && s.mfe >= r2)) {
         const now = new Date().toISOString();
         let metaObj: any = {};
         try { metaObj = JSON.parse(s.metadata || '{}'); } catch {}
@@ -2140,7 +2140,7 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
         metaObj.exit_price = tp2;
         metaObj.exit_time = now;
         metaObj.realized_r = r2;
-        metaObj.mfe_r = Math.max(r2, unrealizedR);
+        metaObj.mfe_r = Math.max(r2, unrealizedR, Number(s.mfe || 0));
 
         await queryDb(
           `UPDATE superadmin_edge_setups 
@@ -2152,7 +2152,7 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
                mfe = ?, 
                metadata = ? 
            WHERE id = ?`,
-          [now, tp2, r2, Math.max(r2, unrealizedR), JSON.stringify(metaObj), s.id]
+          [now, tp2, r2, Math.max(r2, unrealizedR, Number(s.mfe || 0)), JSON.stringify(metaObj), s.id]
         );
         // Closed! Omit from active/runner list
         return null;
@@ -2167,6 +2167,9 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
         initial_stop: initialStop,
         tp1: tp1,
         tp2: tp2,
+        tp1_booked_r: s.r_multiple_1 || 2.0,
+        mfe_r: s.mfe ? Number(s.mfe) : Math.max(s.r_multiple_1 || 2.0, unrealizedR),
+        total_runner_r: Number(((s.r_multiple_1 || 2.0) + Math.max(0, unrealizedR)).toFixed(2)),
         entry_triggered_at: s.entry_triggered_at || s.created_at
       };
     }));

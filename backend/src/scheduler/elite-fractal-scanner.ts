@@ -66,18 +66,34 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
       const currentBid = quote?.bid || currentPrice;
       const currentAsk = quote?.ask || currentPrice;
 
-      // Intra-minute wicks
+      // Comprehensive multi-candle wick analysis across the entire life of the trade since entry
       let maxHigh = currentAsk;
       let minLow = currentBid;
       try {
-        const candles = await getLiveCandles(setup.instrument, '1m', 15);
-        const entryMs = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
+        const entryTime = setup.entry_triggered_at || setup.created_at;
+        const entryMs = entryTime ? new Date(entryTime).getTime() : (Date.now() - 3600000);
+        const elapsedMinutes = Math.max(1, Math.ceil((Date.now() - entryMs) / 60000));
+
+        let candles: any[] = [];
+        if (elapsedMinutes <= 180) {
+          // Up to 3 hours: fetch 1m candles
+          const count = Math.min(200, Math.max(20, elapsedMinutes + 5));
+          candles = await getLiveCandles(setup.instrument, '1m', count);
+        } else if (elapsedMinutes <= 720) {
+          // Up to 12 hours: fetch 5m candles
+          const count = Math.min(150, Math.max(20, Math.ceil(elapsedMinutes / 5) + 5));
+          candles = await getLiveCandles(setup.instrument, '5m', count);
+        } else {
+          // Over 12 hours: fetch 15m candles
+          const count = Math.min(100, Math.max(20, Math.ceil(elapsedMinutes / 15) + 5));
+          candles = await getLiveCandles(setup.instrument, '15m', count);
+        }
+
         if (candles && candles.length > 0) {
-          const post = entryMs > 0 ? candles.filter(c => new Date(c.timestamp).getTime() >= entryMs) : candles;
-          if (post.length > 0) {
-            maxHigh = Math.max(currentAsk, ...post.map(c => c.high));
-            minLow = Math.min(currentBid, ...post.map(c => c.low));
-          }
+          const post = candles.filter((c: any) => new Date(c.timestamp).getTime() >= (entryMs - 60000));
+          const candlesToCheck = post.length > 0 ? post : candles;
+          maxHigh = Math.max(currentAsk, ...candlesToCheck.map((c: any) => c.high));
+          minLow = Math.min(currentBid, ...candlesToCheck.map((c: any) => c.low));
         }
       } catch {}
 
