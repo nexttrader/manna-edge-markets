@@ -390,42 +390,25 @@ export class EliteFractalStrategy implements IStrategyEngine {
       return { foundPattern: true, data: { m1OCs: [] } };
     }
 
-    if (validOCs.length === 1) {
-      // Only 1 OC found — not enough for ENTRY_READY, hold at M1_OC_CONFIRMED
+    if (validOCs.length < 2) {
+      // Only 1 OC found — hold at M1_OC_CONFIRMED, waiting for a second
       return {
         foundPattern: true,
         data: {
-          m1OCs: [validOCs[0]],
-          m1FinalOCPOIType: validOCs[0].poiType,
-          m1FinalOCSwingHigh: validOCs[0].swingHigh,
-          m1FVGMiddleHigh: validOCs[0].fvgMiddleHigh
+          m1OCs: validOCs,
+          m1FinalOCPOIType: validOCs[0]?.poiType,
+          m1FinalOCSwingHigh: validOCs[0]?.swingHigh,
+          m1FVGMiddleHigh: validOCs[0]?.fvgMiddleHigh
         }
       };
     }
 
-    // SUCCESSION CHECK: The two most recent OCs must be within 6 M1 candles of each other.
-    // This ensures OC2 formed right after OC1 — successive bearish displacement from M1 POIs,
-    // not two isolated OCs scattered randomly across 25 minutes.
+    // 2 OCs found in chronological succession (OC2 formed before OC1, both in the 25-candle window).
+    // Each OC has its own M1 POI above it — verified by detectBearishOC.
+    // No gap restriction — they just need to be one after the other.
     const oc1 = validOCs[0]; // most recent
-    const oc2 = validOCs[1]; // second most recent
-    const candlesBetween = oc1.displacementIdx - oc2.displacementIdx; // oc1 is newer (higher idx)
-    // Note: after sorting desc by displacementIdx, oc1.idx > oc2.idx so diff is positive
-    const successionWindow = 6; // within 6 M1 candles = within ~6 minutes
+    const oc2 = validOCs[1]; // formed just before oc1
 
-    if (Math.abs(candlesBetween) > successionWindow) {
-      // OCs are too far apart — not in succession. Wait for oc1 to get a successor.
-      return {
-        foundPattern: true,
-        data: {
-          m1OCs: [oc1],
-          m1FinalOCPOIType: oc1.poiType,
-          m1FinalOCSwingHigh: oc1.swingHigh,
-          m1FVGMiddleHigh: oc1.fvgMiddleHigh
-        }
-      };
-    }
-
-    // Both OCs are successive and each anchored to its own M1 POI — ENTRY_READY!
     return {
       foundPattern: true,
       data: {
