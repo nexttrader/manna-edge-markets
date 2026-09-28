@@ -81,12 +81,57 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         }
       } catch {}
 
-      const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
-      const stopPrice = setup.stop;
-      const tp1 = setup.tp1;
-      const tp2 = setup.tp2;
+      const entryPrice = Number(setup.entry_price_recorded || setup.entry_zone_mid || 0);
       const isRunner = setup.signal_state === 'runner';
       const isBE = Boolean(setup.is_breakeven);
+      const currentStop = Number(setup.stop || 0);
+
+      // Robust initial stop & risk derivation:
+      let initialStop = setup.initial_stop ? Number(setup.initial_stop) : null;
+      let risk = (initialStop && Math.abs(entryPrice - initialStop) > 0)
+        ? Math.abs(entryPrice - initialStop)
+        : (currentStop && Math.abs(entryPrice - currentStop) > 0)
+          ? Math.abs(entryPrice - currentStop)
+          : 0;
+
+      // If risk is 0 (because initial_stop was null and stop was moved to BE entryPrice):
+      // Derive risk from TP1: tp1 = entryPrice - 2.0 * risk
+      if (risk <= 0 && setup.tp1 && Math.abs(entryPrice - Number(setup.tp1)) > 0) {
+        risk = Math.abs(entryPrice - Number(setup.tp1)) / (setup.r_multiple_1 || 2.0);
+      }
+
+      // If risk is still 0 (extreme edge case): fallback to standard tick/pip risk
+      if (risk <= 0) {
+        risk = setup.market === 'forex' ? 0.0020 : 10.0;
+      }
+
+      if (!initialStop || initialStop === entryPrice) {
+        initialStop = Number((entryPrice + risk).toFixed(setup.market === 'forex' ? 5 : 2));
+      }
+
+      const tp1 = setup.tp1 ? Number(setup.tp1) : Number((entryPrice - 2.0 * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+      const tp2 = setup.tp2 ? Number(setup.tp2) : Number((entryPrice - (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+      const r1 = setup.r_multiple_1 || 2.0;
+      const r2 = setup.r_multiple_2 || 3.5;
+
+      // Identify lowest price reached (downward profit for short setups)
+      const lowestObserved = Math.min(
+        currentPrice > 0 ? currentPrice : Infinity,
+        currentBid > 0 ? currentBid : Infinity,
+        minLow > 0 ? minLow : Infinity
+      );
+
+      // Identify highest price reached (upward drawdown for short setups)
+      const highestObserved = Math.max(
+        currentPrice > 0 ? currentPrice : 0,
+        currentAsk > 0 ? currentAsk : 0,
+        maxHigh > 0 ? maxHigh : 0
+      );
+
+      // Unrealized R multiple reached (positive when lowest price dropped below entry)
+      const maxExcursionR = (risk > 0 && lowestObserved !== Infinity)
+        ? Number(((entryPrice - lowestObserved) / risk).toFixed(2))
+        : 0;
 
       let hit = false;
       let outcomeType = '';
@@ -94,37 +139,43 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
       let realizedR = 0;
 
       // Bearish SELL setups:
-      // Profit is downward: currentBid or minLow drops to/below TP2 / TP1
-      // Loss is upward: currentAsk or maxHigh rises to/above Stop
-      if (tp2 && (minLow <= tp2 || currentBid <= tp2)) {
+      // Profit is downward: lowest price drops to/below TP2 / TP1 OR excursion R exceeds target R.
+      // Loss is upward: highest price rises to/above Stop.
+
+      // 1. TP2 HIT: applies to both active setups and runners!
+      if (lowestObserved <= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
         hit = true;
         outcomeType = 'tp2_hit';
         exitPrice = tp2;
-        realizedR = setup.r_multiple_2 || 3.5;
-      } else if (!isRunner && (minLow <= tp1 || currentBid <= tp1)) {
-        // First time hitting TP1 -> Move to runner with Stop at BE!
+        realizedR = r2;
+      }
+      // 2. TP1 HIT: only for active setups that have not become runners yet
+      else if (!isRunner && (lowestObserved <= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
+        // First time hitting TP1 → Move to runner with Stop at BE!
         const now = new Date().toISOString();
         let metaObj: any = {};
         try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
         metaObj.outcome_type = 'tp1_hit';
         metaObj.tp1_hit_at = now;
-        metaObj.realized_r = setup.r_multiple_1 || 2.0;
-        metaObj.mfe_r = setup.r_multiple_1 || 2.0;
+        metaObj.realized_r = r1;
+        metaObj.mfe_r = Math.max(r1, maxExcursionR);
 
+        // Lock stop at BE (entryPrice), preserve original stop in initial_stop
         await queryDb(
           `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
-          [entryPrice, stopPrice, setup.r_multiple_1 || 2.0, JSON.stringify(metaObj), setup.id]
+          [entryPrice, initialStop, Math.max(r1, maxExcursionR), JSON.stringify(metaObj), setup.id]
         );
 
         logger.info(
-          { instrument: setup.instrument, tp1, entryPrice },
+          { instrument: setup.instrument, tp1, entryPrice, initialStop },
           '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
         );
         continue;
-      } else if (maxHigh >= stopPrice || currentAsk >= stopPrice) {
-        // Stop hit!
+      }
+      // 3. STOP LOSS / BREAKEVEN HIT
+      else if (highestObserved >= currentStop || currentAsk >= currentStop || currentPrice >= currentStop) {
         hit = true;
-        exitPrice = stopPrice;
+        exitPrice = currentStop;
         if (isBE || isRunner) {
           outcomeType = 'be_hit';
           realizedR = 0.0;
@@ -149,14 +200,13 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         let highestPrice: number | null = maxHigh;
         let lowestPrice: number | null = minLow;
 
-        const risk = Math.abs(entryPrice - (setup.initial_stop || stopPrice));
-
+        // `risk` already computed above from initialStop
         try {
           const excursion = await calculateTradeExcursion({
             instrument: setup.instrument,
             bias: 'short',
             entryPrice,
-            initialStop: setup.initial_stop || stopPrice,
+            initialStop: initialStop,
             entryTime,
             exitTime: now,
             exitPrice

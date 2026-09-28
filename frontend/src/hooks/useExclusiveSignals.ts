@@ -160,7 +160,7 @@ export function useExclusiveSignals() {
     }
   }, [fetchAll]);
 
-  const resetAnalytics = useCallback(async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data') => {
+  const resetAnalytics = useCallback(async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data' | 'reset_all') => {
     try {
       const res = await fetch(`${API_BASE}/api/super-admin/exclusive-signals/reset-analytics`, {
         method: 'POST',

@@ -527,21 +527,23 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
   const [scanningMarket, setScanningMarket] = useState<'both' | 'forex' | 'futures'>('both');
   const [activeChartSetup, setActiveChartSetup] = useState<EdgeSetup | null>(null);
   const [resettingBaseline, setResettingBaseline] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   // CSV Export Filter State
   const [exportStartDate, setExportStartDate] = useState<string>('');
   const [exportEndDate, setExportEndDate] = useState<string>('');
   const [exportSinceReset, setExportSinceReset] = useState<boolean>(false);
 
-  const handleResetBaseline = async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data') => {
+  const handleResetBaseline = async (action: 'set_baseline' | 'clear_baseline' | 'wipe_test_data' | 'reset_all') => {
     let msg = 'Are you sure you want to reset the analytics baseline to NOW? All performance metrics will calculate from this point forward.';
     if (action === 'clear_baseline') msg = 'Revert to All-Time history analytics baseline?';
-    if (action === 'wipe_test_data') msg = '⚠️ CAUTION: This will permanently delete all test trade setups from the Elite Fractal database table. Proceed?';
+    if (action === 'wipe_test_data' || action === 'reset_all') msg = '⚠️ PERMANENT RESET: This will permanently delete ALL trade setups, logs, and analytics for the Elite Fractal strategy. Are you sure you want to proceed?';
     if (!confirm(msg)) return;
     setResettingBaseline(true);
     try {
       const res = await resetAnalytics(action);
-      alert(`✅ ${res?.message || 'Baseline updated'}`);
+      alert(`✅ ${res?.message || 'Analytics updated successfully'}`);
+      setShowResetModal(false);
     } catch (err: any) {
       alert(`⚠️ ${err.message}`);
     } finally {
@@ -643,6 +645,24 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
           </select>
           <button onClick={handleScan} disabled={scanning} style={{ background: scanning ? 'rgba(139,92,246,0.2)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: '1px solid rgba(139,92,246,0.6)', color: '#e9d5ff', borderRadius: '10px', padding: '10px 20px', cursor: scanning ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {scanning ? '⟳ Scanning...' : '⚡ Run Elite Fractal Scan'}
+          </button>
+          <button
+            onClick={() => setShowResetModal(true)}
+            style={{
+              background: 'rgba(239,68,68,0.12)',
+              border: '1px solid rgba(239,68,68,0.4)',
+              color: '#f87171',
+              borderRadius: '10px',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            ⚙️ Reset Analytics
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '20px', padding: '3px 10px', fontSize: '0.68rem', color: '#34d399', fontWeight: 700 }}>
@@ -1046,20 +1066,28 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                   ↩️ Clear Baseline
                 </button>
                 <button
-                  onClick={() => handleResetBaseline('wipe_test_data')}
+                  onClick={() => {
+                    if (confirm('⚠️ RESET ALL ELITE FRACTAL ANALYTICS\n\nThis will permanently delete ALL signal history, trade records, and analytics for the Elite Fractal strategy. This cannot be undone.\n\nProceed?')) {
+                      handleResetBaseline('wipe_test_data');
+                    }
+                  }}
                   disabled={resettingBaseline}
                   style={{
-                    background: 'rgba(239,68,68,0.12)',
-                    border: '1px solid rgba(239,68,68,0.3)',
+                    background: 'linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(185,28,28,0.15) 100%)',
+                    border: '2px solid rgba(239,68,68,0.6)',
                     color: '#f87171',
                     borderRadius: '8px',
-                    padding: '6px 12px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: resettingBaseline ? 'not-allowed' : 'pointer'
+                    padding: '8px 16px',
+                    fontSize: '0.78rem',
+                    fontWeight: 900,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    letterSpacing: '0.03em'
                   }}
                 >
-                  🗑️ Wipe Test Data
+                  🔴 Reset All Analytics
                 </button>
               </div>
             </div>
@@ -1469,6 +1497,192 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       {/* Universal Live Multi-Timeframe Chart Modal (Telemetry, Signals, History) */}
       {activeChartSetup && (
         <SetupChartModal setup={activeChartSetup} onClose={() => setActiveChartSetup(null)} />
+      )}
+
+      {/* Reset Analytics Settings Modal */}
+      {showResetModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 5, 15, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(20, 15, 45, 0.98) 0%, rgba(30, 20, 60, 0.98) 100%)',
+            border: '1px solid rgba(139, 92, 246, 0.5)',
+            borderRadius: '16px',
+            padding: '24px 28px',
+            maxWidth: '560px',
+            width: '100%',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(139, 92, 246, 0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f3e8ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>⚙️</span> Elite Fractal Analytics Settings
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#a78bfa', marginTop: '4px' }}>
+                  SuperAdmin exclusive strategy data management & baseline controls
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResetModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#94a3b8',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Current Status Box */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>
+                Current Strategy Analytics Status
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#e2e8f0', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span>Active Watermark: <strong style={{ color: analytics?.resetAt ? '#38bdf8' : '#fbbf24' }}>{analytics?.resetAt ? formatETTime(analytics.resetAt) : 'All-Time (No Reset Watermark)'}</strong></span>
+                <span>Total Trades: <strong style={{ color: '#a78bfa' }}>{analytics?.totalSignals ?? 0}</strong></span>
+              </div>
+            </div>
+
+            {/* Option 1: Set Baseline to Now */}
+            <div style={{
+              background: 'rgba(56, 189, 248, 0.06)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '10px',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#38bdf8' }}>
+                  📍 Option 1: Set Reset Baseline to NOW
+                </span>
+                <button
+                  onClick={() => handleResetBaseline('set_baseline')}
+                  disabled={resettingBaseline}
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                    border: '1px solid rgba(56, 189, 248, 0.5)',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {resettingBaseline ? 'Updating...' : 'Set Baseline to Now'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                Calculates win rate, net R-multiples, Profit Factor, and calendar outcomes starting strictly from this exact timestamp forward. Previous trade rows remain in database for export.
+              </div>
+            </div>
+
+            {/* Option 2: Clear Baseline */}
+            {analytics?.resetAt && (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#e2e8f0' }}>Clear Baseline Watermark</div>
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>Revert back to calculating all-time history from inception.</div>
+                </div>
+                <button
+                  onClick={() => handleResetBaseline('clear_baseline')}
+                  disabled={resettingBaseline}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Clear Baseline
+                </button>
+              </div>
+            )}
+
+            {/* Option 3: Hard Reset / Wipe All Data */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: '10px',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#f87171' }}>
+                  🔴 Option 2: Reset All Analytics (Purge History)
+                </span>
+                <button
+                  onClick={() => handleResetBaseline('reset_all')}
+                  disabled={resettingBaseline}
+                  style={{
+                    background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
+                    border: '1px solid rgba(239, 68, 68, 0.6)',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '0.74rem',
+                    fontWeight: 900,
+                    cursor: resettingBaseline ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {resettingBaseline ? 'Purging...' : 'Wipe & Reset Everything'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#fca5a5', lineHeight: 1.4 }}>
+                ⚠️ Permanently wipes all Elite Fractal setups, active trades, runners, and history from the <code>superadmin_edge_setups</code> table. All analytics reset to clean 0 state.
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

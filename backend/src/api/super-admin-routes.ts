@@ -2093,18 +2093,69 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
         currentPrice = s.entry_price_recorded || s.entry_zone_mid;
       }
 
-      const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
-      const initialStop = s.initial_stop || s.stop;
-      const risk = Math.abs(entryPrice - initialStop);
+      const entryPrice = Number(s.entry_price_recorded || s.entry_zone_mid || 0);
+
+      // Robust risk & initial stop calculation:
+      let initialStop = s.initial_stop ? Number(s.initial_stop) : null;
+      let stopPrice = Number(s.stop || 0);
+
+      let risk = (initialStop && Math.abs(entryPrice - initialStop) > 0)
+        ? Math.abs(entryPrice - initialStop)
+        : (stopPrice && Math.abs(entryPrice - stopPrice) > 0)
+          ? Math.abs(entryPrice - stopPrice)
+          : 0;
+
+      if (risk <= 0 && s.tp1 && Math.abs(entryPrice - Number(s.tp1)) > 0) {
+        risk = Math.abs(entryPrice - Number(s.tp1)) / (s.r_multiple_1 || 2.0);
+      }
+
+      if (risk <= 0) {
+        risk = s.market === 'forex' ? 0.0020 : 10.0;
+      }
+
+      if (!initialStop || initialStop === entryPrice) {
+        initialStop = Number((entryPrice + risk).toFixed(s.market === 'forex' ? 5 : 2));
+      }
+
+      const tp1 = s.tp1 ? Number(s.tp1) : Number((entryPrice - 2.0 * risk).toFixed(s.market === 'forex' ? 5 : 2));
+      const tp2 = s.tp2 ? Number(s.tp2) : Number((entryPrice - (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2));
+      const r2 = s.r_multiple_2 || 3.5;
 
       let unrealizedR = 0;
       let unrealizedPL = 0;
 
-      // Sell setups (bearish bias): profit is downward
+      // Sell setups (bearish bias): profit is downward — positive R when price drops below entry
       if (risk > 0 && currentPrice > 0) {
         const diff = entryPrice - currentPrice;
         unrealizedR = Number((diff / risk).toFixed(2));
         unrealizedPL = Number(diff.toFixed(s.market === 'forex' ? 5 : 2));
+      }
+
+      // Auto-resolve any setup/runner that has reached or exceeded TP2 (+3.5R)
+      if (unrealizedR >= r2 || (tp2 !== null && currentPrice <= tp2)) {
+        const now = new Date().toISOString();
+        let metaObj: any = {};
+        try { metaObj = JSON.parse(s.metadata || '{}'); } catch {}
+        metaObj.outcome_type = 'tp2_hit';
+        metaObj.exit_price = tp2;
+        metaObj.exit_time = now;
+        metaObj.realized_r = r2;
+        metaObj.mfe_r = Math.max(r2, unrealizedR);
+
+        await queryDb(
+          `UPDATE superadmin_edge_setups 
+           SET signal_state = 'resolved', 
+               resolved_at = ?, 
+               invalidation_reason = 'tp2_hit', 
+               exit_price = ?, 
+               realized_r = ?, 
+               mfe = ?, 
+               metadata = ? 
+           WHERE id = ?`,
+          [now, tp2, r2, Math.max(r2, unrealizedR), JSON.stringify(metaObj), s.id]
+        );
+        // Closed! Omit from active/runner list
+        return null;
       }
 
       return {
@@ -2114,11 +2165,14 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
         unrealizedPL,
         entry_price_recorded: entryPrice,
         initial_stop: initialStop,
+        tp1: tp1,
+        tp2: tp2,
         entry_triggered_at: s.entry_triggered_at || s.created_at
       };
     }));
 
-    return res.json({ success: true, signals: enriched, count: enriched.length });
+    const validSignals = enriched.filter(Boolean);
+    return res.json({ success: true, signals: validSignals, count: validSignals.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -2296,10 +2350,10 @@ router.post('/exclusive-signals/reset-analytics', verifySuperAdmin, async (req: 
       return res.json({ success: true, message: 'Analytics baseline cleared. Now calculating all-time metrics.', resetAt: null });
     }
 
-    if (action === 'wipe_test_data') {
+    if (action === 'wipe_test_data' || action === 'reset_all') {
       await queryDb(`DELETE FROM superadmin_edge_setups`);
       await queryDb(`DELETE FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
-      return res.json({ success: true, message: 'All test trade data purged cleanly. Fresh tracking initiated.', resetAt: null });
+      return res.json({ success: true, message: 'All Elite Fractal strategy signals, trades, and analytics have been reset cleanly.', resetAt: null });
     }
 
     // Default action: set_baseline
@@ -2362,8 +2416,11 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
     const closed = allSignals.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
 
     let totalR = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
     let winsCount = 0;
     let lossesCount = 0;
+    let breakevenCount = 0;
     let totalMae = 0;
     let maeCount = 0;
     let totalMfe = 0;
@@ -2372,34 +2429,59 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
     closed.forEach((s: any) => {
       let isWin = false;
       let isLoss = false;
+      let isBE = false;
+      let rVal: number | null = null;
+
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (s.mae !== null && s.mae !== undefined) { totalMae += s.mae; maeCount++; }
-        else if (meta.mae_r !== undefined) { totalMae += meta.mae_r; maeCount++; }
+        if (s.mae !== null && s.mae !== undefined) { totalMae += Number(s.mae); maeCount++; }
+        else if (meta.mae_r !== undefined) { totalMae += Number(meta.mae_r); maeCount++; }
 
-        if (s.mfe !== null && s.mfe !== undefined) { totalMfe += s.mfe; mfeCount++; }
-        else if (meta.mfe_r !== undefined) { totalMfe += meta.mfe_r; mfeCount++; }
+        if (s.mfe !== null && s.mfe !== undefined) { totalMfe += Number(s.mfe); mfeCount++; }
+        else if (meta.mfe_r !== undefined) { totalMfe += Number(meta.mfe_r); mfeCount++; }
 
-        if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
-          isWin = true;
-          totalR += (s.r_multiple_2 || 3.5);
+        if (s.realized_r !== null && s.realized_r !== undefined) {
+          rVal = Number(s.realized_r);
+        } else if (meta.realized_r !== undefined) {
+          rVal = Number(meta.realized_r);
+        } else if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
+          rVal = s.r_multiple_2 || 3.5;
         } else if (meta.outcome_type === 'tp1_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
-          isWin = true;
-          totalR += (s.r_multiple_1 || 2.0);
+          rVal = s.r_multiple_1 || 2.0;
         } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
-          // Breakeven 0R
+          rVal = 0.0;
         } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
-          isLoss = true;
-          totalR -= 1.0;
+          rVal = -1.0;
         }
       } catch {}
+
+      if (rVal !== null) {
+        totalR += rVal;
+        if (rVal > 0) {
+          isWin = true;
+          grossProfit += rVal;
+        } else if (rVal < 0) {
+          isLoss = true;
+          grossLoss += Math.abs(rVal);
+        } else {
+          isBE = true;
+        }
+      } else {
+        isLoss = true;
+        totalR -= 1.0;
+        grossLoss += 1.0;
+      }
+
       if (isWin) winsCount++;
-      else if (isLoss || s.signal_state === 'resolved') lossesCount++;
+      else if (isLoss) lossesCount++;
+      else if (isBE) breakevenCount++;
     });
 
     const evaluatedClosedCount = winsCount + lossesCount;
     const winRate = evaluatedClosedCount > 0 ? ((winsCount / evaluatedClosedCount) * 100).toFixed(1) : null;
-    const profitFactor = lossesCount > 0 ? (totalR > 0 ? (totalR / lossesCount).toFixed(2) : '0.00') : (winsCount > 0 ? '∞' : null);
+    const profitFactor = grossLoss > 0
+      ? (grossProfit / grossLoss).toFixed(2)
+      : (grossProfit > 0 ? '∞' : null);
 
     const avgConviction = allSignals.length > 0
       ? (allSignals.reduce((sum: number, s: any) => sum + (s.conviction_score || 0), 0) / allSignals.length).toFixed(1)
@@ -2418,14 +2500,23 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
       acc[inst].total++;
       if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[inst].active++;
       let isWin = false;
+      let isLoss = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) isWin = true;
+        const rVal = (s.realized_r !== null && s.realized_r !== undefined) ? Number(s.realized_r) : null;
+        if (rVal !== null) {
+          if (rVal > 0) isWin = true;
+          else if (rVal < 0) isLoss = true;
+        } else if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) {
+          isWin = true;
+        } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl')) {
+          isLoss = true;
+        }
       } catch {}
-      if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
+      if (s.signal_state === 'resolved' || s.signal_state === 'invalidated') {
         acc[inst].resolved++;
         if (isWin) acc[inst].wins++;
-        else acc[inst].losses++;
+        else if (isLoss) acc[inst].losses++;
         const totalClosed = acc[inst].wins + acc[inst].losses;
         if (totalClosed > 0) acc[inst].winRate = ((acc[inst].wins / totalClosed) * 100).toFixed(1);
       }
@@ -2438,14 +2529,23 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
       acc[kz].total++;
       if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[kz].active++;
       let isWin = false;
+      let isLoss = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) isWin = true;
+        const rVal = (s.realized_r !== null && s.realized_r !== undefined) ? Number(s.realized_r) : null;
+        if (rVal !== null) {
+          if (rVal > 0) isWin = true;
+          else if (rVal < 0) isLoss = true;
+        } else if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) {
+          isWin = true;
+        } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl')) {
+          isLoss = true;
+        }
       } catch {}
-      if (s.signal_state === 'resolved' || s.invalidation_reason?.includes('sl')) {
+      if (s.signal_state === 'resolved' || s.signal_state === 'invalidated') {
         acc[kz].resolved++;
         if (isWin) acc[kz].wins++;
-        else acc[kz].losses++;
+        else if (isLoss) acc[kz].losses++;
         const totalClosed = acc[kz].wins + acc[kz].losses;
         if (totalClosed > 0) acc[kz].winRate = ((acc[kz].wins / totalClosed) * 100).toFixed(1);
       }
@@ -2460,6 +2560,7 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
         closedSignals: closed.length,
         winsCount,
         lossesCount,
+        breakevenCount,
         winRate,
         avgConviction,
         avgRiskReward,
