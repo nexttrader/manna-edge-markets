@@ -123,7 +123,11 @@ export async function initializeDatabase(): Promise<void> {
                     `UPDATE edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`,
                     `UPDATE forex_edge_setups SET entry_price_recorded = NULL WHERE signal_state = 'awaiting_entry' AND entry_triggered_at IS NULL AND entry_price_recorded IS NOT NULL`,
                     `CREATE TABLE IF NOT EXISTS superadmin_edge_setups (id TEXT PRIMARY KEY, instrument TEXT NOT NULL, market TEXT DEFAULT 'forex', created_at TEXT NOT NULL, created_by_run TEXT, killzone_origin TEXT NOT NULL, killzone_origin_at TEXT, bias TEXT NOT NULL, entry_zone_low DOUBLE PRECISION NOT NULL, entry_zone_high DOUBLE PRECISION NOT NULL, entry_zone_mid DOUBLE PRECISION NOT NULL, stop DOUBLE PRECISION NOT NULL, tp1 DOUBLE PRECISION NOT NULL, tp2 DOUBLE PRECISION, r_multiple_1 DOUBLE PRECISION, r_multiple_2 DOUBLE PRECISION, signal_state TEXT NOT NULL DEFAULT 'awaiting_entry', superseded INTEGER DEFAULT 0, invalidation_reason TEXT, invalidation_detail TEXT, entry_triggered_at TEXT, tradable INTEGER DEFAULT 1, conviction_score DOUBLE PRECISION, liquidity_score DOUBLE PRECISION, strategy_id TEXT DEFAULT 'elite_fractal', strategy_tier TEXT DEFAULT 'elite', metadata TEXT, resolved_at TEXT, state_machine_state TEXT DEFAULT 'IDLE', state_machine_phase TEXT DEFAULT 'SCANNING', state_changed_at TEXT)`,
-                    `CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`
+                    `CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS entry_price_recorded DOUBLE PRECISION`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS is_breakeven INTEGER DEFAULT 0`,
+                    `ALTER TABLE superadmin_edge_setups ADD COLUMN IF NOT EXISTS initial_stop DOUBLE PRECISION`,
+                    `UPDATE superadmin_edge_setups SET signal_state = 'active', entry_triggered_at = COALESCE(entry_triggered_at, created_at), entry_price_recorded = COALESCE(entry_price_recorded, entry_zone_mid), initial_stop = COALESCE(initial_stop, stop) WHERE signal_state = 'awaiting_entry'`
                 ];
                 for (const sql of safeAlters) {
                     try { await client.query(sql); } catch (_) { /* column/index/query safe execution */ }
@@ -774,6 +778,10 @@ export async function initializeDatabase(): Promise<void> {
         state_changed_at TEXT
       )`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_superadmin_edge_setups_instrument ON superadmin_edge_setups(instrument, signal_state)`);
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN entry_price_recorded REAL`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN is_breakeven INTEGER DEFAULT 0`); } catch {}
+      try { db.exec(`ALTER TABLE superadmin_edge_setups ADD COLUMN initial_stop REAL`); } catch {}
+      try { db.exec(`UPDATE superadmin_edge_setups SET signal_state = 'active', entry_triggered_at = COALESCE(entry_triggered_at, created_at), entry_price_recorded = COALESCE(entry_price_recorded, entry_zone_mid), initial_stop = COALESCE(initial_stop, stop) WHERE signal_state = 'awaiting_entry'`); } catch {}
     } catch {}
 
     // ── Notification Feature Toggles ─────────────────────────────────────────

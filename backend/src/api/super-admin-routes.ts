@@ -2071,8 +2071,13 @@ const verifySuperAdmin = (req: Request, res: Response, next: express.NextFunctio
 
 router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
+    try {
+      const { evaluateEliteFractalOutcomes } = await import('../scheduler/elite-fractal-scanner');
+      await evaluateEliteFractalOutcomes();
+    } catch {}
+
     const rows = await queryDb<any>(
-      `SELECT * FROM superadmin_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry','active') ORDER BY created_at DESC LIMIT 50`
+      `SELECT * FROM superadmin_edge_setups WHERE superseded = 0 AND signal_state IN ('active','runner','awaiting_entry') ORDER BY created_at DESC LIMIT 50`
     );
     return res.json({ success: true, signals: rows, count: rows.length });
   } catch (err: any) {
@@ -2083,7 +2088,7 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
 router.get('/exclusive-signals/history', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const rows = await queryDb<any>(
-      `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded') ORDER BY created_at DESC LIMIT 30`
+      `SELECT * FROM superadmin_edge_setups WHERE signal_state IN ('invalidated','resolved','superseded') ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 50`
     );
     return res.json({ success: true, signals: rows, count: rows.length });
   } catch (err: any) {
@@ -2117,7 +2122,7 @@ router.get('/exclusive-signals/state-machine', verifySuperAdmin, async (req: Req
 router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
     const allSignals = await queryDb<any>(`SELECT * FROM superadmin_edge_setups ORDER BY created_at DESC LIMIT 500`);
-    const active = allSignals.filter((s: any) => ['awaiting_entry', 'active'].includes(s.signal_state));
+    const active = allSignals.filter((s: any) => ['awaiting_entry', 'active', 'runner'].includes(s.signal_state));
     const closed = allSignals.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
 
     let totalR = 0;
@@ -2129,10 +2134,14 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
       let isLoss = false;
       try {
         const meta = JSON.parse(s.metadata || '{}');
-        if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
+        if (meta.outcome_type === 'tp2_hit') {
           isWin = true;
-          const r = meta.outcome_type === 'tp2_hit' ? (s.r_multiple_2 || 3.5) : (s.r_multiple_1 || 2.0);
-          totalR += r;
+          totalR += (s.r_multiple_2 || 3.5);
+        } else if (meta.outcome_type === 'tp1_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
+          isWin = true;
+          totalR += (s.r_multiple_1 || 2.0);
+        } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
+          // Breakeven 0R
         } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
           isLoss = true;
           totalR -= 1.0;

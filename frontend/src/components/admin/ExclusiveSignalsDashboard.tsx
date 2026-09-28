@@ -203,10 +203,28 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
               <span style={{ fontWeight: 900, fontSize: '1.15rem', color: '#e2e8f0', fontFamily: 'monospace' }}>{signal.instrument}</span>
               <span style={{ background: isShort ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)', border: `1px solid ${isShort ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.5)'}`, color: isShort ? '#f87171' : '#34d399', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: 800 }}>{isShort ? '▼ SELL' : '▲ BUY'}</span>
               <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 700 }}>ELITE FRACTAL</span>
-              <span style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', color: '#c084fc', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 700 }}>SUPERADMIN EXCLUSIVE</span>
+              {signal.signal_state === 'runner' ? (
+                <span style={{ background: 'rgba(168,85,247,0.18)', border: '1px solid rgba(168,85,247,0.5)', color: '#c084fc', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800 }}>
+                  🏃 RUNNER (+2.0R BOOKED · STOP @ BE)
+                </span>
+              ) : signal.signal_state === 'active' ? (
+                <span style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.5)', color: '#34d399', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
+                  ACTIVE · MARKET EXECUTED @ {fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market)}
+                </span>
+              ) : (
+                <span style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.5)', color: '#fbbf24', borderRadius: '20px', padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800 }}>
+                  ⏳ PENDING MARKET FILL
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '4px' }}>
-              {signal.market?.toUpperCase()} · {(signal.killzone_origin || '').toUpperCase().replace('_', ' ')} · {signal.created_at ? formatETTime(signal.created_at) : '—'}
+              {signal.market?.toUpperCase()} · {(signal.killzone_origin || '').toUpperCase().replace('_', ' ')} · Signal: {signal.created_at ? formatETTime(signal.created_at) : '—'}
+              {signal.entry_triggered_at && (
+                <span style={{ color: '#34d399', marginLeft: '8px', fontWeight: 700 }}>
+                  ⚡ Executed: {formatETTime(signal.entry_triggered_at)}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -257,10 +275,10 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
         {/* Levels Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           {[
+            { label: 'Market Exec Fill', value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#38bdf8', sub: 'Executed at Market' },
             { label: 'Entry Low',   value: fmtPrice(signal.entry_zone_low,  signal.market), color: '#e2e8f0', sub: 'Zone Floor' },
-            { label: 'Entry Mid',   value: fmtPrice(signal.entry_zone_mid,  signal.market), color: '#38bdf8', sub: 'Primary Fill' },
             { label: 'Entry High',  value: fmtPrice(signal.entry_zone_high, signal.market), color: '#e2e8f0', sub: 'Zone Ceiling' },
-            { label: 'Stop Loss',   value: fmtPrice(signal.stop,            signal.market), color: '#f87171', sub: 'Inval Level' },
+            { label: 'Stop Loss',   value: fmtPrice(signal.stop,            signal.market), color: '#f87171', sub: signal.is_breakeven ? 'Locked at BE' : 'Inval Level' },
             { label: 'TP1 (+2.0R)', value: fmtPrice(signal.tp1,             signal.market), color: '#34d399', sub: 'Target 1' },
             { label: 'TP2 (+3.5R)', value: fmtPrice(signal.tp2,             signal.market), color: '#10b981', sub: 'Target 2' }
           ].map(item => (
@@ -660,37 +678,69 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             <div style={{ color: '#4a5568', fontSize: '0.8rem', padding: '20px 0' }}>No historical signals yet.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {historySignals.map(signal => (
-                <div key={signal.id} style={{ background: 'rgba(15,20,35,0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                  <div>
-                    <span style={{ fontWeight: 800, fontSize: '0.9rem', fontFamily: 'monospace' }}>{signal.instrument}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#718096', marginLeft: '10px' }}>{signal.market?.toUpperCase()}</span>
+              {historySignals.map(signal => {
+                const meta = (() => { try { return JSON.parse(signal.metadata || '{}'); } catch { return {}; } })();
+                const outcome = meta.outcome_type || signal.invalidation_reason || signal.signal_state;
+                const isTp2 = outcome === 'tp2_hit';
+                const isTp1 = outcome === 'tp1_hit';
+                const isBe = outcome === 'be_hit';
+                const isSl = outcome === 'sl_hit' || String(outcome).includes('sl') || String(outcome).includes('stop');
+                
+                return (
+                  <div key={signal.id} style={{ background: 'rgba(15,20,35,0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', fontFamily: 'monospace' }}>{signal.instrument}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#718096' }}>{signal.market?.toUpperCase()}</span>
+                        {isTp2 ? (
+                          <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#34d399', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
+                            🎯 TP2 HIT (+3.5R)
+                          </span>
+                        ) : isTp1 ? (
+                          <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#34d399', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
+                            🎯 TP1 HIT (+2.0R)
+                          </span>
+                        ) : isBe ? (
+                          <span style={{ fontSize: '0.66rem', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
+                            ⚖️ BREAK EVEN (0.0R)
+                          </span>
+                        ) : isSl ? (
+                          <span style={{ fontSize: '0.66rem', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
+                            🛑 STOP LOSS (-1.0R)
+                          </span>
+                        ) : null}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px' }}>
+                        Resolved: {signal.resolved_at ? formatETTime(signal.resolved_at) : '—'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#718096' }}>Entry: {fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market)}</span>
+                      <span style={{ color: '#f87171' }}>SL: {fmtPrice(signal.stop, signal.market)}</span>
+                      <span style={{ color: '#34d399' }}>TP1: {fmtPrice(signal.tp1, signal.market)}</span>
+                      <span style={{ color: '#10b981' }}>TP2: {fmtPrice(signal.tp2, signal.market)}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        onClick={() => setActiveChartSetup(signal)}
+                        style={{
+                          background: 'rgba(139,92,246,0.15)',
+                          border: '1px solid rgba(139,92,246,0.4)',
+                          color: '#c084fc',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '0.7rem',
+                          cursor: 'pointer',
+                          fontWeight: 700
+                        }}
+                      >
+                        📊 View Chart
+                      </button>
+                      <div style={{ fontSize: '0.68rem', background: signal.signal_state === 'resolved' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${signal.signal_state === 'resolved' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, color: signal.signal_state === 'resolved' ? '#34d399' : '#f87171', borderRadius: '20px', padding: '3px 10px', fontWeight: 700 }}>{(signal.signal_state || '').toUpperCase()}</div>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#718096' }}>Entry: {fmtPrice(signal.entry_zone_mid, signal.market)}</span>
-                    <span style={{ color: '#f87171' }}>SL: {fmtPrice(signal.stop, signal.market)}</span>
-                    <span style={{ color: '#34d399' }}>TP1: {fmtPrice(signal.tp1, signal.market)}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button
-                      onClick={() => setActiveChartSetup(signal)}
-                      style={{
-                        background: 'rgba(139,92,246,0.15)',
-                        border: '1px solid rgba(139,92,246,0.4)',
-                        color: '#c084fc',
-                        borderRadius: '6px',
-                        padding: '4px 10px',
-                        fontSize: '0.7rem',
-                        cursor: 'pointer',
-                        fontWeight: 700
-                      }}
-                    >
-                      📊 View Chart
-                    </button>
-                    <div style={{ fontSize: '0.68rem', background: signal.signal_state === 'resolved' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${signal.signal_state === 'resolved' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, color: signal.signal_state === 'resolved' ? '#34d399' : '#f87171', borderRadius: '20px', padding: '3px 10px', fontWeight: 700 }}>{(signal.signal_state || '').toUpperCase()}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
