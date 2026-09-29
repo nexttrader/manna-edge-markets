@@ -55,12 +55,14 @@ export interface InstrumentTelemetry {
   instrument: string;
   state: StateMachineState;
   phase: StateMachinePhase;
+  bias?: 'short' | 'long';
   stateChangedAt: string;
   phaseChangedAt: string;
   invalidationReason?: string;
   h1PoiLevel?: number;
   h1PoiType?: string;
   m15SwingHigh?: number;
+  m15SwingLow?: number;
   m5ConfirmationTime?: string;
   m1OcCount?: number;
   lastScannedAt: string;
@@ -79,7 +81,8 @@ interface FVGDetails {
   high: number;
   low: number;
   middleCandleIdx: number;
-  middleCandleHigh: number;
+  middleCandleHigh?: number;
+  middleCandleLow?: number;
   timestamp: string;
 }
 
@@ -88,10 +91,12 @@ interface OCDetails {
   low: number;
   displacementIdx: number;
   poiType: POIType;
-  swingHigh: number;
+  swingHigh?: number;
+  swingLow?: number;
   fvgMiddleHigh?: number;
+  fvgMiddleLow?: number;
   complete: boolean;
-  swingHighBroken: boolean;
+  swingBroken: boolean;
   timestamp: string;
 }
 
@@ -108,12 +113,14 @@ interface POIContext {
 interface StateData {
   state: StateMachineState;
   phase: StateMachinePhase;
+  bias: 'short' | 'long';
   stateChangedAt: string;
   phaseChangedAt: string;
   h1POI?: POIContext;
   h1WindowStart?: number;
   h1CandleCount?: number;
   m15SwingHigh?: number;
+  m15SwingLow?: number;
   m15ConfirmationTime?: number;
   m15POI?: POIContext;
   m5ConfirmationTime?: number;
@@ -121,7 +128,9 @@ interface StateData {
   m1OCs: OCDetails[];
   m1FinalOCPOIType?: POIType;
   m1FinalOCSwingHigh?: number;
+  m1FinalOCSwingLow?: number;
   m1FVGMiddleHigh?: number;
+  m1FVGMiddleLow?: number;
   invalidationReason?: string;
 }
 
@@ -153,7 +162,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     id: 'elite_fractal',
     name: 'Elite Fractal Alignment',
     tier: 'elite',
-    description: '4-Timeframe Fractal Alignment state machine: H1 (Context) \u2192 M15 (Primary Setup) \u2192 M5 (Confirmation) \u2192 M1 (Entry). Bearish SELL setups only. Exclusively visible to SuperAdmin.',
+    description: '4-Timeframe Fractal Alignment state machine: H1 (Context) \u2192 M15 (Primary Setup) \u2192 M5 (Confirmation) \u2192 M1 (Entry). Supports Bearish (SELL) and Bullish (BUY) setups. Exclusively visible to SuperAdmin.',
     enabled: true,
     visibility: 'superadmin_only'
   };
@@ -176,11 +185,11 @@ export class EliteFractalStrategy implements IStrategyEngine {
     for (const instrument of instruments) {
       try {
         const bias = preCalculatedBiases[instrument];
-        if (bias !== 'short') {
+        if (bias !== 'short' && bias !== 'long') {
           this.updateTelemetry(instrument, StateMachineState.IDLE, StateMachinePhase.SCANNING);
           continue;
         }
-        const result = await this.processInstrument(instrument, market, killzone, runId);
+        const result = await this.processInstrument(instrument, market, killzone, runId, bias);
         if (result) candidates.push(result);
       } catch (err: any) {
         logger.warn({ instrument, err: err.message }, 'EliteFractal: Error evaluating instrument');
@@ -198,21 +207,22 @@ export class EliteFractalStrategy implements IStrategyEngine {
     instrument: string,
     market: 'futures' | 'forex',
     killzone: KillzoneInfo,
-    runId: string
+    runId: string,
+    bias: 'short' | 'long'
   ): Promise<CandidateSetup | null> {
-    this.resetState(instrument);
+    this.resetState(instrument, bias);
 
     // Step 1: H1 scan — enlarged to 120 candles matching Manna SND historical price action feed
     const h1Candles = await fetchCandles(instrument, '1h', 120);
     if (h1Candles.length < 15) return null;
 
-    const h1POI = this.scanH1ForPOI(h1Candles);
+    const h1POI = this.scanH1ForPOI(h1Candles, bias);
     if (!h1POI) {
-      this.updateTelemetry(instrument, StateMachineState.IDLE, StateMachinePhase.SCANNING);
+      this.updateTelemetry(instrument, StateMachineState.IDLE, StateMachinePhase.SCANNING, bias);
       return null;
     }
 
-    const state = this.getState(instrument);
+    const state = this.getState(instrument, bias);
     state.h1POI = h1POI;
     state.h1WindowStart = new Date(h1POI.timestamp).getTime();
     state.h1CandleCount = 0;
@@ -222,14 +232,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const m15Candles = await fetchCandles(instrument, '15m', 120);
     if (m15Candles.length < 20) return null;
 
-    const m15Scan = this.retrospectiveScanM15(m15Candles, state);
+    const m15Scan = this.retrospectiveScanM15(m15Candles, state, bias);
     if (!m15Scan.foundPattern || !m15Scan.jumpToState) return null;
 
     Object.assign(state, m15Scan.data || {});
     this.transitionTo(instrument, m15Scan.jumpToState);
 
-    // Allow both M15_REVERSAL_CONFIRMED (strongest) and M15_OC_FORMED (valid setup stage)
-    // to proceed to M5 confirmation — M15_OC_FORMED is a legitimate bearish setup initiation.
+    // Allow both M15_REVERSAL_CONFIRMED and M15_OC_FORMED to proceed to M5 confirmation
     const m15StateOk = state.state === StateMachineState.M15_REVERSAL_CONFIRMED ||
                        state.state === StateMachineState.M15_OC_FORMED;
     if (!m15StateOk) return null;
@@ -238,7 +247,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const m5Candles = await fetchCandles(instrument, '5m', 180);
     if (m5Candles.length < 30) return null;
 
-    const m5Scan = this.retrospectiveScanM5(m5Candles, state);
+    const m5Scan = this.retrospectiveScanM5(m5Candles, state, bias);
     if (!m5Scan.foundPattern || !m5Scan.jumpToState) return null;
 
     Object.assign(state, m5Scan.data || {});
@@ -249,32 +258,34 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const m1Candles = await fetchCandles(instrument, '1m', 100);
     if (m1Candles.length < 25) return null;
 
-    // Guard: check that recent price action hasn't broken above the M15 swing high
-    if (state.m15SwingHigh) {
+    // Guard: check that recent price action hasn't broken structural level
+    if (bias === 'short' && state.m15SwingHigh) {
       const recentHigh = Math.max(...m1Candles.slice(-10).map(c => c.high));
       if (recentHigh >= state.m15SwingHigh) {
         this.transitionTo(instrument, StateMachineState.INVALIDATED);
         return null;
       }
+    } else if (bias === 'long' && state.m15SwingLow) {
+      const recentLow = Math.min(...m1Candles.slice(-10).map(c => c.low));
+      if (recentLow <= state.m15SwingLow) {
+        this.transitionTo(instrument, StateMachineState.INVALIDATED);
+        return null;
+      }
     }
 
-    // Fix B: Minimum OC size per instrument — prevents sub-pip micro-consolidations
-    // being treated as valid institutional supply zones.
-    // With stop at M1 OC high + buffer, the OC range determines the effective risk:
-    //   entry at OC mid → risk ≈ OC range / 2 + buffer
-    // Floors: JPY 10 pips (0.100) | Regular forex 5 pips (0.0005) | Futures $1.0
+    // Minimum OC size per instrument
+    // JPY pairs: 10 JPY pips (0.100) | Regular forex 5 pips (0.0005) | Futures $1.0
     const isJPYPair = instrument.includes('JPY');
     const minOCRange = market === 'futures' ? 1.0 : isJPYPair ? 0.100 : 0.0005;
 
-    const m1Scan = this.retrospectiveScanM1(m1Candles, state, minOCRange);
+    const m1Scan = this.retrospectiveScanM1(m1Candles, state, bias, minOCRange);
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    // ENTRY_READY requires 2 successive OCs from M1 POIs (enforced inside retrospectiveScanM1).
-    // If only 1 OC found or OCs not in succession → M1_OC_CONFIRMED (monitor for second OC).
+    // ENTRY_READY requires 2 successive OCs from M1 POIs
     if (state.m1OCs && state.m1OCs.length >= 2) {
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
-      return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles);
+      return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles, bias);
     } else if (state.m1OCs && state.m1OCs.length === 1) {
       this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
       return null;
@@ -288,47 +299,76 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // H1 SCANNING
   // ============================================================================
 
-  private scanH1ForPOI(candles: Candle[]): POIContext | null {
+  private scanH1ForPOI(candles: Candle[], bias: 'short' | 'long'): POIContext | null {
     if (candles.length < 5) return null;
 
-    // Enlarge lookback across the full 120-candle H1 feed (matching Manna SND)
-    // to discover any valid H1 POI (FVG or Swing High) that price has tapped or formed
     const maxLookback = Math.min(candles.length - 2, 120);
-    const recentCandles = candles.slice(-12); // Last 12 hours of price action
+    const recentCandles = candles.slice(-12);
 
     for (let i = 1; i <= maxLookback; i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
 
-      const fvg = this.detectFVG(candles, idx, 'BEARISH');
-      if (fvg) {
-        // Check if recent price (or this candle) tapped into the FVG
-        const tapped = recentCandles.some(c => this.isPriceTappingFVG(c, fvg)) || this.isPriceTappingFVG(candle, fvg);
-        if (tapped) {
-          return {
-            type: POIType.FVG,
-            priceLevel: fvg.high,
-            candleIndex: idx,
-            timestamp: candle.timestamp,
-            high: fvg.high,
-            low: fvg.low,
-            fvgDetails: fvg
-          };
+      if (bias === 'short') {
+        const fvg = this.detectFVG(candles, idx, 'BEARISH');
+        if (fvg) {
+          const tapped = recentCandles.some(c => this.isPriceTappingFVG(c, fvg)) || this.isPriceTappingFVG(candle, fvg);
+          if (tapped) {
+            return {
+              type: POIType.FVG,
+              priceLevel: fvg.high,
+              candleIndex: idx,
+              timestamp: candle.timestamp,
+              high: fvg.high,
+              low: fvg.low,
+              fvgDetails: fvg
+            };
+          }
         }
-      }
 
-      const swingHigh = this.detectSwingHighAt(candles, idx);
-      if (swingHigh) {
-        // Check if recent price tapped near the swing high or if it's a recent swing high
-        const tapped = recentCandles.some(c => Math.abs(c.high - swingHigh) <= swingHigh * 0.003 || c.high >= swingHigh * 0.997) || i <= 8;
-        if (tapped) {
-          return {
-            type: POIType.SWING_HIGH,
-            priceLevel: swingHigh,
-            candleIndex: idx,
-            timestamp: candle.timestamp,
-            high: swingHigh
-          };
+        const swingHigh = this.detectSwingHighAt(candles, idx);
+        if (swingHigh) {
+          const tapped = recentCandles.some(c => Math.abs(c.high - swingHigh) <= swingHigh * 0.003 || c.high >= swingHigh * 0.997) || i <= 8;
+          if (tapped) {
+            return {
+              type: POIType.SWING_HIGH,
+              priceLevel: swingHigh,
+              candleIndex: idx,
+              timestamp: candle.timestamp,
+              high: swingHigh
+            };
+          }
+        }
+      } else {
+        // Bullish long POI
+        const fvg = this.detectFVG(candles, idx, 'BULLISH');
+        if (fvg) {
+          const tapped = recentCandles.some(c => this.isPriceTappingFVG(c, fvg)) || this.isPriceTappingFVG(candle, fvg);
+          if (tapped) {
+            return {
+              type: POIType.FVG,
+              priceLevel: fvg.low,
+              candleIndex: idx,
+              timestamp: candle.timestamp,
+              high: fvg.high,
+              low: fvg.low,
+              fvgDetails: fvg
+            };
+          }
+        }
+
+        const swingLow = this.detectSwingLowAt(candles, idx);
+        if (swingLow) {
+          const tapped = recentCandles.some(c => Math.abs(c.low - swingLow) <= swingLow * 0.003 || c.low <= swingLow * 1.003) || i <= 8;
+          if (tapped) {
+            return {
+              type: POIType.SWING_LOW,
+              priceLevel: swingLow,
+              candleIndex: idx,
+              timestamp: candle.timestamp,
+              low: swingLow
+            };
+          }
         }
       }
     }
@@ -339,11 +379,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // M15 SCAN
   // ============================================================================
 
-  private retrospectiveScanM15(candles: Candle[], state: StateData): RetrospectiveScanResult {
-    // Enlarge window up to 48 hours from H1 POI start so setups have room to build
+  private retrospectiveScanM15(candles: Candle[], state: StateData, bias: 'short' | 'long'): RetrospectiveScanResult {
     const h1WindowEnd = (state.h1WindowStart || 0) + (48 * 60 * 60 * 1000);
-
-    // Enlarge lookback to scan up to 60 candles (~15 hours) of 15m price action
     const maxScan = Math.min(60, candles.length - 3);
 
     for (let i = 1; i <= maxScan; i++) {
@@ -353,26 +390,51 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
       if (state.h1WindowStart && (ts < state.h1WindowStart || ts > h1WindowEnd)) continue;
 
-      const reversal = this.detect3to4CandleReversal(candles, idx, 'BEARISH');
-      if (reversal?.complete && !reversal.swingHighBroken) {
-        return {
-          foundPattern: true,
-          jumpToState: StateMachineState.M15_REVERSAL_CONFIRMED,
-          data: { m15SwingHigh: reversal.swingHigh, m15ConfirmationTime: new Date(reversal.timestamp).getTime(), m15POI: reversal.poi }
-        };
-      }
+      if (bias === 'short') {
+        const reversal = this.detect3to4CandleReversal(candles, idx, 'BEARISH');
+        if (reversal?.complete && !reversal.swingBroken) {
+          return {
+            foundPattern: true,
+            jumpToState: StateMachineState.M15_REVERSAL_CONFIRMED,
+            data: { m15SwingHigh: reversal.swingHigh, m15ConfirmationTime: new Date(reversal.timestamp).getTime(), m15POI: reversal.poi }
+          };
+        }
 
-      const oc = this.detectBearishOC(candles, idx);
-      if (oc?.complete) {
-        return {
-          foundPattern: true,
-          jumpToState: StateMachineState.M15_OC_FORMED,
-          data: {
-            m15POI: { type: POIType.ORDER_BLOCK, priceLevel: oc.high, candleIndex: idx, timestamp: candle.timestamp, high: oc.high, low: oc.low },
-            m15ConfirmationTime: new Date(candle.timestamp).getTime(), // anchor M5 afterTime
-            m15SwingHigh: oc.swingHigh  // use OC high as swing reference for invalidation guard
-          }
-        };
+        const oc = this.detectBearishOC(candles, idx);
+        if (oc?.complete) {
+          return {
+            foundPattern: true,
+            jumpToState: StateMachineState.M15_OC_FORMED,
+            data: {
+              m15POI: { type: POIType.ORDER_BLOCK, priceLevel: oc.high, candleIndex: idx, timestamp: candle.timestamp, high: oc.high, low: oc.low },
+              m15ConfirmationTime: new Date(candle.timestamp).getTime(),
+              m15SwingHigh: oc.swingHigh
+            }
+          };
+        }
+      } else {
+        // Bullish long M15
+        const reversal = this.detect3to4CandleReversal(candles, idx, 'BULLISH');
+        if (reversal?.complete && !reversal.swingBroken) {
+          return {
+            foundPattern: true,
+            jumpToState: StateMachineState.M15_REVERSAL_CONFIRMED,
+            data: { m15SwingLow: reversal.swingLow, m15ConfirmationTime: new Date(reversal.timestamp).getTime(), m15POI: reversal.poi }
+          };
+        }
+
+        const oc = this.detectBullishOC(candles, idx);
+        if (oc?.complete) {
+          return {
+            foundPattern: true,
+            jumpToState: StateMachineState.M15_OC_FORMED,
+            data: {
+              m15POI: { type: POIType.ORDER_BLOCK, priceLevel: oc.low, candleIndex: idx, timestamp: candle.timestamp, high: oc.high, low: oc.low },
+              m15ConfirmationTime: new Date(candle.timestamp).getTime(),
+              m15SwingLow: oc.swingLow
+            }
+          };
+        }
       }
     }
     return { foundPattern: false };
@@ -382,7 +444,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // M5 SCAN
   // ============================================================================
 
-  private retrospectiveScanM5(candles: Candle[], state: StateData): RetrospectiveScanResult {
+  private retrospectiveScanM5(candles: Candle[], state: StateData, bias: 'short' | 'long'): RetrospectiveScanResult {
     const afterTime = state.m15ConfirmationTime || 0;
 
     for (let i = 1; i <= Math.min(60, candles.length - 3); i++) {
@@ -391,8 +453,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
       const ts = new Date(candle.timestamp).getTime();
       if (ts <= afterTime) continue;
 
-      const reversal = this.detect3to4CandleReversal(candles, idx, 'BEARISH');
-      if (reversal?.complete && !reversal.swingHighBroken) {
+      const reversal = this.detect3to4CandleReversal(candles, idx, bias === 'short' ? 'BEARISH' : 'BULLISH');
+      if (reversal?.complete && !reversal.swingBroken) {
         return {
           foundPattern: true,
           jumpToState: StateMachineState.M5_SWING_CONFIRMED,
@@ -407,7 +469,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // M1 SCAN
   // ============================================================================
 
-  private retrospectiveScanM1(candles: Candle[], state: StateData, minOCRange: number = 0): RetrospectiveScanResult {
+  private retrospectiveScanM1(candles: Candle[], state: StateData, bias: 'short' | 'long', minOCRange: number = 0): RetrospectiveScanResult {
     const afterTime = state.m5ConfirmationTime || 0;
     const validOCs: OCDetails[] = [];
 
@@ -418,17 +480,15 @@ export class EliteFractalStrategy implements IStrategyEngine {
       const ts = new Date(candle.timestamp).getTime();
       if (ts <= afterTime) continue;
 
-      const oc = this.detectBearishOC(candles, idx);
-      if (oc?.complete && !oc.swingHighBroken) validOCs.push(oc);
+      const oc = bias === 'short' ? this.detectBearishOC(candles, idx) : this.detectBullishOC(candles, idx);
+      if (oc?.complete && !oc.swingBroken) validOCs.push(oc);
     }
 
-    // Fix B: Filter out micro-OCs that are too small to be valid institutional supply zones.
-    // Sub-pip M1 consolidations (e.g. 0.7 pips on EUR/JPY) are not meaningful OCs.
+    // Filter out micro-OCs smaller than minOCRange
     const sizedOCs = minOCRange > 0
       ? validOCs.filter(oc => (oc.high - oc.low) >= minOCRange)
       : validOCs;
 
-    // Sort by most recent displacement first
     sizedOCs.sort((a, b) => b.displacementIdx - a.displacementIdx);
 
     if (sizedOCs.length === 0) {
@@ -436,23 +496,21 @@ export class EliteFractalStrategy implements IStrategyEngine {
     }
 
     if (sizedOCs.length < 2) {
-      // Only 1 OC found — hold at M1_OC_CONFIRMED, waiting for a second
       return {
         foundPattern: true,
         data: {
           m1OCs: sizedOCs,
           m1FinalOCPOIType: sizedOCs[0]?.poiType,
           m1FinalOCSwingHigh: sizedOCs[0]?.swingHigh,
-          m1FVGMiddleHigh: sizedOCs[0]?.fvgMiddleHigh
+          m1FinalOCSwingLow: sizedOCs[0]?.swingLow,
+          m1FVGMiddleHigh: sizedOCs[0]?.fvgMiddleHigh,
+          m1FVGMiddleLow: sizedOCs[0]?.fvgMiddleLow
         }
       };
     }
 
-    // 2 OCs found in chronological succession (OC2 formed before OC1, both in the 35-candle window).
-    // Each OC has its own M1 POI above it — verified by detectBearishOC.
-    // No gap restriction — they just need to be one after the other.
-    const oc1 = sizedOCs[0]; // most recent
-    const oc2 = sizedOCs[1]; // formed just before oc1
+    const oc1 = sizedOCs[0];
+    const oc2 = sizedOCs[1];
 
     return {
       foundPattern: true,
@@ -460,7 +518,9 @@ export class EliteFractalStrategy implements IStrategyEngine {
         m1OCs: [oc1, oc2],
         m1FinalOCPOIType: oc1.poiType,
         m1FinalOCSwingHigh: oc1.swingHigh,
-        m1FVGMiddleHigh: oc1.fvgMiddleHigh
+        m1FinalOCSwingLow: oc1.swingLow,
+        m1FVGMiddleHigh: oc1.fvgMiddleHigh,
+        m1FVGMiddleLow: oc1.fvgMiddleLow
       }
     };
   }
@@ -478,7 +538,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
       return { high: c1.low, low: c3.high, middleCandleIdx: centerIdx, middleCandleHigh: c2.high, timestamp: c2.timestamp };
     }
     if (direction === 'BULLISH' && c1.high < c3.low) {
-      return { high: c3.low, low: c1.high, middleCandleIdx: centerIdx, middleCandleHigh: c2.high, timestamp: c2.timestamp };
+      return { high: c3.low, low: c1.high, middleCandleIdx: centerIdx, middleCandleHigh: c2.high, middleCandleLow: c2.low, timestamp: c2.timestamp };
     }
     return null;
   }
@@ -492,6 +552,15 @@ export class EliteFractalStrategy implements IStrategyEngine {
     return null;
   }
 
+  private detectSwingLowAt(candles: Candle[], centerIdx: number): number | null {
+    if (centerIdx < 1 || centerIdx >= candles.length - 1) return null;
+    const left = candles[centerIdx - 1];
+    const center = candles[centerIdx];
+    const right = candles[centerIdx + 1];
+    if (center.close < left.close && center.close < right.close) return center.low;
+    return null;
+  }
+
   private detectBearishOC(candles: Candle[], displacementIdx: number): OCDetails | null {
     if (displacementIdx < 3) return null;
     const displacement = candles[displacementIdx];
@@ -501,33 +570,27 @@ export class EliteFractalStrategy implements IStrategyEngine {
     let setupLow = Infinity;
     let foundPOI = false;
     let poiType: POIType = POIType.SWING_HIGH;
-    let fvgMiddleCandleHigh: number | undefined = undefined; // actual FVG middle candle high
+    let fvgMiddleCandleHigh: number | undefined = undefined;
 
-    // Scan setup candles from displacement backwards (closest to displacement = highest priority POI).
-    // Always accumulate high/low across ALL candles regardless of POI so setupHigh is valid.
-    // Only the FIRST (closest) POI found sets poiType and fvgMiddleCandleHigh.
     for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
       const c = candles[i];
       setupHigh = Math.max(setupHigh, c.high);
       setupLow = Math.min(setupLow, c.low);
 
       if (!foundPOI) {
-        // Only the first POI found (closest to displacement) determines type and SL anchor
         const fvg = this.detectFVG(candles, i, 'BEARISH');
         const swing = this.detectSwingHighAt(candles, i);
         if (fvg) {
           foundPOI = true;
           poiType = POIType.FVG;
-          fvgMiddleCandleHigh = fvg.middleCandleHigh; // actual middle candle high of this FVG
+          fvgMiddleCandleHigh = fvg.middleCandleHigh;
         } else if (swing) {
           foundPOI = true;
           poiType = POIType.SWING_HIGH;
-          // fvgMiddleCandleHigh stays undefined — SL will use setupHigh instead
         }
       }
     }
 
-    // If no FVG or Swing High found, check if setup candles contain an Order Block (up candle before displacement)
     if (!foundPOI) {
       for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
         const c = candles[i];
@@ -541,12 +604,10 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     if (!foundPOI || setupHigh === -Infinity) return null;
 
-    // Confirm: the bodies of the setup candles must sit above the displacement candle's close
     const setupCandles = Array.from({ length: Math.min(3, displacementIdx) }, (_, k) => candles[displacementIdx - 1 - k]);
     const allBodiesAbove = setupCandles.every(c => Math.min(c.open, c.close) > displacement.close);
     if (!allBodiesAbove) return null;
 
-    // The full high of the OC setup covers both the setup candle range and the displacement candle
     const ocHigh = Math.max(setupHigh, displacement.high);
     const ocLow = Math.min(setupLow, displacement.low);
 
@@ -556,9 +617,72 @@ export class EliteFractalStrategy implements IStrategyEngine {
       displacementIdx,
       poiType,
       swingHigh: ocHigh,
-      fvgMiddleHigh: fvgMiddleCandleHigh, // actual FVG middle candle high (undefined if POI is swing/OC)
+      fvgMiddleHigh: fvgMiddleCandleHigh,
       complete: true,
-      swingHighBroken: false,
+      swingBroken: false,
+      timestamp: displacement.timestamp
+    };
+  }
+
+  private detectBullishOC(candles: Candle[], displacementIdx: number): OCDetails | null {
+    if (displacementIdx < 3) return null;
+    const displacement = candles[displacementIdx];
+    if (displacement.close <= displacement.open) return null;
+
+    let setupHigh = -Infinity;
+    let setupLow = Infinity;
+    let foundPOI = false;
+    let poiType: POIType = POIType.SWING_LOW;
+    let fvgMiddleCandleLow: number | undefined = undefined;
+
+    for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
+      const c = candles[i];
+      setupHigh = Math.max(setupHigh, c.high);
+      setupLow = Math.min(setupLow, c.low);
+
+      if (!foundPOI) {
+        const fvg = this.detectFVG(candles, i, 'BULLISH');
+        const swing = this.detectSwingLowAt(candles, i);
+        if (fvg) {
+          foundPOI = true;
+          poiType = POIType.FVG;
+          fvgMiddleCandleLow = fvg.middleCandleLow;
+        } else if (swing) {
+          foundPOI = true;
+          poiType = POIType.SWING_LOW;
+        }
+      }
+    }
+
+    if (!foundPOI) {
+      for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
+        const c = candles[i];
+        if (c.close < c.open) {
+          foundPOI = true;
+          poiType = POIType.ORDER_BLOCK;
+          break;
+        }
+      }
+    }
+
+    if (!foundPOI || setupLow === Infinity) return null;
+
+    const setupCandles = Array.from({ length: Math.min(3, displacementIdx) }, (_, k) => candles[displacementIdx - 1 - k]);
+    const allBodiesBelow = setupCandles.every(c => Math.max(c.open, c.close) < displacement.close);
+    if (!allBodiesBelow) return null;
+
+    const ocHigh = Math.max(setupHigh, displacement.high);
+    const ocLow = Math.min(setupLow, displacement.low);
+
+    return {
+      high: ocHigh,
+      low: ocLow,
+      displacementIdx,
+      poiType,
+      swingLow: ocLow,
+      fvgMiddleLow: fvgMiddleCandleLow,
+      complete: true,
+      swingBroken: false,
       timestamp: displacement.timestamp
     };
   }
@@ -585,7 +709,26 @@ export class EliteFractalStrategy implements IStrategyEngine {
                   c2Swing ? { type: POIType.SWING_HIGH, priceLevel: c2Swing, candleIndex: c2Idx, timestamp: c2.timestamp, high: c2Swing } :
                   { type: POIType.SWING_HIGH, priceLevel: c1Swing!, candleIndex: c2Idx - 1, timestamp: c1.timestamp, high: c1Swing! };
 
-      return { complete: true, swingHigh: c2.high, timestamp: c2.timestamp, poi, swingHighBroken: false };
+      return { complete: true, swingHigh: c2.high, timestamp: c2.timestamp, poi, swingBroken: false };
+    }
+
+    if (direction === 'BULLISH') {
+      if (c2.close < c1.low) return null;
+      if (c3.close <= c2.close) return null;
+
+      const c1FVG = this.detectFVG(candles, c2Idx - 1, 'BULLISH');
+      const c2FVG = this.detectFVG(candles, c2Idx, 'BULLISH');
+      const c1Swing = this.detectSwingLowAt(candles, c2Idx - 1);
+      const c2Swing = this.detectSwingLowAt(candles, c2Idx);
+      const hasPOI = !!(c1FVG || c2FVG || c1Swing || c2Swing);
+      if (!hasPOI) return null;
+
+      const poi = c2FVG ? { type: POIType.FVG, priceLevel: c2FVG.low, candleIndex: c2Idx, timestamp: c2.timestamp, high: c2FVG.high, low: c2FVG.low } :
+                  c1FVG ? { type: POIType.FVG, priceLevel: c1FVG.low, candleIndex: c2Idx - 1, timestamp: c1.timestamp, high: c1FVG.high, low: c1FVG.low } :
+                  c2Swing ? { type: POIType.SWING_LOW, priceLevel: c2Swing, candleIndex: c2Idx, timestamp: c2.timestamp, low: c2Swing } :
+                  { type: POIType.SWING_LOW, priceLevel: c1Swing!, candleIndex: c2Idx - 1, timestamp: c1.timestamp, low: c1Swing! };
+
+      return { complete: true, swingLow: c2.low, timestamp: c2.timestamp, poi, swingBroken: false };
     }
     return null;
   }
@@ -605,10 +748,12 @@ export class EliteFractalStrategy implements IStrategyEngine {
     runId: string,
     state: StateData,
     h1Candles: Candle[],
-    m15Candles: Candle[]
+    m15Candles: Candle[],
+    bias: 'short' | 'long'
   ): CandidateSetup {
     const isForex = market === 'forex';
     const isJPY = instrument.includes('JPY');
+    const isLong = bias === 'long';
     const decimals = isForex ? 5 : 2;
     const round = (v: number) => parseFloat(v.toFixed(decimals));
 
@@ -619,49 +764,51 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     const bufferPct = isForex ? 0.0003 : 0.002;
 
-    // ─── STOP LOSS PLACEMENT (SHORT / SELL setups) ────────────────────────────
-    //
-    // Stop = HIGH of the M1 OC candles + small buffer.
-    // This matches how the strategy is traded manually:
-    //   – Entry is into the M1 OC zone when price retests it
-    //   – Stop goes just above the OC high (the top of the base candles)
-    //
-    // Priority:
-    //  1. FVG-based OC → above the FVG middle candle high + OC high (structural top of gap)
-    //  2. Swing/OC-based → above the M1 OC setup high (the base candle highs)
-    //  3. Fallback → M15 swing high (only if no OC data at all)
-    //
-    // The M15 swing high is NOT the stop — it is structural context only.
-    // Fix B (minimum OC size) + Fix D (minimum risk in scanner) are the
-    // safety nets that prevent sub-pip setups from getting through.
+    let stop: number;
 
-    let stopAnchor: number;
-    if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
-      // FVG-based OC: stop above the FVG middle candle high (the structural gap high)
-      // also keep it above the OC high itself
-      stopAnchor = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
-    } else if (finalOC?.high) {
-      // Swing/OC-based: stop above M1 OC high — the user's manual stop point
-      stopAnchor = finalOC.high;
-    } else if (state.m15SwingHigh) {
-      // Fallback only (no OC high available): use M15 swing high
-      stopAnchor = state.m15SwingHigh;
+    if (!isLong) {
+      // ─── STOP LOSS PLACEMENT (SHORT / SELL setups) ────────────────────────────
+      // Stop = HIGH of the M1 OC candles + small buffer.
+      let stopAnchor: number;
+      if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
+        stopAnchor = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
+      } else if (finalOC?.high) {
+        stopAnchor = finalOC.high;
+      } else if (state.m15SwingHigh) {
+        stopAnchor = state.m15SwingHigh;
+      } else {
+        stopAnchor = entryHigh;
+      }
+
+      stop = round(stopAnchor * (1 + bufferPct));
+      if (stop <= entryHigh) {
+        stop = round(entryHigh * (1 + bufferPct * 5));
+      }
     } else {
-      stopAnchor = entryHigh;
+      // ─── STOP LOSS PLACEMENT (LONG / BUY setups) ─────────────────────────────
+      // Stop = LOW of the M1 OC candles - small buffer.
+      let stopAnchor: number;
+      if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleLow) {
+        stopAnchor = Math.min(state.m1FVGMiddleLow, finalOC?.low || Infinity);
+      } else if (finalOC?.low) {
+        stopAnchor = finalOC.low;
+      } else if (state.m15SwingLow) {
+        stopAnchor = state.m15SwingLow;
+      } else {
+        stopAnchor = entryLow;
+      }
+
+      stop = round(stopAnchor * (1 - bufferPct));
+      if (stop >= entryLow) {
+        stop = round(entryLow * (1 - bufferPct * 5));
+      }
     }
 
-    let stop = round(stopAnchor * (1 + bufferPct));
-
-    // Ensure stop is strictly above entry high
-    if (stop <= entryHigh) {
-      stop = round(entryHigh * (1 + bufferPct * 5));
-    }
-
-    const stopDistance = Math.abs(stop - entryMid);
-    const tp1 = round(entryMid - (2 * stopDistance));
-    const tp2 = round(entryMid - (3.5 * stopDistance));
-    const rMultiple1 = parseFloat((Math.abs(entryMid - tp1) / stopDistance).toFixed(2));
-    const rMultiple2 = parseFloat((Math.abs(entryMid - tp2) / stopDistance).toFixed(2));
+    const stopDistance = Math.abs(entryMid - stop);
+    const tp1 = isLong ? round(entryMid + (2 * stopDistance)) : round(entryMid - (2 * stopDistance));
+    const tp2 = isLong ? round(entryMid + (3.5 * stopDistance)) : round(entryMid - (3.5 * stopDistance));
+    const rMultiple1 = parseFloat((Math.abs(tp1 - entryMid) / stopDistance).toFixed(2));
+    const rMultiple2 = parseFloat((Math.abs(tp2 - entryMid) / stopDistance).toFixed(2));
 
     let conviction = 75.0;
     if (state.m15POI) conviction += 5;
@@ -671,20 +818,23 @@ export class EliteFractalStrategy implements IStrategyEngine {
     conviction = Math.min(98, conviction);
 
     const now = new Date().toISOString();
+    const swingLvl = isLong ? state.m15SwingLow : state.m15SwingHigh;
 
     const metadata = JSON.stringify({
       strategy: 'elite_fractal',
       stateAtEntry: state.state,
       phases: {
+        bias,
         h1POIType: state.h1POI?.type,
         h1POILevel: state.h1POI?.priceLevel,
         m15POIType: state.m15POI?.type,
         m15SwingHigh: state.m15SwingHigh,
+        m15SwingLow: state.m15SwingLow,
         m5ConfirmedAt: state.m5ConfirmationTime,
         m1OCCount: state.m1OCs?.length || 0,
         finalOCPOIType: state.m1FinalOCPOIType
       },
-      selection_rationale: `Elite Fractal 4TF Alignment: H1 ${state.h1POI?.type || 'POI'} tapped \u2192 M15 reversal confirmed at ${state.m15SwingHigh?.toFixed(decimals)} \u2192 M5 swing point validated \u2192 M1 entry OC alignment (${state.m1OCs?.length || 0} OCs). Bearish setup with ${conviction.toFixed(1)}% conviction targeting 2R/3.5R.`
+      selection_rationale: `Elite Fractal 4TF Alignment: H1 ${state.h1POI?.type || 'POI'} tapped \u2192 M15 reversal confirmed at ${swingLvl?.toFixed(decimals) || '—'} \u2192 M5 swing point validated \u2192 M1 entry OC alignment (${state.m1OCs?.length || 0} OCs). ${isLong ? 'Bullish BUY' : 'Bearish SELL'} setup with ${conviction.toFixed(1)}% conviction targeting 2R/3.5R.`
     });
 
     this.updateTelemetryFromState(instrument, state, entryLow, entryHigh, stop, tp1, conviction);
@@ -692,7 +842,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     return {
       instrument,
       market,
-      bias: 'short',
+      bias,
       killzone_origin: killzone.killzone,
       killzone_origin_at: now,
       entry_zone_low: entryLow,
@@ -715,16 +865,17 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // STATE MANAGEMENT
   // ============================================================================
 
-  private getState(instrument: string): StateData {
-    if (!this.instrumentStates.has(instrument)) this.resetState(instrument);
+  private getState(instrument: string, bias: 'short' | 'long' = 'short'): StateData {
+    if (!this.instrumentStates.has(instrument)) this.resetState(instrument, bias);
     return this.instrumentStates.get(instrument)!;
   }
 
-  private resetState(instrument: string): void {
+  private resetState(instrument: string, bias: 'short' | 'long' = 'short'): void {
     const now = new Date().toISOString();
     this.instrumentStates.set(instrument, {
       state: StateMachineState.IDLE,
       phase: StateMachinePhase.SCANNING,
+      bias,
       stateChangedAt: now,
       phaseChangedAt: now,
       m1OCs: []
@@ -739,7 +890,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     state.state = newState;
     state.phase = newPhase;
     state.stateChangedAt = now;
-    this.updateTelemetry(instrument, newState, newPhase);
+    this.updateTelemetry(instrument, newState, newPhase, state.bias);
   }
 
   private getPhaseForState(state: StateMachineState): StateMachinePhase {
@@ -760,13 +911,14 @@ export class EliteFractalStrategy implements IStrategyEngine {
     return map[state];
   }
 
-  private updateTelemetry(instrument: string, state: StateMachineState, phase: StateMachinePhase): void {
+  private updateTelemetry(instrument: string, state: StateMachineState, phase: StateMachinePhase, bias?: 'short' | 'long'): void {
     const existing = instrumentStateTelemetry.get(instrument) || {} as InstrumentTelemetry;
     instrumentStateTelemetry.set(instrument, {
       ...existing,
       instrument,
       state,
       phase,
+      bias: bias || existing.bias,
       stateChangedAt: new Date().toISOString(),
       phaseChangedAt: existing.phase !== phase ? new Date().toISOString() : (existing.phaseChangedAt || new Date().toISOString()),
       lastScannedAt: new Date().toISOString()
@@ -778,11 +930,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
       instrument,
       state: state.state,
       phase: state.phase,
+      bias: state.bias,
       stateChangedAt: state.stateChangedAt,
       phaseChangedAt: state.phaseChangedAt,
       h1PoiLevel: state.h1POI?.priceLevel,
       h1PoiType: state.h1POI?.type,
       m15SwingHigh: state.m15SwingHigh,
+      m15SwingLow: state.m15SwingLow,
       m5ConfirmationTime: state.m5ConfirmationTime ? new Date(state.m5ConfirmationTime).toISOString() : undefined,
       m1OcCount: state.m1OCs?.length || 0,
       lastScannedAt: new Date().toISOString(),

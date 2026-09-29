@@ -118,88 +118,149 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         risk = Math.abs(entryPrice - Number(setup.tp1)) / (setup.r_multiple_1 || 2.0);
       }
 
+      const isLong = setup.bias === 'long';
+
       // If risk is still 0 (extreme edge case): fallback to standard tick/pip risk
       if (risk <= 0) {
         risk = setup.market === 'forex' ? 0.0020 : 10.0;
       }
 
       if (!initialStop || initialStop === entryPrice) {
-        initialStop = Number((entryPrice + risk).toFixed(setup.market === 'forex' ? 5 : 2));
+        initialStop = isLong
+          ? Number((entryPrice - risk).toFixed(setup.market === 'forex' ? 5 : 2))
+          : Number((entryPrice + risk).toFixed(setup.market === 'forex' ? 5 : 2));
       }
 
-      const tp1 = setup.tp1 ? Number(setup.tp1) : Number((entryPrice - 2.0 * risk).toFixed(setup.market === 'forex' ? 5 : 2));
-      const tp2 = setup.tp2 ? Number(setup.tp2) : Number((entryPrice - (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+      const tp1 = setup.tp1
+        ? Number(setup.tp1)
+        : isLong
+          ? Number((entryPrice + 2.0 * risk).toFixed(setup.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - 2.0 * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+
+      const tp2 = setup.tp2
+        ? Number(setup.tp2)
+        : isLong
+          ? Number((entryPrice + (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+
       const r1 = setup.r_multiple_1 || 2.0;
       const r2 = setup.r_multiple_2 || 3.5;
 
-      // Identify lowest price reached (downward profit for short setups)
+      // Identify lowest price reached
       const lowestObserved = Math.min(
         currentPrice > 0 ? currentPrice : Infinity,
         currentBid > 0 ? currentBid : Infinity,
         minLow > 0 ? minLow : Infinity
       );
 
-      // Identify highest price reached (upward drawdown for short setups)
+      // Identify highest price reached
       const highestObserved = Math.max(
         currentPrice > 0 ? currentPrice : 0,
         currentAsk > 0 ? currentAsk : 0,
         maxHigh > 0 ? maxHigh : 0
       );
 
-      // Unrealized R multiple reached (positive when lowest price dropped below entry)
-      const maxExcursionR = (risk > 0 && lowestObserved !== Infinity)
-        ? Number(((entryPrice - lowestObserved) / risk).toFixed(2))
+      // Unrealized R multiple reached
+      const maxExcursionR = risk > 0
+        ? isLong
+          ? (highestObserved > 0 ? Number(((highestObserved - entryPrice) / risk).toFixed(2)) : 0)
+          : (lowestObserved !== Infinity ? Number(((entryPrice - lowestObserved) / risk).toFixed(2)) : 0)
         : 0;
 
       let hit = false;
       let outcomeType = '';
-      let exitPrice = currentAsk;
+      let exitPrice = isLong ? currentBid : currentAsk;
       let realizedR = 0;
 
-      // Bearish SELL setups:
-      // Profit is downward: lowest price drops to/below TP2 / TP1 OR excursion R exceeds target R.
-      // Loss is upward: highest price rises to/above Stop.
+      if (!isLong) {
+        // Bearish SELL setups:
+        // Profit is downward: lowest price drops to/below TP2 / TP1.
+        // Loss is upward: highest price rises to/above Stop.
 
-      // 1. TP2 HIT: applies to both active setups and runners!
-      if (lowestObserved <= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
-        hit = true;
-        outcomeType = 'tp2_hit';
-        exitPrice = tp2;
-        realizedR = r2;
-      }
-      // 2. TP1 HIT: only for active setups that have not become runners yet
-      else if (!isRunner && (lowestObserved <= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
-        // First time hitting TP1 → Move to runner with Stop at BE!
-        const now = new Date().toISOString();
-        let metaObj: any = {};
-        try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
-        metaObj.outcome_type = 'tp1_hit';
-        metaObj.tp1_hit_at = now;
-        metaObj.realized_r = r1;
-        metaObj.mfe_r = Math.max(r1, maxExcursionR);
+        // 1. TP2 HIT
+        if (lowestObserved <= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
+          hit = true;
+          outcomeType = 'tp2_hit';
+          exitPrice = tp2;
+          realizedR = r2;
+        }
+        // 2. TP1 HIT
+        else if (!isRunner && (lowestObserved <= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
+          const now = new Date().toISOString();
+          let metaObj: any = {};
+          try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
+          metaObj.outcome_type = 'tp1_hit';
+          metaObj.tp1_hit_at = now;
+          metaObj.realized_r = r1;
+          metaObj.mfe_r = Math.max(r1, maxExcursionR);
 
-        // Lock stop at BE (entryPrice), preserve original stop in initial_stop
-        await queryDb(
-          `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
-          [entryPrice, initialStop, Math.max(r1, maxExcursionR), JSON.stringify(metaObj), setup.id]
-        );
+          await queryDb(
+            `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
+            [entryPrice, initialStop, Math.max(r1, maxExcursionR), JSON.stringify(metaObj), setup.id]
+          );
 
-        logger.info(
-          { instrument: setup.instrument, tp1, entryPrice, initialStop },
-          '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
-        );
-        continue;
-      }
-      // 3. STOP LOSS / BREAKEVEN HIT
-      else if (highestObserved >= currentStop || currentAsk >= currentStop || currentPrice >= currentStop) {
-        hit = true;
-        exitPrice = currentStop;
-        if (isBE || isRunner) {
-          outcomeType = 'be_hit';
-          realizedR = 0.0;
-        } else {
-          outcomeType = 'sl_hit';
-          realizedR = -1.0;
+          logger.info(
+            { instrument: setup.instrument, tp1, entryPrice, initialStop },
+            '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
+          );
+          continue;
+        }
+        // 3. STOP LOSS / BREAKEVEN HIT
+        else if (highestObserved >= currentStop || currentAsk >= currentStop || (currentPrice > 0 && currentPrice >= currentStop)) {
+          hit = true;
+          exitPrice = currentStop;
+          if (isBE || isRunner) {
+            outcomeType = 'be_hit';
+            realizedR = 0.0;
+          } else {
+            outcomeType = 'sl_hit';
+            realizedR = -1.0;
+          }
+        }
+      } else {
+        // Bullish BUY setups:
+        // Profit is upward: highest price rises to/above TP2 / TP1.
+        // Loss is downward: lowest price drops to/below Stop.
+
+        // 1. TP2 HIT
+        if (highestObserved >= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
+          hit = true;
+          outcomeType = 'tp2_hit';
+          exitPrice = tp2;
+          realizedR = r2;
+        }
+        // 2. TP1 HIT
+        else if (!isRunner && (highestObserved >= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
+          const now = new Date().toISOString();
+          let metaObj: any = {};
+          try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
+          metaObj.outcome_type = 'tp1_hit';
+          metaObj.tp1_hit_at = now;
+          metaObj.realized_r = r1;
+          metaObj.mfe_r = Math.max(r1, maxExcursionR);
+
+          await queryDb(
+            `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
+            [entryPrice, initialStop, Math.max(r1, maxExcursionR), JSON.stringify(metaObj), setup.id]
+          );
+
+          logger.info(
+            { instrument: setup.instrument, tp1, entryPrice, initialStop },
+            '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
+          );
+          continue;
+        }
+        // 3. STOP LOSS / BREAKEVEN HIT
+        else if (lowestObserved <= currentStop || currentBid <= currentStop || (currentPrice > 0 && currentPrice <= currentStop)) {
+          hit = true;
+          exitPrice = currentStop;
+          if (isBE || isRunner) {
+            outcomeType = 'be_hit';
+            realizedR = 0.0;
+          } else {
+            outcomeType = 'sl_hit';
+            realizedR = -1.0;
+          }
         }
       }
 
@@ -218,11 +279,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         let highestPrice: number | null = maxHigh;
         let lowestPrice: number | null = minLow;
 
-        // `risk` already computed above from initialStop
         try {
           const excursion = await calculateTradeExcursion({
             instrument: setup.instrument,
-            bias: 'short',
+            bias: setup.bias || 'short',
             entryPrice,
             initialStop: initialStop,
             entryTime,
@@ -236,10 +296,9 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
             lowestPrice = excursion.lowestPrice;
           }
         } catch {
-          // Fallback excursion calculation from recorded wick extremes
           if (risk > 0) {
-            const maxAdverse = Math.max(0, maxHigh - entryPrice);
-            const maxFavorable = Math.max(0, entryPrice - minLow);
+            const maxAdverse = isLong ? Math.max(0, entryPrice - minLow) : Math.max(0, maxHigh - entryPrice);
+            const maxFavorable = isLong ? Math.max(0, maxHigh - entryPrice) : Math.max(0, entryPrice - minLow);
             maeR = Number((maxAdverse / risk).toFixed(2));
             mfeR = Number((maxFavorable / risk).toFixed(2));
           }
@@ -398,18 +457,32 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
           continue;
         }
 
-        // BEARISH SELL SAFETY GUARDS:
-        // 1. Current price must NEVER be at or above the stop loss!
-        if (currentPrice >= candidate.stop) {
+        const isLong = candidate.bias === 'long';
+
+        // SAFETY GUARDS:
+        // 1. Current price must NEVER be at or beyond the stop loss!
+        if (!isLong && currentPrice >= candidate.stop) {
           logger.warn(
             { instrument: candidate.instrument, currentPrice, stop: candidate.stop },
             'EliteFractal: REJECTED — current price is already at/above Stop Loss'
           );
           continue;
+        } else if (isLong && currentPrice <= candidate.stop) {
+          logger.warn(
+            { instrument: candidate.instrument, currentPrice, stop: candidate.stop },
+            'EliteFractal: REJECTED — current price is already at/below Stop Loss'
+          );
+          continue;
         }
 
         // 2. Current price must not have already reached TP1
-        if (currentPrice <= candidate.tp1) {
+        if (!isLong && currentPrice <= candidate.tp1) {
+          logger.warn(
+            { instrument: candidate.instrument, currentPrice, tp1: candidate.tp1 },
+            'EliteFractal: REJECTED — current price has already reached or passed TP1'
+          );
+          continue;
+        } else if (isLong && currentPrice >= candidate.tp1) {
           logger.warn(
             { instrument: candidate.instrument, currentPrice, tp1: candidate.tp1 },
             'EliteFractal: REJECTED — current price has already reached or passed TP1'
@@ -417,31 +490,41 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
           continue;
         }
 
-        // 3. Current price must be AT or very near the OC entry zone (SHORT: we sell INTO the zone)
-        //    Old: 0.15% slack allowed entries 27 pips above the zone on EUR/JPY — too wide, causes
-        //    near-zero stops when price is above the OC zone but still below the stop.
-        //    New: per-instrument pip slack — JPY 0.030 (3 pips), regular forex 0.0003 (3 pips)
+        // 3. Current price must be AT or very near the OC entry zone
+        //    For SHORT: we sell into the zone; price must not have rallied far above entry_zone_high
+        //    For LONG: we buy into the zone; price must not have dumped far below entry_zone_low
         const isJPYInstrument = candidate.instrument.includes('JPY');
         const entrySlack = candidate.market === 'futures'
           ? candidate.entry_zone_high * 0.001  // 0.1% for futures
           : isJPYInstrument ? 0.030             // 3 JPY pips (0.01 each)
           : 0.0003;                             // 3 standard pips (0.0001 each)
-        const entryMax = candidate.entry_zone_high + entrySlack;
-        if (currentPrice > entryMax) {
-          logger.warn(
-            { instrument: candidate.instrument, currentPrice, entryMax, entryZoneHigh: candidate.entry_zone_high },
-            'EliteFractal: REJECTED — price is above entry zone threshold'
-          );
-          continue;
+
+        if (!isLong) {
+          const entryMax = candidate.entry_zone_high + entrySlack;
+          if (currentPrice > entryMax) {
+            logger.warn(
+              { instrument: candidate.instrument, currentPrice, entryMax, entryZoneHigh: candidate.entry_zone_high },
+              'EliteFractal: REJECTED — price is above entry zone threshold'
+            );
+            continue;
+          }
+        } else {
+          const entryMin = candidate.entry_zone_low - entrySlack;
+          if (currentPrice < entryMin) {
+            logger.warn(
+              { instrument: candidate.instrument, currentPrice, entryMin, entryZoneLow: candidate.entry_zone_low },
+              'EliteFractal: REJECTED — price is below entry zone threshold'
+            );
+            continue;
+          }
         }
 
         const execPrice = currentPrice;
         const initialStop = candidate.stop;
         const risk = Math.abs(execPrice - initialStop);
 
-        // Fix D: Minimum risk floor per instrument type.
-        // Stop is at M1 OC high + buffer. Entry is into the OC zone.
-        // With a 10-pip wide JPY OC, entry at OC mid gives ~5 pip risk naturally.
+        // Minimum risk floor per instrument type.
+        // Stop is at M1 OC high/low + buffer. Entry is into the OC zone.
         // Floor: JPY 5 pips (0.050), regular forex 3 pips (0.0003), futures $2.0
         const minRisk = candidate.market === 'futures' ? 2.0
           : isJPYInstrument ? 0.050   // 5 JPY pips — matches natural risk at OC mid entry
@@ -452,8 +535,12 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
           continue;
         }
 
-        const tp1 = Number((execPrice - 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
-        const tp2 = Number((execPrice - 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
+        const tp1 = isLong
+          ? Number((execPrice + 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2))
+          : Number((execPrice - 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
+        const tp2 = isLong
+          ? Number((execPrice + 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2))
+          : Number((execPrice - 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
 
         const id = `ef_${candidate.instrument.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const ts = new Date().toISOString();

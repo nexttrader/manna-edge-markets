@@ -6,11 +6,13 @@ export interface StateMachineTelemetry {
   instrument: string;
   state: string;
   phase: string;
+  bias?: 'short' | 'long';
   stateChangedAt: string;
   phaseChangedAt: string;
   h1PoiLevel?: number;
   h1PoiType?: string;
   m15SwingHigh?: number;
+  m15SwingLow?: number;
   m5ConfirmationTime?: string;
   m1OcCount?: number;
   lastScannedAt: string;

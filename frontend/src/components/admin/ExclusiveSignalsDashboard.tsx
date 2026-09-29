@@ -311,7 +311,17 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
               <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#e2e8f0', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
                 {signal.instrument}
               </span>
-              <span style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#f87171', borderRadius: '20px', padding: '2px 10px', fontSize: '0.7rem', fontWeight: 800 }}>▼ SELL</span>
+              <span style={{
+                background: signal.bias === 'long' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                border: `1px solid ${signal.bias === 'long' ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)'}`,
+                color: signal.bias === 'long' ? '#34d399' : '#f87171',
+                borderRadius: '20px',
+                padding: '2px 10px',
+                fontSize: '0.7rem',
+                fontWeight: 800
+              }}>
+                {signal.bias === 'long' ? '▲ BUY' : '▼ SELL'}
+              </span>
               {/* Market badge */}
               <span style={{ background: marketTheme.labelBg, border: `1px solid ${marketTheme.labelBorder}`, color: marketTheme.labelColor, borderRadius: '20px', padding: '2px 10px', fontSize: '0.66rem', fontWeight: 800 }}>
                 {marketTheme.marketLabel}
@@ -643,7 +653,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       id: `telemetry_${t.instrument.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`,
       instrument: t.instrument,
       market: isFx ? 'forex' : 'futures',
-      bias: 'short',
+      bias: t.bias || 'short',
       killzone_origin: 'live',
       created_at: t.stateChangedAt || new Date().toISOString(),
       signal_state: t.phase === 'ENTRY_READY' ? 'awaiting_entry' : 'active',
@@ -659,9 +669,11 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
       metadata: JSON.stringify({
         strategy: 'elite_fractal',
         phases: {
+          bias: t.bias,
           h1POIType: t.h1PoiType,
           h1POILevel: t.h1PoiLevel,
           m15SwingHigh: t.m15SwingHigh,
+          m15SwingLow: t.m15SwingLow,
           m1OCCount: t.m1OcCount
         },
         telemetryState: t.state,
@@ -692,7 +704,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             <span style={{ fontSize: '1.6rem' }}>🛡️</span>
             <div>
               <div style={{ fontWeight: 900, fontSize: '1.15rem', color: '#a78bfa', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Elite Fractal — Classified Intel</div>
-              <div style={{ fontSize: '0.75rem', color: '#6b46c1', fontWeight: 600 }}>4-Timeframe Fractal Alignment · Bearish SELL Setups · SuperAdmin Exclusive</div>
+              <div style={{ fontSize: '0.75rem', color: '#6b46c1', fontWeight: 600 }}>4-Timeframe Fractal Alignment · Long & Short Setups · SuperAdmin Exclusive</div>
             </div>
           </div>
           <div style={{ fontSize: '0.7rem', color: '#718096' }}>⚠️ This section is not visible to admins or traders. Signal cards, calendar, and analytics are 100% isolated from public dashboards.</div>
