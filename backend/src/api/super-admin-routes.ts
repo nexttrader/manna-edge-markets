@@ -2094,6 +2094,7 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
       }
 
       const entryPrice = Number(s.entry_price_recorded || s.entry_zone_mid || 0);
+      const isLong = s.bias === 'long';
 
       // Robust risk & initial stop calculation:
       let initialStop = s.initial_stop ? Number(s.initial_stop) : null;
@@ -2114,48 +2115,33 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
       }
 
       if (!initialStop || initialStop === entryPrice) {
-        initialStop = Number((entryPrice + risk).toFixed(s.market === 'forex' ? 5 : 2));
+        initialStop = isLong
+          ? Number((entryPrice - risk).toFixed(s.market === 'forex' ? 5 : 2))
+          : Number((entryPrice + risk).toFixed(s.market === 'forex' ? 5 : 2));
       }
 
-      const tp1 = s.tp1 ? Number(s.tp1) : Number((entryPrice - 2.0 * risk).toFixed(s.market === 'forex' ? 5 : 2));
-      const tp2 = s.tp2 ? Number(s.tp2) : Number((entryPrice - (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2));
-      const r2 = s.r_multiple_2 || 3.5;
+      const tp1 = s.tp1
+        ? Number(s.tp1)
+        : isLong
+          ? Number((entryPrice + 2.0 * risk).toFixed(s.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - 2.0 * risk).toFixed(s.market === 'forex' ? 5 : 2));
+
+      const tp2 = s.tp2
+        ? Number(s.tp2)
+        : isLong
+          ? Number((entryPrice + (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2));
 
       let unrealizedR = 0;
       let unrealizedPL = 0;
 
-      // Sell setups (bearish bias): profit is downward — positive R when price drops below entry
+      // Bidirectional P&L calculation:
+      // Long: profit is upward (currentPrice > entryPrice)
+      // Short: profit is downward (entryPrice > currentPrice)
       if (risk > 0 && currentPrice > 0) {
-        const diff = entryPrice - currentPrice;
+        const diff = isLong ? (currentPrice - entryPrice) : (entryPrice - currentPrice);
         unrealizedR = Number((diff / risk).toFixed(2));
         unrealizedPL = Number(diff.toFixed(s.market === 'forex' ? 5 : 2));
-      }
-
-      // Auto-resolve any setup/runner that has reached or exceeded TP2 (+3.5R)
-      if (unrealizedR >= r2 || (tp2 !== null && currentPrice <= tp2) || (s.mfe && s.mfe >= r2)) {
-        const now = new Date().toISOString();
-        let metaObj: any = {};
-        try { metaObj = JSON.parse(s.metadata || '{}'); } catch {}
-        metaObj.outcome_type = 'tp2_hit';
-        metaObj.exit_price = tp2;
-        metaObj.exit_time = now;
-        metaObj.realized_r = r2;
-        metaObj.mfe_r = Math.max(r2, unrealizedR, Number(s.mfe || 0));
-
-        await queryDb(
-          `UPDATE superadmin_edge_setups 
-           SET signal_state = 'resolved', 
-               resolved_at = ?, 
-               invalidation_reason = 'tp2_hit', 
-               exit_price = ?, 
-               realized_r = ?, 
-               mfe = ?, 
-               metadata = ? 
-           WHERE id = ?`,
-          [now, tp2, r2, Math.max(r2, unrealizedR, Number(s.mfe || 0)), JSON.stringify(metaObj), s.id]
-        );
-        // Closed! Omit from active/runner list
-        return null;
       }
 
       return {
