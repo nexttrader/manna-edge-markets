@@ -258,7 +258,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
       }
     }
 
-    const m1Scan = this.retrospectiveScanM1(m1Candles, state);
+    // Fix B: Minimum OC size per instrument — prevents sub-pip micro-consolidations
+    // being treated as valid institutional supply zones.
+    // JPY pairs: 5 JPY pips (0.050) | Regular forex: 5 pips (0.0005) | Futures: $1.0
+    const isJPYPair = instrument.includes('JPY');
+    const minOCRange = market === 'futures' ? 1.0 : isJPYPair ? 0.050 : 0.0005;
+
+    const m1Scan = this.retrospectiveScanM1(m1Candles, state, minOCRange);
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
@@ -399,7 +405,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // M1 SCAN
   // ============================================================================
 
-  private retrospectiveScanM1(candles: Candle[], state: StateData): RetrospectiveScanResult {
+  private retrospectiveScanM1(candles: Candle[], state: StateData, minOCRange: number = 0): RetrospectiveScanResult {
     const afterTime = state.m5ConfirmationTime || 0;
     const validOCs: OCDetails[] = [];
 
@@ -414,31 +420,37 @@ export class EliteFractalStrategy implements IStrategyEngine {
       if (oc?.complete && !oc.swingHighBroken) validOCs.push(oc);
     }
 
-    // Sort by most recent displacement first
-    validOCs.sort((a, b) => b.displacementIdx - a.displacementIdx);
+    // Fix B: Filter out micro-OCs that are too small to be valid institutional supply zones.
+    // Sub-pip M1 consolidations (e.g. 0.7 pips on EUR/JPY) are not meaningful OCs.
+    const sizedOCs = minOCRange > 0
+      ? validOCs.filter(oc => (oc.high - oc.low) >= minOCRange)
+      : validOCs;
 
-    if (validOCs.length === 0) {
+    // Sort by most recent displacement first
+    sizedOCs.sort((a, b) => b.displacementIdx - a.displacementIdx);
+
+    if (sizedOCs.length === 0) {
       return { foundPattern: true, data: { m1OCs: [] } };
     }
 
-    if (validOCs.length < 2) {
+    if (sizedOCs.length < 2) {
       // Only 1 OC found — hold at M1_OC_CONFIRMED, waiting for a second
       return {
         foundPattern: true,
         data: {
-          m1OCs: validOCs,
-          m1FinalOCPOIType: validOCs[0]?.poiType,
-          m1FinalOCSwingHigh: validOCs[0]?.swingHigh,
-          m1FVGMiddleHigh: validOCs[0]?.fvgMiddleHigh
+          m1OCs: sizedOCs,
+          m1FinalOCPOIType: sizedOCs[0]?.poiType,
+          m1FinalOCSwingHigh: sizedOCs[0]?.swingHigh,
+          m1FVGMiddleHigh: sizedOCs[0]?.fvgMiddleHigh
         }
       };
     }
 
-    // 2 OCs found in chronological succession (OC2 formed before OC1, both in the 25-candle window).
+    // 2 OCs found in chronological succession (OC2 formed before OC1, both in the 35-candle window).
     // Each OC has its own M1 POI above it — verified by detectBearishOC.
     // No gap restriction — they just need to be one after the other.
-    const oc1 = validOCs[0]; // most recent
-    const oc2 = validOCs[1]; // formed just before oc1
+    const oc1 = sizedOCs[0]; // most recent
+    const oc2 = sizedOCs[1]; // formed just before oc1
 
     return {
       foundPattern: true,
@@ -594,6 +606,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     m15Candles: Candle[]
   ): CandidateSetup {
     const isForex = market === 'forex';
+    const isJPY = instrument.includes('JPY');
     const decimals = isForex ? 5 : 2;
     const round = (v: number) => parseFloat(v.toFixed(decimals));
 
@@ -603,41 +616,56 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const entryMid = round((entryHigh + entryLow) / 2);
 
     const bufferPct = isForex ? 0.0003 : 0.002;
-    let stop: number;
 
-    // STOP LOSS PLACEMENT RULES (SHORT/SELL setups):
-    // The SL is anchored to the POI that created the last M1 OC.
+    // ─── STOP LOSS PLACEMENT (SHORT / SELL setups) ────────────────────────────
     //
-    // Rule 1: OC came from a FVG
-    //   → SL = above the MIDDLE CANDLE HIGH of that FVG + buffer
-    //   (The FVG's middle candle high is the key structural high to invalidate above)
+    // The stop must be above the REAL STRUCTURAL HIGH where the bearish move
+    // originated — NOT just 0.03% above the tiny M1 OC candles.
     //
-    // Rule 2: OC came from a Swing High  -OR-  from another OC (ORDER_BLOCK)
-    //   → SL = above the HIGH of the last OC setup range + buffer
-    //   (The OC high is the structural high that must not be breached)
+    // Priority order (take the HIGHEST level found):
+    //  1. M15 Swing High  — the confirmed reversal point where price came from
+    //  2. M1 OC POI anchor:
+    //       – FVG-based OC  → above the FVG middle candle high
+    //       – Swing/OC-based → above the full OC setup high
+    //  3. Fallback: entry zone high + 3× buffer
     //
-    // Fallback: use M15 swing high or entry zone high
+    // We always take MAX(M15 anchor, M1 anchor) so the stop covers BOTH levels.
+    // This prevents 0.7-pip stops where the M1 OC range is tiny but the real
+    // structural resistance is the M15 swing high 15-30 pips above.
 
+    // Step 1: M1 OC anchor
+    let m1StopAnchor: number;
     if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
-      // Rule 1: FVG-based OC — SL above FVG middle candle high (and above last OC high)
-      const anchorHigh = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
-      stop = round(anchorHigh * (1 + bufferPct));
+      m1StopAnchor = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
     } else if (finalOC?.high) {
-      // Rule 2: Swing High or OC-based OC — SL above the OC HIGH (setup candle range high)
-      stop = round(finalOC.high * (1 + bufferPct));
-    } else if (state.m15SwingHigh) {
-      stop = round(state.m15SwingHigh * (1 + bufferPct));
+      m1StopAnchor = finalOC.high;
     } else {
-      stop = round(entryHigh * (1 + bufferPct * 3));
+      m1StopAnchor = entryHigh;
     }
 
-    // Ensure stop is strictly above entry high for this bearish SHORT trade
+    // Step 2: structural high = max(M1 anchor, M15 swing high)
+    // The M15 swing high is the real source-of-truth invalidation level
+    const structuralHigh = state.m15SwingHigh
+      ? Math.max(m1StopAnchor, state.m15SwingHigh)
+      : m1StopAnchor;
+
+    let stop = round(structuralHigh * (1 + bufferPct));
+
+    // Step 3: Ensure stop is strictly above entry high
     if (stop <= entryHigh) {
-      stop = round(entryHigh * (1 + bufferPct * 3));
+      stop = round(entryHigh * (1 + bufferPct * 5));
     }
 
+    // Step 4: Enforce minimum stop distance floor (prevents sub-pip stops on JPY pairs)
+    // JPY pairs: min 15 pips (0.150), regular forex: min 5 pips (0.0005), futures: 1.5
+    const minStopDistFloor = market === 'futures' ? 1.5 : isJPY ? 0.150 : 0.0005;
+    const minStopDist = minStopDistFloor;
 
-    const minStopDist = isForex ? 0.0005 : 1.5;
+    // If the computed stop doesn't give enough risk distance, push stop up to the floor
+    if (Math.abs(stop - entryMid) < minStopDist) {
+      stop = round(entryMid + minStopDist);
+    }
+
     const stopDistance = Math.max(Math.abs(stop - entryMid), minStopDist);
     const tp1 = round(entryMid - (2 * stopDistance));
     const tp2 = round(entryMid - (3.5 * stopDistance));

@@ -417,11 +417,19 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
           continue;
         }
 
-        // 3. Current price must be within reasonable distance of the entry zone
-        const entryMax = candidate.entry_zone_high * (candidate.market === 'forex' ? 1.0015 : 1.005);
+        // 3. Current price must be AT or very near the OC entry zone (SHORT: we sell INTO the zone)
+        //    Old: 0.15% slack allowed entries 27 pips above the zone on EUR/JPY — too wide, causes
+        //    near-zero stops when price is above the OC zone but still below the stop.
+        //    New: per-instrument pip slack — JPY 0.030 (3 pips), regular forex 0.0003 (3 pips)
+        const isJPYInstrument = candidate.instrument.includes('JPY');
+        const entrySlack = candidate.market === 'futures'
+          ? candidate.entry_zone_high * 0.001  // 0.1% for futures
+          : isJPYInstrument ? 0.030             // 3 JPY pips (0.01 each)
+          : 0.0003;                             // 3 standard pips (0.0001 each)
+        const entryMax = candidate.entry_zone_high + entrySlack;
         if (currentPrice > entryMax) {
           logger.warn(
-            { instrument: candidate.instrument, currentPrice, entryMax },
+            { instrument: candidate.instrument, currentPrice, entryMax, entryZoneHigh: candidate.entry_zone_high },
             'EliteFractal: REJECTED — price is above entry zone threshold'
           );
           continue;
@@ -430,7 +438,13 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
         const execPrice = currentPrice;
         const initialStop = candidate.stop;
         const risk = Math.abs(execPrice - initialStop);
-        const minRisk = candidate.market === 'forex' ? 0.0003 : 1.5;
+
+        // Fix D: Minimum risk floor per instrument type.
+        // Old floor (0.0003) was essentially 0 for JPY pairs (price ~178 × 0.0003 = 0.054 pip).
+        // New: JPY pairs min 10 pips (0.100), regular forex min 5 pips (0.0005), futures $2.0
+        const minRisk = candidate.market === 'futures' ? 2.0
+          : isJPYInstrument ? 0.100   // 10 JPY pips minimum risk distance
+          : 0.0005;                   // 5 standard pips minimum risk distance
 
         if (risk < minRisk) {
           logger.warn({ instrument: candidate.instrument, risk }, 'EliteFractal: Risk too small — skipping');
