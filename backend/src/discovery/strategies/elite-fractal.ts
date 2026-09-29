@@ -482,6 +482,18 @@ export class EliteFractalStrategy implements IStrategyEngine {
       }
     }
 
+    // If no FVG or Swing High found, check if setup candles contain an Order Block (up candle before displacement)
+    if (!foundPOI) {
+      for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
+        const c = candles[i];
+        if (c.close > c.open) {
+          foundPOI = true;
+          poiType = POIType.ORDER_BLOCK;
+          break;
+        }
+      }
+    }
+
     if (!foundPOI || setupHigh === -Infinity) return null;
 
     // Confirm: the bodies of the setup candles must sit above the displacement candle's close
@@ -489,12 +501,16 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const allBodiesAbove = setupCandles.every(c => Math.min(c.open, c.close) > displacement.close);
     if (!allBodiesAbove) return null;
 
+    // The full high of the OC setup covers both the setup candle range and the displacement candle
+    const ocHigh = Math.max(setupHigh, displacement.high);
+    const ocLow = Math.min(setupLow, displacement.low);
+
     return {
-      high: setupHigh,
-      low: setupLow,
+      high: ocHigh,
+      low: ocLow,
       displacementIdx,
       poiType,
-      swingHigh: setupHigh,
+      swingHigh: ocHigh,
       fvgMiddleHigh: fvgMiddleCandleHigh, // actual FVG middle candle high (undefined if POI is swing/OC)
       complete: true,
       swingHighBroken: false,
@@ -572,8 +588,9 @@ export class EliteFractalStrategy implements IStrategyEngine {
     // Fallback: use M15 swing high or entry zone high
 
     if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
-      // Rule 1: FVG-based OC — SL above FVG middle candle high
-      stop = round(state.m1FVGMiddleHigh * (1 + bufferPct));
+      // Rule 1: FVG-based OC — SL above FVG middle candle high (and above last OC high)
+      const anchorHigh = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
+      stop = round(anchorHigh * (1 + bufferPct));
     } else if (finalOC?.high) {
       // Rule 2: Swing High or OC-based OC — SL above the OC HIGH (setup candle range high)
       stop = round(finalOC.high * (1 + bufferPct));
