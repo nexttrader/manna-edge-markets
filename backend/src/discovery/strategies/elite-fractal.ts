@@ -202,8 +202,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
   ): Promise<CandidateSetup | null> {
     this.resetState(instrument);
 
-    // Step 1: H1 scan
-    const h1Candles = await fetchCandles(instrument, '1h', 60);
+    // Step 1: H1 scan — enlarged to 120 candles matching Manna SND historical price action feed
+    const h1Candles = await fetchCandles(instrument, '1h', 120);
     if (h1Candles.length < 15) return null;
 
     const h1POI = this.scanH1ForPOI(h1Candles);
@@ -281,18 +281,47 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // ============================================================================
 
   private scanH1ForPOI(candles: Candle[]): POIContext | null {
-    for (let i = 1; i <= Math.min(10, candles.length - 2); i++) {
+    if (candles.length < 5) return null;
+
+    // Enlarge lookback across the full 120-candle H1 feed (matching Manna SND)
+    // to discover any valid H1 POI (FVG or Swing High) that price has tapped or formed
+    const maxLookback = Math.min(candles.length - 2, 120);
+    const recentCandles = candles.slice(-12); // Last 12 hours of price action
+
+    for (let i = 1; i <= maxLookback; i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
 
       const fvg = this.detectFVG(candles, idx, 'BEARISH');
-      if (fvg && this.isPriceTappingFVG(candle, fvg)) {
-        return { type: POIType.FVG, priceLevel: fvg.high, candleIndex: idx, timestamp: candle.timestamp, high: fvg.high, low: fvg.low, fvgDetails: fvg };
+      if (fvg) {
+        // Check if recent price (or this candle) tapped into the FVG
+        const tapped = recentCandles.some(c => this.isPriceTappingFVG(c, fvg)) || this.isPriceTappingFVG(candle, fvg);
+        if (tapped) {
+          return {
+            type: POIType.FVG,
+            priceLevel: fvg.high,
+            candleIndex: idx,
+            timestamp: candle.timestamp,
+            high: fvg.high,
+            low: fvg.low,
+            fvgDetails: fvg
+          };
+        }
       }
 
       const swingHigh = this.detectSwingHighAt(candles, idx);
-      if (swingHigh && Math.abs(candle.high - swingHigh) < swingHigh * 0.001) {
-        return { type: POIType.SWING_HIGH, priceLevel: swingHigh, candleIndex: idx, timestamp: candle.timestamp, high: swingHigh };
+      if (swingHigh) {
+        // Check if recent price tapped near the swing high or if it's a recent swing high
+        const tapped = recentCandles.some(c => Math.abs(c.high - swingHigh) <= swingHigh * 0.003 || c.high >= swingHigh * 0.997) || i <= 8;
+        if (tapped) {
+          return {
+            type: POIType.SWING_HIGH,
+            priceLevel: swingHigh,
+            candleIndex: idx,
+            timestamp: candle.timestamp,
+            high: swingHigh
+          };
+        }
       }
     }
     return null;
@@ -303,9 +332,13 @@ export class EliteFractalStrategy implements IStrategyEngine {
   // ============================================================================
 
   private retrospectiveScanM15(candles: Candle[], state: StateData): RetrospectiveScanResult {
-    const h1WindowEnd = (state.h1WindowStart || 0) + (4 * 60 * 60 * 1000);
+    // Enlarge window up to 48 hours from H1 POI start so setups have room to build
+    const h1WindowEnd = (state.h1WindowStart || 0) + (48 * 60 * 60 * 1000);
 
-    for (let i = 1; i <= Math.min(25, candles.length - 3); i++) {
+    // Enlarge lookback to scan up to 60 candles (~15 hours) of 15m price action
+    const maxScan = Math.min(60, candles.length - 3);
+
+    for (let i = 1; i <= maxScan; i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
       const ts = new Date(candle.timestamp).getTime();
@@ -344,7 +377,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
   private retrospectiveScanM5(candles: Candle[], state: StateData): RetrospectiveScanResult {
     const afterTime = state.m15ConfirmationTime || 0;
 
-    for (let i = 1; i <= Math.min(50, candles.length - 3); i++) {
+    for (let i = 1; i <= Math.min(60, candles.length - 3); i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
       const ts = new Date(candle.timestamp).getTime();
@@ -370,10 +403,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const afterTime = state.m5ConfirmationTime || 0;
     const validOCs: OCDetails[] = [];
 
-    // Scan the last 25 M1 candles for bearish OCs.
-    // Each OC must have its own M1 POI (FVG or swing high) above the displacement candle —
-    // this is already enforced inside detectBearishOC which looks up to 8 candles back for a POI.
-    for (let i = 1; i <= Math.min(25, candles.length - 3); i++) {
+    // Scan up to 35 M1 candles (~35 mins) so two successive OCs can form naturally
+    for (let i = 1; i <= Math.min(35, candles.length - 3); i++) {
       const idx = candles.length - 1 - i;
       const candle = candles[idx];
       const ts = new Date(candle.timestamp).getTime();
