@@ -456,21 +456,29 @@ export class EliteFractalStrategy implements IStrategyEngine {
     let setupLow = Infinity;
     let foundPOI = false;
     let poiType: POIType = POIType.SWING_HIGH;
+    let fvgMiddleCandleHigh: number | undefined = undefined; // actual FVG middle candle high
 
-    // First pass: collect the high/low range of the setup candles leading into the displacement
-    // AND check for a POI (FVG or swing high) among those setup candles.
-    // We MUST accumulate highs/lows regardless of whether a POI is found so setupHigh is valid.
+    // Scan setup candles from displacement backwards (closest to displacement = highest priority POI).
+    // Always accumulate high/low across ALL candles regardless of POI so setupHigh is valid.
+    // Only the FIRST (closest) POI found sets poiType and fvgMiddleCandleHigh.
     for (let i = displacementIdx - 1; i >= Math.max(0, displacementIdx - 8); i--) {
       const c = candles[i];
-      // Always accumulate range — this was the bug: break fired before accumulation
       setupHigh = Math.max(setupHigh, c.high);
       setupLow = Math.min(setupLow, c.low);
-      const fvg = this.detectFVG(candles, i, 'BEARISH');
-      const swing = this.detectSwingHighAt(candles, i);
-      if (fvg || swing) {
-        foundPOI = true;
-        poiType = fvg ? POIType.FVG : POIType.SWING_HIGH;
-        // Do NOT break — keep accumulating to ensure setupHigh covers full setup range
+
+      if (!foundPOI) {
+        // Only the first POI found (closest to displacement) determines type and SL anchor
+        const fvg = this.detectFVG(candles, i, 'BEARISH');
+        const swing = this.detectSwingHighAt(candles, i);
+        if (fvg) {
+          foundPOI = true;
+          poiType = POIType.FVG;
+          fvgMiddleCandleHigh = fvg.middleCandleHigh; // actual middle candle high of this FVG
+        } else if (swing) {
+          foundPOI = true;
+          poiType = POIType.SWING_HIGH;
+          // fvgMiddleCandleHigh stays undefined — SL will use setupHigh instead
+        }
       }
     }
 
@@ -481,7 +489,17 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const allBodiesAbove = setupCandles.every(c => Math.min(c.open, c.close) > displacement.close);
     if (!allBodiesAbove) return null;
 
-    return { high: setupHigh, low: setupLow, displacementIdx, poiType, swingHigh: setupHigh, fvgMiddleHigh: poiType === POIType.FVG ? setupHigh : undefined, complete: true, swingHighBroken: false, timestamp: displacement.timestamp };
+    return {
+      high: setupHigh,
+      low: setupLow,
+      displacementIdx,
+      poiType,
+      swingHigh: setupHigh,
+      fvgMiddleHigh: fvgMiddleCandleHigh, // actual FVG middle candle high (undefined if POI is swing/OC)
+      complete: true,
+      swingHighBroken: false,
+      timestamp: displacement.timestamp
+    };
   }
 
   private detect3to4CandleReversal(candles: Candle[], c2Idx: number, direction: 'BEARISH' | 'BULLISH'): any | null {
@@ -539,20 +557,37 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     const bufferPct = isForex ? 0.0003 : 0.002;
     let stop: number;
+
+    // STOP LOSS PLACEMENT RULES (SHORT/SELL setups):
+    // The SL is anchored to the POI that created the last M1 OC.
+    //
+    // Rule 1: OC came from a FVG
+    //   → SL = above the MIDDLE CANDLE HIGH of that FVG + buffer
+    //   (The FVG's middle candle high is the key structural high to invalidate above)
+    //
+    // Rule 2: OC came from a Swing High  -OR-  from another OC (ORDER_BLOCK)
+    //   → SL = above the HIGH of the last OC setup range + buffer
+    //   (The OC high is the structural high that must not be breached)
+    //
+    // Fallback: use M15 swing high or entry zone high
+
     if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
+      // Rule 1: FVG-based OC — SL above FVG middle candle high
       stop = round(state.m1FVGMiddleHigh * (1 + bufferPct));
-    } else if (state.m1FinalOCSwingHigh) {
-      stop = round(state.m1FinalOCSwingHigh * (1 + bufferPct));
+    } else if (finalOC?.high) {
+      // Rule 2: Swing High or OC-based OC — SL above the OC HIGH (setup candle range high)
+      stop = round(finalOC.high * (1 + bufferPct));
     } else if (state.m15SwingHigh) {
       stop = round(state.m15SwingHigh * (1 + bufferPct));
     } else {
       stop = round(entryHigh * (1 + bufferPct * 3));
     }
 
-    // Ensure stop is strictly above entry for bearish SHORT trade
+    // Ensure stop is strictly above entry high for this bearish SHORT trade
     if (stop <= entryHigh) {
       stop = round(entryHigh * (1 + bufferPct * 3));
     }
+
 
     const minStopDist = isForex ? 0.0005 : 1.5;
     const stopDistance = Math.max(Math.abs(stop - entryMid), minStopDist);
