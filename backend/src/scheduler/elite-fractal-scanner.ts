@@ -440,11 +440,12 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
         const risk = Math.abs(execPrice - initialStop);
 
         // Fix D: Minimum risk floor per instrument type.
-        // Old floor (0.0003) was essentially 0 for JPY pairs (price ~178 × 0.0003 = 0.054 pip).
-        // New: JPY pairs min 10 pips (0.100), regular forex min 5 pips (0.0005), futures $2.0
+        // Stop is at M1 OC high + buffer. Entry is into the OC zone.
+        // With a 10-pip wide JPY OC, entry at OC mid gives ~5 pip risk naturally.
+        // Floor: JPY 5 pips (0.050), regular forex 3 pips (0.0003), futures $2.0
         const minRisk = candidate.market === 'futures' ? 2.0
-          : isJPYInstrument ? 0.100   // 10 JPY pips minimum risk distance
-          : 0.0005;                   // 5 standard pips minimum risk distance
+          : isJPYInstrument ? 0.050   // 5 JPY pips — matches natural risk at OC mid entry
+          : 0.0003;                   // 3 standard pips
 
         if (risk < minRisk) {
           logger.warn({ instrument: candidate.instrument, risk }, 'EliteFractal: Risk too small — skipping');

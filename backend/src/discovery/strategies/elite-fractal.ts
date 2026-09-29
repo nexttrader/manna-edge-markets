@@ -260,9 +260,11 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     // Fix B: Minimum OC size per instrument — prevents sub-pip micro-consolidations
     // being treated as valid institutional supply zones.
-    // JPY pairs: 5 JPY pips (0.050) | Regular forex: 5 pips (0.0005) | Futures: $1.0
+    // With stop at M1 OC high + buffer, the OC range determines the effective risk:
+    //   entry at OC mid → risk ≈ OC range / 2 + buffer
+    // Floors: JPY 10 pips (0.100) | Regular forex 5 pips (0.0005) | Futures $1.0
     const isJPYPair = instrument.includes('JPY');
-    const minOCRange = market === 'futures' ? 1.0 : isJPYPair ? 0.050 : 0.0005;
+    const minOCRange = market === 'futures' ? 1.0 : isJPYPair ? 0.100 : 0.0005;
 
     const m1Scan = this.retrospectiveScanM1(m1Candles, state, minOCRange);
     if (!m1Scan.foundPattern) return null;
@@ -619,54 +621,43 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     // ─── STOP LOSS PLACEMENT (SHORT / SELL setups) ────────────────────────────
     //
-    // The stop must be above the REAL STRUCTURAL HIGH where the bearish move
-    // originated — NOT just 0.03% above the tiny M1 OC candles.
+    // Stop = HIGH of the M1 OC candles + small buffer.
+    // This matches how the strategy is traded manually:
+    //   – Entry is into the M1 OC zone when price retests it
+    //   – Stop goes just above the OC high (the top of the base candles)
     //
-    // Priority order (take the HIGHEST level found):
-    //  1. M15 Swing High  — the confirmed reversal point where price came from
-    //  2. M1 OC POI anchor:
-    //       – FVG-based OC  → above the FVG middle candle high
-    //       – Swing/OC-based → above the full OC setup high
-    //  3. Fallback: entry zone high + 3× buffer
+    // Priority:
+    //  1. FVG-based OC → above the FVG middle candle high + OC high (structural top of gap)
+    //  2. Swing/OC-based → above the M1 OC setup high (the base candle highs)
+    //  3. Fallback → M15 swing high (only if no OC data at all)
     //
-    // We always take MAX(M15 anchor, M1 anchor) so the stop covers BOTH levels.
-    // This prevents 0.7-pip stops where the M1 OC range is tiny but the real
-    // structural resistance is the M15 swing high 15-30 pips above.
+    // The M15 swing high is NOT the stop — it is structural context only.
+    // Fix B (minimum OC size) + Fix D (minimum risk in scanner) are the
+    // safety nets that prevent sub-pip setups from getting through.
 
-    // Step 1: M1 OC anchor
-    let m1StopAnchor: number;
+    let stopAnchor: number;
     if (state.m1FinalOCPOIType === POIType.FVG && state.m1FVGMiddleHigh) {
-      m1StopAnchor = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
+      // FVG-based OC: stop above the FVG middle candle high (the structural gap high)
+      // also keep it above the OC high itself
+      stopAnchor = Math.max(state.m1FVGMiddleHigh, finalOC?.high || 0);
     } else if (finalOC?.high) {
-      m1StopAnchor = finalOC.high;
+      // Swing/OC-based: stop above M1 OC high — the user's manual stop point
+      stopAnchor = finalOC.high;
+    } else if (state.m15SwingHigh) {
+      // Fallback only (no OC high available): use M15 swing high
+      stopAnchor = state.m15SwingHigh;
     } else {
-      m1StopAnchor = entryHigh;
+      stopAnchor = entryHigh;
     }
 
-    // Step 2: structural high = max(M1 anchor, M15 swing high)
-    // The M15 swing high is the real source-of-truth invalidation level
-    const structuralHigh = state.m15SwingHigh
-      ? Math.max(m1StopAnchor, state.m15SwingHigh)
-      : m1StopAnchor;
+    let stop = round(stopAnchor * (1 + bufferPct));
 
-    let stop = round(structuralHigh * (1 + bufferPct));
-
-    // Step 3: Ensure stop is strictly above entry high
+    // Ensure stop is strictly above entry high
     if (stop <= entryHigh) {
       stop = round(entryHigh * (1 + bufferPct * 5));
     }
 
-    // Step 4: Enforce minimum stop distance floor (prevents sub-pip stops on JPY pairs)
-    // JPY pairs: min 15 pips (0.150), regular forex: min 5 pips (0.0005), futures: 1.5
-    const minStopDistFloor = market === 'futures' ? 1.5 : isJPY ? 0.150 : 0.0005;
-    const minStopDist = minStopDistFloor;
-
-    // If the computed stop doesn't give enough risk distance, push stop up to the floor
-    if (Math.abs(stop - entryMid) < minStopDist) {
-      stop = round(entryMid + minStopDist);
-    }
-
-    const stopDistance = Math.max(Math.abs(stop - entryMid), minStopDist);
+    const stopDistance = Math.abs(stop - entryMid);
     const tp1 = round(entryMid - (2 * stopDistance));
     const tp2 = round(entryMid - (3.5 * stopDistance));
     const rMultiple1 = parseFloat((Math.abs(entryMid - tp1) / stopDistance).toFixed(2));
