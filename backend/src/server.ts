@@ -200,11 +200,28 @@ async function startServer() {
                         return;
                     }
 
-                    // If NY AM early Forex scan has already executed today, skip post-open scan
+                    // Check if a dynamic news Forex scan has run or is rescheduled for today
                     const earlyStatus = earlyScanService.getStatus(now);
-                    if (kzInfo.killzone === 'ny_am' && earlyStatus.hasCompletedToday) {
-                        logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Pre-news Forex scan already completed; skipping 08:05 ET Forex scan.');
-                        return;
+                    if (kzInfo.killzone === 'ny_am') {
+                        if (earlyStatus.hasCompletedToday) {
+                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Dynamic news Forex scan already completed; skipping 08:05 ET Forex scan.');
+                            return;
+                        }
+                        if (earlyStatus.hasEarlyScanToday && (earlyStatus.isPostNewsScan || earlyStatus.isEarlyScanNeeded)) {
+                            logger.info({ targetScanTimeET: earlyStatus.earlyScanTimeET }, 'Forex scan rescheduled due to high-impact news; skipping standard 08:05 ET post-open scan.');
+                            return;
+                        }
+                    }
+
+                    if (kzInfo.killzone === 'ny_pm' && earlyStatus.hasEarlyScanToday && earlyStatus.scanHour >= 12) {
+                        if (earlyStatus.hasCompletedToday) {
+                            logger.info({ earlyScanTimeET: earlyStatus.earlyScanTimeET }, 'Post-FOMC Forex scan already completed; skipping 14:05 ET Forex scan.');
+                            return;
+                        }
+                        if (earlyStatus.isPostNewsScan) {
+                            logger.info({ targetScanTimeET: earlyStatus.earlyScanTimeET }, 'Forex scan rescheduled for 30m post-FOMC; skipping standard 14:05 ET post-open scan.');
+                            return;
+                        }
                     }
 
                     const runId = `run_forex_${Date.now()}`;

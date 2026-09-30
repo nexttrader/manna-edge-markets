@@ -601,18 +601,31 @@ class TelegramBotService {
 ━━━━━━━━━━━━━━━━━━━━━`;
   }
 
-  public async sendEarlyScanNotice(eventTitle: string, eventTimeET: string, scheduledScanTimeET: string): Promise<boolean> {
-    const isStandard = scheduledScanTimeET === '08:00 AM ET';
-    const actionText = isStandard
-      ? `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>08:00 AM ET</b> (aligned with standard session open).`
-      : `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>${scheduledScanTimeET}</b> (standard: 08:00 AM ET).`;
-    const marketText = isStandard
-      ? `Both Forex & Futures will scan at 08:00 AM ET.`
-      : `Forex Only (Futures scan remains scheduled at 08:00 AM ET).`;
+  public async sendEarlyScanNotice(
+    eventTitle: string,
+    eventTimeET: string,
+    scheduledScanTimeET: string,
+    isPostNews: boolean = false
+  ): Promise<boolean> {
+    let actionText: string;
+    let marketText: string;
+
+    if (isPostNews) {
+      actionText = `The <b>Forex Scanner</b> will execute <b>30 minutes after the news event</b> at <b>${scheduledScanTimeET}</b> (post-news liquidity & volatility release).`;
+      marketText = `Forex Only (Futures scan remains scheduled at 08:00 AM ET).`;
+    } else {
+      const isStandard = scheduledScanTimeET === '08:00 AM ET';
+      actionText = isStandard
+        ? `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>08:00 AM ET</b> (aligned with standard session open).`
+        : `The <b>Forex Scanner</b> will execute <b>30 minutes prior to news</b> at <b>${scheduledScanTimeET}</b> (standard: 08:00 AM ET).`;
+      marketText = isStandard
+        ? `Both Forex & Futures will scan at 08:00 AM ET.`
+        : `Forex Only (Futures scan remains scheduled at 08:00 AM ET).`;
+    }
 
     const text = `⚠️ <b>HIGH-IMPACT NEWS SCHEDULE WARNING</b>
 ━━━━━━━━━━━━━━━━━━━━━
-📢 <b>Notice:</b> High-impact economic news is scheduled during today's New York AM session.
+📢 <b>Notice:</b> High-impact economic news is scheduled during today's New York trading session.
 📰 <b>Event:</b> ${eventTitle} (${eventTimeET})
 ⚡ <b>Action:</b> ${actionText}
 📊 <b>Market:</b> ${marketText}

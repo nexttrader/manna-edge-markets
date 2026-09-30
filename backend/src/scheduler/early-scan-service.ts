@@ -17,6 +17,9 @@ export interface EarlyScanStatus {
   bannerText: string;
   isEarlyScanNeeded: boolean;
   isStandardTimeScan: boolean;
+  isPostNewsScan: boolean;
+  specialEventType?: 'CPI' | 'NFP' | 'FOMC' | null;
+  newsTimingOffsetMinutes: number;
   scanHour: number;
   scanMinute: number;
 }
@@ -43,17 +46,26 @@ class EarlyScanService {
 
     let bannerText = '';
     if (newsInfo.hasNews) {
-      if (hasCompleted) {
-        if (newsInfo.isStandardTimeScan) {
-          bannerText = `Forex Scan executed at 08:00 AM ET (30 minutes prior to ${newsInfo.firstEvent?.currency} ${newsInfo.firstEvent?.title} at ${newsInfo.scheduledTimeET}). Both Forex & Futures completed.`;
+      const eventLabel = `${newsInfo.firstEvent?.currency} ${newsInfo.firstEvent?.title}`;
+      if (newsInfo.isPostNewsScan) {
+        if (hasCompleted) {
+          bannerText = `Post-News Forex Scan completed at ${newsInfo.targetScanTimeET} (30 minutes after ${eventLabel} at ${newsInfo.scheduledTimeET}).`;
         } else {
-          bannerText = `Early Forex Scan completed at ${newsInfo.targetScanTimeET} ahead of high-impact news (${newsInfo.firstEvent?.currency} ${newsInfo.firstEvent?.title} at ${newsInfo.scheduledTimeET}). Futures scan scheduled at 08:00 AM ET.`;
+          bannerText = `HIGH-IMPACT NEWS DETECTED: ${eventLabel} scheduled at ${newsInfo.scheduledTimeET}. The Forex scanner will execute 30 minutes after the news event at ${newsInfo.targetScanTimeET} (post-news release). Futures scan remains at 08:00 AM ET.`;
         }
       } else {
-        if (newsInfo.isStandardTimeScan) {
-          bannerText = `HIGH-IMPACT NEWS DETECTED: ${newsInfo.firstEvent?.currency} ${newsInfo.firstEvent?.title} scheduled at ${newsInfo.scheduledTimeET}. The Forex scanner will execute 30 minutes prior to news at 08:00 AM ET (aligned with standard session open).`;
+        if (hasCompleted) {
+          if (newsInfo.isStandardTimeScan) {
+            bannerText = `Forex Scan executed at 08:00 AM ET (30 minutes prior to ${eventLabel} at ${newsInfo.scheduledTimeET}). Both Forex & Futures completed.`;
+          } else {
+            bannerText = `Early Forex Scan completed at ${newsInfo.targetScanTimeET} ahead of high-impact news (${eventLabel} at ${newsInfo.scheduledTimeET}). Futures scan scheduled at 08:00 AM ET.`;
+          }
         } else {
-          bannerText = `HIGH-IMPACT NEWS DETECTED: ${newsInfo.firstEvent?.currency} ${newsInfo.firstEvent?.title} scheduled at ${newsInfo.scheduledTimeET}. The Forex scanner will execute 30 minutes prior to news at ${newsInfo.targetScanTimeET}. Futures scan remains at 08:00 AM ET.`;
+          if (newsInfo.isStandardTimeScan) {
+            bannerText = `HIGH-IMPACT NEWS DETECTED: ${eventLabel} scheduled at ${newsInfo.scheduledTimeET}. The Forex scanner will execute 30 minutes prior to news at 08:00 AM ET (aligned with standard session open).`;
+          } else {
+            bannerText = `HIGH-IMPACT NEWS DETECTED: ${eventLabel} scheduled at ${newsInfo.scheduledTimeET}. The Forex scanner will execute 30 minutes prior to news at ${newsInfo.targetScanTimeET}. Futures scan remains at 08:00 AM ET.`;
+          }
         }
       }
     }
@@ -64,13 +76,16 @@ class EarlyScanService {
       noticeSentToday: noticeSent,
       earlyScanTimeET: newsInfo.targetScanTimeET,
       standardScanTimeET: '08:00 AM ET',
-      targetMarket: newsInfo.isEarlyScanNeeded ? 'forex' : 'both',
+      targetMarket: (newsInfo.isEarlyScanNeeded || newsInfo.isPostNewsScan) ? 'forex' : 'both',
       events: newsInfo.events,
       firstEvent: newsInfo.firstEvent,
       scheduledTimeET: newsInfo.scheduledTimeET,
       bannerText,
       isEarlyScanNeeded: newsInfo.isEarlyScanNeeded,
       isStandardTimeScan: newsInfo.isStandardTimeScan,
+      isPostNewsScan: newsInfo.isPostNewsScan,
+      specialEventType: newsInfo.specialEventType,
+      newsTimingOffsetMinutes: newsInfo.newsTimingOffsetMinutes,
       scanHour: newsInfo.scanHour,
       scanMinute: newsInfo.scanMinute
     };
@@ -78,12 +93,12 @@ class EarlyScanService {
 
   public isEarlyScanRequired(date: Date = new Date()): boolean {
     const status = this.getStatus(date);
-    return status.hasEarlyScanToday && !status.hasCompletedToday && status.isEarlyScanNeeded;
+    return status.hasEarlyScanToday && !status.hasCompletedToday && (status.isEarlyScanNeeded || status.isPostNewsScan);
   }
 
   public isEarlyScanDue(date: Date = new Date()): boolean {
     const status = this.getStatus(date);
-    if (!status.hasEarlyScanToday || status.hasCompletedToday || !status.isEarlyScanNeeded) {
+    if (!status.hasEarlyScanToday || status.hasCompletedToday || (!status.isEarlyScanNeeded && !status.isPostNewsScan)) {
       return false;
     }
 
@@ -105,7 +120,7 @@ class EarlyScanService {
   public markCompleted(date: Date = new Date()): void {
     const todayET = this.getTodayET(date);
     this.lastCompletedDateET = todayET;
-    logger.info({ todayET }, 'Pre-news Forex scan marked as completed for today');
+    logger.info({ todayET }, 'Dynamic news Forex scan marked as completed for today');
   }
 
   public async checkAndSendNotice(date: Date = new Date()): Promise<boolean> {
@@ -126,15 +141,16 @@ class EarlyScanService {
       const sent = await telegramBotService.sendEarlyScanNotice(
         eventTitle,
         newsInfo.scheduledTimeET,
-        newsInfo.targetScanTimeET
+        newsInfo.targetScanTimeET,
+        newsInfo.isPostNewsScan
       );
       if (sent) {
         this.lastNoticeSentDateET = todayET;
-        logger.info({ todayET, eventTitle, scanTime: newsInfo.targetScanTimeET }, 'Telegram pre-news scan notice successfully dispatched');
+        logger.info({ todayET, eventTitle, scanTime: newsInfo.targetScanTimeET, isPostNews: newsInfo.isPostNewsScan }, 'Telegram news scan notice successfully dispatched');
         return true;
       }
     } catch (err) {
-      logger.error({ err }, 'Failed to dispatch Telegram pre-news scan notice');
+      logger.error({ err }, 'Failed to dispatch Telegram news scan notice');
     }
     return false;
   }

@@ -25,6 +25,8 @@ interface EarlyScanStatus {
   scheduledTimeET: string;
   bannerText: string;
   isEarlyScanNeeded?: boolean;
+  isPostNewsScan?: boolean;
+  specialEventType?: 'CPI' | 'NFP' | 'FOMC' | null;
 }
 
 function formatET(isoStr: string): string {
@@ -87,7 +89,7 @@ export const EarlyScanNewsBanner: React.FC = () => {
     return null;
   }
 
-  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, events = [], isEarlyScanNeeded, scheduledTimeET } = status;
+  const { hasCompletedToday, earlyScanTimeET, standardScanTimeET, events = [], isEarlyScanNeeded, isPostNewsScan, scheduledTimeET } = status;
   const isEarly = isEarlyScanNeeded ?? (earlyScanTimeET !== standardScanTimeET);
 
   // Compact event titles summary (e.g., "USD Core CPI, CPI m/m +2 more")
@@ -105,18 +107,22 @@ export const EarlyScanNewsBanner: React.FC = () => {
             <span className="pulse-beacon"></span>
             <span className="banner-badge">
               {hasCompletedToday
-                ? (isEarly ? '✅ FOREX EARLY SCAN EXECUTED' : '✅ FOREX NEWS SCAN EXECUTED')
-                : (isEarly ? '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED' : '⚡ HIGH-IMPACT NEWS: PRE-NEWS FOREX SCAN')}
+                ? (isPostNewsScan
+                    ? '✅ FOREX POST-NEWS SCAN EXECUTED'
+                    : (isEarly ? '✅ FOREX EARLY SCAN EXECUTED' : '✅ FOREX NEWS SCAN EXECUTED'))
+                : (isPostNewsScan
+                    ? '⚡ HIGH-IMPACT NEWS: POST-NEWS FOREX SCAN (+30M)'
+                    : (isEarly ? '⚡ HIGH-IMPACT NEWS: FOREX SCAN RESCHEDULED' : '⚡ HIGH-IMPACT NEWS: PRE-NEWS FOREX SCAN'))}
             </span>
 
             {/* Small summary displayed in-line when minimized */}
             {isMinimized && (
               <div className="banner-minimized-summary">
                 {hasCompletedToday ? (
-                  <span>Executed at <strong>{earlyScanTimeET}</strong> ahead of high-impact news</span>
+                  <span>Executed at <strong>{earlyScanTimeET}</strong> {isPostNewsScan ? '(30m post-news)' : 'ahead of high-impact news'}</span>
                 ) : (
                   <span>
-                    Forex scan at <strong>{earlyScanTimeET}</strong> (30m pre-news)
+                    Forex scan at <strong>{earlyScanTimeET}</strong> ({isPostNewsScan ? '30m post-news' : '30m pre-news'})
                     {summaryEventTitles && (
                       <span className="banner-summary-events"> &bull; {events.length} Event{events.length > 1 ? 's' : ''}: <em>{summaryEventTitles}</em></span>
                     )}
@@ -129,7 +135,7 @@ export const EarlyScanNewsBanner: React.FC = () => {
           <div className="banner-actions-group">
             <div className="banner-timing-pill font-mono">
               <span className="timing-label">
-                {hasCompletedToday ? 'STATUS' : (isEarly ? 'RESCHEDULED' : 'PRE-NEWS')}
+                {hasCompletedToday ? 'STATUS' : (isPostNewsScan ? 'POST-NEWS' : (isEarly ? 'RESCHEDULED' : 'PRE-NEWS'))}
               </span>
               <span className="timing-value">{hasCompletedToday ? `COMPLETED ${earlyScanTimeET}` : earlyScanTimeET}</span>
             </div>
@@ -164,7 +170,11 @@ export const EarlyScanNewsBanner: React.FC = () => {
           <>
             <div className="banner-narrative">
               {hasCompletedToday ? (
-                isEarly ? (
+                isPostNewsScan ? (
+                  <span>
+                    The Forex scanner executed 30 minutes after the news event at <strong>{earlyScanTimeET}</strong> following <strong>{scheduledTimeET}</strong> releases ({summaryEventTitles}). Initial news volatility and liquidity sweeps have cleared.
+                  </span>
+                ) : isEarly ? (
                   <span>
                     The Forex scanner executed 30 minutes prior to news at <strong>{earlyScanTimeET}</strong> ahead of high-impact economic releases. Standard Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong> (Double-scan protection active: Forex market will not be rescanned).
                   </span>
@@ -174,7 +184,11 @@ export const EarlyScanNewsBanner: React.FC = () => {
                   </span>
                 )
               ) : (
-                isEarly ? (
+                isPostNewsScan ? (
+                  <span>
+                    High-impact economic news ({summaryEventTitles}) is scheduled today at <strong>{scheduledTimeET}</strong>. To allow initial release volatility and liquidity sweeps to clear, the <strong>Forex Scanner will execute 30 minutes after the news event at {earlyScanTimeET}</strong>. Standard Futures scan remains scheduled at <strong>{standardScanTimeET}</strong>.
+                  </span>
+                ) : isEarly ? (
                   <span>
                     Real high-impact economic news is scheduled during today's New York AM session. The <strong>Forex Scanner</strong> will execute <strong>30 minutes prior to news at {earlyScanTimeET}</strong> (standard: {standardScanTimeET}). The Futures scanner remains scheduled at <strong>{standardScanTimeET}</strong>.
                   </span>

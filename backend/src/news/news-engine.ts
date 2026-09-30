@@ -96,6 +96,43 @@ export function isRealHighImpactNewsEvent(event: EconomicEvent): boolean {
   return highImpactKeywords.some(kw => title.includes(kw));
 }
 
+/**
+ * Categorizes whether an event is specifically CPI, FOMC, or NFP (Tier-1 post-news events).
+ * For these specific releases only, the scanner runs 30 minutes AFTER the news event.
+ */
+export function getNewsEventType(event: EconomicEvent): 'CPI' | 'NFP' | 'FOMC' | 'OTHER' {
+  const title = (event.title || '').trim().toLowerCase();
+  
+  // 1. CPI (Consumer Price Index)
+  if (title.includes('cpi') || title.includes('consumer price index')) {
+    return 'CPI';
+  }
+  
+  // 2. FOMC (Federal Open Market Committee)
+  if (title.includes('fomc') || title.includes('federal funds rate')) {
+    return 'FOMC';
+  }
+  
+  // 3. NFP (Non-Farm Payrolls) - strictly exclude ADP private payrolls
+  if (!title.includes('adp') && (
+    title.includes('non-farm') || 
+    title.includes('nonfarm') || 
+    title.includes('payrolls') || 
+    title.includes('nfp')
+  )) {
+    return 'NFP';
+  }
+
+  return 'OTHER';
+}
+
+/**
+ * Checks if an event is specifically CPI, FOMC, or NFP.
+ */
+export function isCpiNfpOrFomc(event: EconomicEvent): boolean {
+  return getNewsEventType(event) !== 'OTHER';
+}
+
 export class NewsEngine {
   private events: EconomicEvent[] = [];
   private isLive: boolean = false;
@@ -371,8 +408,12 @@ export class NewsEngine {
   }
 
   /**
-   * Checks if genuine, real high-impact economic news is scheduled during the NY AM session (08:00 - 12:00 ET)
+   * Checks if genuine, real high-impact economic news is scheduled during the NY session (08:00 - 16:00 ET)
    * for Forex-relevant currencies (USD, EUR, GBP, CAD).
+   * 
+   * SCAN RULES:
+   * 1. CPI, FOMC, and NFP (specifically and ONLY these): The scanner runs 30 minutes AFTER the news event (+30m).
+   * 2. All other high-impact news releases: The scanner runs 30 minutes PRIOR to the news event (-30m).
    */
   public hasNyAmHighImpactNews(targetDate: Date = new Date()): {
     hasNews: boolean;
@@ -384,6 +425,9 @@ export class NewsEngine {
     targetScanTimeET: string;
     isEarlyScanNeeded: boolean;
     isStandardTimeScan: boolean;
+    isPostNewsScan: boolean;
+    specialEventType: 'CPI' | 'NFP' | 'FOMC' | null;
+    newsTimingOffsetMinutes: number;
     scanHour: number;
     scanMinute: number;
   } {
@@ -398,6 +442,9 @@ export class NewsEngine {
         targetScanTimeET: '08:00 AM ET',
         isEarlyScanNeeded: false,
         isStandardTimeScan: true,
+        isPostNewsScan: false,
+        specialEventType: null,
+        newsTimingOffsetMinutes: -30,
         scanHour: 8,
         scanMinute: 0
       };
@@ -424,8 +471,8 @@ export class NewsEngine {
         hour12: false
       });
       const hourET = parseInt(hourFormatter.format(eventDate), 10);
-      // NY AM session window (08:00 ET to 12:00 ET, e.g. 08:15 ADP, 08:30 CPI/NFP, 10:00 ISM)
-      return hourET >= 8 && hourET < 12;
+      // NY session window (08:00 ET to 16:00 ET, e.g. 08:15 ADP, 08:30 CPI/NFP, 10:00 ISM, 14:00 FOMC)
+      return hourET >= 8 && hourET < 16;
     }).sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
 
     if (nyAmHighImpact.length === 0) {
@@ -439,23 +486,36 @@ export class NewsEngine {
         targetScanTimeET: '08:00 AM ET',
         isEarlyScanNeeded: false,
         isStandardTimeScan: true,
+        isPostNewsScan: false,
+        specialEventType: null,
+        newsTimingOffsetMinutes: -30,
         scanHour: 8,
         scanMinute: 0
       };
     }
 
-    const first = nyAmHighImpact[0];
-    const firstEventDate = new Date(first.eventTime);
+    // Prioritize CPI, NFP, or FOMC if present on today's schedule
+    const specialEvent = nyAmHighImpact.find(e => isCpiNfpOrFomc(e));
+    const targetEvent = specialEvent || nyAmHighImpact[0];
+    const targetEventDate = new Date(targetEvent.eventTime);
+
     const timeFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/New_York',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     });
-    const scheduledTimeET = timeFormatter.format(firstEventDate) + ' ET';
+    const scheduledTimeET = timeFormatter.format(targetEventDate) + ' ET';
 
-    // Target scan time: exactly 30 minutes prior to first high-impact news event
-    const targetScanMs = firstEventDate.getTime() - 30 * 60 * 1000;
+    // Rule:
+    // - CPI, FOMC, NFP (specifically and ONLY these): scan runs 30 minutes AFTER (+30m)
+    // - Other high impact news: scan runs 30 minutes PRIOR (-30m)
+    const isSpecialPostNews = isCpiNfpOrFomc(targetEvent);
+    const eventType = getNewsEventType(targetEvent);
+    const specialEventType = isSpecialPostNews ? (eventType as 'CPI' | 'NFP' | 'FOMC') : null;
+    const newsTimingOffsetMinutes = isSpecialPostNews ? 30 : -30;
+
+    const targetScanMs = targetEventDate.getTime() + newsTimingOffsetMinutes * 60 * 1000;
     const targetScanDate = new Date(targetScanMs);
     const targetScanTimeET = timeFormatter.format(targetScanDate) + ' ET';
 
@@ -469,9 +529,9 @@ export class NewsEngine {
     const scanHour = parseInt(parts.find(p => p.type === 'hour')?.value || '8', 10);
     const scanMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
 
-    // Early scan is strictly required before 08:00 AM ET session open
-    const isEarlyScanNeeded = (scanHour < 8);
-    const isStandardTimeScan = (scanHour === 8 && scanMinute === 0);
+    const isPostNewsScan = isSpecialPostNews;
+    const isEarlyScanNeeded = (!isPostNewsScan && scanHour < 8);
+    const isStandardTimeScan = (!isPostNewsScan && scanHour === 8 && scanMinute === 0);
 
     const eventNames = nyAmHighImpact.map(e => {
       const timeStr = timeFormatter.format(new Date(e.eventTime)) + ' ET';
@@ -481,13 +541,16 @@ export class NewsEngine {
     return {
       hasNews: true,
       events: nyAmHighImpact,
-      firstEvent: first,
+      firstEvent: targetEvent,
       scheduledTimeET,
       description: eventNames,
       targetScanDate,
       targetScanTimeET,
       isEarlyScanNeeded,
       isStandardTimeScan,
+      isPostNewsScan,
+      specialEventType,
+      newsTimingOffsetMinutes,
       scanHour,
       scanMinute
     };

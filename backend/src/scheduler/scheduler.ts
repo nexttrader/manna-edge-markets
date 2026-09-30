@@ -139,17 +139,18 @@ export function startScheduler(
     });
     scheduledTasks.push(earlyNoticeTask);
 
-    // 5. NY AM High-Impact News: Dynamic Pre-News Early Forex Scan (30m prior to earliest news)
-    // Checks every minute Mon-Fri between 07:00 and 07:59 ET for an early scan (<08:00 ET) timed 30m prior to news
-    const earlyForexScanTask = cron.schedule('* 7 * * 1-5', async () => {
+    // 5. High-Impact News: Dynamic News Forex Scan (Pre-news 30m prior OR Post-news 30m after for CPI/NFP/FOMC)
+    // Checks every minute Mon-Fri between 07:00 and 17:00 ET for scheduled dynamic news scans
+    const earlyForexScanTask = cron.schedule('* 7-17 * * 1-5', async () => {
         const now = new Date();
         try {
             if (earlyScanService.isEarlyScanDue(now)) {
                 const status = earlyScanService.getStatus(now);
-                console.log(`⚡ NY AM High-Impact News: Executing Early Forex Scan at ${status.earlyScanTimeET} (${now.toISOString()})`);
+                console.log(`⚡ High-Impact News: Executing ${status.isPostNewsScan ? 'Post-News' : 'Early'} Forex Scan at ${status.earlyScanTimeET} (${now.toISOString()})`);
+                const isPm = status.scanHour >= 12;
                 const kzInfo: KillzoneInfo = {
-                    killzone: 'ny_am',
-                    name: 'NY_AM',
+                    killzone: isPm ? 'ny_pm' : 'ny_am',
+                    name: isPm ? 'NY_PM' : 'NY_AM',
                     boundaryET: `${String(status.scanHour).padStart(2, '0')}:${String(status.scanMinute).padStart(2, '0')}`,
                     boundaryUTC: now.toISOString()
                 };
@@ -159,7 +160,7 @@ export function startScheduler(
                 earlyScanService.markCompleted(now);
             }
         } catch (error) {
-            console.error('Error executing dynamic pre-news early Forex scan:', error);
+            console.error('Error executing dynamic news Forex scan:', error);
         }
     }, {
         timezone: 'America/New_York'
