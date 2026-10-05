@@ -53,27 +53,32 @@ export class MannaSndStrategy implements IStrategyEngine {
   }
 
   /**
-   * Check if a Supply/Demand zone is FRESH (no subsequent candles cut through proximal boundary)
+   * Check if a Supply/Demand zone is FRESH.
+   * A zone is marked as used only if subsequent price has penetrated deeper than 50% into the zone depth.
    */
   private isFreshZone(zone: Zone, candles: Candle[], zoneIndex: number): boolean {
     if (zoneIndex < 0 || zoneIndex >= candles.length - 1) return true;
     const subsequentCandles = candles.slice(zoneIndex + 1);
+    const depth = Math.abs(zone.proximal - zone.distal);
 
     for (const c of subsequentCandles) {
       if (zone.type === 'demand') {
-        // If a subsequent candle low penetrated below proximal line, zone is tested/cut-through
-        if (c.low < zone.proximal) return false;
+        // Demand: marked used only if subsequent low penetrated deeper than 50% of zone depth
+        const fiftyPctLevel = zone.proximal - (0.5 * depth);
+        if (c.low < fiftyPctLevel) return false;
       } else {
-        // If a subsequent candle high penetrated above proximal line, zone is tested/cut-through
-        if (c.high > zone.proximal) return false;
+        // Supply: marked used only if subsequent high penetrated deeper than 50% of zone depth
+        const fiftyPctLevel = zone.proximal + (0.5 * depth);
+        if (c.high > fiftyPctLevel) return false;
       }
     }
     return true;
   }
 
   /**
-   * Find fresh Supply and Demand imbalance zones in candle history with candle index
-   * Formations: RBR (Rally-Base-Rally), DBR (Drop-Base-Rally), RBD (Rally-Base-Drop), DBD (Drop-Base-Drop)
+   * Find fresh Supply and Demand imbalance zones in candle history with candle index.
+   * Formations: RBR (Rally-Base-Rally), DBR (Drop-Base-Rally), RBD (Rally-Base-Drop), DBD (Drop-Base-Drop).
+   * Imbalance rule: Leg-Out departure (single candle or consecutive series of same-colour candles) > 1.0x Base Range.
    */
   private findZonesWithIndex(candles: Candle[], minDepartureAtrMultiple: number = 0, atr: number = 0): (Zone & { index: number })[] {
     const zones: (Zone & { index: number })[] = [];
@@ -86,45 +91,90 @@ export class MannaSndStrategy implements IStrategyEngine {
         if (i + baseCount >= candles.length) break;
 
         const prevType = types[i - 1];
-        const departureType = types[i + baseCount];
         const baseCandles = candles.slice(i, i + baseCount);
         const baseTypes = types.slice(i, i + baseCount);
 
         const allBase = baseTypes.every(t => t === 'base');
         if (!allBase) continue;
 
-        const departureCandle = candles[i + baseCount];
-        // Enforce institutional displacement: departure body must reflect genuine imbalance
-        if (atr > 0 && minDepartureAtrMultiple > 0 && departureCandle) {
-          const departureBody = Math.abs(departureCandle.close - departureCandle.open);
-          if (departureBody < atr * minDepartureAtrMultiple) continue;
-        }
+        const baseHigh = Math.max(...baseCandles.map(c => c.high));
+        const baseLow  = Math.min(...baseCandles.map(c => c.low));
+        const baseRange = baseHigh - baseLow;
+        if (baseRange <= 0) continue;
 
+        const depStartIndex = i + baseCount;
+        const firstDepCandle = candles[depStartIndex];
         const baseTime = baseCandles[0].timestamp;
 
         // 1. DEMAND ZONES: RBR (Rally-Base-Rally) & DBR (Drop-Base-Rally)
-        if (departureType === 'leg_up') {
-          let formation: Zone['formation'] | null = null;
-          if (prevType === 'leg_up') formation = 'Rally-Base-Rally';
-          else if (prevType === 'leg_down') formation = 'Drop-Base-Rally';
+        // Leg-out is bullish: first departure candle is green (close > open)
+        if (firstDepCandle.close > firstDepCandle.open) {
+          const legoutCandles: Candle[] = [];
+          for (let j = depStartIndex; j < candles.length; j++) {
+            if (candles[j].close >= candles[j].open) {
+              legoutCandles.push(candles[j]);
+            } else {
+              break;
+            }
+          }
+          if (legoutCandles.length === 0) continue;
+          const legoutHigh = Math.max(...legoutCandles.map(c => c.high));
+          const legoutGain = legoutHigh - baseHigh;
 
-          if (formation) {
-            const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
-            const distal = Math.min(...baseCandles.map(c => c.low));
-            zones.push({ type: 'demand', formation, proximal, distal, timestamp: baseTime, index: i + baseCount });
+          // Institutional Imbalance: Leg-Out expansion must be > 1.0x Base Range
+          if (legoutGain > 1.0 * baseRange) {
+            let formation: Zone['formation'] | null = null;
+            if (prevType === 'leg_up') formation = 'Rally-Base-Rally';
+            else if (prevType === 'leg_down') formation = 'Drop-Base-Rally';
+
+            if (formation) {
+              const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
+              const distal = baseLow;
+              zones.push({
+                type: 'demand',
+                formation,
+                proximal,
+                distal,
+                timestamp: baseTime,
+                index: i + baseCount
+              });
+            }
           }
         }
 
         // 2. SUPPLY ZONES: RBD (Rally-Base-Drop) & DBD (Drop-Base-Drop)
-        if (departureType === 'leg_down') {
-          let formation: Zone['formation'] | null = null;
-          if (prevType === 'leg_up') formation = 'Rally-Base-Drop';
-          else if (prevType === 'leg_down') formation = 'Drop-Base-Drop';
+        // Leg-out is bearish: first departure candle is red (close < open)
+        else if (firstDepCandle.close < firstDepCandle.open) {
+          const legoutCandles: Candle[] = [];
+          for (let j = depStartIndex; j < candles.length; j++) {
+            if (candles[j].close <= candles[j].open) {
+              legoutCandles.push(candles[j]);
+            } else {
+              break;
+            }
+          }
+          if (legoutCandles.length === 0) continue;
+          const legoutLow = Math.min(...legoutCandles.map(c => c.low));
+          const legoutDrop = baseLow - legoutLow;
 
-          if (formation) {
-            const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
-            const distal = Math.max(...baseCandles.map(c => c.high));
-            zones.push({ type: 'supply', formation, proximal, distal, timestamp: baseTime, index: i + baseCount });
+          // Institutional Imbalance: Leg-Out expansion must be > 1.0x Base Range
+          if (legoutDrop > 1.0 * baseRange) {
+            let formation: Zone['formation'] | null = null;
+            if (prevType === 'leg_up') formation = 'Rally-Base-Drop';
+            else if (prevType === 'leg_down') formation = 'Drop-Base-Drop';
+
+            if (formation) {
+              const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
+              const distal = baseHigh;
+              zones.push({
+                type: 'supply',
+                formation,
+                proximal,
+                distal,
+                timestamp: baseTime,
+                index: i + baseCount
+              });
+            }
           }
         }
       }
@@ -413,9 +463,8 @@ export class MannaSndStrategy implements IStrategyEngine {
         }
 
         // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
-        // Enforce institutional departure displacement (body >= 0.65x ATR14 for Forex, 0.75x for Futures)
-        const minDepartureMult = market === 'forex' ? 0.65 : 0.75;
-        const m15Zones = this.findZonesWithIndex(candles15m, minDepartureMult, atr14);
+        // Enforce institutional imbalance: Leg-Out departure > 1.0x Base Range
+        const m15Zones = this.findZonesWithIndex(candles15m);
 
         if (allowedAction === 'BUY') {
           // 15M Entry Zone MUST sit strictly BETWEEN 1H Demand distal and 1H Supply proximal boundaries
