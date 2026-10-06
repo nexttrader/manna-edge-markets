@@ -477,10 +477,27 @@ export class MannaSndStrategy implements IStrategyEngine {
             this.isFreshZone(z, candles15m, z.index)
           );
 
-          // No fallback to 1H HTF zone — if no fresh 15M demand zone qualifies, skip this session.
-          // A displaced signal (stale 1H zone) is worse than no signal.
-          if (demandInCurve.length === 0) continue;
-          const zone: Zone = demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0]);
+          // 15M Entry Zone Selection:
+          // 1. Primary: Look for fresh 15M demand zone in open curve
+          let selectedZone: Zone | null = null;
+          if (demandInCurve.length > 0) {
+            selectedZone = demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0]);
+          } else {
+            // 2. 1H Fallback Refinement: Search for a 15M demand zone nested INSIDE the 1H demand area [htfDemand.distal, htfDemand.proximal]
+            const nested15mDemand = m15Zones.filter(z =>
+              z.type === 'demand' &&
+              z.proximal <= currentPrice &&
+              z.distal >= htfDemand.distal &&
+              z.proximal <= htfDemand.proximal
+            );
+            if (nested15mDemand.length > 0) {
+              selectedZone = nested15mDemand.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, nested15mDemand[0]);
+            }
+          }
+
+          // If neither an open-curve 15M zone nor a nested 15M zone in the 1H demand area qualifies, skip this session
+          if (!selectedZone) continue;
+          const zone: Zone = selectedZone;
 
           const bias: Bias = 'long';
           const entry_zone_mid = zone.proximal;
@@ -610,10 +627,27 @@ export class MannaSndStrategy implements IStrategyEngine {
             this.isFreshZone(z, candles15m, z.index)
           );
 
-          // No fallback to 1H HTF zone — if no fresh 15M supply zone qualifies, skip this session.
-          // A displaced signal (stale 1H zone) is worse than no signal.
-          if (supplyInCurve.length === 0) continue;
-          const zone: Zone = supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0]);
+          // 15M Entry Zone Selection:
+          // 1. Primary: Look for fresh 15M supply zone in open curve
+          let selectedZone: Zone | null = null;
+          if (supplyInCurve.length > 0) {
+            selectedZone = supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0]);
+          } else {
+            // 2. 1H Fallback Refinement: Search for a 15M supply zone nested INSIDE the 1H supply area [htfSupply.proximal, htfSupply.distal]
+            const nested15mSupply = m15Zones.filter(z =>
+              z.type === 'supply' &&
+              z.proximal >= currentPrice &&
+              z.proximal >= htfSupply.proximal &&
+              z.distal <= htfSupply.distal
+            );
+            if (nested15mSupply.length > 0) {
+              selectedZone = nested15mSupply.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, nested15mSupply[0]);
+            }
+          }
+
+          // If neither an open-curve 15M zone nor a nested 15M zone in the 1H supply area qualifies, skip this session
+          if (!selectedZone) continue;
+          const zone: Zone = selectedZone;
 
           const bias: Bias = 'short';
           const entry_zone_mid = zone.proximal;
