@@ -134,8 +134,11 @@ export class OutcomeDetector {
         const maxProfit = isLong ? Math.max(0, maxHighBid - entryPrice) : Math.max(0, entryPrice - minLowAsk);
         const maxR = initialRisk > 0 ? (maxProfit / initialRisk) : 0;
         
-        // Old BE rule: As soon as trade reaches +1.0R open profit, move Stop Loss to Break-Even (entryPrice)
-        const beCriteriaReached = maxR >= 1.0;
+        // Institutional BE rule: Soften early BE threshold from 1.0R to 1.5R for Sentinel V2 (or TP1-only if enabled)
+        // to prevent choking trades on normal pullbacks
+        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'sentinel_v2');
+        const beThreshold = setup.strategy_id === 'sentinel_v2' ? 1.5 : 1.0;
+        const beCriteriaReached = !isTp1BeOnly && (maxR >= beThreshold);
         if (!setup.is_breakeven && beCriteriaReached) {
           setup.is_breakeven = 1;
           setup.initial_stop = origStop;
@@ -147,7 +150,7 @@ export class OutcomeDetector {
             is_breakeven: 1
           });
           
-          logger.info({ setupId: setup.id, instrument: setup.instrument, entryPrice }, 'Stop Loss moved to Break Even (BE) at +1.0R Open PnL');
+          logger.info({ setupId: setup.id, instrument: setup.instrument, entryPrice, beThreshold }, `Stop Loss moved to Break Even (BE) at +${beThreshold}R Open PnL`);
           publishEvents.emit('setup_breakeven', { ...setup, stop: entryPrice, is_breakeven: 1 });
         }
         

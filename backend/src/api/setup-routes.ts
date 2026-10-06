@@ -152,8 +152,9 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           }
         }
 
-        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'manna_snd');
-        const isEarlyBeEligible = !isTp1BeOnly && (unrealizedR !== undefined && unrealizedR >= 1.0);
+        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'sentinel_v2');
+        const beThreshold = setup.strategy_id === 'sentinel_v2' ? 1.5 : 1.0;
+        const isEarlyBeEligible = !isTp1BeOnly && (unrealizedR !== undefined && unrealizedR >= beThreshold);
 
         const isBreakeven = Boolean(
           setup.is_breakeven === 1 ||

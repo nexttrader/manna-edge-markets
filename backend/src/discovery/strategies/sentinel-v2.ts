@@ -56,7 +56,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
     id: 'sentinel_v2',
     name: 'Manna Elite v1.2',
     tier: 'elite',
-    description: 'Manna Elite v1.2 (Trade Sentinel Elite Framework): Strictly deterministic 4-stage state machine across 1H/15M/1M for institutional expansion, POI discovery & mitigation, 15M swing reversal confirmation, and closed 1M precision entry.',
+    description: 'Manna Elite v1.2 (Trade Sentinel Elite Framework): Strictly deterministic 4-stage state machine across 1H/15M/5M for institutional expansion, POI discovery & mitigation, 15M swing reversal confirmation, and closed structural entry.',
     enabled: true
   };
 
@@ -152,10 +152,12 @@ export class SentinelV2Strategy implements IStrategyEngine {
         // =========================================================================
         // STAGE 1.5: 1H Expansion Quadrant Filter (Equilibrium of Expansion Candle)
         // =========================================================================
+        // Institutional SMC: Buyers require Discount (price <= 50% midpoint),
+        // Sellers require Premium (price >= 50% midpoint) for valid deep retracement.
         const expansionMidpoint = (expansionCandle.high + expansionCandle.low) / 2;
         const quadrantPassed = bias === 'long'
-          ? currentPrice > expansionMidpoint
-          : currentPrice < expansionMidpoint;
+          ? currentPrice <= expansionMidpoint
+          : currentPrice >= expansionMidpoint;
 
         if (!quadrantPassed) continue;
 
@@ -292,27 +294,42 @@ export class SentinelV2Strategy implements IStrategyEngine {
         if (!mtfConfirmCandle) continue;
 
         // =========================================================================
-        // STAGE 4: 1M Closed-Bar Precision Entry Trigger
+        // STAGE 4: Closed-Bar Structural Entry Trigger (5M / Multi-Bar BOS)
         // =========================================================================
-        // Lookback 15 to 30 closed candles
-        const candles1m = await getLiveCandles(instrument, '1m', 30);
-        if (candles1m.length < 5) continue;
+        // Lookback 15 to 30 closed candles (5M preferred for institutional confirmation, fallback to 1M)
+        let candlesLTF = await getLiveCandles(instrument, '5m', 30);
+        let ltfTimeframe = '5m';
+        if (!candlesLTF || candlesLTF.length < 5) {
+          candlesLTF = await getLiveCandles(instrument, '1m', 30);
+          ltfTimeframe = '1m';
+        }
+        if (!candlesLTF || candlesLTF.length < 5) continue;
 
-        const closed1m = candles1m.slice(0, -1);
-        if (closed1m.length < 2) continue;
+        const closedLTF = candlesLTF.slice(0, -1);
+        if (closedLTF.length < 2) continue;
 
-        const bar1 = closed1m[closed1m.length - 1]; // Latest closed 1M bar
-        const bar2 = closed1m[closed1m.length - 2]; // Previous 1M bar
+        const bar1 = closedLTF[closedLTF.length - 1]; // Latest closed LTF bar
+        const bar2 = closedLTF[closedLTF.length - 2]; // Previous LTF bar
 
-        // 1. Window Constraint: Bar 1 price must remain within the range of mtfConfirmCandle
-        const withinMtfWindow = bar1.close >= mtfConfirmCandle.low && bar1.close <= mtfConfirmCandle.high;
+        // 1. Window Constraint: Bar 1 price must remain within the range of mtfConfirmCandle OR within the mitigated POI
+        const withinMtfWindow = (bar1.close >= mtfConfirmCandle.low && bar1.close <= mtfConfirmCandle.high) ||
+          (bias === 'long' ? (bar1.low <= mitigatedPoi.high && bar1.close >= mitigatedPoi.low) : (bar1.high >= mitigatedPoi.low && bar1.close <= mitigatedPoi.high));
         if (!withinMtfWindow) continue;
 
-        // 2. Break of Structure (BOS) on closed 1M bar:
-        // Long Entry: Close1 > High2 && Close1 > Open1
-        // Short Entry: Close1 < Low2 && Close1 < Open1
-        const bosLong = bar1.close > bar2.high && bar1.close > bar1.open;
-        const bosShort = bar1.close < bar2.low && bar1.close < bar1.open;
+        // 2. Break of Structure (BOS) on closed bar:
+        // For 5M: closed directional bar breaking previous bar's high/low
+        // For 1M fallback: closed directional bar breaking structural swing high/low of prior 3 bars
+        let bosLong = false;
+        let bosShort = false;
+        if (ltfTimeframe === '5m') {
+          bosLong = bar1.close > bar2.high && bar1.close > bar1.open;
+          bosShort = bar1.close < bar2.low && bar1.close < bar1.open;
+        } else {
+          const priorHigh3 = Math.max(...closedLTF.slice(-4, -1).map(c => c.high));
+          const priorLow3 = Math.min(...closedLTF.slice(-4, -1).map(c => c.low));
+          bosLong = bar1.close > priorHigh3 && bar1.close > bar1.open;
+          bosShort = bar1.close < priorLow3 && bar1.close < bar1.open;
+        }
 
         const entryTriggered = bias === 'long' ? bosLong : bosShort;
         if (!entryTriggered) continue;
@@ -321,7 +338,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
         // 3. RISK MANAGEMENT & TARGET ENGINE
         // =========================================================================
         const entry = bar1.close;
-        const last5_1m = closed1m.slice(-5);
+        const last5_ltf = closedLTF.slice(-5);
         const decimals = getInstrumentDecimals(instrument, market);
 
         // Spread Buffer
@@ -329,14 +346,17 @@ export class SentinelV2Strategy implements IStrategyEngine {
           ? (instrument === 'NQ' || instrument === 'YM' ? 1.0 : 0.25)
           : (instrument.includes('JPY') ? 0.020 : 0.00015);
 
-        // Stop Loss Anchoring
+        // Stop Loss Anchoring: Anchor beyond 15M structural swing extreme AND mitigated POI boundary
+        // to prevent getting wicked out by normal intra-session liquidity sweeps
         let rawStop = 0;
         if (bias === 'long') {
-          const minLow1m = Math.min(...last5_1m.map(c => c.low));
-          rawStop = Math.min(minLow1m, mtfConfirmCandle.low) - spreadBuffer;
+          const minLowLtf = Math.min(...last5_ltf.map(c => c.low));
+          const structuralFloor = Math.min(minLowLtf, mtfConfirmCandle.low, mitigatedPoi.low);
+          rawStop = structuralFloor - spreadBuffer;
         } else {
-          const maxHigh1m = Math.max(...last5_1m.map(c => c.high));
-          rawStop = Math.max(maxHigh1m, mtfConfirmCandle.high) + spreadBuffer;
+          const maxHighLtf = Math.max(...last5_ltf.map(c => c.high));
+          const structuralCeiling = Math.max(maxHighLtf, mtfConfirmCandle.high, mitigatedPoi.high);
+          rawStop = structuralCeiling + spreadBuffer;
         }
 
         const rawRiskDistance = Math.abs(entry - rawStop);
@@ -406,7 +426,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
         if (mitigatedPoi.type === 'FVG' || mitigatedPoi.type === 'REV') rawPoints += 5;
         rawPoints += 15; // POI mitigated
         rawPoints += 15; // 15M swing confirmed
-        rawPoints += 10; // 1M BOS entry confirmed
+        rawPoints += 10; // LTF structural BOS entry confirmed
 
         const sentinel_raw_conviction = rawPoints;
         const normalizedScore = Math.min(99.5, Math.max(70.0, (rawPoints / 100) * 100));
@@ -430,7 +450,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
 
         const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
         const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
-        const curVol = closed1m.length > 0 ? closed1m[closed1m.length - 1].volume : avgVol;
+        const curVol = closedLTF.length > 0 ? closedLTF[closedLTF.length - 1].volume : avgVol;
         const liquidity_score = computeLiquidityScore(curVol, avgVol, spread);
 
         // Tuning & Audience Qualification
@@ -504,7 +524,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
             target_audience: targetAudience,
             htf: "1H",
             mtf: "15M",
-            ltf: "1M",
+            ltf: ltfTimeframe.toUpperCase(),
             selection_rationale,
             sentinel_phase: "LTF_ENTRY_ACTIVE",
             sentinel_raw_conviction,
@@ -521,7 +541,7 @@ export class SentinelV2Strategy implements IStrategyEngine {
             quadrant_passed: quadrantPassed,
             order_type: bias === 'long' ? "BUY_LIMIT" : "SELL_LIMIT",
             context_tf: "1H Context",
-            entry_tf: "1M Entry",
+            entry_tf: `${ltfTimeframe.toUpperCase()} Entry`,
             payload
           })
         });
