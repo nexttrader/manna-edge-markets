@@ -477,15 +477,10 @@ export class MannaSndStrategy implements IStrategyEngine {
             this.isFreshZone(z, candles15m, z.index)
           );
 
-          const zone: Zone = demandInCurve.length > 0
-            ? demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0])
-            : {
-                type: 'demand',
-                formation: (htfDemand.formation as any) || 'Drop-Base-Rally',
-                proximal: htfDemand.proximal,
-                distal: htfDemand.distal,
-                timestamp: htfDemand.timestamp
-              };
+          // No fallback to 1H HTF zone — if no fresh 15M demand zone qualifies, skip this session.
+          // A displaced signal (stale 1H zone) is worse than no signal.
+          if (demandInCurve.length === 0) continue;
+          const zone: Zone = demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0]);
 
           const bias: Bias = 'long';
           const entry_zone_mid = zone.proximal;
@@ -615,15 +610,10 @@ export class MannaSndStrategy implements IStrategyEngine {
             this.isFreshZone(z, candles15m, z.index)
           );
 
-          const zone: Zone = supplyInCurve.length > 0
-            ? supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0])
-            : {
-                type: 'supply',
-                formation: (htfSupply.formation as any) || 'Rally-Base-Drop',
-                proximal: htfSupply.proximal,
-                distal: htfSupply.distal,
-                timestamp: htfSupply.timestamp
-              };
+          // No fallback to 1H HTF zone — if no fresh 15M supply zone qualifies, skip this session.
+          // A displaced signal (stale 1H zone) is worse than no signal.
+          if (supplyInCurve.length === 0) continue;
+          const zone: Zone = supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0]);
 
           const bias: Bias = 'short';
           const entry_zone_mid = zone.proximal;
