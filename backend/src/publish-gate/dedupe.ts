@@ -83,6 +83,23 @@ export function dedupeAndSelect(
        return { action: 'replace', selectedCandidate: selected, invalidations };
     }
     
+    // 3. Pending AWAITING_ENTRY setups in the SAME direction:
+    // If a newer 15M zone has formed in the same direction, replace the pending order with the newer zone
+    if (existingSetup.bias === selected.bias) {
+      const isIdentical = Math.abs(selected.entry_zone_mid - existingSetup.entry_zone_mid) < 0.00001 &&
+                          Math.abs(selected.stop - existingSetup.stop) < 0.00001;
+      if (!isIdentical) {
+        invalidations.push({
+          setupId: existingSetup.id,
+          reason: 'superseded',
+          detail: `Newer 15M zone developed in same direction (${selected.bias.toUpperCase()} @ ${selected.entry_zone_mid}), superseding pending entry @ ${existingSetup.entry_zone_mid}`
+        });
+        return { action: 'replace', selectedCandidate: selected, invalidations };
+      }
+      // Exact same zone: preserve existing setup without duplicate alerts
+      return { action: 'preserve', invalidations };
+    }
+
     // 4. Pending AWAITING_ENTRY setups: Check for significantly higher conviction (>15 points)
     if ((selected.conviction_score || 0) > (existingSetup.conviction_score || 0) + 15) {
        invalidations.push({

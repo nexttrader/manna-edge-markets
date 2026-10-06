@@ -234,6 +234,55 @@ async function startServer() {
                 } catch (err) {
                     logger.error({ err }, 'Forex post-open (+5m) boundary handler failed');
                 }
+            },
+            // 5. Continuous 15-Minute Scan Handler for Active Pending Assets
+            // Runs at :01, :16, :31, :46 ET (1 minute after each 15-minute bar closes)
+            // ONLY rescans assets that currently have an active pending signal ('awaiting_entry')
+            async (kzInfo) => {
+                const now = new Date();
+                try {
+                    const forexOpen = isForexMarketOpen(now);
+                    const futuresOpen = isFuturesMarketOpen(now);
+                    if (!forexOpen && !futuresOpen) return;
+
+                    // Fetch active pending setups across markets
+                    const activeForex = forexOpen ? await queries.getActiveSetups('forex') : [];
+                    const activeFutures = futuresOpen ? await queries.getActiveSetups('futures') : [];
+
+                    const pendingForex = activeForex.filter(s => s.signal_state === 'awaiting_entry');
+                    const pendingFutures = activeFutures.filter(s => s.signal_state === 'awaiting_entry');
+
+                    const forexTargets = Array.from(new Set(pendingForex.map(s => s.instrument)));
+                    const futuresTargets = Array.from(new Set(pendingFutures.map(s => s.instrument)));
+
+                    if (forexTargets.length === 0 && futuresTargets.length === 0) {
+                        return; // No active pending signals — zero overhead
+                    }
+
+                    logger.info({
+                        forexTargets,
+                        futuresTargets,
+                        killzone: kzInfo.killzone
+                    }, '⏱️ Continuous 15M Active Asset Scanner: Rescanning instruments with pending signals for newer 15M continuation zones');
+
+                    const runId = `run_continuous_15m_${Date.now()}`;
+
+                    if (forexTargets.length > 0) {
+                        const { forex } = await discoverUnifiedSetups(kzInfo, runId, 'forex', [], undefined, true, forexTargets);
+                        if (forex.length > 0) {
+                            await executePublishRun(kzInfo, [], forex, 'live', 'scheduled', 'forex');
+                        }
+                    }
+
+                    if (futuresTargets.length > 0) {
+                        const { futures } = await discoverUnifiedSetups(kzInfo, runId, 'futures', [], undefined, true, futuresTargets);
+                        if (futures.length > 0) {
+                            await executePublishRun(kzInfo, futures, [], 'live', 'scheduled', 'futures');
+                        }
+                    }
+                } catch (err: any) {
+                    logger.error({ err: err.message }, 'Continuous 15M active asset scan handler failed');
+                }
             }
         );
 

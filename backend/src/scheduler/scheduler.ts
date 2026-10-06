@@ -11,7 +11,8 @@ export function startScheduler(
     onKillzoneBoundary: (kz: KillzoneInfo) => Promise<void>,
     onKillzoneMidpoint?: (kz: KillzoneInfo) => Promise<void>,
     onEarlyForexScan?: (kz: KillzoneInfo) => Promise<void>,
-    onForexSessionScan?: (kz: KillzoneInfo) => Promise<void>
+    onForexSessionScan?: (kz: KillzoneInfo) => Promise<void>,
+    onContinuousActiveScan?: (kz: KillzoneInfo) => Promise<void>
 ): void {
     // 1. Killzone Start Boundaries - Futures Bell (02:00, 08:00, 14:00, 20:00 ET)
     const boundaries: Array<{ cron: string; expected: Killzone }> = [
@@ -70,6 +71,25 @@ export function startScheduler(
         
         scheduledTasks.push(task);
     });
+
+    // 1c. Continuous 15-Minute Scan for Active Pending Assets
+    // Runs at :01, :16, :31, :46 ET (1 minute after each 15-minute candle closes)
+    // ONLY scans assets that currently have an active pending signal ('awaiting_entry')
+    const continuousActiveScanTask = cron.schedule('1,16,31,46 * * * *', async () => {
+        const now = new Date();
+        const kzInfo = mapTimestampToKillzone(now);
+        if (onContinuousActiveScan && kzInfo) {
+            try {
+                await onContinuousActiveScan(kzInfo);
+            } catch (error) {
+                console.error('Error in onContinuousActiveScan handler:', error);
+            }
+        }
+    }, {
+        timezone: 'America/New_York'
+    });
+
+    scheduledTasks.push(continuousActiveScanTask);
 
     // 2. Killzone Midpoint Booster Boundaries (03:30 ET London, 09:30 ET NY AM, 14:30 ET NY PM, 21:30 ET Asia)
     const midpoints: Array<{ cron: string; expected: Killzone; label: string }> = [

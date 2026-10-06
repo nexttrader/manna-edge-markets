@@ -16,10 +16,14 @@ export async function discoverUnifiedSetups(
   marketScope: 'both' | 'futures' | 'forex' = 'both',
   excludedInstruments: string[] = [],
   targetStrategyId?: string,
-  bypassSessionFilter: boolean = false
+  bypassSessionFilter: boolean = false,
+  onlyTargetInstruments?: string[]
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
   // 1. Single Source of Truth: Compute Unified Biases ONCE for all target instruments
-  const allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
+  let allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
+  if (onlyTargetInstruments && onlyTargetInstruments.length > 0) {
+    allInstruments = allInstruments.filter(inst => onlyTargetInstruments.includes(inst));
+  }
   const targetInstruments = excludedInstruments.length > 0
     ? allInstruments.filter(inst => !excludedInstruments.includes(inst))
     : allInstruments;
@@ -41,8 +45,13 @@ export async function discoverUnifiedSetups(
   }
 
   const sessionDisabled = bypassSessionFilter ? [] : await queries.getDisabledDisplayAssets(killzone.killzone);
-  const targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
-  const targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
+  let targetFutures = FUTURES_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
+  let targetForex = FOREX_INSTRUMENTS.filter(i => !excludedInstruments.includes(i) && !sessionDisabled.includes(i));
+
+  if (onlyTargetInstruments && onlyTargetInstruments.length > 0) {
+    targetFutures = targetFutures.filter(i => onlyTargetInstruments.includes(i));
+    targetForex = targetForex.filter(i => onlyTargetInstruments.includes(i));
+  }
 
   // 2. Execute selected strategy engines
   if (marketScope === 'both' || marketScope === 'futures') {
