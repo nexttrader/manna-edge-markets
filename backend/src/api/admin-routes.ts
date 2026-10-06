@@ -980,8 +980,13 @@ async function performRetroactiveRestoration(): Promise<{ deletedOutcomesCount: 
   await queryDb(`UPDATE forex_edge_setups SET strategy_id = 'sentinel_v2' WHERE metadata LIKE '%sentinel%' OR metadata LIKE '%context_tf%' OR metadata LIKE '%poi_type%'`);
   await queryDb(`UPDATE outcomes SET strategy_id = 'sentinel_v2' WHERE setup_id IN (SELECT id FROM edge_setups WHERE strategy_id = 'sentinel_v2' UNION SELECT id FROM forex_edge_setups WHERE strategy_id = 'sentinel_v2')`);
 
+  // Restore setups that hit TP1 but were mistakenly marked as be_hit when the runner remainder touched entry
+  await queryDb(`UPDATE edge_setups SET invalidation_reason = 'tp1_hit' WHERE invalidation_reason = 'be_hit' AND id IN (SELECT setup_id FROM outcomes WHERE outcome_type = 'tp1_hit')`);
+  await queryDb(`UPDATE forex_edge_setups SET invalidation_reason = 'tp1_hit' WHERE invalidation_reason = 'be_hit' AND id IN (SELECT setup_id FROM outcomes WHERE outcome_type = 'tp1_hit')`);
+  await queryDb(`UPDATE outcomes SET outcome_type = 'tp1_hit', realized_pl = 2.0 WHERE outcome_type = 'be_hit' AND was_runner = 1`);
+
   await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);
-  await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND realized_pl != 0.0`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND (was_runner IS NULL OR was_runner = 0) AND realized_pl != 0.0`);
   await queryDb(`UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
   await queryDb(`UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
 

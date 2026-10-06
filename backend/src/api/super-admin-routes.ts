@@ -1481,9 +1481,19 @@ async function calculateStrategyComparisonData(filters?: {
       st.losses++;
       rVal = -1.0;
     } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
-      isBE = true;
-      st.breakevens++;
-      rVal = 0.0;
+      // If the trade was a runner or previously achieved TP1, retain the TP1 win (+2.0R)
+      const meta = (() => { try { return JSON.parse(setup?.metadata || '{}'); } catch { return {}; } })();
+      const isRunnerTp1 = Boolean(o.was_runner || setup?.invalidation_reason === 'tp1_hit' || meta?.tp1_hit_at);
+      if (isRunnerTp1) {
+        isWin = true;
+        st.wins++;
+        st.tp1Hits++;
+        rVal = setup?.r_multiple_1 || 2.0;
+      } else {
+        isBE = true;
+        st.breakevens++;
+        rVal = 0.0;
+      }
     } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
       rVal = Math.max(-1.0, o.realized_pl);
       if (rVal > 0) { isWin = true; st.wins++; }
@@ -2225,8 +2235,18 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
       let meta: any = {};
       try { meta = JSON.parse(s.metadata || '{}'); } catch {}
       const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
-      const initialStop = s.initial_stop || s.stop;
-      const realizedR = s.realized_r !== null && s.realized_r !== undefined ? s.realized_r : (meta.realized_r !== undefined ? meta.realized_r : (s.invalidation_reason === 'tp2_hit' ? 3.5 : s.invalidation_reason === 'tp1_hit' ? 2.0 : s.invalidation_reason === 'be_hit' ? 0.0 : -1.0));
+      const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
+      const realizedR = s.realized_r !== null && s.realized_r !== undefined 
+        ? s.realized_r 
+        : (meta.realized_r !== undefined 
+          ? meta.realized_r 
+          : (s.invalidation_reason === 'tp2_hit' 
+            ? 3.5 
+            : isTp1Achieved 
+              ? (s.r_multiple_1 || 2.0) 
+              : s.invalidation_reason === 'be_hit' 
+                ? 0.0 
+                : -1.0));
 
       return {
         id: s.id,
@@ -2236,12 +2256,12 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
         bias: s.bias || 'short',
         strategy_id: 'elite_fractal',
         conviction_score: s.conviction_score || 85,
-        outcome_type: s.invalidation_reason || meta.outcome_type || 'resolved',
+        outcome_type: s.invalidation_reason === 'tp2_hit' ? 'tp2_hit' : isTp1Achieved ? 'tp1_hit' : (s.invalidation_reason || meta.outcome_type || 'resolved'),
         realized_r: realizedR,
         realized_pl: realizedR,
         entry_price: entryPrice,
         entry_price_recorded: entryPrice,
-        initial_stop: initialStop,
+        initial_stop: s.initial_stop || meta.initial_stop || s.stop,
         stop: s.stop,
         tp1: s.tp1,
         tp2: s.tp2,

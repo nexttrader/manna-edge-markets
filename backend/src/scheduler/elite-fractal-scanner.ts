@@ -210,7 +210,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         else if (highestObserved >= currentStop || currentAsk >= currentStop || (currentPrice > 0 && currentPrice >= currentStop)) {
           hit = true;
           exitPrice = currentStop;
-          if (isBE || isRunner) {
+          if (isRunner) {
+            outcomeType = 'tp1_hit';
+            realizedR = r1;
+          } else if (isBE) {
             outcomeType = 'be_hit';
             realizedR = 0.0;
           } else {
@@ -255,7 +258,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         else if (lowestObserved <= currentStop || currentBid <= currentStop || (currentPrice > 0 && currentPrice <= currentStop)) {
           hit = true;
           exitPrice = currentStop;
-          if (isBE || isRunner) {
+          if (isRunner) {
+            outcomeType = 'tp1_hit';
+            realizedR = r1;
+          } else if (isBE) {
             outcomeType = 'be_hit';
             realizedR = 0.0;
           } else {

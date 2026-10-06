@@ -190,12 +190,14 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const signalSentTime = setup.created_at || setup.createdAt || setup.validatedAt;
   const createdTime = signalSentTime || new Date().toISOString();
 
+  const isTp1Won = setup.invalidation_reason === 'tp1_hit' || stateStr === 'runner';
   const isBreakeven = Boolean(
-    setup.is_breakeven ||
-    ((stateStr === 'active' || stateStr === 'resolved') && (
-      setup.invalidation_reason === 'tp1_hit' ||
-      (!setup.halved_floor_tp1_be && setup.unrealizedR !== undefined && setup.unrealizedR >= 1.0)
-    ))
+    !isTp1Won && (
+      setup.is_breakeven ||
+      ((stateStr === 'active' || stateStr === 'resolved') && (
+        (!setup.halved_floor_tp1_be && setup.unrealizedR !== undefined && setup.unrealizedR >= 1.5)
+      ))
+    )
   );
 
   const getOrderType = (): string => {
@@ -291,11 +293,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 <span className="tf-badge ltf">15M Entry</span>
               </>
             )}
-            {isBreakeven && (
+            {isTp1Won ? (
+              <span className="badge-tp1 font-mono" style={{ background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', color: '#10b981', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>
+                🎯 TP1 HIT (+{r1}R)
+              </span>
+            ) : isBreakeven ? (
               <span className="be-badge font-mono animate-pulse" title="Stop Loss moved to Entry to lock in risk-free position">
                 🛡️ BREAK EVEN
               </span>
-            )}
+            ) : null}
           </div>
           {strategyId === 'sentinel_v2' && isSuperAdmin && (
             <div className="sentinel-pipeline font-mono">

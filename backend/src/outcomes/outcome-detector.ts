@@ -380,16 +380,18 @@ export class OutcomeDetector {
           logger.info({ setupId: setup.id, instrument: setup.instrument, newRealizedR }, 'Runner reached TP2 (3R)! Analytics upgraded to 3R');
           publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp2_hit', realized_pl: newRealizedR, was_runner: 1 } });
         } else if (beHit) {
+          const finalRealizedR = setup.r_multiple_1 || 2.0;
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
             tradable: 0,
             resolved_at: new Date().toISOString(),
-            invalidation_reason: 'be_hit'
+            invalidation_reason: 'tp1_hit'
           });
           
-          logger.info({ setupId: setup.id, instrument: setup.instrument }, 'Runner retraced to Break Even after TP1. Initial 2R log retained.');
-          // FIX #8: Emit be_hit for runner BE exit — tp1_hit was already booked at TP1.
-          // Emitting tp1_hit again inflates analytics. This is a 0R delta event.
-          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'be_hit', realized_pl: 0 } });
+          logger.info({ setupId: setup.id, instrument: setup.instrument, finalRealizedR }, 'Runner retraced to Break Even after TP1. Full 2.0R TP1 win retained in analytics.');
+          publishEvents.emit('setup_resolved', { 
+            setup: { ...setup, signal_state: 'resolved', invalidation_reason: 'tp1_hit' }, 
+            outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: finalRealizedR, was_runner: 1, exit_reason: 'TP1 (Runner BE)' } 
+          });
         }
       }
     } catch (err) {

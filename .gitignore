@@ -38,3 +38,10 @@ backend/reports/
 .scratch/
 scratch/
 .antigravity/
+
+# Media & NotebookLM Assets
+*.mp3
+*.mp4
+Manna_Edge_Markets_Client_Handbook.pdf
+notebookllm_assets/
+backend/*.mjs
