@@ -31,6 +31,24 @@ export interface InstrumentAnalytics {
   wins: number;
   losses: number;
   winRate: string | null;
+  market?: string;
+}
+
+export interface MarketMetrics {
+  totalSignals: number;
+  activeSignals: number;
+  closedSignals: number;
+  winsCount: number;
+  lossesCount: number;
+  breakevenCount: number;
+  winRate: string | null;
+  avgConviction: string | null;
+  avgRiskReward: string | null;
+  avgMAE: string | null;
+  avgMFE: string | null;
+  totalRMultiple: string | null;
+  profitFactor: string | null;
+  byInstrument: Record<string, InstrumentAnalytics>;
 }
 
 export interface ExclusiveAnalytics {
@@ -39,6 +57,7 @@ export interface ExclusiveAnalytics {
   closedSignals: number;
   winsCount: number;
   lossesCount: number;
+  breakevenCount: number;
   winRate: string | null;
   avgConviction: string | null;
   avgRiskReward: string | null;
@@ -48,6 +67,11 @@ export interface ExclusiveAnalytics {
   profitFactor: string | null;
   byInstrument: Record<string, InstrumentAnalytics>;
   byKillzone: Record<string, InstrumentAnalytics>;
+  byMarket?: {
+    forex: MarketMetrics;
+    futures: MarketMetrics;
+  };
+  marketFilter?: 'all' | 'forex' | 'futures';
   resetAt: string | null;
   scope: 'since_reset' | 'all_time';
   strategyId: string;
@@ -69,6 +93,7 @@ export function useExclusiveSignals() {
   const [analytics, setAnalytics] = useState<ExclusiveAnalytics | null>(null);
   const [phaseCount, setPhaseCount] = useState<PhaseCount>({ scanning: 0, candidate: 0, validated: 0, entryReady: 0, rejected: 0 });
   const [analyticsScope, setAnalyticsScope] = useState<'baseline' | 'all_time'>('baseline');
+  const [marketFilter, setMarketFilter] = useState<'all' | 'forex' | 'futures'>('all');
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -83,9 +108,9 @@ export function useExclusiveSignals() {
       const [signalsRes, telemetryRes, analyticsRes, historyRes, outcomesRes] = await Promise.all([
         fetch(`${API_BASE}/api/super-admin/exclusive-signals`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/state-machine`, { headers }),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics?scope=${analyticsScope}`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics?scope=${analyticsScope}&market=${marketFilter}`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`, { headers }),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/outcomes`, { headers })
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/outcomes?market=${marketFilter}`, { headers })
       ]);
 
       if (signalsRes.ok) {
@@ -115,7 +140,7 @@ export function useExclusiveSignals() {
     } finally {
       setLoading(false);
     }
-  }, [analyticsScope]);
+  }, [analyticsScope, marketFilter]);
 
   useEffect(() => {
     fetchAll();
@@ -197,6 +222,8 @@ export function useExclusiveSignals() {
     phaseCount,
     analyticsScope,
     setAnalyticsScope,
+    marketFilter,
+    setMarketFilter,
     loading,
     scanning,
     lastUpdated,

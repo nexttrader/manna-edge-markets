@@ -584,6 +584,8 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
     phaseCount,
     analyticsScope,
     setAnalyticsScope,
+    marketFilter,
+    setMarketFilter,
     loading,
     scanning,
     lastUpdated,
@@ -947,21 +949,32 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '1.2rem' }}>📅</span>
                 <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Elite Fractal Performance Calendar
+                  Manna Elite (Elite Fractal) Performance Calendar
                 </span>
               </div>
               <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
-                Daily trading session breakdown, realized trade outcomes, R-multiples, and win/loss journaling strictly isolated for SuperAdmin.
+                Daily trading session breakdown, Forex vs. Futures trade journaling, R-multiples, and win/loss audit strictly for SuperAdmin.
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 800, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.3)', padding: '4px 12px', borderRadius: '20px' }}>
+                💱 Forex: {outcomes.filter(o => o.market === 'forex' || o.instrument?.includes('/')).length}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 800, background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', padding: '4px 12px', borderRadius: '20px' }}>
+                📈 Futures: {outcomes.filter(o => !(o.market === 'forex' || o.instrument?.includes('/'))).length}
+              </span>
               <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 800, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', padding: '4px 12px', borderRadius: '20px' }}>
-                Recorded Trades: {outcomes.length}
+                Total: {outcomes.length}
               </span>
             </div>
           </div>
 
-          <ExpandableCalendar outcomes={outcomes} strategyFilter="elite_fractal" />
+          <ExpandableCalendar 
+            outcomes={outcomes} 
+            strategyFilter="elite_fractal" 
+            marketFilter={marketFilter}
+            onMarketFilterChange={setMarketFilter}
+          />
         </div>
       )}
 
@@ -1064,40 +1077,91 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Scope Toggle & Action Buttons */}
+            {/* Scope & Market Filter Toggles + Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-              {/* Scope Switcher */}
-              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', padding: '3px' }}>
-                <button
-                  onClick={() => setAnalyticsScope('baseline')}
-                  style={{
-                    background: analyticsScope === 'baseline' ? 'rgba(139,92,246,0.4)' : 'transparent',
-                    border: 'none',
-                    color: analyticsScope === 'baseline' ? '#e2e8f0' : '#718096',
-                    borderRadius: '6px',
-                    padding: '5px 12px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  📍 Since Reset Point
-                </button>
-                <button
-                  onClick={() => setAnalyticsScope('all_time')}
-                  style={{
-                    background: analyticsScope === 'all_time' ? 'rgba(139,92,246,0.4)' : 'transparent',
-                    border: 'none',
-                    color: analyticsScope === 'all_time' ? '#e2e8f0' : '#718096',
-                    borderRadius: '6px',
-                    padding: '5px 12px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  🌐 All-Time History
-                </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* Market View Switcher */}
+                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', padding: '3px' }}>
+                  <button
+                    onClick={() => setMarketFilter('all')}
+                    style={{
+                      background: marketFilter === 'all' ? 'linear-gradient(135deg, rgba(139,92,246,0.5) 0%, rgba(99,102,241,0.5) 100%)' : 'transparent',
+                      border: 'none',
+                      color: marketFilter === 'all' ? '#ffffff' : '#718096',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🌐 All Markets
+                  </button>
+                  <button
+                    onClick={() => setMarketFilter('forex')}
+                    style={{
+                      background: marketFilter === 'forex' ? 'linear-gradient(135deg, rgba(56,189,248,0.4) 0%, rgba(14,165,233,0.4) 100%)' : 'transparent',
+                      border: 'none',
+                      color: marketFilter === 'forex' ? '#38bdf8' : '#718096',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💱 Forex
+                  </button>
+                  <button
+                    onClick={() => setMarketFilter('futures')}
+                    style={{
+                      background: marketFilter === 'futures' ? 'linear-gradient(135deg, rgba(234,179,8,0.35) 0%, rgba(202,138,4,0.35) 100%)' : 'transparent',
+                      border: 'none',
+                      color: marketFilter === 'futures' ? '#fbbf24' : '#718096',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📈 Futures
+                  </button>
+                </div>
+
+                {/* Scope Switcher */}
+                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', padding: '3px' }}>
+                  <button
+                    onClick={() => setAnalyticsScope('baseline')}
+                    style={{
+                      background: analyticsScope === 'baseline' ? 'rgba(139,92,246,0.4)' : 'transparent',
+                      border: 'none',
+                      color: analyticsScope === 'baseline' ? '#e2e8f0' : '#718096',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📍 Since Reset
+                  </button>
+                  <button
+                    onClick={() => setAnalyticsScope('all_time')}
+                    style={{
+                      background: analyticsScope === 'all_time' ? 'rgba(139,92,246,0.4)' : 'transparent',
+                      border: 'none',
+                      color: analyticsScope === 'all_time' ? '#e2e8f0' : '#718096',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🌐 All-Time
+                  </button>
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -1165,6 +1229,171 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* FOREX VS FUTURES INSTITUTIONAL HEAD-TO-HEAD COMPARISON CARD */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(18,14,38,0.95) 0%, rgba(26,18,52,0.95) 100%)',
+            border: '1px solid rgba(139,92,246,0.35)',
+            borderRadius: '14px',
+            padding: '20px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.4rem' }}>⚔️</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900, color: '#e2e8f0', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Forex vs. Futures Institutional Analytics Comparison
+                  </h3>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Manna Elite (Trade Sentinel Elite Framework) performance segmented by market asset class.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.7rem', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', padding: '3px 10px', borderRadius: '12px', fontWeight: 800 }}>
+                  💱 Forex: 8 Pairs
+                </span>
+                <span style={{ fontSize: '0.7rem', color: '#fbbf24', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', padding: '3px 10px', borderRadius: '12px', fontWeight: 800 }}>
+                  📈 Futures: 7 Contracts
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+              {/* FOREX PANEL */}
+              <div style={{
+                background: 'rgba(10, 25, 45, 0.75)',
+                border: '1px solid rgba(56, 189, 248, 0.35)',
+                borderRadius: '12px',
+                padding: '18px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>💱</span>
+                    <span style={{ fontWeight: 900, fontSize: '0.9rem', color: '#38bdf8', letterSpacing: '0.05em' }}>
+                      FOREX CURRENCIES
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '6px' }}>
+                    EUR/USD, GBP/USD, USD/JPY...
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.15)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Win Rate</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#38bdf8', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.forex?.winRate ? `${analytics.byMarket.forex.winRate}%` : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Wins: {analytics?.byMarket?.forex?.winsCount || 0} · Losses: {analytics?.byMarket?.forex?.lossesCount || 0}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.15)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Realized R</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: (Number(analytics?.byMarket?.forex?.totalRMultiple || 0) >= 0 ? '#34d399' : '#f87171'), fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.forex?.totalRMultiple ? `${analytics.byMarket.forex.totalRMultiple}R` : '0.00R'}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Profit Factor: {analytics?.byMarket?.forex?.profitFactor || '—'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Total Setups</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#e2e8f0', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.forex?.totalSignals || 0}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Active: {analytics?.byMarket?.forex?.activeSignals || 0} · Closed: {analytics?.byMarket?.forex?.closedSignals || 0}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>MAE / MFE</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#e2e8f0', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.forex?.avgMAE || '—'}R / {analytics?.byMarket?.forex?.avgMFE || '—'}R
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Avg Conviction: {analytics?.byMarket?.forex?.avgConviction || '—'}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* FUTURES PANEL */}
+              <div style={{
+                background: 'rgba(35, 25, 10, 0.75)',
+                border: '1px solid rgba(251, 191, 36, 0.35)',
+                borderRadius: '12px',
+                padding: '18px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>📈</span>
+                    <span style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fbbf24', letterSpacing: '0.05em' }}>
+                      FUTURES CONTRACTS
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '6px' }}>
+                    ES, NQ, YM, RTY, GC, CL, ZN
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(251,191,36,0.15)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Win Rate</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.futures?.winRate ? `${analytics.byMarket.futures.winRate}%` : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Wins: {analytics?.byMarket?.futures?.winsCount || 0} · Losses: {analytics?.byMarket?.futures?.lossesCount || 0}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(251,191,36,0.15)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Realized R</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: (Number(analytics?.byMarket?.futures?.totalRMultiple || 0) >= 0 ? '#34d399' : '#f87171'), fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.futures?.totalRMultiple ? `${analytics.byMarket.futures.totalRMultiple}R` : '0.00R'}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Profit Factor: {analytics?.byMarket?.futures?.profitFactor || '—'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Total Setups</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#e2e8f0', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.futures?.totalSignals || 0}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Active: {analytics?.byMarket?.futures?.activeSignals || 0} · Closed: {analytics?.byMarket?.futures?.closedSignals || 0}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>MAE / MFE</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#e2e8f0', fontFamily: 'monospace' }}>
+                      {analytics?.byMarket?.futures?.avgMAE || '—'}R / {analytics?.byMarket?.futures?.avgMFE || '—'}R
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      Avg Conviction: {analytics?.byMarket?.futures?.avgConviction || '—'}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Excursion & Strategy KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
             <div style={{ background: 'rgba(15,20,40,0.8)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', padding: '16px 18px' }}>
@@ -1219,7 +1448,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
           {/* Performance by Instrument Table */}
           <div style={{ background: 'rgba(15,20,35,0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '18px 20px' }}>
             <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#e2e8f0', marginBottom: '12px', textTransform: 'uppercase' }}>
-              📊 Performance Breakdown by Instrument
+              📊 Performance Breakdown by Instrument {marketFilter !== 'all' ? `(${marketFilter.toUpperCase()} ONLY)` : ''}
             </div>
             {!analytics?.byInstrument || Object.keys(analytics.byInstrument).length === 0 ? (
               <div style={{ color: '#64748b', fontSize: '0.78rem' }}>No instrument records available yet.</div>
@@ -1229,6 +1458,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', textAlign: 'left' }}>
                       <th style={{ padding: '8px 12px' }}>Instrument</th>
+                      <th style={{ padding: '8px 12px' }}>Market</th>
                       <th style={{ padding: '8px 12px' }}>Total Setups</th>
                       <th style={{ padding: '8px 12px' }}>Active</th>
                       <th style={{ padding: '8px 12px' }}>Wins (TP1/TP2)</th>
@@ -1237,18 +1467,41 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(analytics.byInstrument).map(([inst, data]: [string, InstrumentAnalytics]) => (
-                      <tr key={inst} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 800, fontFamily: 'monospace', color: '#e2e8f0' }}>{inst}</td>
-                        <td style={{ padding: '8px 12px', color: '#94a3b8' }}>{data.total}</td>
-                        <td style={{ padding: '8px 12px', color: '#34d399' }}>{data.active}</td>
-                        <td style={{ padding: '8px 12px', color: '#10b981', fontWeight: 700 }}>{data.wins}</td>
-                        <td style={{ padding: '8px 12px', color: '#f87171' }}>{data.losses}</td>
-                        <td style={{ padding: '8px 12px', color: data.winRate ? '#fbbf24' : '#64748b', fontWeight: 800 }}>
-                          {data.winRate ? `${data.winRate}%` : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {Object.entries(analytics.byInstrument)
+                      .filter(([inst, data]: [string, InstrumentAnalytics]) => {
+                        if (marketFilter === 'all') return true;
+                        const isFx = data.market === 'forex' || inst.includes('/');
+                        return marketFilter === 'forex' ? isFx : !isFx;
+                      })
+                      .map(([inst, data]: [string, InstrumentAnalytics]) => {
+                        const isFx = data.market === 'forex' || inst.includes('/');
+                        return (
+                          <tr key={inst} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 800, fontFamily: 'monospace', color: '#e2e8f0' }}>{inst}</td>
+                            <td style={{ padding: '8px 12px' }}>
+                              <span style={{
+                                fontSize: '0.66rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: isFx ? 'rgba(56,189,248,0.15)' : 'rgba(251,191,36,0.15)',
+                                color: isFx ? '#38bdf8' : '#fbbf24',
+                                border: `1px solid ${isFx ? 'rgba(56,189,248,0.35)' : 'rgba(251,191,36,0.35)'}`,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {isFx ? '💱 FOREX' : '📈 FUTURES'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 12px', color: '#94a3b8' }}>{data.total}</td>
+                            <td style={{ padding: '8px 12px', color: '#34d399' }}>{data.active}</td>
+                            <td style={{ padding: '8px 12px', color: '#10b981', fontWeight: 700 }}>{data.wins}</td>
+                            <td style={{ padding: '8px 12px', color: '#f87171' }}>{data.losses}</td>
+                            <td style={{ padding: '8px 12px', color: data.winRate ? '#fbbf24' : '#64748b', fontWeight: 800 }}>
+                              {data.winRate ? `${data.winRate}%` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>

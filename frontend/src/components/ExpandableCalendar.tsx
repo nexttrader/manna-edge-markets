@@ -95,6 +95,15 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
 interface ExpandableCalendarProps {
   outcomes: Outcome[];
   strategyFilter: string;
+  marketFilter?: 'all' | 'forex' | 'futures';
+  onMarketFilterChange?: (market: 'all' | 'forex' | 'futures') => void;
+}
+
+function getOutcomeMarket(trade: Outcome): 'forex' | 'futures' {
+  const m = (trade.market || trade.setup_market || '').toLowerCase();
+  if (m === 'forex') return 'forex';
+  if (m === 'futures') return 'futures';
+  return (trade.instrument && trade.instrument.includes('/')) ? 'forex' : 'futures';
 }
 
 // Session definitions matching backend mapTimestampToKillzone
@@ -179,13 +188,25 @@ function getTradingDayAndSession(timeStr: string): { tradingDay: string; session
   }
 }
 
-export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: ExpandableCalendarProps) {
+export function ExpandableCalendar({
+  outcomes = [],
+  strategyFilter = 'all',
+  marketFilter: propsMarketFilter,
+  onMarketFilterChange
+}: ExpandableCalendarProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [internalMarketFilter, setInternalMarketFilter] = useState<'all' | 'forex' | 'futures'>(propsMarketFilter || 'all');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
   const [selectedReviewSetup, setSelectedReviewSetup] = useState<EdgeSetup | null>(null);
   const [copiedTradeId, setCopiedTradeId] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
+
+  const currentMarketFilter = propsMarketFilter !== undefined ? propsMarketFilter : internalMarketFilter;
+  const handleMarketFilterChange = (m: 'all' | 'forex' | 'futures') => {
+    setInternalMarketFilter(m);
+    if (onMarketFilterChange) onMarketFilterChange(m);
+  };
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth(); // 0-indexed
@@ -214,29 +235,51 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     return 'text-muted';
   };
 
+  const matchesStrategy = (stratId?: string) => {
+    if (strategyFilter === 'all') return true;
+    if (!stratId) return false;
+    if (strategyFilter === 'elite_fractal' || strategyFilter === 'sentinel_v2') {
+      return stratId === 'elite_fractal' || stratId === 'sentinel_v2';
+    }
+    return stratId === strategyFilter;
+  };
+
   // 1. Calculate overall Forex vs Futures realized R splits
-  const { totalFuturesR, totalForexR } = useMemo(() => {
+  const { totalFuturesR, totalForexR, totalCombinedR, forexCount, futuresCount } = useMemo(() => {
     let fut = 0;
     let fx = 0;
+    let fCount = 0;
+    let futCount = 0;
     outcomes.forEach(o => {
-      if (strategyFilter !== 'all' && o.strategy_id !== strategyFilter) return;
+      if (!matchesStrategy(o.strategy_id)) return;
       const r = o.realized_r ?? 0;
-      const mkt = o.market || o.setup_market || 'futures';
+      const mkt = getOutcomeMarket(o);
       if (mkt === 'forex') {
         fx += r;
+        fCount++;
       } else {
         fut += r;
+        futCount++;
       }
     });
-    return { totalFuturesR: fut, totalForexR: fx };
+    return {
+      totalFuturesR: fut,
+      totalForexR: fx,
+      totalCombinedR: fut + fx,
+      forexCount: fCount,
+      futuresCount: futCount
+    };
   }, [outcomes, strategyFilter]);
 
-  // 2. Filter outcomes by the selected strategy and map them to trading days and sessions
+  // 2. Filter outcomes by the selected strategy and market, mapping them to trading days and sessions
   const processedOutcomes = useMemo(() => {
-    // Filter by strategy
-    const filtered = strategyFilter === 'all'
-      ? outcomes
-      : outcomes.filter(o => o.strategy_id === strategyFilter);
+    const filtered = outcomes.filter(o => {
+      if (!matchesStrategy(o.strategy_id)) return false;
+      if (currentMarketFilter !== 'all') {
+        if (getOutcomeMarket(o) !== currentMarketFilter) return false;
+      }
+      return true;
+    });
 
     // Group by Trading Day
     const grouped: Record<string, Record<SessionType, Outcome[]>> = {};
@@ -261,7 +304,7 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     });
 
     return grouped;
-  }, [outcomes, strategyFilter]);
+  }, [outcomes, strategyFilter, currentMarketFilter]);
 
   // 3. Generate Calendar Month Grid Cells
   const calendarCells = useMemo(() => {
@@ -311,10 +354,10 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
       let dayTotalR = 0;
       let dayFuturesR = 0;
       let dayForexR = 0;
+      let dayTradesCount = 0;
       let hasActivity = false;
 
       if (dayTradingData) {
-        hasActivity = true;
         Object.keys(dayTradingData).forEach((sKey) => {
           const session = sKey as SessionType;
           const trades = dayTradingData[session];
@@ -325,8 +368,9 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
           };
           dayTotalR += sessionTotalR;
           trades.forEach(t => {
+            dayTradesCount++;
             const r = t.realized_r ?? 0;
-            const mkt = t.market || t.setup_market || 'futures';
+            const mkt = getOutcomeMarket(t);
             if (mkt === 'forex') {
               dayForexR += r;
             } else {
@@ -334,13 +378,20 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
             }
           });
         });
+        hasActivity = dayTradesCount > 0;
       }
+
+      const activeDayTotalR = currentMarketFilter === 'forex' 
+        ? dayForexR 
+        : currentMarketFilter === 'futures' 
+          ? dayFuturesR 
+          : dayTotalR;
 
       cells.push({
         dateStr,
         dayNum: day,
         isCurrentMonth: true,
-        totalR: dayTotalR,
+        totalR: activeDayTotalR,
         futuresR: dayFuturesR,
         forexR: dayForexR,
         sessions: sessionsData,
@@ -371,7 +422,7 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
     }
 
     return cells;
-  }, [currentYear, currentMonth, processedOutcomes]);
+  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter]);
 
   // Navigate Months
   const handlePrevMonth = () => {
@@ -403,7 +454,7 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
       ];
       allTrades.forEach(t => {
         const r = t.realized_r ?? 0;
-        const mkt = t.market || t.setup_market || 'futures';
+        const mkt = getOutcomeMarket(t);
         if (mkt === 'forex') {
           fx += r;
         } else {
@@ -433,12 +484,53 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
           <div className="calendar-title-group" onClick={() => setIsExpanded(true)} style={{ cursor: 'pointer' }}>
             <span>📅</span>
             <div>
-              <h2 style={{ fontSize: '1.15rem' }}>Session Performance Calendar</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '2px', flexWrap: 'wrap' }}>
-                <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE PERFORMANCE:</span>
-                <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
-                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
-                <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '1.15rem' }}>Session Performance Calendar</h2>
+                <div className="calendar-market-toggle" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    type="button" 
+                    className={`calendar-market-btn ${currentMarketFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => handleMarketFilterChange('all')}
+                  >
+                    🌐 All ({forexCount + futuresCount})
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`calendar-market-btn forex ${currentMarketFilter === 'forex' ? 'active' : ''}`}
+                    onClick={() => handleMarketFilterChange('forex')}
+                  >
+                    💱 Forex ({forexCount})
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`calendar-market-btn futures ${currentMarketFilter === 'futures' ? 'active' : ''}`}
+                    onClick={() => handleMarketFilterChange('futures')}
+                  >
+                    📈 Futures ({futuresCount})
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
+                {currentMarketFilter === 'all' ? (
+                  <>
+                    <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE:</span>
+                    <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
+                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                    <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                    <span style={{ color: '#ccc' }}>Net: <strong className={getPnlClass(totalCombinedR)}>{formatPNLString(totalCombinedR)} ({formatCurrency(totalCombinedR)})</strong></span>
+                  </>
+                ) : currentMarketFilter === 'forex' ? (
+                  <>
+                    <span className="market-split-label" style={{ color: '#38bdf8' }}>FOREX CUMULATIVE:</span>
+                    <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong> across {forexCount} trades</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="market-split-label" style={{ color: '#fbbf24' }}>FUTURES CUMULATIVE:</span>
+                    <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -463,7 +555,7 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
         <div className="calendar-title-group">
           <span>📅</span>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <h2>Session Performance Calendar</h2>
               <button 
                 type="button" 
@@ -477,16 +569,57 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
                 Collapse &uarr;
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
-              <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE PERFORMANCE:</span>
-              <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
-              <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
-              <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.78rem', marginTop: '6px', flexWrap: 'wrap' }}>
+              {currentMarketFilter === 'all' ? (
+                <>
+                  <span className="market-split-label" style={{ color: 'var(--kdt-gold, #ffd700)' }}>CUMULATIVE PERFORMANCE:</span>
+                  <span style={{ color: '#ccc' }}>Futures: <strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong></span>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                  <span style={{ color: '#ccc' }}>Forex: <strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong></span>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                  <span style={{ color: '#ccc' }}>Net: <strong className={getPnlClass(totalCombinedR)}>{formatPNLString(totalCombinedR)} ({formatCurrency(totalCombinedR)})</strong></span>
+                </>
+              ) : currentMarketFilter === 'forex' ? (
+                <>
+                  <span className="market-split-label" style={{ color: '#38bdf8' }}>FOREX CUMULATIVE:</span>
+                  <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalForexR)}>{formatPNLString(totalForexR)} ({formatCurrency(totalForexR)})</strong> across {forexCount} trades</span>
+                </>
+              ) : (
+                <>
+                  <span className="market-split-label" style={{ color: '#fbbf24' }}>FUTURES CUMULATIVE:</span>
+                  <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         <div className="calendar-controls">
+          {/* Market Toggle in Main Header Controls */}
+          <div className="calendar-market-toggle">
+            <button 
+              type="button" 
+              className={`calendar-market-btn ${currentMarketFilter === 'all' ? 'active' : ''}`}
+              onClick={() => handleMarketFilterChange('all')}
+            >
+              🌐 All ({forexCount + futuresCount})
+            </button>
+            <button 
+              type="button" 
+              className={`calendar-market-btn forex ${currentMarketFilter === 'forex' ? 'active' : ''}`}
+              onClick={() => handleMarketFilterChange('forex')}
+            >
+              💱 Forex ({forexCount})
+            </button>
+            <button 
+              type="button" 
+              className={`calendar-market-btn futures ${currentMarketFilter === 'futures' ? 'active' : ''}`}
+              onClick={() => handleMarketFilterChange('futures')}
+            >
+              📈 Futures ({futuresCount})
+            </button>
+          </div>
+
           {/* Risk unit size selection */}
           <div className="risk-input-group">
             <span>Risk/Trade:</span>
@@ -657,6 +790,20 @@ export function ExpandableCalendar({ outcomes = [], strategyFilter = 'all' }: Ex
                             <div className="trade-item-header">
                               <span className="trade-symbol-bias">
                                 {trade.instrument || 'SETUP'}
+                                <span 
+                                  className="trade-strat-badge" 
+                                  style={{ 
+                                    background: getOutcomeMarket(trade) === 'forex' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(168, 85, 247, 0.15)',
+                                    border: `1px solid ${getOutcomeMarket(trade) === 'forex' ? '#38bdf8' : '#a855f7'}`,
+                                    color: getOutcomeMarket(trade) === 'forex' ? '#38bdf8' : '#c084fc',
+                                    fontSize: '0.62rem',
+                                    fontWeight: 800,
+                                    padding: '1px 5px',
+                                    borderRadius: '4px'
+                                  }}
+                                >
+                                  {getOutcomeMarket(trade) === 'forex' ? '💱 FX' : '📈 FUT'}
+                                </span>
                                 <span className={`trade-strat-badge ${trade.bias}`}>
                                   {trade.bias?.toUpperCase()}
                                 </span>

@@ -2215,7 +2215,7 @@ router.get('/exclusive-signals/history', verifySuperAdmin, async (req: Request, 
 
 router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
-    const { since_reset } = req.query;
+    const { since_reset, market } = req.query;
     let resetAt: string | null = null;
     try {
       const resetRows = await queryDb<any>(`SELECT value FROM superadmin_strategy_settings WHERE key = 'elite_fractal_reset_at'`);
@@ -2230,7 +2230,13 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
     }
     sql += ` ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 500`;
 
-    const rows = await queryDb<any>(sql, params);
+    const rawRows = await queryDb<any>(sql, params);
+    const rows = rawRows.filter((s: any) => {
+      if (!market || market === 'all') return true;
+      const isFx = s.market === 'forex' || s.instrument?.includes('/');
+      return market === 'forex' ? isFx : !isFx;
+    });
+
     const outcomes = rows.map((s: any) => {
       let meta: any = {};
       try { meta = JSON.parse(s.metadata || '{}'); } catch {}
@@ -2248,11 +2254,13 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
                 ? 0.0 
                 : -1.0));
 
+      const detectedMarket = s.market || (s.instrument?.includes('/') ? 'forex' : 'futures');
+
       return {
         id: s.id,
         setup_id: s.id,
         instrument: s.instrument,
-        market: s.market || 'forex',
+        market: detectedMarket,
         bias: s.bias || 'short',
         strategy_id: 'elite_fractal',
         conviction_score: s.conviction_score || 85,
@@ -2276,7 +2284,7 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
         holding_duration_min: s.duration_min || meta.duration_min,
         killzone_origin: s.killzone_origin,
         created_at: s.created_at,
-        setup_market: s.market,
+        setup_market: detectedMarket,
         invalidation_reason: s.invalidation_reason || meta.outcome_type,
         trade_id: s.id,
         metadata: s.metadata
@@ -2404,7 +2412,7 @@ router.get('/exclusive-signals/state-machine', verifySuperAdmin, async (req: Req
 
 router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request, res: Response) => {
   try {
-    const { scope = 'baseline' } = req.query;
+    const { scope = 'baseline', market = 'all' } = req.query;
 
     let resetAt: string | null = null;
     try {
@@ -2421,118 +2429,151 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
     sql += ` ORDER BY created_at DESC LIMIT 500`;
 
     const allSignals = await queryDb<any>(sql, params);
-    const active = allSignals.filter((s: any) => ['awaiting_entry', 'active', 'runner'].includes(s.signal_state));
-    const closed = allSignals.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
 
-    let totalR = 0;
-    let grossProfit = 0;
-    let grossLoss = 0;
-    let winsCount = 0;
-    let lossesCount = 0;
-    let breakevenCount = 0;
-    let totalMae = 0;
-    let maeCount = 0;
-    let totalMfe = 0;
-    let mfeCount = 0;
+    const isForex = (s: any) => s.market === 'forex' || s.instrument?.includes('/');
+    const forexSignals = allSignals.filter(isForex);
+    const futuresSignals = allSignals.filter((s: any) => !isForex(s));
 
-    closed.forEach((s: any) => {
-      let isWin = false;
-      let isLoss = false;
-      let isBE = false;
-      let rVal: number | null = null;
+    const computeMetrics = (signalsList: any[]) => {
+      const active = signalsList.filter((s: any) => ['awaiting_entry', 'active', 'runner'].includes(s.signal_state));
+      const closed = signalsList.filter((s: any) => s.signal_state === 'resolved' || s.signal_state === 'invalidated');
 
-      try {
-        const meta = JSON.parse(s.metadata || '{}');
-        if (s.mae !== null && s.mae !== undefined) { totalMae += Number(s.mae); maeCount++; }
-        else if (meta.mae_r !== undefined) { totalMae += Number(meta.mae_r); maeCount++; }
+      let totalR = 0;
+      let grossProfit = 0;
+      let grossLoss = 0;
+      let winsCount = 0;
+      let lossesCount = 0;
+      let breakevenCount = 0;
+      let totalMae = 0;
+      let maeCount = 0;
+      let totalMfe = 0;
+      let mfeCount = 0;
 
-        if (s.mfe !== null && s.mfe !== undefined) { totalMfe += Number(s.mfe); mfeCount++; }
-        else if (meta.mfe_r !== undefined) { totalMfe += Number(meta.mfe_r); mfeCount++; }
+      closed.forEach((s: any) => {
+        let isWin = false;
+        let isLoss = false;
+        let isBE = false;
+        let rVal: number | null = null;
 
-        if (s.realized_r !== null && s.realized_r !== undefined) {
-          rVal = Number(s.realized_r);
-        } else if (meta.realized_r !== undefined) {
-          rVal = Number(meta.realized_r);
-        } else if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
-          rVal = s.r_multiple_2 || 3.5;
-        } else if (meta.outcome_type === 'tp1_hit' || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
-          rVal = s.r_multiple_1 || 2.0;
-        } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
-          rVal = 0.0;
-        } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
-          rVal = -1.0;
-        }
-      } catch {}
+        try {
+          const meta = JSON.parse(s.metadata || '{}');
+          if (s.mae !== null && s.mae !== undefined) { totalMae += Number(s.mae); maeCount++; }
+          else if (meta.mae_r !== undefined) { totalMae += Number(meta.mae_r); maeCount++; }
 
-      if (rVal !== null) {
-        totalR += rVal;
-        if (rVal > 0) {
-          isWin = true;
-          grossProfit += rVal;
-        } else if (rVal < 0) {
-          isLoss = true;
-          grossLoss += Math.abs(rVal);
-        } else {
-          isBE = true;
-        }
-      } else {
-        isLoss = true;
-        totalR -= 1.0;
-        grossLoss += 1.0;
-      }
+          if (s.mfe !== null && s.mfe !== undefined) { totalMfe += Number(s.mfe); mfeCount++; }
+          else if (meta.mfe_r !== undefined) { totalMfe += Number(meta.mfe_r); mfeCount++; }
 
-      if (isWin) winsCount++;
-      else if (isLoss) lossesCount++;
-      else if (isBE) breakevenCount++;
-    });
+          const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
 
-    const evaluatedClosedCount = winsCount + lossesCount;
-    const winRate = evaluatedClosedCount > 0 ? ((winsCount / evaluatedClosedCount) * 100).toFixed(1) : null;
-    const profitFactor = grossLoss > 0
-      ? (grossProfit / grossLoss).toFixed(2)
-      : (grossProfit > 0 ? '∞' : null);
+          if (s.realized_r !== null && s.realized_r !== undefined) {
+            rVal = Number(s.realized_r);
+          } else if (meta.realized_r !== undefined) {
+            rVal = Number(meta.realized_r);
+          } else if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
+            rVal = s.r_multiple_2 || 3.5;
+          } else if (isTp1Achieved || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
+            rVal = s.r_multiple_1 || 2.0;
+          } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
+            rVal = 0.0;
+          } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
+            rVal = -1.0;
+          }
+        } catch {}
 
-    const avgConviction = allSignals.length > 0
-      ? (allSignals.reduce((sum: number, s: any) => sum + (s.conviction_score || 0), 0) / allSignals.length).toFixed(1)
-      : null;
-
-    const avgRiskReward = allSignals.length > 0
-      ? (allSignals.reduce((sum: number, s: any) => sum + (s.r_multiple_1 || 2.0), 0) / allSignals.length).toFixed(2)
-      : '2.00';
-
-    const avgMAE = maeCount > 0 ? (totalMae / maeCount).toFixed(2) : null;
-    const avgMFE = mfeCount > 0 ? (totalMfe / mfeCount).toFixed(2) : null;
-
-    const byInstrument = allSignals.reduce((acc: any, s: any) => {
-      const inst = s.instrument;
-      if (!acc[inst]) acc[inst] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
-      acc[inst].total++;
-      if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[inst].active++;
-      let isWin = false;
-      let isLoss = false;
-      try {
-        const meta = JSON.parse(s.metadata || '{}');
-        const rVal = (s.realized_r !== null && s.realized_r !== undefined) ? Number(s.realized_r) : null;
         if (rVal !== null) {
-          if (rVal > 0) isWin = true;
-          else if (rVal < 0) isLoss = true;
-        } else if (meta.outcome_type === 'tp1_hit' || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) {
-          isWin = true;
-        } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl')) {
+          totalR += rVal;
+          if (rVal > 0) {
+            isWin = true;
+            grossProfit += rVal;
+          } else if (rVal < 0) {
+            isLoss = true;
+            grossLoss += Math.abs(rVal);
+          } else {
+            isBE = true;
+          }
+        } else {
           isLoss = true;
+          totalR -= 1.0;
+          grossLoss += 1.0;
         }
-      } catch {}
-      if (s.signal_state === 'resolved' || s.signal_state === 'invalidated') {
-        acc[inst].resolved++;
-        if (isWin) acc[inst].wins++;
-        else if (isLoss) acc[inst].losses++;
-        const totalClosed = acc[inst].wins + acc[inst].losses;
-        if (totalClosed > 0) acc[inst].winRate = ((acc[inst].wins / totalClosed) * 100).toFixed(1);
-      }
-      return acc;
-    }, {});
 
-    const byKillzone = allSignals.reduce((acc: any, s: any) => {
+        if (isWin) winsCount++;
+        else if (isLoss) lossesCount++;
+        else if (isBE) breakevenCount++;
+      });
+
+      const evaluatedClosedCount = winsCount + lossesCount;
+      const winRate = evaluatedClosedCount > 0 ? ((winsCount / evaluatedClosedCount) * 100).toFixed(1) : null;
+      const profitFactor = grossLoss > 0
+        ? (grossProfit / grossLoss).toFixed(2)
+        : (grossProfit > 0 ? '∞' : null);
+
+      const avgConviction = signalsList.length > 0
+        ? (signalsList.reduce((sum: number, s: any) => sum + (s.conviction_score || 0), 0) / signalsList.length).toFixed(1)
+        : null;
+
+      const avgRiskReward = signalsList.length > 0
+        ? (signalsList.reduce((sum: number, s: any) => sum + (s.r_multiple_1 || 2.0), 0) / signalsList.length).toFixed(2)
+        : '2.00';
+
+      const avgMAE = maeCount > 0 ? (totalMae / maeCount).toFixed(2) : null;
+      const avgMFE = mfeCount > 0 ? (totalMfe / mfeCount).toFixed(2) : null;
+
+      const byInstrument = signalsList.reduce((acc: any, s: any) => {
+        const inst = s.instrument;
+        const instMarket = s.market || (s.instrument?.includes('/') ? 'forex' : 'futures');
+        if (!acc[inst]) acc[inst] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null, market: instMarket };
+        acc[inst].total++;
+        if (['awaiting_entry', 'active', 'runner'].includes(s.signal_state)) acc[inst].active++;
+        let isWin = false;
+        let isLoss = false;
+        try {
+          const meta = JSON.parse(s.metadata || '{}');
+          const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
+          const rVal = (s.realized_r !== null && s.realized_r !== undefined) ? Number(s.realized_r) : null;
+          if (rVal !== null) {
+            if (rVal > 0) isWin = true;
+            else if (rVal < 0) isLoss = true;
+          } else if (isTp1Achieved || meta.outcome_type === 'tp2_hit' || s.invalidation_reason?.includes('tp')) {
+            isWin = true;
+          } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl')) {
+            isLoss = true;
+          }
+        } catch {}
+        if (s.signal_state === 'resolved' || s.signal_state === 'invalidated') {
+          acc[inst].resolved++;
+          if (isWin) acc[inst].wins++;
+          else if (isLoss) acc[inst].losses++;
+          const totalClosed = acc[inst].wins + acc[inst].losses;
+          if (totalClosed > 0) acc[inst].winRate = ((acc[inst].wins / totalClosed) * 100).toFixed(1);
+        }
+        return acc;
+      }, {});
+
+      return {
+        totalSignals: signalsList.length,
+        activeSignals: active.length,
+        closedSignals: closed.length,
+        winsCount,
+        lossesCount,
+        breakevenCount,
+        winRate,
+        avgConviction,
+        avgRiskReward,
+        avgMAE,
+        avgMFE,
+        totalRMultiple: totalR !== 0 ? totalR.toFixed(2) : '0.00',
+        profitFactor,
+        byInstrument
+      };
+    };
+
+    const targetSignals = market === 'forex' ? forexSignals : market === 'futures' ? futuresSignals : allSignals;
+    const overallMetrics = computeMetrics(targetSignals);
+    const forexMetrics = computeMetrics(forexSignals);
+    const futuresMetrics = computeMetrics(futuresSignals);
+
+    const byKillzone = targetSignals.reduce((acc: any, s: any) => {
       const kz = s.killzone_origin || 'unknown';
       if (!acc[kz]) acc[kz] = { total: 0, active: 0, resolved: 0, wins: 0, losses: 0, winRate: null };
       acc[kz].total++;
@@ -2564,20 +2605,12 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
     return res.json({
       success: true,
       analytics: {
-        totalSignals: allSignals.length,
-        activeSignals: active.length,
-        closedSignals: closed.length,
-        winsCount,
-        lossesCount,
-        breakevenCount,
-        winRate,
-        avgConviction,
-        avgRiskReward,
-        avgMAE,
-        avgMFE,
-        totalRMultiple: totalR !== 0 ? totalR.toFixed(2) : '0.00',
-        profitFactor,
-        byInstrument,
+        ...overallMetrics,
+        marketFilter: market,
+        byMarket: {
+          forex: forexMetrics,
+          futures: futuresMetrics
+        },
         byKillzone,
         resetAt,
         scope: resetAt && scope !== 'all_time' ? 'since_reset' : 'all_time',
