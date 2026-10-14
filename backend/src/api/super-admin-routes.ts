@@ -2139,8 +2139,8 @@ router.get('/exclusive-signals', verifySuperAdmin, async (req: Request, res: Res
       const tp2 = s.tp2
         ? Number(s.tp2)
         : isLong
-          ? Number((entryPrice + (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2))
-          : Number((entryPrice - (s.r_multiple_2 || 3.5) * risk).toFixed(s.market === 'forex' ? 5 : 2));
+          ? Number((entryPrice + (s.r_multiple_2 || 3.0) * risk).toFixed(s.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - (s.r_multiple_2 || 3.0) * risk).toFixed(s.market === 'forex' ? 5 : 2));
 
       let unrealizedR = 0;
       let unrealizedPL = 0;
@@ -2241,16 +2241,18 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
       let meta: any = {};
       try { meta = JSON.parse(s.metadata || '{}'); } catch {}
       const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
+      const r1 = Number(s.r_multiple_1 || 2.0);
+      const r2 = Number(s.r_multiple_2 || 3.0);
       const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
       const realizedR = s.realized_r !== null && s.realized_r !== undefined 
-        ? s.realized_r 
+        ? Number(s.realized_r) 
         : (meta.realized_r !== undefined 
-          ? meta.realized_r 
-          : (s.invalidation_reason === 'tp2_hit' 
-            ? 3.5 
+          ? Number(meta.realized_r) 
+          : (s.invalidation_reason === 'tp2_hit' || meta.outcome_type === 'tp2_hit'
+            ? Number(((0.80 * r1) + (0.20 * r2)).toFixed(2)) 
             : isTp1Achieved 
-              ? (s.r_multiple_1 || 2.0) 
-              : s.invalidation_reason === 'be_hit' 
+              ? Number((0.80 * r1).toFixed(2)) 
+              : (s.invalidation_reason === 'be_hit' || meta.outcome_type === 'be_hit')
                 ? 0.0 
                 : -1.0));
 
@@ -2273,8 +2275,8 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
         stop: s.stop,
         tp1: s.tp1,
         tp2: s.tp2,
-        r_multiple_1: s.r_multiple_1 || 2.0,
-        r_multiple_2: s.r_multiple_2 || 3.5,
+        r_multiple_1: r1,
+        r_multiple_2: r2,
         execution_price: s.exit_price || meta.exit_price || (realizedR > 0 ? s.tp1 : s.stop),
         execution_time: s.resolved_at || s.created_at,
         time_signaled: s.created_at,
@@ -2329,7 +2331,7 @@ router.get('/exclusive-signals/export', verifySuperAdmin, async (req: Request, r
 
     const rows = await queryDb<any>(sql, params);
 
-    let csv = 'Trade ID,Instrument,Market,Direction,Killzone,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Entry Price,Initial Stop,Final Stop,TP1 (2R),TP2 (3.5R),Exit Price,Outcome Type,Realized R,MAE (R),MFE (R),Duration (Min),Conviction (%),H1 POI,M15 Level,M1 OCs,Status\n';
+    let csv = 'Trade ID,Instrument,Market,Direction,Killzone,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Entry Price,Initial Stop,Final Stop,TP1 (2R),TP2 (3R),Exit Price,Outcome Type,Realized R,MAE (R),MFE (R),Duration (Min),Conviction (%),H1 POI,M15 Level,M1 OCs,Status\n';
 
     rows.forEach((s: any) => {
       let meta: any = {};
@@ -2470,9 +2472,12 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
           } else if (meta.realized_r !== undefined) {
             rVal = Number(meta.realized_r);
           } else if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
-            rVal = s.r_multiple_2 || 3.5;
+            const r1 = Number(s.r_multiple_1 || 2.0);
+            const r2 = Number(s.r_multiple_2 || 3.0);
+            rVal = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
           } else if (isTp1Achieved || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
-            rVal = s.r_multiple_1 || 2.0;
+            const r1 = Number(s.r_multiple_1 || 2.0);
+            rVal = Number((0.80 * r1).toFixed(2));
           } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
             rVal = 0.0;
           } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {

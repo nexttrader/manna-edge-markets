@@ -1,6 +1,8 @@
 import { IStrategyEngine, StrategyMeta } from './strategy-interface';
 import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
 import { getLiveCandles } from '../yahoo-provider';
+import { computeATR } from '../atr';
+import { getLogicalStopDistance, getInstrumentDecimals } from '../stop-loss-rules';
 import { createLogger } from '../../telemetry/logger';
 
 const logger = createLogger('EliteFractal');
@@ -119,6 +121,9 @@ interface StateData {
   h1POI?: POIContext;
   h1WindowStart?: number;
   h1CandleCount?: number;
+  h1SwingHigh?: number;
+  h1SwingLow?: number;
+  h1Equilibrium?: number;
   m15SwingHigh?: number;
   m15SwingLow?: number;
   m15ConfirmationTime?: number;
@@ -222,10 +227,36 @@ export class EliteFractalStrategy implements IStrategyEngine {
       return null;
     }
 
+    // =========================================================================
+    // STAGE 1.5: 1H Expansion Quadrant Filter (Equilibrium Discount/Premium)
+    // =========================================================================
+    // Institutional SMC: Buyers strictly require Discount (price <= 50% midpoint of 1H expansion swing)
+    // Sellers strictly require Premium (price >= 50% midpoint of 1H expansion swing)
+    const contextLookback = h1Candles.slice(Math.max(0, h1POI.candleIndex - 10));
+    const h1SwingHigh = Math.max(...contextLookback.map(c => c.high));
+    const h1SwingLow = Math.min(...contextLookback.map(c => c.low));
+    const h1Equilibrium = (h1SwingHigh + h1SwingLow) / 2;
+    const currentH1Price = h1Candles[h1Candles.length - 1].close;
+
+    const isDiscount = currentH1Price <= h1Equilibrium && (h1POI.priceLevel <= h1Equilibrium || (h1POI.low !== undefined && h1POI.low <= h1Equilibrium));
+    const isPremium = currentH1Price >= h1Equilibrium && (h1POI.priceLevel >= h1Equilibrium || (h1POI.high !== undefined && h1POI.high >= h1Equilibrium));
+
+    if (bias === 'long' && !isDiscount) {
+      this.updateTelemetry(instrument, StateMachineState.INVALIDATED, StateMachinePhase.REJECTED, bias);
+      return null;
+    }
+    if (bias === 'short' && !isPremium) {
+      this.updateTelemetry(instrument, StateMachineState.INVALIDATED, StateMachinePhase.REJECTED, bias);
+      return null;
+    }
+
     const state = this.getState(instrument, bias);
     state.h1POI = h1POI;
     state.h1WindowStart = new Date(h1POI.timestamp).getTime();
     state.h1CandleCount = 0;
+    state.h1SwingHigh = h1SwingHigh;
+    state.h1SwingLow = h1SwingLow;
+    state.h1Equilibrium = h1Equilibrium;
     this.transitionTo(instrument, StateMachineState.H1_POI_DETECTED);
 
     // Step 2: M15 retrospective scan
@@ -258,15 +289,19 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const m1Candles = await fetchCandles(instrument, '1m', 100);
     if (m1Candles.length < 25) return null;
 
+    // Use closed M1 candles for structural evaluation (ignoring unclosed forming tick)
+    const closedM1 = m1Candles.slice(0, -1);
+    if (closedM1.length < 20) return null;
+
     // Guard: check that recent price action hasn't broken structural level
     if (bias === 'short' && state.m15SwingHigh) {
-      const recentHigh = Math.max(...m1Candles.slice(-10).map(c => c.high));
+      const recentHigh = Math.max(...closedM1.slice(-10).map(c => c.high));
       if (recentHigh >= state.m15SwingHigh) {
         this.transitionTo(instrument, StateMachineState.INVALIDATED);
         return null;
       }
     } else if (bias === 'long' && state.m15SwingLow) {
-      const recentLow = Math.min(...m1Candles.slice(-10).map(c => c.low));
+      const recentLow = Math.min(...closedM1.slice(-10).map(c => c.low));
       if (recentLow <= state.m15SwingLow) {
         this.transitionTo(instrument, StateMachineState.INVALIDATED);
         return null;
@@ -278,12 +313,28 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const isJPYPair = instrument.includes('JPY');
     const minOCRange = market === 'futures' ? 1.0 : isJPYPair ? 0.100 : 0.0005;
 
-    const m1Scan = this.retrospectiveScanM1(m1Candles, state, bias, minOCRange);
+    const m1Scan = this.retrospectiveScanM1(closedM1, state, bias, minOCRange);
     if (!m1Scan.foundPattern) return null;
 
     Object.assign(state, m1Scan.data || {});
-    // ENTRY_READY requires 2 successive OCs from M1 POIs
+
+    // Enhanced M1 Entry Trigger: Closed 1M bar confirmation (BOS)
+    const latestClosedM1 = closedM1[closedM1.length - 1];
+    const priorClosedM1 = closedM1.slice(-5, -1);
+    const priorHigh3 = Math.max(...priorClosedM1.slice(-3).map(c => c.high));
+    const priorLow3 = Math.min(...priorClosedM1.slice(-3).map(c => c.low));
+
+    const m1BosConfirmed = bias === 'long'
+      ? (latestClosedM1.close > latestClosedM1.open && latestClosedM1.close >= priorHigh3)
+      : (latestClosedM1.close < latestClosedM1.open && latestClosedM1.close <= priorLow3);
+
+    // ENTRY_READY requires 2 successive OCs from M1 POIs AND closed M1 BOS confirmation
     if (state.m1OCs && state.m1OCs.length >= 2) {
+      if (!m1BosConfirmed) {
+        // Wait for closed directional BOS bar before triggering entry
+        this.transitionTo(instrument, StateMachineState.M1_OC_CONFIRMED);
+        return null;
+      }
       this.transitionTo(instrument, StateMachineState.ENTRY_READY);
       return this.buildCandidateSetup(instrument, market, killzone, runId, state, h1Candles, m15Candles, bias);
     } else if (state.m1OCs && state.m1OCs.length === 1) {
@@ -754,7 +805,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
     const isForex = market === 'forex';
     const isJPY = instrument.includes('JPY');
     const isLong = bias === 'long';
-    const decimals = isForex ? 5 : 2;
+    const decimals = getInstrumentDecimals(instrument, market);
     const round = (v: number) => parseFloat(v.toFixed(decimals));
 
     const finalOC = state.m1OCs?.[0];
@@ -764,7 +815,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
 
     const bufferPct = isForex ? 0.0003 : 0.002;
 
-    let stop: number;
+    let rawStop: number;
 
     if (!isLong) {
       // ─── STOP LOSS PLACEMENT (SHORT / SELL setups) ────────────────────────────
@@ -780,9 +831,9 @@ export class EliteFractalStrategy implements IStrategyEngine {
         stopAnchor = entryHigh;
       }
 
-      stop = round(stopAnchor * (1 + bufferPct));
-      if (stop <= entryHigh) {
-        stop = round(entryHigh * (1 + bufferPct * 5));
+      rawStop = round(stopAnchor * (1 + bufferPct));
+      if (rawStop <= entryHigh) {
+        rawStop = round(entryHigh * (1 + bufferPct * 5));
       }
     } else {
       // ─── STOP LOSS PLACEMENT (LONG / BUY setups) ─────────────────────────────
@@ -798,17 +849,24 @@ export class EliteFractalStrategy implements IStrategyEngine {
         stopAnchor = entryLow;
       }
 
-      stop = round(stopAnchor * (1 - bufferPct));
-      if (stop >= entryLow) {
-        stop = round(entryLow * (1 - bufferPct * 5));
+      rawStop = round(stopAnchor * (1 - bufferPct));
+      if (rawStop >= entryLow) {
+        rawStop = round(entryLow * (1 - bufferPct * 5));
       }
     }
 
+    const rawStopDistance = Math.abs(entryMid - rawStop);
+    const atr14_15m = computeATR(m15Candles, 14);
+    const logicalRisk = getLogicalStopDistance(instrument, atr14_15m, rawStopDistance, market);
+
+    // Re-anchor stop loss ensuring institutional floor compliance
+    const stop = isLong ? round(entryMid - logicalRisk) : round(entryMid + logicalRisk);
     const stopDistance = Math.abs(entryMid - stop);
-    const tp1 = isLong ? round(entryMid + (2 * stopDistance)) : round(entryMid - (2 * stopDistance));
-    const tp2 = isLong ? round(entryMid + (3.5 * stopDistance)) : round(entryMid - (3.5 * stopDistance));
-    const rMultiple1 = parseFloat((Math.abs(tp1 - entryMid) / stopDistance).toFixed(2));
-    const rMultiple2 = parseFloat((Math.abs(tp2 - entryMid) / stopDistance).toFixed(2));
+
+    const tp1 = isLong ? round(entryMid + (2.0 * stopDistance)) : round(entryMid - (2.0 * stopDistance));
+    const tp2 = isLong ? round(entryMid + (3.0 * stopDistance)) : round(entryMid - (3.0 * stopDistance));
+    const rMultiple1 = 2.0;
+    const rMultiple2 = 3.0;
 
     let conviction = 75.0;
     if (state.m15POI) conviction += 5;
@@ -827,6 +885,8 @@ export class EliteFractalStrategy implements IStrategyEngine {
         bias,
         h1POIType: state.h1POI?.type,
         h1POILevel: state.h1POI?.priceLevel,
+        h1Equilibrium: state.h1Equilibrium,
+        quadrantPassed: true,
         m15POIType: state.m15POI?.type,
         m15SwingHigh: state.m15SwingHigh,
         m15SwingLow: state.m15SwingLow,
@@ -834,7 +894,7 @@ export class EliteFractalStrategy implements IStrategyEngine {
         m1OCCount: state.m1OCs?.length || 0,
         finalOCPOIType: state.m1FinalOCPOIType
       },
-      selection_rationale: `Elite Fractal 4TF Alignment: H1 ${state.h1POI?.type || 'POI'} tapped \u2192 M15 reversal confirmed at ${swingLvl?.toFixed(decimals) || '—'} \u2192 M5 swing point validated \u2192 M1 entry OC alignment (${state.m1OCs?.length || 0} OCs). ${isLong ? 'Bullish BUY' : 'Bearish SELL'} setup with ${conviction.toFixed(1)}% conviction targeting 2R/3.5R.`
+      selection_rationale: `Elite Fractal 4TF Alignment: H1 ${state.h1POI?.type || 'POI'} tapped (${isLong ? 'Discount <= ' : 'Premium >= '}${state.h1Equilibrium?.toFixed(decimals) || '50%'}) \u2192 M15 reversal confirmed at ${swingLvl?.toFixed(decimals) || '—'} \u2192 M5 swing point validated \u2192 M1 closed BOS entry (${state.m1OCs?.length || 0} OCs). ${isLong ? 'Bullish BUY' : 'Bearish SELL'} setup targeting 2.0R TP1 (80%) and 3.0R TP2 (20%).`
     });
 
     this.updateTelemetryFromState(instrument, state, entryLow, entryHigh, stop, tp1, conviction);

@@ -868,6 +868,17 @@ export function ExpandableCalendar({
                               </span>
                             </div>
 
+                            {trade.strategy_id === 'elite_fractal' && isWin && (
+                              <div style={{ fontSize: '0.67rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(167,139,250,0.25)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>⚡ Scale-Out:</span>
+                                <strong>
+                                  {trade.outcome_type?.includes('tp2') 
+                                    ? `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ ${trade.r_multiple_2 || 3}R (+${((trade.r_multiple_2 || 3) * 0.2).toFixed(2)}R)`
+                                    : `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ BE (+0.00R)`}
+                                </strong>
+                              </div>
+                            )}
+
                             <div className="trade-item-footer">
                               <span>Conviction: {trade.conviction_score || 85}%</span>
                               <span>

@@ -141,11 +141,11 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
       const tp2 = setup.tp2
         ? Number(setup.tp2)
         : isLong
-          ? Number((entryPrice + (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2))
-          : Number((entryPrice - (setup.r_multiple_2 || 3.5) * risk).toFixed(setup.market === 'forex' ? 5 : 2));
+          ? Number((entryPrice + (setup.r_multiple_2 || 3.0) * risk).toFixed(setup.market === 'forex' ? 5 : 2))
+          : Number((entryPrice - (setup.r_multiple_2 || 3.0) * risk).toFixed(setup.market === 'forex' ? 5 : 2));
 
       const r1 = setup.r_multiple_1 || 2.0;
-      const r2 = setup.r_multiple_2 || 3.5;
+      const r2 = setup.r_multiple_2 || 3.0;
 
       // Identify lowest price reached
       const lowestObserved = Math.min(
@@ -178,22 +178,23 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         // Profit is downward: lowest price drops to/below TP2 / TP1.
         // Loss is upward: highest price rises to/above Stop.
 
-        // 1. TP2 HIT
+        // 1. TP2 HIT (80% at TP1 + 20% at TP2)
         if (lowestObserved <= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
           hit = true;
           outcomeType = 'tp2_hit';
           exitPrice = tp2;
-          realizedR = r2;
+          realizedR = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
         }
-        // 2. TP1 HIT
+        // 2. TP1 HIT (Bank 80% at 2.0R, move 20% runner to BE)
         else if (!isRunner && (lowestObserved <= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
           const now = new Date().toISOString();
           let metaObj: any = {};
           try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
           metaObj.outcome_type = 'tp1_hit';
           metaObj.tp1_hit_at = now;
-          metaObj.realized_r = r1;
+          metaObj.realized_r = Number((0.80 * r1).toFixed(2));
           metaObj.mfe_r = Math.max(r1, maxExcursionR);
+          metaObj.scale_out = { tp1_pct: 0.80, tp2_pct: 0.20, tp1_r: r1, tp2_r: r2 };
 
           await queryDb(
             `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
@@ -201,8 +202,8 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
           );
 
           logger.info(
-            { instrument: setup.instrument, tp1, entryPrice, initialStop },
-            '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
+            { instrument: setup.instrument, tp1, entryPrice, initialStop, bankedR: metaObj.realized_r },
+            '🎯 EliteFractal: TP1 (+2.0R) hit! Banked 80% (+1.60R). Moved 20% to RUNNER with Stop at BE targeting TP2'
           );
           continue;
         }
@@ -212,7 +213,7 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
           exitPrice = currentStop;
           if (isRunner) {
             outcomeType = 'tp1_hit';
-            realizedR = r1;
+            realizedR = Number((0.80 * r1).toFixed(2));
           } else if (isBE) {
             outcomeType = 'be_hit';
             realizedR = 0.0;
@@ -226,22 +227,23 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
         // Profit is upward: highest price rises to/above TP2 / TP1.
         // Loss is downward: lowest price drops to/below Stop.
 
-        // 1. TP2 HIT
+        // 1. TP2 HIT (80% at TP1 + 20% at TP2)
         if (highestObserved >= tp2 || maxExcursionR >= r2 || (setup.mfe && setup.mfe >= r2)) {
           hit = true;
           outcomeType = 'tp2_hit';
           exitPrice = tp2;
-          realizedR = r2;
+          realizedR = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
         }
-        // 2. TP1 HIT
+        // 2. TP1 HIT (Bank 80% at 2.0R, move 20% runner to BE)
         else if (!isRunner && (highestObserved >= tp1 || maxExcursionR >= r1 || (setup.mfe && setup.mfe >= r1))) {
           const now = new Date().toISOString();
           let metaObj: any = {};
           try { metaObj = JSON.parse(setup.metadata || '{}'); } catch {}
           metaObj.outcome_type = 'tp1_hit';
           metaObj.tp1_hit_at = now;
-          metaObj.realized_r = r1;
+          metaObj.realized_r = Number((0.80 * r1).toFixed(2));
           metaObj.mfe_r = Math.max(r1, maxExcursionR);
+          metaObj.scale_out = { tp1_pct: 0.80, tp2_pct: 0.20, tp1_r: r1, tp2_r: r2 };
 
           await queryDb(
             `UPDATE superadmin_edge_setups SET signal_state = 'runner', stop = ?, initial_stop = COALESCE(initial_stop, ?), is_breakeven = 1, mfe = ?, metadata = ? WHERE id = ?`,
@@ -249,8 +251,8 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
           );
 
           logger.info(
-            { instrument: setup.instrument, tp1, entryPrice, initialStop },
-            '🎯 EliteFractal: TP1 (+2.0R) hit! Moved to RUNNER with Stop at BE targeting TP2'
+            { instrument: setup.instrument, tp1, entryPrice, initialStop, bankedR: metaObj.realized_r },
+            '🎯 EliteFractal: TP1 (+2.0R) hit! Banked 80% (+1.60R). Moved 20% to RUNNER with Stop at BE targeting TP2'
           );
           continue;
         }
@@ -260,7 +262,7 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
           exitPrice = currentStop;
           if (isRunner) {
             outcomeType = 'tp1_hit';
-            realizedR = r1;
+            realizedR = Number((0.80 * r1).toFixed(2));
           } else if (isBE) {
             outcomeType = 'be_hit';
             realizedR = 0.0;
@@ -542,12 +544,12 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
           continue;
         }
 
-        const tp1 = isLong
+        const tp1 = candidate.tp1 || (isLong
           ? Number((execPrice + 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2))
-          : Number((execPrice - 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
-        const tp2 = isLong
-          ? Number((execPrice + 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2))
-          : Number((execPrice - 3.5 * risk).toFixed(candidate.market === 'forex' ? 5 : 2));
+          : Number((execPrice - 2.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2)));
+        const tp2 = candidate.tp2 || (isLong
+          ? Number((execPrice + 3.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2))
+          : Number((execPrice - 3.0 * risk).toFixed(candidate.market === 'forex' ? 5 : 2)));
 
         const id = `ef_${candidate.instrument.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const ts = new Date().toISOString();
@@ -588,8 +590,8 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
             initialStop,
             tp1,
             tp2,
-            2.0,
-            3.5,
+            candidate.r_multiple_1 || 2.0,
+            candidate.r_multiple_2 || 3.0,
             candidate.conviction_score ?? null,
             candidate.liquidity_score ?? null,
             candidate.strategy_id ?? 'elite_fractal',

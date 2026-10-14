@@ -458,7 +458,7 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
                 </div>
                 <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
                   {isRunner
-                    ? `Stop locked @ Break-Even (${fmtPrice(signal.stop, signal.market)}) · Current Runner Float: ${(signal.unrealizedR ?? 0) > 0 ? '+' : ''}${(signal.unrealizedR ?? 0).toFixed(2)}R · Aiming for TP2 (+3.50R)`
+                    ? `Stop locked @ Break-Even (${fmtPrice(signal.stop, signal.market)}) · Current Runner Float: ${(signal.unrealizedR ?? 0) > 0 ? '+' : ''}${(signal.unrealizedR ?? 0).toFixed(2)}R · Aiming for TP2 (+${(signal.r_multiple_2 || 3.0).toFixed(2)}R)`
                     : `Current Price: ${fmtPrice(signal.current_price, signal.market)} · Target 1: ${fmtPrice(signal.tp1, signal.market)} (+2.0R)`
                   }
                 </div>
@@ -512,7 +512,7 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
             { label: 'Entry Fill',   value: fmtPrice(signal.entry_price_recorded || signal.entry_zone_mid, signal.market), color: '#e2e8f0',  sub: 'Market Exec' },
             { label: 'Stop Loss',    value: fmtPrice(signal.stop, signal.market),                                           color: '#f87171',  sub: isRunner || signal.is_breakeven ? 'Locked @ BE' : 'Invalidation' },
             { label: 'TP1 (+2.0R)', value: fmtPrice(signal.tp1, signal.market),                                            color: '#34d399',  sub: isRunner ? '✓ Booked' : 'Target 1' },
-            { label: 'TP2 (+3.5R)', value: fmtPrice(signal.tp2, signal.market),                                            color: '#10b981',  sub: isRunner ? '← Active' : 'Target 2' },
+            { label: `TP2 (+${(signal.r_multiple_2 || 3.0).toFixed(1)}R)`, value: fmtPrice(signal.tp2, signal.market),   color: '#10b981',  sub: isRunner ? '← Active (20%)' : 'Target 2 (20%)' },
             { label: 'Live Price',   value: signal.current_price ? fmtPrice(signal.current_price, signal.market) : '—',    color: '#38bdf8',  sub: 'Real-time' },
           ].map(item => (
             <div key={item.label} style={{
@@ -899,7 +899,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               <div style={{ textAlign: 'center', padding: '60px', background: 'rgba(15,20,40,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px' }}>
                 <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🏃</div>
                 <div style={{ color: '#718096', fontWeight: 700 }}>No runner signals</div>
-                <div style={{ color: '#4a5568', fontSize: '0.78rem', marginTop: '8px' }}>Runners appear here when active signals hit TP1 (+2R). Stop is then moved to breakeven while targeting TP2 (+3.5R).</div>
+                <div style={{ color: '#4a5568', fontSize: '0.78rem', marginTop: '8px' }}>Runners appear here when active signals hit TP1 (+2R). Stop is then moved to breakeven while targeting TP2 (+3.0R).</div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1575,11 +1575,11 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
                         <span style={{ fontSize: '0.72rem', color: '#718096' }}>{signal.market?.toUpperCase()}</span>
                         {isTp2 ? (
                           <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#34d399', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
-                            🎯 TP2 HIT (+3.5R)
+                            🎯 TP2 HIT (+{signal.realized_r !== null && signal.realized_r !== undefined ? signal.realized_r.toFixed(2) : '2.20'}R)
                           </span>
                         ) : isTp1 ? (
                           <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#34d399', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
-                            🎯 TP1 HIT (+2.0R)
+                            🎯 TP1 HIT (+{signal.realized_r !== null && signal.realized_r !== undefined ? signal.realized_r.toFixed(2) : '1.60'}R)
                           </span>
                         ) : isBe ? (
                           <span style={{ fontSize: '0.66rem', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', borderRadius: '12px', padding: '2px 8px', fontWeight: 800 }}>
@@ -1805,7 +1805,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
               <div>• Initial Stop</div>
               <div>• Final Trailing Stop</div>
               <div>• TP1 (+2.0R)</div>
-              <div>• TP2 (+3.5R)</div>
+              <div>• TP2 (+3.0R)</div>
               <div>• Exit Fill Price</div>
               <div>• Outcome Type</div>
               <div>• Realized R-Multiple</div>
