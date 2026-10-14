@@ -2242,7 +2242,7 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
       try { meta = JSON.parse(s.metadata || '{}'); } catch {}
       const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
       const r1 = Number(s.r_multiple_1 || 2.0);
-      const r2 = Number(s.r_multiple_2 || 3.0);
+      const r2 = 3.0;
       const isTp2Hit = s.invalidation_reason === 'tp2_hit' || meta.outcome_type === 'tp2_hit';
       const isTp1Achieved = !isTp2Hit && (s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit');
       const isBeHit = s.invalidation_reason === 'be_hit' || meta.outcome_type === 'be_hit';
@@ -2480,7 +2480,7 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
           const isSlHit = meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop');
 
           const r1 = Number(s.r_multiple_1 || 2.0);
-          const r2 = Number(s.r_multiple_2 || 3.0);
+          const r2 = 3.0;
 
           if (isTp2Hit) {
             rVal = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));

@@ -50,8 +50,8 @@ export function getAccurateRealizedR(trade: Outcome): number {
 
   // For Elite Fractal and Sentinel v2, enforce true 80/20 partial scale-out accounting:
   if (strat === 'elite_fractal' || strat === 'sentinel_v2') {
-    const r1 = trade.r_multiple_1 || 2.0;
-    const r2 = trade.r_multiple_2 || 3.0;
+    const r1 = 2.0;
+    const r2 = 3.0;
 
     if (ot.includes('tp2')) {
       // 80% at TP1 + 20% at TP2
