@@ -44,6 +44,38 @@ interface Outcome {
   metadata?: any;
 }
 
+export function getAccurateRealizedR(trade: Outcome): number {
+  const strat = trade.strategy_id || '';
+  const ot = (trade.outcome_type || trade.invalidation_reason || '').toLowerCase();
+
+  // For Elite Fractal and Sentinel v2, enforce true 80/20 partial scale-out accounting:
+  if (strat === 'elite_fractal' || strat === 'sentinel_v2') {
+    const r1 = trade.r_multiple_1 || 2.0;
+    const r2 = trade.r_multiple_2 || 3.0;
+
+    if (ot.includes('tp2')) {
+      // 80% at TP1 + 20% at TP2
+      return Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
+    }
+    if (ot.includes('tp1')) {
+      // 80% at TP1 + 20% at BE
+      return Number((0.80 * r1).toFixed(2));
+    }
+    if (ot.includes('be') || ot.includes('breakeven')) {
+      return 0.0;
+    }
+    if (ot.includes('sl') || ot.includes('stop')) {
+      return -1.0;
+    }
+  }
+
+  // Fallback to trade.realized_r if present
+  if (trade.realized_r !== undefined && trade.realized_r !== null) {
+    return Number(trade.realized_r);
+  }
+  return 0.0;
+}
+
 function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
   const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
   const initialStop = trade.initial_stop || trade.stop || 0;
@@ -54,6 +86,7 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
     trade.outcome_type?.includes('sl') ? initialStop :
     trade.outcome_type?.includes('be') ? entryPrice : undefined
   );
+  const calculatedR = getAccurateRealizedR(trade);
 
   return {
     id: trade.setup_id || trade.id,
@@ -82,8 +115,8 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
     invalidation_detail: trade.invalidation_detail,
     killzone_origin: trade.killzone_origin,
     execution_price: exitPrice,
-    realized_r: trade.realized_r,
-    realized_pl: trade.realized_pl,
+    realized_r: calculatedR,
+    realized_pl: calculatedR,
     time_to_fill_min: trade.time_to_fill_min,
     holding_duration_min: trade.holding_duration_min || trade.duration_min,
     duration_min: trade.duration_min || trade.holding_duration_min,
@@ -252,7 +285,7 @@ export function ExpandableCalendar({
     let futCount = 0;
     outcomes.forEach(o => {
       if (!matchesStrategy(o.strategy_id)) return;
-      const r = o.realized_r ?? 0;
+      const r = getAccurateRealizedR(o);
       const mkt = getOutcomeMarket(o);
       if (mkt === 'forex') {
         fx += r;
@@ -361,7 +394,7 @@ export function ExpandableCalendar({
         Object.keys(dayTradingData).forEach((sKey) => {
           const session = sKey as SessionType;
           const trades = dayTradingData[session];
-          const sessionTotalR = trades.reduce((acc, t) => acc + (t.realized_r ?? 0), 0);
+          const sessionTotalR = trades.reduce((acc, t) => acc + getAccurateRealizedR(t), 0);
           sessionsData[session] = {
             trades,
             totalR: sessionTotalR
@@ -369,7 +402,7 @@ export function ExpandableCalendar({
           dayTotalR += sessionTotalR;
           trades.forEach(t => {
             dayTradesCount++;
-            const r = t.realized_r ?? 0;
+            const r = getAccurateRealizedR(t);
             const mkt = getOutcomeMarket(t);
             if (mkt === 'forex') {
               dayForexR += r;
@@ -453,7 +486,7 @@ export function ExpandableCalendar({
         ...selectedDayData.sessions.ny_pm.trades
       ];
       allTrades.forEach(t => {
-        const r = t.realized_r ?? 0;
+        const r = getAccurateRealizedR(t);
         const mkt = getOutcomeMarket(t);
         if (mkt === 'forex') {
           fx += r;
@@ -766,7 +799,7 @@ export function ExpandableCalendar({
                       sessionData.trades.map((trade) => {
                         const isWin = trade.outcome_type?.includes('tp');
                         const isLoss = trade.outcome_type?.includes('sl');
-                        const tradeR = trade.realized_r ?? 0;
+                        const tradeR = getAccurateRealizedR(trade);
                         const tradePnlClass = getPnlClass(tradeR);
                         const telegramId = formatTelegramTradeId({ id: trade.setup_id || trade.id, instrument: trade.instrument });
                         const isCopied = copiedTradeId === trade.id || copiedTradeId === trade.setup_id;

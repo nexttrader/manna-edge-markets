@@ -2243,18 +2243,27 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
       const entryPrice = s.entry_price_recorded || s.entry_zone_mid;
       const r1 = Number(s.r_multiple_1 || 2.0);
       const r2 = Number(s.r_multiple_2 || 3.0);
-      const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
-      const realizedR = s.realized_r !== null && s.realized_r !== undefined 
-        ? Number(s.realized_r) 
-        : (meta.realized_r !== undefined 
-          ? Number(meta.realized_r) 
-          : (s.invalidation_reason === 'tp2_hit' || meta.outcome_type === 'tp2_hit'
-            ? Number(((0.80 * r1) + (0.20 * r2)).toFixed(2)) 
-            : isTp1Achieved 
-              ? Number((0.80 * r1).toFixed(2)) 
-              : (s.invalidation_reason === 'be_hit' || meta.outcome_type === 'be_hit')
-                ? 0.0 
-                : -1.0));
+      const isTp2Hit = s.invalidation_reason === 'tp2_hit' || meta.outcome_type === 'tp2_hit';
+      const isTp1Achieved = !isTp2Hit && (s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit');
+      const isBeHit = s.invalidation_reason === 'be_hit' || meta.outcome_type === 'be_hit';
+      const isSlHit = s.invalidation_reason === 'sl_hit' || meta.outcome_type === 'sl_hit';
+
+      let realizedR: number;
+      if (isTp2Hit) {
+        realizedR = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
+      } else if (isTp1Achieved) {
+        realizedR = Number((0.80 * r1).toFixed(2));
+      } else if (isBeHit) {
+        realizedR = 0.0;
+      } else if (isSlHit) {
+        realizedR = -1.0;
+      } else if (s.realized_r !== null && s.realized_r !== undefined) {
+        realizedR = Number(s.realized_r);
+      } else if (meta.realized_r !== undefined) {
+        realizedR = Number(meta.realized_r);
+      } else {
+        realizedR = -1.0;
+      }
 
       const detectedMarket = s.market || (s.instrument?.includes('/') ? 'forex' : 'futures');
 
@@ -2465,23 +2474,26 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
           if (s.mfe !== null && s.mfe !== undefined) { totalMfe += Number(s.mfe); mfeCount++; }
           else if (meta.mfe_r !== undefined) { totalMfe += Number(meta.mfe_r); mfeCount++; }
 
-          const isTp1Achieved = s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit';
+          const isTp2Hit = meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit';
+          const isTp1Achieved = !isTp2Hit && (s.invalidation_reason === 'tp1_hit' || Boolean(meta.tp1_hit_at) || meta.outcome_type === 'tp1_hit' || s.invalidation_reason?.includes('tp1'));
+          const isBeHit = meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven');
+          const isSlHit = meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop');
 
-          if (s.realized_r !== null && s.realized_r !== undefined) {
+          const r1 = Number(s.r_multiple_1 || 2.0);
+          const r2 = Number(s.r_multiple_2 || 3.0);
+
+          if (isTp2Hit) {
+            rVal = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
+          } else if (isTp1Achieved) {
+            rVal = Number((0.80 * r1).toFixed(2));
+          } else if (isBeHit) {
+            rVal = 0.0;
+          } else if (isSlHit) {
+            rVal = -1.0;
+          } else if (s.realized_r !== null && s.realized_r !== undefined) {
             rVal = Number(s.realized_r);
           } else if (meta.realized_r !== undefined) {
             rVal = Number(meta.realized_r);
-          } else if (meta.outcome_type === 'tp2_hit' || s.invalidation_reason === 'tp2_hit') {
-            const r1 = Number(s.r_multiple_1 || 2.0);
-            const r2 = Number(s.r_multiple_2 || 3.0);
-            rVal = Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
-          } else if (isTp1Achieved || s.invalidation_reason?.includes('tp1') || s.invalidation_reason?.includes('tp2')) {
-            const r1 = Number(s.r_multiple_1 || 2.0);
-            rVal = Number((0.80 * r1).toFixed(2));
-          } else if (meta.outcome_type === 'be_hit' || s.invalidation_reason?.includes('be') || s.invalidation_reason?.includes('breakeven')) {
-            rVal = 0.0;
-          } else if (meta.outcome_type === 'sl_hit' || s.invalidation_reason?.includes('sl') || s.invalidation_reason?.includes('stop')) {
-            rVal = -1.0;
           }
         } catch {}
 
