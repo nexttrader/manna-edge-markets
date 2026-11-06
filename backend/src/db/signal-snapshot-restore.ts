@@ -3,13 +3,23 @@ import path from 'path';
 import { queryDb } from './database';
 import { EdgeSetup } from '../discovery/types';
 import { createLogger } from '../telemetry/logger';
+import { isMockSetup } from '../publish-gate/revalidation';
 
 const logger = createLogger('SignalSnapshotRestore');
 
 const SNAPSHOT_FILE_PATH = path.resolve(process.cwd(), 'src/db/persistent_signals_snapshot.json');
+const SNAPSHOT_DIST_PATH = path.resolve(__dirname, 'persistent_signals_snapshot.json');
 const SNAPSHOT_TMP_PATH = '/tmp/persistent_signals_snapshot.json';
 
-import { isMockSetup } from '../publish-gate/revalidation';
+// Bundled snapshot fallback available directly in code
+let bundledSnapshot: EdgeSetup[] = [];
+try {
+  bundledSnapshot = require('./persistent_signals_snapshot.json');
+} catch {
+  try {
+    bundledSnapshot = require('../db/persistent_signals_snapshot.json');
+  } catch {}
+}
 
 export async function saveSignalsSnapshot(setups: EdgeSetup[]): Promise<void> {
   try {
@@ -28,7 +38,7 @@ export async function saveSignalsSnapshot(setups: EdgeSetup[]): Promise<void> {
     }
 
     // 2. Save to disk files
-    for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_TMP_PATH]) {
+    for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_DIST_PATH, SNAPSHOT_TMP_PATH]) {
       try {
         fs.writeFileSync(fpath, jsonStr, 'utf8');
       } catch {}
@@ -41,37 +51,52 @@ export async function saveSignalsSnapshot(setups: EdgeSetup[]): Promise<void> {
 }
 
 export async function loadSignalsSnapshot(): Promise<EdgeSetup[]> {
-  // 1. Try loading from database table system_signal_snapshots
+  const mergedMap = new Map<string, EdgeSetup>();
+
+  // 1. Bundled snapshot
+  if (Array.isArray(bundledSnapshot)) {
+    for (const s of bundledSnapshot) {
+      if (s && !isMockSetup(s) && s.id) {
+        mergedMap.set(s.id, s);
+      }
+    }
+  }
+
+  // 2. Disk snapshot files
+  for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_DIST_PATH, SNAPSHOT_TMP_PATH]) {
+    try {
+      if (fs.existsSync(fpath)) {
+        const content = fs.readFileSync(fpath, 'utf8');
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          for (const s of parsed) {
+            if (s && !isMockSetup(s) && s.id) {
+              mergedMap.set(s.id, s);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Persistent database table system_signal_snapshots
   try {
     const rows = await queryDb<any>(`SELECT snapshot_json FROM system_signal_snapshots WHERE id = 'current'`);
     if (rows && rows.length > 0 && rows[0].snapshot_json) {
       const parsed = JSON.parse(rows[0].snapshot_json);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const realOnly = parsed.filter((s: EdgeSetup) => !isMockSetup(s));
-        logger.info({ count: realOnly.length }, 'Loaded signals snapshot from persistent database table');
-        return realOnly;
+      if (Array.isArray(parsed)) {
+        for (const s of parsed) {
+          if (s && !isMockSetup(s) && s.id && !mergedMap.has(s.id)) {
+            mergedMap.set(s.id, s);
+          }
+        }
       }
     }
   } catch (err: any) {
     logger.warn({ err: err.message }, 'Could not read signals snapshot from database table');
   }
 
-  // 2. Fallback to disk snapshot files
-  for (const fpath of [SNAPSHOT_FILE_PATH, SNAPSHOT_TMP_PATH]) {
-    try {
-      if (fs.existsSync(fpath)) {
-        const content = fs.readFileSync(fpath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const realOnly = parsed.filter((s: EdgeSetup) => !isMockSetup(s));
-          logger.info({ count: realOnly.length, fpath }, 'Loaded signals snapshot from disk file');
-          return realOnly;
-        }
-      }
-    } catch {}
-  }
-
-  return [];
+  return Array.from(mergedMap.values());
 }
 
 export async function ensureActiveSignalsRestored(): Promise<void> {
@@ -82,29 +107,33 @@ export async function ensureActiveSignalsRestored(): Promise<void> {
       await queryDb(`DELETE FROM forex_edge_setups WHERE id LIKE '%seed%' OR id LIKE 'kz_mid_%' OR id LIKE '%mock%' OR created_by_run = 'seed_init' OR conviction_score IS NULL OR metadata LIKE '%"seed":true%' OR metadata LIKE '%"source":"mock"%'`);
     } catch {}
 
-    const futures = await queryDb<EdgeSetup>(`SELECT * FROM edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
-    const forex = await queryDb<EdgeSetup>(`SELECT * FROM forex_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
-    const totalActive = futures.length + forex.length;
+    // Check existing active setups in DB
+    const existingFutures = await queryDb<EdgeSetup>(`SELECT * FROM edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
+    const existingForex = await queryDb<EdgeSetup>(`SELECT * FROM forex_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
+    const activeInstrumentsInDb = new Set([...existingFutures, ...existingForex].map(s => (s.instrument || '').toUpperCase()));
+    const activeIdsInDb = new Set([...existingFutures, ...existingForex].map(s => s.id));
 
-    if (totalActive > 0) {
-      // Save current real active signals to DB snapshot table & disk
-      await saveSignalsSnapshot([...futures, ...forex]);
-      logger.info({ count: totalActive }, 'Active signals present in database on startup; snapshot updated.');
-      return;
-    }
+    // Also get all resolved outcomes / terminal setup IDs so we never resurrect truly closed setups
+    const resolvedOutcomes = await queryDb<{ setup_id: string }>(`SELECT setup_id FROM outcomes`);
+    const terminalIds = new Set((resolvedOutcomes || []).map(o => String(o.setup_id)));
 
+    // Load full merged snapshot candidates (bundled + disk + db table)
     const snapshotSetups = await loadSignalsSnapshot();
-    if (snapshotSetups.length === 0) {
-      logger.info('Database initialized with 0 active signals; waiting for next live market scan.');
-      return;
-    }
 
-    logger.warn(`⚠️ Activating failsafe restoration of ${snapshotSetups.length} previously saved real signals...`);
-
+    let restoredCount = 0;
     for (const setup of snapshotSetups) {
+      if (!setup || !setup.instrument || !setup.id) continue;
+      if (terminalIds.has(String(setup.id))) continue;
+
+      const instUpper = setup.instrument.toUpperCase();
+      // If this exact ID is already active in DB, or this instrument already has an active setup in DB, don't overwrite it
+      if (activeIdsInDb.has(setup.id) || activeInstrumentsInDb.has(instUpper)) {
+        continue;
+      }
+
       const table = (setup.market || '').toLowerCase() === 'forex' ? 'forex_edge_setups' : 'edge_setups';
       const mkt = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
-      
+
       const insertSql = `
         INSERT INTO ${table} (
           id, instrument, market, created_at, created_by_run, killzone_origin, bias,
@@ -130,8 +159,6 @@ export async function ensureActiveSignalsRestored(): Promise<void> {
         setup.entry_zone_low,
         setup.entry_zone_high,
         setup.entry_zone_mid,
-        // Only restore entry_price_recorded if the signal was actually filled (active).
-        // Awaiting_entry signals never filled, so their entry_price_recorded must stay NULL.
         (setup.signal_state === 'active' ? setup.entry_price_recorded : null) || null,
         setup.stop,
         setup.initial_stop || setup.stop,
@@ -142,13 +169,26 @@ export async function ensureActiveSignalsRestored(): Promise<void> {
         setup.signal_state || 'awaiting_entry',
         setup.conviction_score || 90.0,
         setup.liquidity_score || 90.0,
-        setup.strategy_id || 'sentinel_v2',
-        setup.strategy_tier || 'basic',
-        setup.metadata || '{}'
+        setup.strategy_id || 'manna_snd',
+        setup.strategy_tier || 'pro',
+        typeof setup.metadata === 'object' ? JSON.stringify(setup.metadata) : (setup.metadata || '{}')
       ]);
+
+      activeInstrumentsInDb.add(instUpper);
+      activeIdsInDb.add(setup.id);
+      restoredCount++;
     }
 
-    logger.info(`🛡️ FAILSAFE ACTIVATED: Restored ${snapshotSetups.length} real active trade setups into database on server restart!`);
+    // Query final set of active setups in DB and update the snapshot table & files
+    const finalFutures = await queryDb<EdgeSetup>(`SELECT * FROM edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
+    const finalForex = await queryDb<EdgeSetup>(`SELECT * FROM forex_edge_setups WHERE superseded = 0 AND signal_state IN ('awaiting_entry', 'active')`);
+    await saveSignalsSnapshot([...finalFutures, ...finalForex]);
+
+    logger.info({
+      initialActive: existingFutures.length + existingForex.length,
+      restoredFromSnapshot: restoredCount,
+      totalActiveNow: finalFutures.length + finalForex.length
+    }, 'Active signals verified & restored on startup');
   } catch (err: any) {
     logger.error({ err: err.message }, 'Failed to restore signals snapshot on startup');
   }

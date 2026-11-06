@@ -15,6 +15,65 @@ let outcomeInterval: NodeJS.Timeout | null = null;
 let isRunning = false;
 let isEvaluatingOutcomes = false;
 
+// =============================================================================
+// CONTINUOUS SCAN ON/OFF SWITCH (persisted in superadmin_strategy_settings)
+// =============================================================================
+const CONTINUOUS_SCAN_SETTING_KEY = 'elite_fractal_continuous_scan_enabled';
+let continuousScanEnabled = true; // Default ON when no setting has been saved
+let continuousScanSettingLoaded = false;
+let continuousScanUpdatedAt: string | null = null;
+
+/**
+ * Returns whether the continuous (automatic 5m) Elite Fractal scan is enabled.
+ * The value is loaded once from the DB and then cached in memory.
+ * Manual scans (POST /exclusive-signals/scan) are NOT affected by this flag.
+ */
+export async function isEliteFractalContinuousScanEnabled(): Promise<boolean> {
+  if (!continuousScanSettingLoaded) {
+    try {
+      const rows = await queryDb<{ value: string; updated_at: string | null }>(
+        `SELECT value, updated_at FROM superadmin_strategy_settings WHERE key = ?`,
+        [CONTINUOUS_SCAN_SETTING_KEY]
+      );
+      if (rows && rows.length > 0) {
+        continuousScanEnabled = rows[0].value !== 'false';
+        continuousScanUpdatedAt = rows[0].updated_at || null;
+      }
+      continuousScanSettingLoaded = true;
+    } catch (err: any) {
+      logger.warn({ err: err.message }, 'EliteFractal: Could not load continuous scan setting — defaulting to current value');
+    }
+  }
+  return continuousScanEnabled;
+}
+
+export async function getEliteFractalContinuousScanStatus(): Promise<{ enabled: boolean; updatedAt: string | null }> {
+  const enabled = await isEliteFractalContinuousScanEnabled();
+  return { enabled, updatedAt: continuousScanUpdatedAt };
+}
+
+/**
+ * Turn the continuous Elite Fractal scan on or off and persist the choice.
+ * Outcome tracking for already-open trades keeps running either way so
+ * existing positions still resolve (TP / SL / BE) correctly.
+ */
+export async function setEliteFractalContinuousScanEnabled(enabled: boolean): Promise<{ enabled: boolean; updatedAt: string }> {
+  const now = new Date().toISOString();
+  await queryDb(`DELETE FROM superadmin_strategy_settings WHERE key = ?`, [CONTINUOUS_SCAN_SETTING_KEY]);
+  await queryDb(
+    `INSERT INTO superadmin_strategy_settings (key, value, updated_at) VALUES (?, ?, ?)`,
+    [CONTINUOUS_SCAN_SETTING_KEY, enabled ? 'true' : 'false', now]
+  );
+  continuousScanEnabled = enabled;
+  continuousScanSettingLoaded = true;
+  continuousScanUpdatedAt = now;
+  logger.info(
+    { enabled },
+    enabled ? '🛡️ EliteFractal: Continuous scanning ENABLED' : '⏸️ EliteFractal: Continuous scanning DISABLED'
+  );
+  return { enabled, updatedAt: now };
+}
+
 /**
  * Evaluates active and runner setups in superadmin_edge_setups against live prices.
  * - Detects TP1 (+2.0R), TP2 (+3.5R), Stop Loss (-1.0R), and Break-Even (0.0R).
@@ -646,6 +705,10 @@ export function startEliteFractalContinuousScanner(): void {
   // 1. Scan task: Every 5 minutes
   scanTask = cron.schedule('*/5 * * * *', async () => {
     try {
+      if (!(await isEliteFractalContinuousScanEnabled())) {
+        logger.debug('EliteFractal: Continuous scanning is disabled — skipping scheduled scan.');
+        return;
+      }
       await runEliteFractalScanCycle();
     } catch (err: any) {
       logger.error({ err: err.message }, 'EliteFractal: Unhandled error in cron job');
@@ -670,7 +733,11 @@ export function startEliteFractalContinuousScanner(): void {
     try {
       logger.info('🛡️ EliteFractal: Running initial startup scan and outcome check...');
       await evaluateEliteFractalOutcomes();
-      await runEliteFractalScanCycle();
+      if (await isEliteFractalContinuousScanEnabled()) {
+        await runEliteFractalScanCycle();
+      } else {
+        logger.info('⏸️ EliteFractal: Continuous scanning is disabled — skipping startup scan (outcome tracking still active).');
+      }
     } catch (err: any) {
       logger.error({ err: err.message }, 'EliteFractal: Initial startup scan error');
     }

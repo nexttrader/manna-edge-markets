@@ -887,7 +887,7 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
         };
         const runId = `manna_snd_manual_${Date.now()}`;
         const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
-        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual');
+        const result = await executePublishRun(kzInfo, futures, forex, 'live', 'manual', scope);
         const enrichedStats = {
             ...result.stats,
             futuresDiscovered: futures.length,
@@ -2508,11 +2508,9 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
           } else {
             isBE = true;
           }
-        } else {
-          isLoss = true;
-          totalR -= 1.0;
-          grossLoss += 1.0;
         }
+        // If rVal is null, this setup was cancelled or invalidated prior to entry without an executed fill.
+        // It must NOT be counted as a -1.0R loss!
 
         if (isWin) winsCount++;
         else if (isLoss) lossesCount++;
@@ -2650,6 +2648,42 @@ router.post('/exclusive-signals/scan', verifySuperAdmin, async (req: Request, re
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message, details: err.stack?.slice(0, 300) });
+  }
+});
+
+router.get('/exclusive-signals/continuous-scan', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { getEliteFractalContinuousScanStatus } = await import('../scheduler/elite-fractal-scanner');
+    const status = await getEliteFractalContinuousScanStatus();
+    return res.json({ success: true, ...status });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/exclusive-signals/continuous-scan', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: '`enabled` (boolean) is required' });
+    }
+    const { setEliteFractalContinuousScanEnabled, runEliteFractalScanCycle } = await import('../scheduler/elite-fractal-scanner');
+    const status = await setEliteFractalContinuousScanEnabled(enabled);
+
+    // When re-enabled, kick off a scan right away instead of waiting for the next 5m tick
+    if (enabled) {
+      runEliteFractalScanCycle().catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      ...status,
+      message: enabled
+        ? 'Elite Fractal continuous scanning enabled (every 5 minutes).'
+        : 'Elite Fractal continuous scanning disabled. Open trades will still be tracked to resolution.'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

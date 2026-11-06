@@ -842,7 +842,7 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
     
     const runId = `manna_snd_manual_${Date.now()}`;
     const { futures, forex } = await discoverUnifiedSetups(kzInfo, runId, scope, [], 'manna_snd');
-    const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual');
+    const result = await executePublishRun(kzInfo, futures, forex, mode, 'manual', scope);
     const enrichedStats = {
       ...result.stats,
       futuresDiscovered: futures.length,

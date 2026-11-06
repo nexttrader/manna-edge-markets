@@ -1671,15 +1671,15 @@ export interface AssetSnapshotEntry {
 const ASSET_SNAPSHOT_PATH = path.resolve(process.cwd(), 'asset_settings_snapshot.json');
 
 export const DEFAULT_ASSET_SESSIONS: Record<string, string[]> = {
-  // Forex (Session-Aware: Active during designated liquidity killzones)
+  // Forex (Unrestricted display across sessions; individual asset filters still respected)
   'EUR/USD': ['all'],
   'GBP/USD': ['all'],
   'USD/JPY': ['all'],
   'AUD/USD': ['all'],
-  'EUR/GBP': ['london', 'ny_am'],
-  'GBP/JPY': ['asia', 'london'],
-  'EUR/JPY': ['asia', 'london'],
-  'USD/CAD': ['ny_am', 'ny_pm'],
+  'EUR/GBP': ['all'],
+  'GBP/JPY': ['all'],
+  'EUR/JPY': ['all'],
+  'USD/CAD': ['all'],
 
   // Futures (Kept As Is: Unrestricted across all sessions)
   'CL': ['all'],

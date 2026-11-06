@@ -592,7 +592,10 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
     triggerScan,
     dismissSignal,
     resetAnalytics,
-    getExportUrl
+    getExportUrl,
+    continuousScanEnabled,
+    togglingContinuousScan,
+    setContinuousScan
   } = useExclusiveSignals();
 
   const [activeSection, setActiveSection] = useState<'live' | 'runners' | 'calendar' | 'telemetry' | 'analytics' | 'history' | 'export'>('live');
@@ -694,6 +697,16 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
     }
   };
 
+  const handleToggleContinuousScan = async () => {
+    const next = !continuousScanEnabled;
+    if (!next && !confirm('Turn OFF Elite Fractal continuous scanning?\n\nNo new signals will be generated automatically. Open trades will still be tracked until they hit TP / SL / BE, and you can still run manual scans.')) return;
+    try {
+      await setContinuousScan(next);
+    } catch (err: any) {
+      alert(`⚠️ ${err.message}`);
+    }
+  };
+
   const hotInstruments  = telemetry.filter(t => t.phase === 'ENTRY_READY' || t.phase === 'VALIDATED');
   const coldInstruments = telemetry.filter(t => t.phase !== 'ENTRY_READY' && t.phase !== 'VALIDATED');
 
@@ -739,10 +752,35 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             ⚙️ Reset Analytics
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '20px', padding: '3px 10px', fontSize: '0.68rem', color: '#34d399', fontWeight: 700 }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', display: 'inline-block' }}></span>
-              Continuous Auto-Scan (5m)
-            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={continuousScanEnabled}
+              onClick={handleToggleContinuousScan}
+              disabled={togglingContinuousScan}
+              title={continuousScanEnabled ? 'Click to turn OFF continuous auto-scan' : 'Click to turn ON continuous auto-scan'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: continuousScanEnabled ? 'rgba(16,185,129,0.1)' : 'rgba(148,163,184,0.08)',
+                border: `1px solid ${continuousScanEnabled ? 'rgba(16,185,129,0.3)' : 'rgba(148,163,184,0.3)'}`,
+                borderRadius: '20px',
+                padding: '3px 10px 3px 4px',
+                fontSize: '0.68rem',
+                color: continuousScanEnabled ? '#34d399' : '#94a3b8',
+                fontWeight: 700,
+                cursor: togglingContinuousScan ? 'wait' : 'pointer',
+                opacity: togglingContinuousScan ? 0.6 : 1
+              }}
+            >
+              <span style={{ position: 'relative', width: '26px', height: '14px', borderRadius: '999px', background: continuousScanEnabled ? '#10b981' : '#475569', transition: 'background 0.2s', display: 'inline-block', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: '2px', left: continuousScanEnabled ? '14px' : '2px', width: '10px', height: '10px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}></span>
+              </span>
+              {togglingContinuousScan
+                ? 'Updating...'
+                : continuousScanEnabled ? 'Continuous Auto-Scan (5m): ON' : 'Continuous Auto-Scan: OFF'}
+            </button>
             {lastUpdated && <div style={{ fontSize: '0.65rem', color: '#718096' }}>UI Synced: {new Date(lastUpdated).toLocaleTimeString()}</div>}
           </div>
         </div>

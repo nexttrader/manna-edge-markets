@@ -20,7 +20,11 @@ export async function discoverUnifiedSetups(
   onlyTargetInstruments?: string[]
 ): Promise<{ futures: CandidateSetup[]; forex: CandidateSetup[] }> {
   // 1. Single Source of Truth: Compute Unified Biases ONCE for all target instruments
-  let allInstruments = [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
+  let allInstruments = marketScope === 'forex'
+    ? [...FOREX_INSTRUMENTS]
+    : marketScope === 'futures'
+    ? [...FUTURES_INSTRUMENTS]
+    : [...FUTURES_INSTRUMENTS, ...FOREX_INSTRUMENTS];
   if (onlyTargetInstruments && onlyTargetInstruments.length > 0) {
     allInstruments = allInstruments.filter(inst => onlyTargetInstruments.includes(inst));
   }

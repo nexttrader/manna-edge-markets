@@ -97,6 +97,8 @@ export function useExclusiveSignals() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [continuousScanEnabled, setContinuousScanEnabled] = useState<boolean>(true);
+  const [togglingContinuousScan, setTogglingContinuousScan] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -105,14 +107,19 @@ export function useExclusiveSignals() {
         'x-user-role': 'super_admin'
       };
 
-      const [signalsRes, telemetryRes, analyticsRes, historyRes, outcomesRes] = await Promise.all([
+      const [signalsRes, telemetryRes, analyticsRes, historyRes, outcomesRes, continuousScanRes] = await Promise.all([
         fetch(`${API_BASE}/api/super-admin/exclusive-signals`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/state-machine`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/analytics?scope=${analyticsScope}&market=${marketFilter}`, { headers }),
         fetch(`${API_BASE}/api/super-admin/exclusive-signals/history`, { headers }),
-        fetch(`${API_BASE}/api/super-admin/exclusive-signals/outcomes?market=${marketFilter}`, { headers })
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/outcomes?market=${marketFilter}`, { headers }),
+        fetch(`${API_BASE}/api/super-admin/exclusive-signals/continuous-scan`, { headers }).catch(() => null)
       ]);
 
+      if (continuousScanRes && continuousScanRes.ok) {
+        const data = await continuousScanRes.json();
+        if (typeof data.enabled === 'boolean') setContinuousScanEnabled(data.enabled);
+      }
       if (signalsRes.ok) {
         const data = await signalsRes.json();
         setSignals(data.signals || []);
@@ -205,6 +212,26 @@ export function useExclusiveSignals() {
     }
   }, [fetchAll]);
 
+  const setContinuousScan = useCallback(async (enabled: boolean) => {
+    setTogglingContinuousScan(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/super-admin/exclusive-signals/continuous-scan`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'super_admin'
+        },
+        body: JSON.stringify({ enabled })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update continuous scan setting');
+      setContinuousScanEnabled(Boolean(data.enabled));
+      return data;
+    } finally {
+      setTogglingContinuousScan(false);
+    }
+  }, []);
+
   const getExportUrl = useCallback((startDate?: string, endDate?: string, sinceReset?: boolean) => {
     const params = new URLSearchParams();
     if (startDate) params.set('start_date', startDate);
@@ -231,6 +258,9 @@ export function useExclusiveSignals() {
     triggerScan,
     dismissSignal,
     resetAnalytics,
-    getExportUrl
+    getExportUrl,
+    continuousScanEnabled,
+    togglingContinuousScan,
+    setContinuousScan
   };
 }

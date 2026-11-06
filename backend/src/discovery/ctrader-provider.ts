@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Candle } from './types';
 import { createLogger } from '../telemetry/logger';
 
@@ -60,6 +62,11 @@ let isConnected = false;
 let isStarting = false;
 let spotUnsubscribe: (() => Promise<void>) | null = null;
 
+// Backoff & cooldown state to protect from aggressive reconnect loops
+let nextAllowedConnectAttempt = 0;
+const AUTH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000; // 5 min backoff after expired/invalid token
+const NETWORK_FAILURE_COOLDOWN_MS = 30 * 1000;  // 30s backoff after transient network glitch
+
 const spotCache = new Map<string, CTraderLiveQuote>();
 const symbolDigits = new Map<string, number>(Object.entries(DEFAULT_DIGITS));
 
@@ -72,6 +79,63 @@ async function getCtraderLib(): Promise<any> {
     return Function('return import("ctrader-ts")')();
 }
 
+/**
+ * Automatically exchange a refresh token for a fresh access token & refresh token.
+ */
+async function refreshCtraderToken(
+    clientId: string,
+    clientSecret: string,
+    refreshToken: string
+): Promise<{ accessToken: string; refreshToken?: string } | null> {
+    try {
+        const url = new URL('https://openapi.ctrader.com/apps/token');
+        url.searchParams.set('grant_type', 'refresh_token');
+        url.searchParams.set('refresh_token', refreshToken);
+        url.searchParams.set('client_id', clientId);
+        url.searchParams.set('client_secret', clientSecret);
+
+        const res = await fetch(url.toString(), {
+            headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return null;
+
+        const body = (await res.json()) as any;
+        if (body.accessToken) {
+            return {
+                accessToken: body.accessToken,
+                refreshToken: body.refreshToken || refreshToken,
+            };
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Sync refreshed tokens to process.env and local .env file if writable.
+ */
+function syncTokenToEnv(newAccessToken: string, newRefreshToken?: string) {
+    process.env.CTRADER_ACCESS_TOKEN = newAccessToken;
+    if (newRefreshToken) {
+        process.env.CTRADER_REFRESH_TOKEN = newRefreshToken;
+    }
+
+    try {
+        const envPath = path.resolve(__dirname, '../../.env');
+        if (fs.existsSync(envPath)) {
+            let content = fs.readFileSync(envPath, 'utf-8');
+            content = content.replace(/^CTRADER_ACCESS_TOKEN=.*$/m, `CTRADER_ACCESS_TOKEN=${newAccessToken}`);
+            if (newRefreshToken) {
+                content = content.replace(/^CTRADER_REFRESH_TOKEN=.*$/m, `CTRADER_REFRESH_TOKEN=${newRefreshToken}`);
+            }
+            fs.writeFileSync(envPath, content, 'utf-8');
+        }
+    } catch {
+        // Ignored in read-only container environments
+    }
+}
+
 export function isCtraderConnected(): boolean {
     return isConnected && ctClient !== null;
 }
@@ -80,12 +144,14 @@ export function resolveCtraderSymbol(instrument: string): string | null {
     return CTRADER_SYMBOL_MAP[instrument] || null;
 }
 
-export async function startCtraderProvider(): Promise<void> {
+export async function startCtraderProvider(force = false): Promise<void> {
     if (isConnected || isStarting) return;
+    if (!force && Date.now() < nextAllowedConnectAttempt) return;
 
     const clientId = process.env.CTRADER_CLIENT_ID || '39573_6DFom6Ds6qTufd6UEAeuC95ei5cwKqhbUK8EhJ0AJbuB4oFn36';
     const clientSecret = process.env.CTRADER_CLIENT_SECRET || 'QAJOLFHIEK9hYa4jHsDGq9AzwasNo2sUuP52EZYeVd63GqeX6y';
-    const accessToken = process.env.CTRADER_ACCESS_TOKEN || 'Xv93xb9hZcbZAja6qY9BxW3bOChv9vgvXlauP4yWM00';
+    let accessToken = process.env.CTRADER_ACCESS_TOKEN || 'OKmsnXLgz24iJqgx2rA1Tr9rkx2VWslOS3GKjtz_Sic';
+    let refreshToken = process.env.CTRADER_REFRESH_TOKEN || 'SZo0NJRytDchBJClRMJkmDKnXM5_pYTU16Ml39t3268';
     const accountIdStr = process.env.CTRADER_ACCOUNT_ID || '48662843';
     const environment = (process.env.CTRADER_ENVIRONMENT as 'demo' | 'live') || 'demo';
 
@@ -99,17 +165,48 @@ export async function startCtraderProvider(): Promise<void> {
         logger.info({ environment, accountId: accountIdStr }, 'Connecting to cTrader Open API...');
         const { connect } = await getCtraderLib();
 
-        const ct = await connect({
-            clientId,
-            clientSecret,
-            accessToken,
-            accountId: Number(accountIdStr),
-            environment,
-        });
+        let ct: any = null;
+        try {
+            ct = await connect({
+                clientId,
+                clientSecret,
+                accessToken,
+                accountId: Number(accountIdStr),
+                environment,
+            });
+        } catch (initialErr: any) {
+            const isAuthIssue = initialErr?.message?.includes('CH_ACCESS_TOKEN_INVALID') ||
+                                initialErr?.message?.includes('OA_AUTH_TOKEN_EXPIRED') ||
+                                initialErr?.message?.includes('OAUTH_TOKEN_INVALIDATED');
+
+            if (isAuthIssue && refreshToken) {
+                logger.info('cTrader access token expired. Attempting automatic refresh via refresh token...');
+                const refreshed = await refreshCtraderToken(clientId, clientSecret, refreshToken);
+                if (refreshed?.accessToken) {
+                    logger.info('🟢 Successfully refreshed cTrader tokens! Re-authenticating...');
+                    accessToken = refreshed.accessToken;
+                    refreshToken = refreshed.refreshToken || refreshToken;
+                    syncTokenToEnv(accessToken, refreshToken);
+
+                    ct = await connect({
+                        clientId,
+                        clientSecret,
+                        accessToken,
+                        accountId: Number(accountIdStr),
+                        environment,
+                    });
+                } else {
+                    throw initialErr;
+                }
+            } else {
+                throw initialErr;
+            }
+        }
 
         ctClient = ct;
         isConnected = true;
         isStarting = false;
+        nextAllowedConnectAttempt = 0;
         logger.info('🟢 Successfully connected and authorized with cTrader Open API (IC Markets)!');
 
         // Query symbol details to ensure accurate digits
@@ -198,13 +295,29 @@ export async function startCtraderProvider(): Promise<void> {
         });
 
         ct.onTokenInvalidated(() => {
-            logger.error('cTrader access token invalidated or expired.');
+            logger.warn('cTrader access token invalidated or expired.');
             isConnected = false;
+            nextAllowedConnectAttempt = 0; // Allow immediate re-connect / auto-refresh attempt
         });
     } catch (err: any) {
         isStarting = false;
         isConnected = false;
-        logger.error({ err: err.message }, 'Failed to initialize cTrader Open API connection.');
+
+        const isAuthIssue = err?.message?.includes('CH_ACCESS_TOKEN_INVALID') ||
+                            err?.message?.includes('OA_AUTH_TOKEN_EXPIRED') ||
+                            err?.message?.includes('OAUTH_TOKEN_INVALIDATED') ||
+                            err?.message?.includes('CH_CLIENT_AUTH_FAILURE');
+
+        if (isAuthIssue) {
+            nextAllowedConnectAttempt = Date.now() + AUTH_FAILURE_COOLDOWN_MS;
+            logger.error(
+                { err: err.message, nextRetryInMinutes: AUTH_FAILURE_COOLDOWN_MS / 60000 },
+                'cTrader authentication failed (token expired or invalid). Run `npm run ctrader:auth` or update CTRADER_ACCESS_TOKEN. Cooldown active (clean fallback to Twelve Data / Yahoo).'
+            );
+        } else {
+            nextAllowedConnectAttempt = Date.now() + NETWORK_FAILURE_COOLDOWN_MS;
+            logger.error({ err: err.message }, 'Failed to initialize cTrader Open API connection. Retrying in 30s.');
+        }
     }
 }
 
@@ -272,7 +385,7 @@ export async function getCtraderCandles(
     if (!sym) return [];
 
     if (!isConnected || !ctClient) {
-        if (!isStarting) {
+        if (!isStarting && Date.now() >= nextAllowedConnectAttempt) {
             startCtraderProvider().catch(() => {});
         }
         return [];
