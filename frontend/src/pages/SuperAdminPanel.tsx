@@ -4,6 +4,7 @@ import './SuperAdminPanel.css';
 import '../components/admin/ui/AdminDesignSystem.css';
 import { AdminHeader } from '../components/admin/ui/AdminHeader';
 import type { AdminTabConfig } from '../components/admin/ui/AdminHeader';
+import { EdgeFinderRolloutCard } from '../components/edge-finder/EdgeFinderRolloutCard';
 import { AdminLandingTiles } from '../components/admin/ui/AdminLandingTiles';
 import { AdminCommandCenter } from '../components/admin/ui/AdminCommandCenter';
 import { useAuth } from '../context/AuthContext';
@@ -750,6 +751,7 @@ export const SuperAdminPanel: React.FC = () => {
       <main className="container" style={{ maxWidth: '1540px', margin: '20px auto', padding: '0 24px' }}>
         {/* LANDING SECTION: MISSION CONTROL DESTINATION TILES */}
         {activeTab === 'overview' && (
+          <>
           <AdminLandingTiles
             currentConsole="super_admin"
             onNavigateTab={handleSelectTab}
@@ -766,6 +768,10 @@ export const SuperAdminPanel: React.FC = () => {
               onTriggerTwelveDataRefresh: () => fetchTwelveDataUsage(true)
             }}
           />
+          <div style={{ marginTop: '18px' }}>
+            <EdgeFinderRolloutCard />
+          </div>
+          </>
         )}
 
         {/* SUBTAB HEADER CONTROLS (Displayed when navigating into submodules) */}
@@ -1856,6 +1862,8 @@ export const SuperAdminPanel: React.FC = () => {
 
         {/* TAB 5: Strategy Governance */}
         {activeTab === 'strategies' && (
+          <>
+          <EdgeFinderRolloutCard />
           <div className="super-card font-mono">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ margin: 0, color: '#00e5ff' }}>⚙️ Strategy Governance &amp; Admin Access Control</h2>
@@ -2935,6 +2943,7 @@ export const SuperAdminPanel: React.FC = () => {
               </form>
             </div>
           </div>
+          </>
         )}
 
         {/* TAB: Strategy Analytics & LLM Export */}

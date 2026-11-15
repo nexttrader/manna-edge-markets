@@ -591,6 +591,7 @@ router.post('/single-asset-rescan', async (req: Request, res: Response) => {
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
       killzone: 'ny_am' as const,
+      name: 'NY AM',
       boundaryET: '08:00',
       boundaryUTC: now.toISOString()
     };
@@ -777,6 +778,7 @@ router.post('/scheduled/session-boundary-revalidation', async (req: Request, res
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
       killzone: 'ny_am' as const,
+      name: 'NY AM',
       boundaryET: '08:00',
       boundaryUTC: now.toISOString()
     };
@@ -836,6 +838,7 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
     const currentKz = getCurrentKillzone(now);
     const kzInfo = currentKz || {
       killzone: 'ny_am' as const,
+      name: 'NY AM',
       boundaryET: '08:00',
       boundaryUTC: now.toISOString()
     };

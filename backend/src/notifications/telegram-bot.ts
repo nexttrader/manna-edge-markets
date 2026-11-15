@@ -263,7 +263,7 @@ class TelegramBotService {
     return this.enqueue(`doc:${filename}`, () => {
       const formData = new FormData();
       formData.append('chat_id', chatId);
-      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' });
       formData.append('document', blob, filename);
       if (caption) {
         formData.append('caption', caption);

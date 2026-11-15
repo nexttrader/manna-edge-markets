@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -882,6 +883,7 @@ router.all('/manna-snd/scan', async (req: Request, res: Response) => {
 
         const kzInfo = getCurrentKillzone(now) || {
             killzone: 'ny_am' as const,
+            name: 'NY AM',
             boundaryET: '08:00',
             boundaryUTC: now.toISOString()
         };
@@ -2696,6 +2698,47 @@ router.delete('/exclusive-signals/:id', verifySuperAdmin, async (req: Request, r
     return res.json({ success: true, id });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/edge-finder/rollout', verifySuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { getEdgeFinderRollout } = await import('../edge-finder/edge-finder-service');
+    const rollout = await getEdgeFinderRollout();
+    return res.json({ success: true, rollout });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/edge-finder/rollout', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { visibleToAdmins, visibleToTraders } = req.body || {};
+    const { updateEdgeFinderRollout } = await import('../edge-finder/edge-finder-service');
+    const email = (req.headers['x-user-email'] || 'super_admin').toString().toLowerCase().trim();
+    const rollout = await updateEdgeFinderRollout(
+      { visibleToAdmins, visibleToTraders },
+      email
+    );
+    try {
+      await queryDb(
+        `INSERT INTO admin_audit_logs (id, admin_email, admin_role, action, target_user_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          email,
+          'super_admin',
+          'UPDATE_EDGE_FINDER_ROLLOUT',
+          'edge_finder_module',
+          JSON.stringify(rollout),
+          new Date().toISOString()
+        ]
+      );
+    } catch {
+      // ignore if audit schema differs
+    }
+    return res.json({ success: true, rollout });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

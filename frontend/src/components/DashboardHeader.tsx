@@ -14,10 +14,12 @@ import { UserInbox } from './UserInbox';
 import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
 import { type EdgeSetup } from '../types';
+import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
 
 export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] }) => {
   const navigate = useNavigate();
   const { user, logout, originalAdmin, elevateToSuperAdmin, isImpersonating } = useAuth();
+  const { canAccessEdgeFinder } = useEdgeFinderAccess();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
   const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
@@ -201,6 +203,12 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                 ❓ FAQ
               </button>
 
+              {canAccessEdgeFinder && (
+                <Link to="/edge-finder" className={`nav-link ${location.pathname === '/edge-finder' ? 'active' : ''}`} style={{ color: '#DFC46B' }}>
+                  🧭 EdgeFinder
+                </Link>
+              )}
+
               {isAdmin && (
                 <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
                   ⚙️ Admin
@@ -282,7 +290,13 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
 
                     <div className="dropdown-divider" />
 
-                    {isAdmin && (
+                    {canAccessEdgeFinder && (
+                      <Link to="/edge-finder" className="dropdown-item" style={{ color: '#DFC46B' }} onClick={() => setShowUserMenu(false)}>
+                        🧭 Manna EdgeFinder Pro
+                      </Link>
+                    )}
+
+              {isAdmin && (
                       <Link to="/admin" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
                         ⚙️ Admin Panel
                       </Link>
@@ -361,6 +375,17 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
               >
                 ❓ Knowledge Base / FAQ
               </button>
+
+              {canAccessEdgeFinder && (
+                <Link 
+                  to="/edge-finder" 
+                  className={`mobile-nav-item ${location.pathname === '/edge-finder' ? 'active' : ''}`}
+                  style={{ color: '#DFC46B' }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  🧭 Manna EdgeFinder Pro
+                </Link>
+              )}
 
               {isAdmin && (
                 <Link 

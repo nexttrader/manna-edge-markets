@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useEdgeFinderAccess } from '../../../hooks/useEdgeFinder';
 
 export interface AdminTabConfig {
   id: string;
@@ -42,6 +43,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onRefreshTwelveData
 }) => {
   const navigate = useNavigate();
+  const { canAccessEdgeFinder } = useEdgeFinderAccess();
 
   return (
     <header className="console-header">
@@ -80,6 +82,22 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
                     👑 Vault
                   </button>
                 </div>
+              )}
+
+              {canAccessEdgeFinder && (
+                <button
+                  type="button"
+                  className="console-switcher-btn"
+                  style={{
+                    borderColor: 'rgba(201, 168, 76, 0.65)',
+                    background: 'rgba(201, 168, 76, 0.16)',
+                    color: '#DFC46B'
+                  }}
+                  onClick={() => navigate('/edge-finder')}
+                  title="Launch Manna EdgeFinder Pro Matrix"
+                >
+                  🧭 EdgeFinder
+                </button>
               )}
             </div>
           </div>

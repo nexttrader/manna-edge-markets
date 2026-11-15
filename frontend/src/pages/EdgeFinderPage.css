@@ -1,0 +1,857 @@
+/* Manna EdgeFinder Pro — KDT Imperial Royal Purple & Brushed Gold */
+
+.ef-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at 18% 0%, rgba(124, 58, 237, 0.16), transparent 45%),
+    radial-gradient(circle at 86% 12%, rgba(201, 168, 76, 0.12), transparent 40%),
+    var(--kdt-purple-deep, #140926);
+  color: #f3efff;
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif);
+  padding-bottom: 56px;
+}
+
+.ef-container {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 20px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Top Navigation / Utility Strip */
+.ef-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 20px;
+  background: rgba(30, 13, 56, 0.88);
+  border: 1px solid rgba(201, 168, 76, 0.28);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+}
+
+.ef-brand-cluster {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ef-brand-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.24), rgba(139, 92, 246, 0.28));
+  border: 1px solid rgba(201, 168, 76, 0.55);
+  box-shadow: 0 0 18px rgba(201, 168, 76, 0.16);
+}
+
+.ef-title {
+  margin: 0;
+  font-family: var(--font-headline, var(--font-body));
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ef-pro-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #140926;
+  background: linear-gradient(135deg, var(--kdt-gold-light, #DFC46B), var(--kdt-gold, #C9A84C));
+}
+
+.ef-subtitle {
+  margin: 3px 0 0;
+  font-size: 0.82rem;
+  color: #b7a8d6;
+}
+
+.ef-nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ef-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(45, 22, 82, 0.75);
+  color: #ece6ff;
+  text-decoration: none;
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.12s ease;
+}
+
+.ef-btn:hover:not(:disabled) {
+  border-color: var(--kdt-gold, #C9A84C);
+  background: rgba(65, 32, 114, 0.85);
+}
+
+.ef-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ef-btn-gold {
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.25), rgba(201, 168, 76, 0.14));
+  border-color: rgba(201, 168, 76, 0.65);
+  color: var(--kdt-gold-light, #DFC46B);
+}
+
+.ef-btn-vault {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(167, 139, 250, 0.55);
+  color: #ddd6fe;
+}
+
+/* Super Admin Rollout Governance Banner */
+.ef-governance-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 18px;
+  background: linear-gradient(90deg, rgba(201, 168, 76, 0.13), rgba(91, 33, 182, 0.24));
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  border-radius: 12px;
+}
+
+.ef-gov-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ef-gov-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--kdt-gold-light, #DFC46B);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ef-gov-desc {
+  font-size: 0.78rem;
+  color: #d6cceb;
+}
+
+.ef-gov-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ef-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(20, 9, 38, 0.72);
+  color: #e2d9f3;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.ef-toggle-pill.is-on {
+  border-color: rgba(0, 230, 118, 0.65);
+  background: rgba(0, 230, 118, 0.14);
+  color: #86efac;
+}
+
+.ef-toggle-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.ef-toggle-pill.is-on .ef-toggle-dot {
+  background: var(--green, #00E676);
+  box-shadow: 0 0 8px rgba(0, 230, 118, 0.75);
+}
+
+/* Pulse Telemetry Ribbon */
+.ef-pulse-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(360px, 2fr) minmax(240px, 1fr);
+  gap: 14px;
+}
+
+.ef-card {
+  background: var(--kdt-purple-card, #1e0d38);
+  border: 1px solid var(--kdt-purple-border, rgba(167, 139, 250, 0.22));
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.ef-perf-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+}
+
+@supports not (content-visibility: auto) {
+  .ef-perf-section {
+    contain: layout style paint;
+  }
+}
+
+.ef-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ef-card-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--kdt-gold-light, #DFC46B);
+}
+
+.ef-card-meta {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74rem;
+  color: #a99bc9;
+}
+
+/* Risk Gauge */
+.ef-risk-bar-track {
+  position: relative;
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff5252 0%, #ffc107 50%, #00e676 100%);
+  margin: 10px 0 12px;
+}
+
+.ef-risk-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #140926;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+}
+
+.ef-risk-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ef-risk-big {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ef-risk-drivers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ef-mini-chip {
+  font-size: 0.72rem;
+  font-family: var(--font-mono, monospace);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #dcd3f2;
+}
+
+/* Currency Strength Meter */
+.ef-strength-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ef-strength-tile {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(20, 9, 38, 0.58);
+  border: 1px solid rgba(167, 139, 250, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ef-strength-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ef-strength-bar-bg {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ef-strength-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* Sync & Killzone Card */
+.ef-sync-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ef-stat-box {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(20, 9, 38, 0.55);
+  border: 1px solid rgba(167, 139, 250, 0.18);
+}
+
+.ef-stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9f91c2;
+}
+
+.ef-stat-val {
+  margin-top: 3px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Modern Web Guidance: Single-row Tabs with border-block-end indicator */
+.ef-tablist {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 0 6px;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.25);
+  background: rgba(26, 10, 46, 0.85);
+  border-radius: 12px 12px 0 0;
+  scrollbar-width: thin;
+}
+
+.ef-tab {
+  flex: none;
+  white-space: nowrap;
+  position: relative;
+  background: transparent;
+  border: none;
+  color: #b7a8d6;
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 14px 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.ef-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ef-tab:focus-visible {
+  outline: 2px solid var(--kdt-gold-light, #DFC46B);
+  outline-offset: -2px;
+}
+
+.ef-tab[aria-selected='true'] {
+  color: var(--kdt-gold-light, #DFC46B);
+  background: rgba(201, 168, 76, 0.09);
+}
+
+.ef-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  border-block-end: 3px solid var(--kdt-gold, #C9A84C);
+  border-radius: 3px 3px 0 0;
+}
+
+.ef-tabpanel {
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Filter Toolbar */
+.ef-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ef-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ef-filter-btn {
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(167, 139, 250, 0.26);
+  background: rgba(30, 13, 56, 0.8);
+  color: #cfc5e8;
+}
+
+.ef-filter-btn.is-active {
+  border-color: var(--kdt-gold, #C9A84C);
+  background: rgba(201, 168, 76, 0.18);
+  color: var(--kdt-gold-light, #DFC46B);
+}
+
+.ef-search-input {
+  min-width: 220px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(20, 9, 38, 0.85);
+  color: #ffffff;
+  font-size: 0.84rem;
+}
+
+.ef-search-input:focus {
+  outline: none;
+  border-color: var(--kdt-gold, #C9A84C);
+}
+
+/* Diverging Top Setups Bar Chart */
+.ef-diverging-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ef-diverging-row {
+  display: grid;
+  grid-template-columns: 95px 1fr 78px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.ef-diverging-row:hover {
+  background: rgba(201, 168, 76, 0.1);
+}
+
+.ef-diverging-track {
+  position: relative;
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.ef-diverging-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+  z-index: 2;
+}
+
+.ef-diverging-fill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 4px;
+}
+
+/* Modern Web Guidance: Accessible Responsive Sortable Table */
+.ef-table-wrapper {
+  container-type: inline-size;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
+  border: 1px solid rgba(167, 139, 250, 0.26);
+  border-radius: 12px;
+  background: #1e0d38;
+}
+
+.ef-table-wrapper:focus-visible {
+  outline: 2px solid var(--kdt-gold-light, #DFC46B);
+  outline-offset: 2px;
+}
+
+.ef-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  min-width: 960px;
+}
+
+.ef-table caption {
+  caption-side: top;
+  text-align: left;
+  padding: 12px 16px 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #b7a8d6;
+  background: #231040;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.ef-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #231040;
+  color: #dcd3f2;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 0;
+  white-space: nowrap;
+}
+
+.ef-table thead th[aria-sort] {
+  color: var(--kdt-gold-light, #DFC46B);
+  background: #2b154d;
+}
+
+.ef-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 12px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ef-sort-btn:hover {
+  background: rgba(201, 168, 76, 0.12);
+}
+
+.ef-sort-btn:focus-visible {
+  outline: 2px solid var(--kdt-gold-light, #DFC46B);
+  outline-offset: -2px;
+}
+
+.ef-table tbody tr {
+  border-bottom: 1px solid rgba(167, 139, 250, 0.12);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.ef-table tbody tr:hover {
+  background: rgba(139, 92, 246, 0.16);
+}
+
+.ef-table tbody tr.is-selected {
+  background: rgba(201, 168, 76, 0.12);
+}
+
+.ef-table tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #1e0d38;
+  text-align: left;
+  padding: 11px 14px;
+  border-right: 1px solid rgba(167, 139, 250, 0.16);
+}
+
+.ef-table tbody tr:hover th {
+  background: #28154a;
+}
+
+.ef-table thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  border-right: 1px solid rgba(167, 139, 250, 0.22);
+}
+
+.ef-table tbody td {
+  padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ef-num {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badges */
+.ef-bias-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+}
+
+.ef-bias-strong-buy { background: rgba(0, 230, 118, 0.2); color: #69f0ae; border: 1px solid rgba(0, 230, 118, 0.5); }
+.ef-bias-buy { background: rgba(0, 230, 118, 0.11); color: #b9f6ca; border: 1px solid rgba(0, 230, 118, 0.32); }
+.ef-bias-neutral { background: rgba(255, 193, 7, 0.12); color: #ffe082; border: 1px solid rgba(255, 193, 7, 0.35); }
+.ef-bias-sell { background: rgba(255, 82, 82, 0.12); color: #ff8a80; border: 1px solid rgba(255, 82, 82, 0.34); }
+.ef-bias-strong-sell { background: rgba(255, 82, 82, 0.22); color: #ff5252; border: 1px solid rgba(255, 82, 82, 0.55); }
+
+.ef-heatmap-cell {
+  display: inline-block;
+  min-width: 50px;
+  text-align: center;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ef-kz-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.ef-kz-aligned { background: rgba(201, 168, 76, 0.2); color: var(--kdt-gold-light, #DFC46B); border: 1px solid rgba(201, 168, 76, 0.55); }
+.ef-kz-conflict { background: rgba(255, 82, 82, 0.18); color: #ff8a80; border: 1px solid rgba(255, 82, 82, 0.45); }
+.ef-kz-standby { background: rgba(255, 255, 255, 0.06); color: #9f91c2; border: 1px solid rgba(255, 255, 255, 0.12); }
+
+/* Scorecard Deep Dive Layout */
+.ef-deepdive-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+}
+
+.ef-pill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.ef-pillar-card {
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: rgba(20, 9, 38, 0.6);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ef-pillar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ef-tug-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(20, 9, 38, 0.55);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  font-size: 0.8rem;
+}
+
+/* Seasonality Matrix Grid */
+.ef-seasonality-grid {
+  overflow-x: auto;
+  border: 1px solid rgba(167, 139, 250, 0.24);
+  border-radius: 12px;
+  background: #1e0d38;
+}
+
+.ef-seasonality-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+}
+
+.ef-seasonality-table th,
+.ef-seasonality-table td {
+  padding: 8px 7px;
+  text-align: center;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.12);
+}
+
+.ef-seasonality-table th:first-child,
+.ef-seasonality-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: #1e0d38;
+  text-align: left;
+  padding-left: 14px;
+  font-weight: 700;
+  border-right: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.ef-month-current {
+  box-shadow: inset 0 0 0 2px var(--kdt-gold, #C9A84C);
+}
+
+/* Retail Sentiment Contrarian Split Bar */
+.ef-split-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ef-split-long {
+  background: linear-gradient(90deg, #16a34a, #00e676);
+}
+
+.ef-split-short {
+  background: linear-gradient(90deg, #ef4444, #ff5252);
+}
+
+/* Modal for Super Admin Macro Edit */
+.ef-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(10, 4, 22, 0.8);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.ef-modal {
+  width: 100%;
+  max-width: 560px;
+  background: #1e0d38;
+  border: 1px solid var(--kdt-gold, #C9A84C);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+}
+
+.ef-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.ef-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #cfc5e8;
+}
+
+.ef-input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: #140926;
+  color: #ffffff;
+  font-family: var(--font-mono, monospace);
+}
+
+@media (max-width: 1180px) {
+  .ef-pulse-grid {
+    grid-template-columns: 1fr;
+  }
+  .ef-deepdive-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .ef-container {
+    padding: 14px 12px 0;
+  }
+  .ef-strength-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ef-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,7 +6,9 @@ import { LoginPage } from './pages/LoginPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { SuperAdminPanel } from './pages/SuperAdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
+import { EdgeFinderPage } from './pages/EdgeFinderPage';
 import { useAuth } from './context/AuthContext';
+import { useEdgeFinderAccess } from './hooks/useEdgeFinder';
 import { MaintenanceProvider } from './context/MaintenanceContext';
 import { AdminMaintenanceBanner } from './components/AdminMaintenanceBanner';
 import { ImpersonationBanner } from './components/ImpersonationBanner';
@@ -34,6 +36,32 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   if (user.role !== 'admin' && user.role !== 'super_admin') {
     return <Navigate to="/dashboard" replace />;
   }
+  return <>{children}</>;
+}
+
+function ProtectedEdgeFinderRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const { canAccessEdgeFinder, loading } = useEdgeFinderAccess();
+
+  if (loading && !canAccessEdgeFinder) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#140926',
+        color: '#DFC46B',
+        display: 'grid',
+        placeItems: 'center',
+        fontFamily: 'monospace'
+      }}>
+        Verifying Manna EdgeFinder Pro clearance...
+      </div>
+    );
+  }
+
+  if (!canAccessEdgeFinder) {
+    return <Navigate to={user ? '/dashboard' : '/'} replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -151,6 +179,14 @@ function App() {
         />
         <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="/vault-7729" element={<Navigate to="/dashboard" replace />} />
+        <Route 
+          path="/edge-finder" 
+          element={
+            <ProtectedEdgeFinderRoute>
+              <EdgeFinderPage />
+            </ProtectedEdgeFinderRoute>
+          } 
+        />
         <Route 
           path="/setup/:id" 
           element={
