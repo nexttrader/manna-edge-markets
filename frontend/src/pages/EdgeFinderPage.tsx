@@ -2,20 +2,34 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CotHistoryChartSvg,
+  CountryHistoryTrendSvg,
+  GoldVsDxyChartSvg,
   HistoricalScorePriceSvg,
   ScoreGaugeSvg,
-  SeasonalityBarChartSvg
+  SeasonalityBarChartSvg,
+  YieldCurveSvg
 } from '../components/edge-finder/EdgeFinderCharts';
 import {
   type AssetEdgeScorecard,
+  type EconomyCode,
   type MacroEconomyData,
   useEdgeFinderAccess,
   useEdgeFinderData
 } from '../hooks/useEdgeFinder';
 import './EdgeFinderPage.css';
 
-type WorkspaceTab = 'scanner' | 'scorecard' | 'cot' | 'sentiment' | 'seasonality' | 'macro';
-type AssetFilterMode = 'ALL' | 'FOREX' | 'FUTURES' | 'ALIGNED' | 'STRONG' | 'WATCHLIST';
+type WorkspaceTab =
+  | 'scanner'
+  | 'scorecard'
+  | 'gold'
+  | 'carry'
+  | 'cot'
+  | 'smart_money'
+  | 'sentiment'
+  | 'seasonality'
+  | 'macro';
+
+type AssetFilterMode = 'ALL' | 'FOREX' | 'FUTURES' | 'CRYPTO' | 'EXTREME_COT' | 'ALIGNED' | 'STRONG' | 'WATCHLIST';
 type SortKey =
   | 'instrument'
   | 'currentPrice'
@@ -25,7 +39,10 @@ type SortKey =
   | 'seasonalityScore'
   | 'trendScore'
   | 'fundamentalScore'
-  | 'mannaFlowScore';
+  | 'mannaFlowScore'
+  | 'volatilityPct';
+
+type CarrySortKey = 'instrument' | 'rateSpreadPct' | 'carryAtrRatio' | 'assetTotalScore';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WATCHLIST_STORAGE_KEY = 'manna_edge_finder_watchlist_v1';
@@ -33,11 +50,28 @@ const WATCHLIST_STORAGE_KEY = 'manna_edge_finder_watchlist_v1';
 const TAB_ITEMS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
   { id: 'scanner', label: 'Top Setups & Matrix', icon: '📊' },
   { id: 'scorecard', label: 'Asset Scorecard', icon: '🎯' },
+  { id: 'gold', label: 'Gold Scorecard', icon: '🥇' },
+  { id: 'carry', label: 'Carry Scanner', icon: '💱' },
   { id: 'cot', label: 'COT Smart Money', icon: '🏦' },
+  { id: 'smart_money', label: 'Smart Money & Targets', icon: '🏛️' },
   { id: 'sentiment', label: 'Retail Contrarian', icon: '🧭' },
   { id: 'seasonality', label: 'Seasonality & Killzones', icon: '🗓️' },
-  { id: 'macro', label: 'Global Macro & Calendar', icon: '🌐' }
+  { id: 'macro', label: 'Global Macro & Yields', icon: '🌐' }
 ];
+
+const KEY_CORR_ASSETS = [
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD', 'GBP/JPY',
+  'ES', 'NQ', 'ZN', 'GC', 'SI', 'CL', 'BTC/USD', 'ETH/USD'
+];
+
+function formatUsdCompact(val: number): string {
+  if (!val || !Number.isFinite(val)) return '—';
+  const abs = Math.abs(val);
+  if (abs >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `$${(val / 1e3).toFixed(1)}K`;
+  return `$${val.toFixed(0)}`;
+}
 
 const COLLATOR = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 
@@ -126,6 +160,9 @@ export const EdgeFinderPage: React.FC = () => {
   const [watchlist, setWatchlist] = useState<string[]>(loadWatchlist);
   const [seasonalityMetric, setSeasonalityMetric] = useState<'return' | 'winRate'>('return');
   const [showCorrelations, setShowCorrelations] = useState<boolean>(false);
+  const [carrySortKey, setCarrySortKey] = useState<CarrySortKey>('carryAtrRatio');
+  const [carrySortDir, setCarrySortDir] = useState<'ascending' | 'descending'>('descending');
+  const [selectedHistoryCurrency, setSelectedHistoryCurrency] = useState<EconomyCode>('USD');
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [editingEcon, setEditingEcon] = useState<MacroEconomyData | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -143,6 +180,15 @@ export const EdgeFinderPage: React.FC = () => {
       }
       return next;
     });
+  };
+
+  const handleCarrySort = (key: CarrySortKey) => {
+    if (carrySortKey === key) {
+      setCarrySortDir((prev) => (prev === 'descending' ? 'ascending' : 'descending'));
+    } else {
+      setCarrySortKey(key);
+      setCarrySortDir(key === 'instrument' ? 'ascending' : 'descending');
+    }
   };
 
   const handleSort = (key: SortKey) => {
@@ -192,6 +238,8 @@ export const EdgeFinderPage: React.FC = () => {
     const list = scorecards.filter((sc) => {
       if (filterMode === 'FOREX' && sc.assetClass !== 'forex') return false;
       if (filterMode === 'FUTURES' && sc.assetClass !== 'futures') return false;
+      if (filterMode === 'CRYPTO' && sc.category !== 'Crypto') return false;
+      if (filterMode === 'EXTREME_COT' && sc.cot.extremeFlag === 'NONE') return false;
       if (filterMode === 'ALIGNED' && sc.killzoneAlignment.alignmentStatus !== 'ALIGNED') return false;
       if (filterMode === 'STRONG' && Math.abs(sc.totalScore) < 5) return false;
       if (filterMode === 'WATCHLIST' && !watchlist.includes(sc.instrument)) return false;
@@ -206,12 +254,33 @@ export const EdgeFinderPage: React.FC = () => {
       let cmp = 0;
       if (sortKey === 'instrument') {
         cmp = COLLATOR.compare(a.instrument, b.instrument);
+      } else if (sortKey === 'volatilityPct') {
+        cmp = a.technical.dayRangePctOfAtr - b.technical.dayRangePctOfAtr;
       } else {
         cmp = (a[sortKey] as number) - (b[sortKey] as number);
       }
       return sortDir === 'ascending' ? cmp : -cmp;
     });
   }, [scorecards, filterMode, searchQuery, sortKey, sortDir, watchlist]);
+
+  const sortedCarryTrades = useMemo(() => {
+    const list = snapshot?.carryTrades || [];
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (carrySortKey === 'instrument') {
+        cmp = COLLATOR.compare(a.instrument, b.instrument);
+      } else {
+        cmp = a[carrySortKey] - b[carrySortKey];
+      }
+      return carrySortDir === 'ascending' ? cmp : -cmp;
+    });
+  }, [snapshot?.carryTrades, carrySortKey, carrySortDir]);
+
+  const corrAssets = useMemo(() => {
+    const all = snapshot?.correlations.assets || [];
+    const subset = KEY_CORR_ASSETS.filter((sym) => all.includes(sym));
+    return subset.length > 0 ? subset : all.slice(0, 16);
+  }, [snapshot?.correlations.assets]);
 
   const topSetupsPreview = useMemo(
     () => [...scorecards].sort((a, b) => Math.abs(b.totalScore) - Math.abs(a.totalScore)).slice(0, 8),
@@ -224,6 +293,11 @@ export const EdgeFinderPage: React.FC = () => {
 
   const alignedCount = useMemo(
     () => scorecards.filter((s) => s.killzoneAlignment.alignmentStatus === 'ALIGNED').length,
+    [scorecards]
+  );
+
+  const cotExtremeCount = useMemo(
+    () => scorecards.filter((s) => s.cot.extremeFlag !== 'NONE').length,
     [scorecards]
   );
 
@@ -250,7 +324,7 @@ export const EdgeFinderPage: React.FC = () => {
       notes: editingEcon.notes
     });
     if (ok) {
-      setBannerNotice(`${editingEcon.currency} Central Bank & Macro profile updated — all 16 asset scores recalculated.`);
+      setBannerNotice(`${editingEcon.currency} Central Bank & Macro profile updated — all ${scorecards.length} asset scores & carry spreads recalculated.`);
       setEditingEcon(null);
       window.setTimeout(() => setBannerNotice(null), 4000);
     }
@@ -577,8 +651,10 @@ export const EdgeFinderPage: React.FC = () => {
                     {(
                       [
                         ['ALL', `All Assets (${scorecards.length})`],
-                        ['FOREX', 'Forex Pairs'],
+                        ['FOREX', '28 FX Pairs'],
                         ['FUTURES', 'Futures & Commodities'],
+                        ['CRYPTO', 'Crypto (BTC/ETH)'],
+                        ['EXTREME_COT', `52W COT Extremes (${cotExtremeCount})`],
                         ['ALIGNED', `Killzone Aligned (${alignedCount})`],
                         ['STRONG', 'Strong Bias (|Score| >= 5)'],
                         ['WATCHLIST', `★ Watchlist (${watchlist.length})`]
@@ -614,7 +690,7 @@ export const EdgeFinderPage: React.FC = () => {
                 >
                   <table className="ef-table">
                     <caption id="ef-scanner-caption">
-                      Manna EdgeFinder Institutional Matrix — Click any column header to sort or click a row to inspect the 11-pillar Asset Scorecard.
+                      Manna EdgeFinder Institutional Matrix ({scorecards.length} Assets) — Click any column header to sort or click a row to inspect the 11-pillar Asset Scorecard.
                     </caption>
                     <thead>
                       <tr>
@@ -658,6 +734,12 @@ export const EdgeFinderPage: React.FC = () => {
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('trendScore')}>
                             <span>Trend</span>
                             <span>{sortKey === 'trendScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                        <th scope="col" aria-sort={sortKey === 'volatilityPct' ? sortDir : undefined}>
+                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
+                            <span>Vol / MTF</span>
+                            <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'fundamentalScore' ? sortDir : undefined}>
@@ -748,6 +830,14 @@ export const EdgeFinderPage: React.FC = () => {
                               </span>
                             </td>
                             <td>
+                              <div className="ef-num" style={{ fontSize: '0.76rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
+                                {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR · {formatSigned(sc.technical.return5dPct, 1)}% 5D
+                              </div>
+                              <div style={{ fontSize: '0.68rem', color: '#a99bc9' }}>
+                                MTF {sc.technical.mtfAlignment.alignedCount}/4 · {sc.technical.volatilityPercentile30d}%ile Vol
+                              </div>
+                            </td>
+                            <td>
                               <span className="ef-heatmap-cell" style={scoreCellStyle(sc.fundamentalScore)}>
                                 {formatSigned(sc.fundamentalScore, 2)}
                               </span>
@@ -781,7 +871,7 @@ export const EdgeFinderPage: React.FC = () => {
                 {showCorrelations && (
                   <section className="ef-card ef-perf-section" aria-label="Cross-Asset Daily Return Correlations">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">30-Day Cross-Asset Return Correlation Matrix</h2>
+                      <h2 className="ef-card-title">30-Day Cross-Asset Return Correlation Matrix (Key Benchmarks)</h2>
                       <span className="ef-card-meta">Pearson r (-1.00 inverse to +1.00 coupled)</span>
                     </div>
                     <div className="ef-seasonality-grid">
@@ -789,16 +879,16 @@ export const EdgeFinderPage: React.FC = () => {
                         <thead>
                           <tr>
                             <th>Asset</th>
-                            {snapshot.correlations.assets.map((col) => (
+                            {corrAssets.map((col) => (
                               <th key={col}>{col}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {snapshot.correlations.assets.map((row) => (
+                          {corrAssets.map((row) => (
                             <tr key={row}>
                               <td>{row}</td>
-                              {snapshot.correlations.assets.map((col) => {
+                              {corrAssets.map((col) => {
                                 const val = snapshot.correlations.matrix[row]?.[col] ?? 0;
                                 const bg =
                                   row === col
@@ -895,13 +985,60 @@ export const EdgeFinderPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="ef-stat-box">
-                          <div className="ef-stat-label">RSI (14D)</div>
-                          <div className="ef-stat-val">{activeScorecard.technical.rsi14.toFixed(1)}</div>
+                          <div className="ef-stat-label">RSI (14D) / ADR%</div>
+                          <div className="ef-stat-val">
+                            {activeScorecard.technical.rsi14.toFixed(1)} · {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}%
+                          </div>
                         </div>
                         <div className="ef-stat-box">
-                          <div className="ef-stat-label">ATR (14D %)</div>
-                          <div className="ef-stat-val">{activeScorecard.technical.atrPct.toFixed(2)}%</div>
+                          <div className="ef-stat-label">5D / 20D Mom</div>
+                          <div
+                            className="ef-stat-val"
+                            style={{ color: activeScorecard.technical.return5dPct >= 0 ? '#69F0AE' : '#FF8A80' }}
+                          >
+                            {formatSigned(activeScorecard.technical.return5dPct, 1)}% / {formatSigned(activeScorecard.technical.return20dPct, 1)}%
+                          </div>
                         </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">30D Vol %ile</div>
+                          <div className="ef-stat-val">{activeScorecard.technical.volatilityPercentile30d}%ile</div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">52W COT Index</div>
+                          <div className="ef-stat-val" style={{ color: '#38bdf8' }}>
+                            {activeScorecard.cot.cotIndex52w.toFixed(1)}% (Z {activeScorecard.cot.cotZScore52w.toFixed(2)})
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+                        {(
+                          [
+                            ['5D', activeScorecard.technical.mtfAlignment.d5],
+                            ['20D', activeScorecard.technical.mtfAlignment.d20],
+                            ['50D', activeScorecard.technical.mtfAlignment.d50],
+                            ['Monthly', activeScorecard.technical.mtfAlignment.monthly]
+                          ] as Array<[string, 'Bullish' | 'Bearish' | 'Flat']>
+                        ).map(([tf, dir]) => (
+                          <div
+                            key={tf}
+                            style={{
+                              padding: '5px 6px',
+                              borderRadius: 6,
+                              textAlign: 'center',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              background:
+                                dir === 'Bullish'
+                                  ? 'rgba(0,230,118,0.14)'
+                                  : dir === 'Bearish'
+                                    ? 'rgba(255,82,82,0.14)'
+                                    : 'rgba(255,255,255,0.05)',
+                              color: dir === 'Bullish' ? '#69F0AE' : dir === 'Bearish' ? '#FF8A80' : '#cfc5e8'
+                            }}
+                          >
+                            {tf}: {dir}
+                          </div>
+                        ))}
                       </div>
                     </section>
 
@@ -950,7 +1087,7 @@ export const EdgeFinderPage: React.FC = () => {
                       <div className="ef-card-header">
                         <h2 className="ef-card-title">30-Day Price (Gold) vs Historical Edge Score (Cyan)</h2>
                         <span className="ef-card-meta">
-                          EMA20: {activeScorecard.technical.ema20} · EMA50: {activeScorecard.technical.ema50}
+                          EMA5: {activeScorecard.technical.ema5} · EMA20: {activeScorecard.technical.ema20} · EMA50: {activeScorecard.technical.ema50}
                         </span>
                       </div>
                       <HistoricalScorePriceSvg
@@ -986,6 +1123,194 @@ export const EdgeFinderPage: React.FC = () => {
               </div>
             )}
 
+            {/* TAB 2B: DEDICATED GOLD SCORECARD (REAL YIELDS / DXY / VIX / GC-SI / COT) */}
+            {activeTab === 'gold' && snapshot.goldScorecard && (
+              <div
+                role="tabpanel"
+                id="panel-gold"
+                aria-labelledby="tab-gold"
+                className="ef-tabpanel"
+              >
+                <div className="ef-deepdive-grid">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">COMEX Gold (GC / XAU) Edge Gauge</h2>
+                        <span className="ef-card-meta">7-Pillar Precious Metals Model</span>
+                      </div>
+                      <ScoreGaugeSvg
+                        score={snapshot.goldScorecard.totalScore}
+                        biasLabel={snapshot.goldScorecard.biasLabel}
+                      />
+                      <div style={{ textAlign: 'center', marginTop: 6, color: '#cfc5e8', fontSize: '0.86rem' }}>
+                        GCSpot/Fut <strong className="ef-num" style={{ color: '#ffffff' }}>${snapshot.goldScorecard.gcPrice.toFixed(2)}</strong>{' '}
+                        <span className="ef-num" style={{ color: snapshot.goldScorecard.gcChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                          ({formatSigned(snapshot.goldScorecard.gcChangePct, 2)}%)
+                        </span>
+                      </div>
+                    </section>
+
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">Macro Gold Inputs (Live)</h2>
+                        <span className="ef-card-meta">FRED + Yahoo + CFTC</span>
+                      </div>
+                      <div className="ef-sync-stats">
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">10Y TIPS Real Yield</div>
+                          <div className="ef-stat-val" style={{ color: snapshot.goldScorecard.realYield10y >= 2.2 ? '#FF8A80' : '#69F0AE' }}>
+                            {snapshot.goldScorecard.realYield10y.toFixed(2)}%
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">US Dollar Index (DXY)</div>
+                          <div className="ef-stat-val">{snapshot.goldScorecard.dxy.toFixed(2)}</div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">Gold / Silver Ratio</div>
+                          <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                            {snapshot.goldScorecard.goldSilverRatio.toFixed(1)}x
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">Silver (SI) / VIX</div>
+                          <div className="ef-stat-val">
+                            ${snapshot.goldScorecard.silverPrice.toFixed(2)} · {snapshot.goldScorecard.vix.toFixed(1)}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">30-Day COMEX Gold (Gold) vs US Dollar Index DXY (Cyan)</h2>
+                        <span className="ef-card-meta">52W COT Index: {snapshot.goldScorecard.cotIndex52w.toFixed(1)}%</span>
+                      </div>
+                      <GoldVsDxyChartSvg series={snapshot.goldScorecard.series30d} />
+                    </section>
+
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">7-Pillar Gold Model Attribution</h2>
+                        <span className="ef-card-meta">Real Rate · Dollar Inverse · Haven · COT</span>
+                      </div>
+                      <div className="ef-pill-grid">
+                        {snapshot.goldScorecard.drivers.map((d) => (
+                          <div key={d.key} className="ef-pillar-card">
+                            <div className="ef-pillar-top">
+                              <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9' }}>{d.category}</span>
+                              <span className="ef-heatmap-cell" style={scoreCellStyle(d.contribution)}>
+                                {formatSigned(d.contribution, 2)} (w={d.weight})
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{d.label}</div>
+                            <div style={{ fontSize: '0.77rem', color: '#b7a8d6', lineHeight: 1.4 }}>{d.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2C: CARRY TRADE SCANNER (ALL 28 FX PAIRS) */}
+            {activeTab === 'carry' && (
+              <div
+                role="tabpanel"
+                id="panel-carry"
+                aria-labelledby="tab-carry"
+                className="ef-tabpanel"
+              >
+                <div tabIndex={0} role="region" aria-labelledby="ef-carry-caption" className="ef-table-wrapper ef-perf-section">
+                  <table className="ef-table">
+                    <caption id="ef-carry-caption">
+                      G8 FX Carry Trade Scanner (All 28 Currency Pairs) — Ranked by Live BIS Central Bank Rate Differential &amp; Carry-to-ATR Efficiency.
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" aria-sort={carrySortKey === 'instrument' ? carrySortDir : undefined}>
+                          <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('instrument')}>
+                            <span>FX Pair</span>
+                            <span>{carrySortKey === 'instrument' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Base / Quote Rate</span></th>
+                        <th scope="col" aria-sort={carrySortKey === 'rateSpreadPct' ? carrySortDir : undefined}>
+                          <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('rateSpreadPct')}>
+                            <span>Yield Spread (bps)</span>
+                            <span>{carrySortKey === 'rateSpreadPct' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Optimal Carry Side</span></th>
+                        <th scope="col" aria-sort={carrySortKey === 'carryAtrRatio' ? carrySortDir : undefined}>
+                          <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('carryAtrRatio')}>
+                            <span>Carry / ATR Ratio</span>
+                            <span>{carrySortKey === 'carryAtrRatio' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                        <th scope="col" aria-sort={carrySortKey === 'assetTotalScore' ? carrySortDir : undefined}>
+                          <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('assetTotalScore')}>
+                            <span>Edge Score</span>
+                            <span>{carrySortKey === 'assetTotalScore' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Confluence &amp; Trend</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedCarryTrades.map((ct) => (
+                        <tr key={ct.instrument} onClick={() => handleSelectAssetForDeepDive(ct.instrument)}>
+                          <th scope="row">
+                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{ct.instrument}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>
+                              {ct.baseCurrency} vs {ct.quoteCurrency}
+                            </div>
+                          </th>
+                          <td className="ef-num">
+                            {ct.baseRate.toFixed(2)}% / {ct.quoteRate.toFixed(2)}%
+                          </td>
+                          <td>
+                            <span className="ef-heatmap-cell" style={scoreCellStyle(ct.rateSpreadPct)}>
+                              {ct.rateSpreadBps >= 0 ? `+${ct.rateSpreadBps}` : ct.rateSpreadBps} bps ({formatSigned(ct.rateSpreadPct, 2)}%)
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`ef-kz-pill ${
+                                ct.carryDirection === 'LONG'
+                                  ? 'ef-bias-buy'
+                                  : ct.carryDirection === 'SHORT'
+                                    ? 'ef-bias-sell'
+                                    : 'ef-kz-standby'
+                              }`}
+                            >
+                              {ct.carryDirection === 'NEUTRAL' ? 'FLAT SPREAD' : `POSITIVE CARRY ${ct.carryDirection}`}
+                            </span>
+                          </td>
+                          <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>
+                            {ct.carryAtrRatio.toFixed(2)}x
+                          </td>
+                          <td>
+                            <span className="ef-heatmap-cell" style={scoreCellStyle(ct.assetTotalScore)}>
+                              {formatSigned(ct.assetTotalScore, 1)} ({ct.biasLabel})
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`ef-kz-pill ${ct.alignedWithEdge ? 'ef-kz-aligned' : 'ef-kz-standby'}`}>
+                              {ct.alignedWithEdge ? 'CARRY + EDGE ALIGNED' : `TREND: ${ct.technicalTrend}`}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* TAB 3: COT SMART MONEY */}
             {activeTab === 'cot' && (
               <div
@@ -1001,7 +1326,7 @@ export const EdgeFinderPage: React.FC = () => {
                         12-Week Managed Money Net Positioning — {activeScorecard.instrument} ({activeScorecard.cot.contractName})
                       </h2>
                       <span className="ef-card-meta">
-                        Source: {activeScorecard.cot.source} · Report {activeScorecard.cot.reportDate}
+                        Source: {activeScorecard.cot.source} · 52W Index: {activeScorecard.cot.cotIndex52w.toFixed(1)}% · Z: {activeScorecard.cot.cotZScore52w.toFixed(2)} · Report {activeScorecard.cot.reportDate}
                       </span>
                     </div>
                     <div className="ef-filter-pills" style={{ marginBottom: 12 }}>
@@ -1026,19 +1351,19 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-cot-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-cot-caption">
-                      CFTC Commitments of Traders — Non-Commercial Institutional Futures Positioning Across All 16 Tracked Assets.
+                      CFTC Commitments of Traders — Non-Commercial &amp; Commercial Hedger Positioning + 52-Week Percentile Index Across All {scorecards.length} Tracked Assets.
                     </caption>
                     <thead>
                       <tr>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Instrument</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>CFTC Code</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Non-Comm Long</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Non-Comm Short</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Net Position</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>WoW Change</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Long %</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Non-Comm Long / Short</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Non-Comm Net (WoW)</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Commercial Hedgers Net</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>52W Index / Z-Score</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Spec Long %</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Open Interest</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>COT Bias</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>COT Bias &amp; Extreme</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1049,17 +1374,37 @@ export const EdgeFinderPage: React.FC = () => {
                             <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{sc.cot.reportDate}</div>
                           </th>
                           <td className="ef-num">{sc.cot.cftcCode}</td>
-                          <td className="ef-num" style={{ color: '#69F0AE' }}>{sc.cot.nonCommercialLong.toLocaleString()}</td>
-                          <td className="ef-num" style={{ color: '#FF8A80' }}>{sc.cot.nonCommercialShort.toLocaleString()}</td>
-                          <td className="ef-num" style={{ fontWeight: 700, color: sc.cot.nonCommercialNet >= 0 ? '#69F0AE' : '#FF8A80' }}>
-                            {sc.cot.nonCommercialNet >= 0 ? '+' : ''}{sc.cot.nonCommercialNet.toLocaleString()}
+                          <td className="ef-num">
+                            <span style={{ color: '#69F0AE' }}>{sc.cot.nonCommercialLong.toLocaleString()}</span> /{' '}
+                            <span style={{ color: '#FF8A80' }}>{sc.cot.nonCommercialShort.toLocaleString()}</span>
                           </td>
-                          <td className="ef-num" style={{ color: sc.cot.netChangeWoW >= 0 ? '#69F0AE' : '#FF8A80' }}>
-                            {sc.cot.netChangeWoW >= 0 ? '+' : ''}{sc.cot.netChangeWoW.toLocaleString()}
+                          <td className="ef-num">
+                            <div style={{ fontWeight: 700, color: sc.cot.nonCommercialNet >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                              {sc.cot.nonCommercialNet >= 0 ? '+' : ''}{sc.cot.nonCommercialNet.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: sc.cot.netChangeWoW >= 0 ? '#B9F6CA' : '#FFCDD2' }}>
+                              WoW {sc.cot.netChangeWoW >= 0 ? '+' : ''}{sc.cot.netChangeWoW.toLocaleString()}
+                            </div>
+                          </td>
+                          <td className="ef-num">
+                            <div style={{ fontWeight: 600, color: sc.cot.commercialNet >= 0 ? '#38bdf8' : '#ffb74d' }}>
+                              {sc.cot.commercialNet >= 0 ? '+' : ''}{sc.cot.commercialNet.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                              {sc.cot.commercialLongPct.toFixed(1)}% Comm Long
+                            </div>
+                          </td>
+                          <td className="ef-num">
+                            <div style={{ fontWeight: 700, color: sc.cot.cotIndex52w >= 80 ? '#69F0AE' : sc.cot.cotIndex52w <= 20 ? '#FF8A80' : '#DFC46B' }}>
+                              {sc.cot.cotIndex52w.toFixed(1)}%
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                              Z {sc.cot.cotZScore52w >= 0 ? '+' : ''}{sc.cot.cotZScore52w.toFixed(2)}
+                            </div>
                           </td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div className="ef-split-bar" style={{ width: 92 }}>
+                              <div className="ef-split-bar" style={{ width: 84 }}>
                                 <div className="ef-split-long" style={{ width: `${sc.cot.longPct}%` }} />
                                 <div className="ef-split-short" style={{ width: `${sc.cot.shortPct}%` }} />
                               </div>
@@ -1068,14 +1413,163 @@ export const EdgeFinderPage: React.FC = () => {
                           </td>
                           <td className="ef-num">{sc.cot.openInterest.toLocaleString()}</td>
                           <td>
-                            <span className="ef-heatmap-cell" style={scoreCellStyle(sc.cotScore)}>
-                              {sc.cot.sentimentLabel}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.cotScore)}>
+                                {sc.cot.sentimentLabel}
+                              </span>
+                              {sc.cot.extremeFlag !== 'NONE' && (
+                                <span
+                                  className={`ef-kz-pill ${sc.cot.extremeFlag === 'BULLISH_EXTREME' ? 'ef-bias-buy' : 'ef-kz-conflict'}`}
+                                  style={{ fontSize: '0.66rem' }}
+                                >
+                                  {sc.cot.extremeFlag.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3B: SMART MONEY TRACKER (SEC FORM 4, 13F WHALES, WALL STREET TARGETS) */}
+            {activeTab === 'smart_money' && snapshot.smartMoney && (
+              <div
+                role="tabpanel"
+                id="panel-smart_money"
+                aria-labelledby="tab-smart_money"
+                className="ef-tabpanel"
+              >
+                <div tabIndex={0} role="region" aria-labelledby="ef-targets-caption" className="ef-table-wrapper ef-perf-section">
+                  <table className="ef-table">
+                    <caption id="ef-targets-caption">
+                      Wall Street Institutional Analyst Consensus Targets Across Macro &amp; Sector Bellwethers (Live Yahoo Finance Consensus).
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Ticker</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Current Price</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Target Low</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Mean Consensus</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Target High</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Implied Upside</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Rating (Analysts)</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshot.smartMoney.bankAndStreetTargets.map((item) => (
+                        <tr key={item.ticker}>
+                          <th scope="row">
+                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{item.ticker}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{item.name}</div>
+                          </th>
+                          <td className="ef-num">${item.currentPrice.toFixed(2)}</td>
+                          <td className="ef-num" style={{ color: '#b7a8d6' }}>${item.targetLow.toFixed(2)}</td>
+                          <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>${item.targetMean.toFixed(2)}</td>
+                          <td className="ef-num" style={{ color: '#69F0AE' }}>${item.targetHigh.toFixed(2)}</td>
+                          <td>
+                            <span className="ef-heatmap-cell" style={scoreCellStyle(item.upsidePct / 5)}>
+                              {formatSigned(item.upsidePct, 1)}%
+                            </span>
+                          </td>
+                          <td>
+                            <span className="ef-kz-pill ef-kz-aligned" style={{ textTransform: 'uppercase' }}>
+                              {item.recommendationKey} ({item.analystsCount})
                             </span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="ef-two-col-grid">
+                  <div tabIndex={0} role="region" aria-labelledby="ef-insiders-caption" className="ef-table-wrapper ef-perf-section">
+                    <table className="ef-table">
+                      <caption id="ef-insiders-caption">
+                        SEC Form 4 Corporate Insider Filings (Live Officers &amp; Directors Buys/Sales).
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Ticker / Date</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Insider &amp; Role</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Action</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Shares / Value</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {snapshot.smartMoney.insiders.map((ins, i) => (
+                          <tr key={`${ins.ticker}-${ins.filerName}-${i}`}>
+                            <th scope="row">
+                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{ins.ticker}</div>
+                              <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{ins.date}</div>
+                            </th>
+                            <td>
+                              <div style={{ fontWeight: 600, color: '#e9e2fb', fontSize: '0.8rem' }}>{ins.filerName}</div>
+                              <div style={{ fontSize: '0.7rem', color: '#9f91c2' }}>{ins.relation}</div>
+                            </td>
+                            <td>
+                              <span
+                                className={`ef-kz-pill ${
+                                  ins.direction === 'BUY'
+                                    ? 'ef-bias-buy'
+                                    : ins.direction === 'SELL'
+                                      ? 'ef-bias-sell'
+                                      : 'ef-kz-standby'
+                                }`}
+                              >
+                                {ins.direction}
+                              </span>
+                            </td>
+                            <td className="ef-num">
+                              <div>{ins.shares.toLocaleString()} sh</div>
+                              <div style={{ fontSize: '0.72rem', color: '#DFC46B' }}>{formatUsdCompact(ins.valueUsd)}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div tabIndex={0} role="region" aria-labelledby="ef-whales-caption" className="ef-table-wrapper ef-perf-section">
+                    <table className="ef-table">
+                      <caption id="ef-whales-caption">
+                        13F Institutional Whale Holdings (Largest Reported Equity Stakes &amp; QoQ Change).
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Ticker / Report</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Institution</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Stake % (Chg)</span></th>
+                          <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Position Value</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {snapshot.smartMoney.whales.map((w, i) => (
+                          <tr key={`${w.ticker}-${w.holder}-${i}`}>
+                            <th scope="row">
+                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{w.ticker}</div>
+                              <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{w.reportDate}</div>
+                            </th>
+                            <td style={{ fontWeight: 600, color: '#e9e2fb', fontSize: '0.8rem' }}>{w.holder}</td>
+                            <td className="ef-num">
+                              <div>{w.pctHeld.toFixed(2)}%</div>
+                              <div style={{ fontSize: '0.7rem', color: w.pctChange >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                                {formatSigned(w.pctChange, 2)}% QoQ
+                              </div>
+                            </td>
+                            <td className="ef-num">
+                              <div style={{ fontWeight: 700, color: '#DFC46B' }}>{formatUsdCompact(w.valueUsd)}</div>
+                              <div style={{ fontSize: '0.7rem', color: '#9f91c2' }}>{w.position.toLocaleString()} sh</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -1244,21 +1738,135 @@ export const EdgeFinderPage: React.FC = () => {
                 aria-labelledby="tab-macro"
                 className="ef-tabpanel"
               >
+                {/* US Treasury Yield Curve & Live FRED Macro Valuation */}
+                {snapshot.macroInternals && (
+                  <div className="ef-two-col-grid">
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">US Treasury Yield Curve &amp; Intermarket Regime</h2>
+                        <span
+                          className={`ef-kz-pill ${
+                            snapshot.macroInternals.yieldCurve.curveRegime.includes('Inverted')
+                              ? 'ef-kz-conflict'
+                              : snapshot.macroInternals.yieldCurve.curveRegime.includes('Normal')
+                                ? 'ef-kz-aligned'
+                                : 'ef-kz-standby'
+                          }`}
+                        >
+                          {snapshot.macroInternals.yieldCurve.curveRegime}
+                        </span>
+                      </div>
+                      <YieldCurveSvg
+                        m3={snapshot.macroInternals.yieldCurve.m3}
+                        y2={snapshot.macroInternals.yieldCurve.y2}
+                        y5={snapshot.macroInternals.yieldCurve.y5}
+                        y10={snapshot.macroInternals.yieldCurve.y10}
+                        y30={snapshot.macroInternals.yieldCurve.y30}
+                        realYield10y={snapshot.macroInternals.yieldCurve.realYield10y}
+                        curveRegime={snapshot.macroInternals.yieldCurve.curveRegime}
+                      />
+                      <div className="ef-sync-stats" style={{ marginTop: 10 }}>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">10Y - 2Y Spread</div>
+                          <div
+                            className="ef-stat-val"
+                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y2y < 0 ? '#FF8A80' : '#69F0AE' }}
+                          >
+                            {formatSigned(snapshot.macroInternals.yieldCurve.spread10y2y, 2)}%
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">10Y - 3M Spread</div>
+                          <div
+                            className="ef-stat-val"
+                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y3m < 0 ? '#FF8A80' : '#69F0AE' }}
+                          >
+                            {formatSigned(snapshot.macroInternals.yieldCurve.spread10y3m, 2)}%
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">US Dollar Index (DXY)</div>
+                          <div className="ef-stat-val">
+                            {snapshot.macroInternals.dxy.toFixed(2)}{' '}
+                            <span style={{ fontSize: '0.72rem', color: snapshot.macroInternals.dxyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                              ({formatSigned(snapshot.macroInternals.dxyChangePct, 2)}%)
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">CBOE VIX / S&amp;P 500</div>
+                          <div className="ef-stat-val">
+                            {snapshot.macroInternals.vix.toFixed(1)} · {snapshot.macroInternals.sp500Price.toFixed(0)}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">Live FRED US Macro Health &amp; Valuation</h2>
+                        <span className="ef-card-meta">Updated {snapshot.macroInternals.fredUsMacro.updatedAt}</span>
+                      </div>
+                      <div className="ef-sync-stats">
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">Nonfarm Payrolls (PAYEMS)</div>
+                          <div className="ef-stat-val">{snapshot.macroInternals.fredUsMacro.nfpTotalK.toLocaleString()}K</div>
+                          <div style={{ fontSize: '0.7rem', color: snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                            MoM {snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK >= 0 ? '+' : ''}{snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK}K Jobs
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">Buffett Indicator (W5K/GDP)</div>
+                          <div
+                            className="ef-stat-val"
+                            style={{ color: snapshot.macroInternals.fredUsMacro.buffettIndicatorPct >= 160 ? '#FF8A80' : '#69F0AE' }}
+                          >
+                            {snapshot.macroInternals.fredUsMacro.buffettIndicatorPct.toFixed(1)}%
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                            {snapshot.macroInternals.fredUsMacro.buffettIndicatorPct >= 160 ? 'Stretched Valuation' : 'Fair Value Zone'}
+                          </div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">M2 Money Supply</div>
+                          <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                            ${(snapshot.macroInternals.fredUsMacro.m2Billions / 1000).toFixed(2)}T
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>FRED M2SL Liquidity</div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">US Housing Starts</div>
+                          <div className="ef-stat-val">{snapshot.macroInternals.fredUsMacro.housingStartsK.toLocaleString()}K</div>
+                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>SAAR Units (HOUST)</div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">US Nominal GDP</div>
+                          <div className="ef-stat-val">${(snapshot.macroInternals.fredUsMacro.nominalGdpBillions / 1000).toFixed(2)}T</div>
+                        </div>
+                        <div className="ef-stat-box">
+                          <div className="ef-stat-label">Wilshire 5000 Cap</div>
+                          <div className="ef-stat-val">${(snapshot.macroInternals.wilshire5000Price / 1000).toFixed(2)}T</div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
                 <div tabIndex={0} role="region" aria-labelledby="ef-macro-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-macro-caption">
-                      G8 Sovereign Economies &amp; Central Bank Policy Matrix — {isSuperAdmin ? 'Super Admin can edit macro parameters live.' : 'Live macro differential feeds.'}
+                      G8 Sovereign Economies, Central Bank Rate Probabilities &amp; Policy Matrix — {isSuperAdmin ? 'Super Admin can edit macro parameters live.' : 'Live macro differential feeds.'}
                     </caption>
                     <thead>
                       <tr>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Currency</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Policy Rate</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Stance / Next</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Implied Rate Odds</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>GDP QoQ</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>CPI / Core</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>PMI Mfg / Svc</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Unemp</span></th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Retail MoM</span></th>
                         <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Macro Score</span></th>
                         {isSuperAdmin && <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Governance</span></th>}
                       </tr>
@@ -1285,11 +1893,21 @@ export const EdgeFinderPage: React.FC = () => {
                             </span>
                             <div style={{ fontSize: '0.7rem', color: '#9f91c2', marginTop: 2 }}>{econ.nextMeeting}</div>
                           </td>
+                          <td>
+                            {econ.rateProbabilities ? (
+                              <div className="ef-num" style={{ fontSize: '0.73rem', lineHeight: 1.35 }}>
+                                <span style={{ color: '#69F0AE' }}>Hike {econ.rateProbabilities.hikePct}%</span> ·{' '}
+                                <span style={{ color: '#ffe082' }}>Hold {econ.rateProbabilities.holdPct}%</span> ·{' '}
+                                <span style={{ color: '#FF8A80' }}>Cut {econ.rateProbabilities.cutPct}%</span>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#9f91c2' }}>—</span>
+                            )}
+                          </td>
                           <td className="ef-num">{econ.gdpQoQ.toFixed(1)}%</td>
                           <td className="ef-num">{econ.cpiYoY.toFixed(1)}% / {econ.coreCpiYoY.toFixed(1)}%</td>
                           <td className="ef-num">{econ.pmiManufacturing.toFixed(1)} / {econ.pmiServices.toFixed(1)}</td>
                           <td className="ef-num">{econ.unemploymentRate.toFixed(1)}%</td>
-                          <td className="ef-num">{formatSigned(econ.retailSalesMoM, 1)}%</td>
                           <td>
                             <span className="ef-heatmap-cell" style={scoreCellStyle(econ.economicScore)}>
                               {formatSigned(econ.economicScore, 1)}
@@ -1312,6 +1930,81 @@ export const EdgeFinderPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* G8 Country Multi-Year Historical Macro Explorer */}
+                {(() => {
+                  const activeEcon =
+                    snapshot.economies.find((e) => e.currency === selectedHistoryCurrency) || snapshot.economies[0];
+                  if (!activeEcon) return null;
+                  return (
+                    <section className="ef-card ef-perf-section">
+                      <div className="ef-card-header">
+                        <h2 className="ef-card-title">
+                          {activeEcon.country} ({activeEcon.currency}) Multi-Year Sovereign Macro Trends
+                        </h2>
+                        <span className="ef-card-meta">12M BIS Policy Rate + 6Y World Bank WDI History</span>
+                      </div>
+                      <div className="ef-filter-pills" style={{ marginBottom: 12 }}>
+                        {snapshot.economies.map((e) => (
+                          <button
+                            key={e.currency}
+                            type="button"
+                            className={`ef-filter-btn ${activeEcon.currency === e.currency ? 'is-active' : ''}`}
+                            onClick={() => setSelectedHistoryCurrency(e.currency)}
+                          >
+                            {e.currency} ({e.country})
+                          </button>
+                        ))}
+                      </div>
+                      <div className="ef-pill-grid">
+                        <div className="ef-pillar-card">
+                          <div className="ef-pillar-top">
+                            <span style={{ fontWeight: 700, color: '#DFC46B', fontSize: '0.82rem' }}>12M Central Bank Policy Rate</span>
+                            <span className="ef-num">{activeEcon.rate.toFixed(2)}%</span>
+                          </div>
+                          <CountryHistoryTrendSvg
+                            points={(activeEcon.history?.rates || []).map((r) => ({ label: r.date, value: r.value }))}
+                            color="#DFC46B"
+                            ariaLabel={`${activeEcon.country} 12-month policy rate trajectory`}
+                          />
+                        </div>
+                        <div className="ef-pillar-card">
+                          <div className="ef-pillar-top">
+                            <span style={{ fontWeight: 700, color: '#69F0AE', fontSize: '0.82rem' }}>Multi-Year Real GDP Growth</span>
+                            <span className="ef-num">{activeEcon.gdpQoQ.toFixed(1)}%</span>
+                          </div>
+                          <CountryHistoryTrendSvg
+                            points={(activeEcon.history?.gdp || []).map((g) => ({ label: g.year, value: g.value }))}
+                            color="#00E676"
+                            ariaLabel={`${activeEcon.country} multi-year GDP growth`}
+                          />
+                        </div>
+                        <div className="ef-pillar-card">
+                          <div className="ef-pillar-top">
+                            <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.82rem' }}>Multi-Year Headline CPI YoY</span>
+                            <span className="ef-num">{activeEcon.cpiYoY.toFixed(1)}%</span>
+                          </div>
+                          <CountryHistoryTrendSvg
+                            points={(activeEcon.history?.cpi || []).map((c) => ({ label: c.year, value: c.value }))}
+                            color="#38bdf8"
+                            ariaLabel={`${activeEcon.country} multi-year CPI inflation`}
+                          />
+                        </div>
+                        <div className="ef-pillar-card">
+                          <div className="ef-pillar-top">
+                            <span style={{ fontWeight: 700, color: '#ffb74d', fontSize: '0.82rem' }}>Multi-Year Unemployment Rate</span>
+                            <span className="ef-num">{activeEcon.unemploymentRate.toFixed(1)}%</span>
+                          </div>
+                          <CountryHistoryTrendSvg
+                            points={(activeEcon.history?.unemployment || []).map((u) => ({ label: u.year, value: u.value }))}
+                            color="#ffb74d"
+                            ariaLabel={`${activeEcon.country} multi-year unemployment rate`}
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
 
                 {/* Live High-Impact Economic Calendar */}
                 <section className="ef-card ef-perf-section">

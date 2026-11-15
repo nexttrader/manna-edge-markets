@@ -29,6 +29,18 @@ export interface MacroEconomyData {
   retailSalesMoM: number;
   economicScore: number;
   surpriseScore: number;
+  rateProbabilities: {
+    hikePct: number;
+    holdPct: number;
+    cutPct: number;
+    impliedAction: 'Hike' | 'Hold' | 'Cut';
+  };
+  history: {
+    rates: Array<{ date: string; value: number }>;
+    gdp: Array<{ year: string; value: number }>;
+    cpi: Array<{ year: string; value: number }>;
+    unemployment: Array<{ year: string; value: number }>;
+  };
   notes: string;
   updatedAt: string;
 }
@@ -42,10 +54,17 @@ export interface CotPositioningRecord {
   nonCommercialLong: number;
   nonCommercialShort: number;
   nonCommercialNet: number;
+  commercialLong: number;
+  commercialShort: number;
+  commercialNet: number;
+  commercialLongPct: number;
   netChangeWoW: number;
   longPct: number;
   shortPct: number;
   openInterest: number;
+  cotIndex52w: number;
+  cotZScore52w: number;
+  extremeFlag: 'BULLISH_EXTREME' | 'BEARISH_EXTREME' | 'NONE';
   sentimentLabel: 'Strongly Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Strongly Bearish';
   cotScore: -1 | 0 | 1;
   history12w: Array<{ date: string; net: number; longPct: number }>;
@@ -111,7 +130,7 @@ export interface AssetEdgeScorecard {
   instrument: string;
   displayName: string;
   assetClass: 'forex' | 'futures';
-  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates';
+  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Crypto';
   baseCurrency: string;
   quoteCurrency: string;
   currentPrice: number;
@@ -132,6 +151,7 @@ export interface AssetEdgeScorecard {
     rows: TugOfWarRow[];
   };
   technical: {
+    ema5: number;
     ema20: number;
     ema50: number;
     rsi14: number;
@@ -141,12 +161,124 @@ export interface AssetEdgeScorecard {
     low30d: number;
     trendDirection: 'Bullish' | 'Bearish' | 'Ranging';
     distanceFromEma20Pct: number;
+    dayRangePctOfAtr: number;
+    volatilityPercentile30d: number;
+    return5dPct: number;
+    return20dPct: number;
+    mtfAlignment: {
+      d5: 'Bullish' | 'Bearish' | 'Flat';
+      d20: 'Bullish' | 'Bearish' | 'Flat';
+      d50: 'Bullish' | 'Bearish' | 'Flat';
+      monthly: 'Bullish' | 'Bearish' | 'Flat';
+      alignedCount: number;
+    };
   };
   cot: CotPositioningRecord;
   retailSentiment: RetailSentimentRecord;
   seasonality: SeasonalityRecord;
   killzoneAlignment: KillzoneAlignment;
   historicalSeries: HistoricalScorePoint[];
+}
+
+export interface CarryTradeItem {
+  instrument: string;
+  baseCurrency: EconomyCode;
+  quoteCurrency: EconomyCode;
+  baseRate: number;
+  quoteRate: number;
+  rateSpreadPct: number;
+  rateSpreadBps: number;
+  carryDirection: 'LONG' | 'SHORT' | 'NEUTRAL';
+  carryAtrRatio: number;
+  assetTotalScore: number;
+  biasLabel: EdgeBiasLabel;
+  alignedWithEdge: boolean;
+  technicalTrend: 'Bullish' | 'Bearish' | 'Ranging';
+}
+
+export interface MacroInternalsData {
+  yieldCurve: {
+    m3: number;
+    y2: number;
+    y5: number;
+    y10: number;
+    y30: number;
+    spread10y2y: number;
+    spread10y3m: number;
+    realYield10y: number;
+    curveRegime: 'Normal Steepening' | 'Flat Curve' | 'Inverted Curve';
+  };
+  vix: number;
+  dxy: number;
+  dxyChangePct: number;
+  sp500Price: number;
+  wilshire5000Price: number;
+  fredUsMacro: {
+    nfpTotalK: number;
+    nfpMonthlyChangeK: number;
+    housingStartsK: number;
+    m2Billions: number;
+    nominalGdpBillions: number;
+    buffettIndicatorPct: number;
+    updatedAt: string;
+  };
+  dxySeries30d: Array<{ date: string; close: number }>;
+  yieldsSource: 'LIVE_FRED_YAHOO' | 'PARTIAL';
+}
+
+export interface GoldScorecardData {
+  gcPrice: number;
+  gcChangePct: number;
+  silverPrice: number;
+  goldSilverRatio: number;
+  realYield10y: number;
+  dxy: number;
+  vix: number;
+  cotIndex52w: number;
+  totalScore: number;
+  biasLabel: EdgeBiasLabel;
+  drivers: FactorBreakdownItem[];
+  series30d: Array<{ date: string; goldPrice: number; dxyPrice: number }>;
+}
+
+export interface InsiderTradeItem {
+  ticker: string;
+  filerName: string;
+  relation: string;
+  transactionText: string;
+  direction: 'BUY' | 'SELL' | 'OTHER';
+  shares: number;
+  valueUsd: number;
+  date: string;
+}
+
+export interface InstitutionalWhaleItem {
+  ticker: string;
+  holder: string;
+  pctHeld: number;
+  position: number;
+  valueUsd: number;
+  pctChange: number;
+  reportDate: string;
+}
+
+export interface AnalystTargetItem {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  targetLow: number;
+  targetMean: number;
+  targetHigh: number;
+  upsidePct: number;
+  recommendationKey: string;
+  analystsCount: number;
+}
+
+export interface SmartMoneyData {
+  insiders: InsiderTradeItem[];
+  whales: InstitutionalWhaleItem[];
+  bankAndStreetTargets: AnalystTargetItem[];
+  updatedAt: string;
 }
 
 export interface CurrencyStrengthItem {
@@ -186,6 +318,10 @@ export interface EdgeFinderSnapshot {
   economies: MacroEconomyData[];
   currencyStrength: CurrencyStrengthItem[];
   riskGauge: RiskGauge;
+  carryTrades: CarryTradeItem[];
+  goldScorecard: GoldScorecardData;
+  macroInternals: MacroInternalsData;
+  smartMoney: SmartMoneyData;
   correlations: {
     assets: string[];
     matrix: Record<string, Record<string, number>>;
@@ -202,6 +338,8 @@ export interface EdgeFinderSnapshot {
   syncStatus: {
     cftcSource: 'CFTC_LIVE' | 'INSTITUTIONAL_MODEL';
     macroSource?: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
+    yieldsSource: 'LIVE_FRED_YAHOO' | 'PARTIAL';
+    smartMoneyCount: number;
     livePriceCount: number;
     totalAssets: number;
     cacheAgeSeconds: number;
