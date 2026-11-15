@@ -201,6 +201,7 @@ export interface EdgeFinderSnapshot {
   };
   syncStatus: {
     cftcSource: 'CFTC_LIVE' | 'INSTITUTIONAL_MODEL';
+    macroSource?: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
     livePriceCount: number;
     totalAssets: number;
     cacheAgeSeconds: number;

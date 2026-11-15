@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import YahooFinance from 'yahoo-finance2';
 import { queryDb } from '../db/database';
 import { getAllActiveSetups } from '../db/queries';
 import { Candle, EdgeSetup } from '../discovery/types';
@@ -188,6 +189,7 @@ export interface EdgeFinderSnapshot {
   };
   syncStatus: {
     cftcSource: 'CFTC_LIVE' | 'INSTITUTIONAL_MODEL';
+    macroSource?: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
     livePriceCount: number;
     totalAssets: number;
     cacheAgeSeconds: number;
@@ -198,6 +200,31 @@ const ROLLOUT_KEY = 'edge_finder_rollout';
 const MACRO_OVERRIDES_KEY = 'edge_finder_macro_overrides';
 const SNAPSHOT_FILE = path.join(process.cwd(), 'edge_finder_settings_snapshot.json');
 const CFTC_ENDPOINT = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
+const BIS_CBPOL_ENDPOINT =
+  'https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/M.US+XM+GB+JP+AU+CA+CH+NZ?lastNObservations=3&format=sdmx-json';
+const WB_MACRO_ENDPOINT =
+  'https://api.worldbank.org/v2/country/USA;EMU;GBR;JPN;AUS;CAN;CHE;NZL/indicator/FP.CPI.TOTL.ZG;SL.UEM.TOTL.ZS;NY.GDP.MKTP.KD.ZG?source=2&mrnev=1&format=json&per_page=100';
+
+const yahooClient = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+
+const YAHOO_SYMBOL_MAP: Record<string, string> = {
+  'EUR/USD': 'EURUSD=X',
+  'GBP/USD': 'GBPUSD=X',
+  'USD/JPY': 'JPY=X',
+  'AUD/USD': 'AUDUSD=X',
+  'USD/CAD': 'CAD=X',
+  'EUR/GBP': 'EURGBP=X',
+  'GBP/JPY': 'GBPJPY=X',
+  'EUR/JPY': 'EURJPY=X',
+  ES: 'ES=F',
+  NQ: 'NQ=F',
+  YM: 'YM=F',
+  RTY: 'RTY=F',
+  GC: 'GC=F',
+  SI: 'SI=F',
+  CL: 'CL=F',
+  ZN: 'ZN=F'
+};
 
 interface AssetDefinition {
   instrument: string;
@@ -206,17 +233,13 @@ interface AssetDefinition {
   category: AssetEdgeScorecard['category'];
   baseCurrency: string;
   quoteCurrency: string;
-  referencePrice: number;
   decimals: number;
   cftcCode: string;
+  baseCftcCode?: string;
+  quoteCftcCode?: string;
   contractName: string;
-  baseCotNet: number;
-  baseCotLongPct: number;
-  baseRetailLongPct: number;
   bestKillzone: 'ASIA' | 'LONDON' | 'NY_AM' | 'NY_PM';
   killzoneNotes: string;
-  monthlyReturns10Y: number[];
-  monthlyWinRate10Y: number[];
 }
 
 export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
@@ -227,17 +250,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Major FX',
     baseCurrency: 'EUR',
     quoteCurrency: 'USD',
-    referencePrice: 1.0845,
     decimals: 5,
     cftcCode: '099741',
     contractName: 'EURO FX - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: 41200,
-    baseCotLongPct: 58.4,
-    baseRetailLongPct: 64.2,
     bestKillzone: 'LONDON',
-    killzoneNotes: 'Highest institutional displacement during London Open (02:00-05:00 NY) & NY AM overlap.',
-    monthlyReturns10Y: [-0.42, -0.31, 0.28, 0.65, -0.58, 0.72, 0.54, -0.21, -0.68, -0.35, -0.18, 1.12],
-    monthlyWinRate10Y: [40, 40, 60, 70, 30, 70, 60, 50, 30, 40, 50, 80]
+    killzoneNotes: 'Highest institutional displacement during London Open (02:00-05:00 NY) & NY AM overlap.'
   },
   {
     instrument: 'GBP/USD',
@@ -246,17 +263,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Major FX',
     baseCurrency: 'GBP',
     quoteCurrency: 'USD',
-    referencePrice: 1.2715,
     decimals: 5,
     cftcCode: '096742',
     contractName: 'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: 54800,
-    baseCotLongPct: 63.1,
-    baseRetailLongPct: 53.4,
     bestKillzone: 'LONDON',
-    killzoneNotes: 'Sharp liquidity sweeps at 02:30-04:00 NY prior to FTSE/Gilt cash expansion.',
-    monthlyReturns10Y: [0.34, -0.45, 0.18, 1.18, -0.62, 0.24, 0.76, -0.51, -0.84, 0.29, 0.41, 0.89],
-    monthlyWinRate10Y: [60, 40, 50, 80, 30, 60, 70, 40, 30, 60, 60, 70]
+    killzoneNotes: 'Sharp liquidity sweeps at 02:30-04:00 NY prior to FTSE/Gilt cash expansion.'
   },
   {
     instrument: 'USD/JPY',
@@ -265,17 +276,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Major FX',
     baseCurrency: 'USD',
     quoteCurrency: 'JPY',
-    referencePrice: 152.85,
     decimals: 3,
     cftcCode: '097741',
     contractName: 'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: -62400,
-    baseCotLongPct: 37.8,
-    baseRetailLongPct: 34.6,
     bestKillzone: 'ASIA',
-    killzoneNotes: 'Tokyo Fix (19:55 NY) & NY AM US10Y yield auction drive trend continuations.',
-    monthlyReturns10Y: [-0.22, 0.48, 0.56, 0.71, 0.34, 0.82, -0.58, -0.44, 0.69, 0.74, 0.52, -0.64],
-    monthlyWinRate10Y: [40, 60, 70, 70, 60, 70, 30, 40, 70, 70, 60, 30]
+    killzoneNotes: 'Tokyo Fix (19:55 NY) & NY AM US10Y yield auction drive trend continuations.'
   },
   {
     instrument: 'AUD/USD',
@@ -284,17 +289,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Major FX',
     baseCurrency: 'AUD',
     quoteCurrency: 'USD',
-    referencePrice: 0.658,
     decimals: 5,
     cftcCode: '232741',
     contractName: 'AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: 18900,
-    baseCotLongPct: 54.6,
-    baseRetailLongPct: 68.5,
     bestKillzone: 'ASIA',
-    killzoneNotes: 'Tracks RBA cash prints & China/Asia equity risk open at 20:00-22:30 NY.',
-    monthlyReturns10Y: [-0.52, 0.24, 0.31, 0.94, -0.48, 0.56, 0.44, -0.78, -0.62, 0.19, 0.68, 1.05],
-    monthlyWinRate10Y: [40, 60, 50, 70, 40, 60, 60, 30, 30, 50, 70, 80]
+    killzoneNotes: 'Tracks RBA cash prints & China/Asia equity risk open at 20:00-22:30 NY.'
   },
   {
     instrument: 'USD/CAD',
@@ -303,17 +302,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Major FX',
     baseCurrency: 'USD',
     quoteCurrency: 'CAD',
-    referencePrice: 1.3895,
     decimals: 5,
     cftcCode: '090741',
     contractName: 'CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: -48500,
-    baseCotLongPct: 39.2,
-    baseRetailLongPct: 36.1,
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'Dual North American 08:30 NY macro releases & WTI Crude correlation spikes.',
-    monthlyReturns10Y: [0.46, 0.28, -0.19, -0.78, 0.52, -0.61, -0.18, 0.64, 0.58, 0.32, 0.41, -0.49],
-    monthlyWinRate10Y: [60, 60, 40, 30, 70, 30, 40, 70, 70, 60, 60, 40]
+    killzoneNotes: 'Dual North American 08:30 NY macro releases & WTI Crude correlation spikes.'
   },
   {
     instrument: 'EUR/GBP',
@@ -322,17 +315,13 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Cross FX',
     baseCurrency: 'EUR',
     quoteCurrency: 'GBP',
-    referencePrice: 0.8528,
     decimals: 5,
     cftcCode: '099741',
-    contractName: 'EURO FX vs BRITISH POUND CROSS',
-    baseCotNet: -13600,
-    baseCotLongPct: 45.2,
-    baseRetailLongPct: 66.8,
+    baseCftcCode: '099741',
+    quoteCftcCode: '096742',
+    contractName: 'EURO FX vs BRITISH POUND CFTC LEG PAIR',
     bestKillzone: 'LONDON',
-    killzoneNotes: 'Tight mean-reversion sweeps between 02:00 and 05:00 NY around BoE/ECB repricing.',
-    monthlyReturns10Y: [-0.62, 0.14, 0.08, -0.44, 0.19, 0.41, -0.22, 0.34, 0.18, -0.46, -0.52, 0.24],
-    monthlyWinRate10Y: [30, 50, 50, 30, 60, 60, 40, 60, 50, 30, 30, 60]
+    killzoneNotes: 'Tight mean-reversion sweeps between 02:00 and 05:00 NY around BoE/ECB repricing.'
   },
   {
     instrument: 'GBP/JPY',
@@ -341,17 +330,13 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Cross FX',
     baseCurrency: 'GBP',
     quoteCurrency: 'JPY',
-    referencePrice: 194.35,
     decimals: 3,
     cftcCode: '096742',
-    contractName: 'BRITISH POUND vs JAPANESE YEN CROSS',
-    baseCotNet: 117200,
-    baseCotLongPct: 69.5,
-    baseRetailLongPct: 33.8,
+    baseCftcCode: '096742',
+    quoteCftcCode: '097741',
+    contractName: 'BRITISH POUND vs JAPANESE YEN CFTC LEG PAIR',
     bestKillzone: 'LONDON',
-    killzoneNotes: 'High-beta risk proxy; London Open expansions often deliver 1.5x daily ADR.',
-    monthlyReturns10Y: [0.18, 0.12, 0.72, 1.64, -0.34, 0.98, 0.21, -0.89, -0.22, 0.96, 0.88, 0.26],
-    monthlyWinRate10Y: [50, 50, 70, 80, 40, 70, 60, 30, 40, 70, 70, 60]
+    killzoneNotes: 'High-beta risk proxy; London Open expansions often deliver 1.5x daily ADR.'
   },
   {
     instrument: 'EUR/JPY',
@@ -360,17 +345,13 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Cross FX',
     baseCurrency: 'EUR',
     quoteCurrency: 'JPY',
-    referencePrice: 165.75,
     decimals: 3,
     cftcCode: '099741',
-    contractName: 'EURO FX vs JAPANESE YEN CROSS',
-    baseCotNet: 103600,
-    baseCotLongPct: 66.2,
-    baseRetailLongPct: 38.4,
+    baseCftcCode: '099741',
+    quoteCftcCode: '097741',
+    contractName: 'EURO FX vs JAPANESE YEN CFTC LEG PAIR',
     bestKillzone: 'LONDON',
-    killzoneNotes: 'Strong carry differential sensitivity across European & NY morning bond auctions.',
-    monthlyReturns10Y: [-0.56, 0.18, 0.78, 1.28, -0.21, 1.44, -0.06, -0.62, -0.04, 0.39, 0.34, 0.48],
-    monthlyWinRate10Y: [40, 50, 70, 70, 40, 80, 50, 30, 50, 60, 60, 60]
+    killzoneNotes: 'Strong carry differential sensitivity across European & NY morning bond auctions.'
   },
   {
     instrument: 'ES',
@@ -379,17 +360,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Equity Index',
     baseCurrency: 'SPX',
     quoteCurrency: 'USD',
-    referencePrice: 5985.5,
     decimals: 2,
     cftcCode: '13874A',
     contractName: 'E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: 88400,
-    baseCotLongPct: 61.4,
-    baseRetailLongPct: 39.5,
     bestKillzone: 'NY_AM',
-    killzoneNotes: '09:30 NY Cash Equities Open & 10:00 Silver Bullet windows anchor primary displacement.',
-    monthlyReturns10Y: [1.45, 0.22, 1.62, 2.35, 0.92, 1.38, 2.64, -0.28, -1.85, 1.42, 3.12, 1.48],
-    monthlyWinRate10Y: [60, 60, 70, 80, 70, 70, 80, 50, 30, 60, 80, 70]
+    killzoneNotes: '09:30 NY Cash Equities Open & 10:00 Silver Bullet windows anchor primary displacement.'
   },
   {
     instrument: 'NQ',
@@ -398,17 +373,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Equity Index',
     baseCurrency: 'NDX',
     quoteCurrency: 'USD',
-    referencePrice: 21140.25,
     decimals: 2,
     cftcCode: '209742',
     contractName: 'NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: 44600,
-    baseCotLongPct: 60.2,
-    baseRetailLongPct: 37.2,
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'Mega-cap tech flows at 09:30-11:30 NY; sensitive to real yield & CPI surprises.',
-    monthlyReturns10Y: [2.38, 0.54, 1.94, 2.68, 1.85, 2.12, 3.42, 0.45, -2.14, 1.92, 3.85, 1.72],
-    monthlyWinRate10Y: [70, 60, 70, 80, 70, 70, 90, 60, 30, 70, 80, 70]
+    killzoneNotes: 'Mega-cap tech flows at 09:30-11:30 NY; sensitive to real yield & CPI surprises.'
   },
   {
     instrument: 'YM',
@@ -417,17 +386,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Equity Index',
     baseCurrency: 'DJI',
     quoteCurrency: 'USD',
-    referencePrice: 43890.0,
     decimals: 0,
     cftcCode: '124603',
-    contractName: 'DOW JONES INDUSTRIAL AVG - CBOT',
-    baseCotNet: 21400,
-    baseCotLongPct: 57.1,
-    baseRetailLongPct: 44.8,
+    contractName: 'DJIA x $5 - CHICAGO BOARD OF TRADE',
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'Value/cyclical sector rotation benchmark during NY AM & PM Power Hour.',
-    monthlyReturns10Y: [0.94, 0.18, 1.12, 2.04, 0.48, 0.96, 2.15, -0.41, -1.62, 1.38, 2.94, 1.22],
-    monthlyWinRate10Y: [60, 50, 60, 80, 60, 70, 80, 40, 30, 60, 80, 70]
+    killzoneNotes: 'Value/cyclical sector rotation benchmark during NY AM & PM Power Hour.'
   },
   {
     instrument: 'RTY',
@@ -436,17 +399,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Equity Index',
     baseCurrency: 'RUT',
     quoteCurrency: 'USD',
-    referencePrice: 2315.4,
     decimals: 1,
     cftcCode: '239742',
     contractName: 'RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE',
-    baseCotNet: -14800,
-    baseCotLongPct: 45.6,
-    baseRetailLongPct: 61.8,
     bestKillzone: 'NY_PM',
-    killzoneNotes: 'High sensitivity to domestic PMI, regional banking liquidity, and NY PM closing sweeps.',
-    monthlyReturns10Y: [0.42, 0.68, 0.44, 1.56, 0.34, 1.18, 2.42, -0.82, -2.28, 0.86, 4.18, 1.65],
-    monthlyWinRate10Y: [50, 60, 50, 70, 50, 60, 80, 40, 20, 60, 80, 70]
+    killzoneNotes: 'High sensitivity to domestic PMI, regional banking liquidity, and NY PM closing sweeps.'
   },
   {
     instrument: 'GC',
@@ -455,17 +412,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Metals',
     baseCurrency: 'XAU',
     quoteCurrency: 'USD',
-    referencePrice: 2684.6,
     decimals: 2,
     cftcCode: '088691',
     contractName: 'GOLD - COMMODITY EXCHANGE INC.',
-    baseCotNet: 248500,
-    baseCotLongPct: 74.2,
-    baseRetailLongPct: 41.2,
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'LBMA 03:00 NY & COMEX 08:20-10:30 NY opens produce textbook FVG displacement.',
-    monthlyReturns10Y: [2.42, 0.34, 0.62, 1.38, 0.14, 0.28, 1.84, 1.12, -1.48, 0.64, -0.22, 1.94],
-    monthlyWinRate10Y: [80, 60, 60, 70, 50, 50, 70, 70, 30, 60, 40, 80]
+    killzoneNotes: 'LBMA 03:00 NY & COMEX 08:20-10:30 NY opens produce textbook FVG displacement.'
   },
   {
     instrument: 'SI',
@@ -474,17 +425,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Metals',
     baseCurrency: 'XAG',
     quoteCurrency: 'USD',
-    referencePrice: 31.42,
     decimals: 3,
     cftcCode: '084691',
     contractName: 'SILVER - COMMODITY EXCHANGE INC.',
-    baseCotNet: 52400,
-    baseCotLongPct: 68.8,
-    baseRetailLongPct: 65.4,
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'High-beta metals amplification; watch SMT divergence against GC at London/NY opens.',
-    monthlyReturns10Y: [2.18, 0.16, 0.42, 1.95, -0.35, -0.18, 2.74, 0.92, -2.35, 1.14, 0.42, 2.48],
-    monthlyWinRate10Y: [70, 50, 50, 70, 40, 50, 70, 60, 30, 60, 50, 70]
+    killzoneNotes: 'High-beta metals amplification; watch SMT divergence against GC at London/NY opens.'
   },
   {
     instrument: 'CL',
@@ -493,17 +438,11 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Energy',
     baseCurrency: 'WTI',
     quoteCurrency: 'USD',
-    referencePrice: 70.65,
     decimals: 2,
     cftcCode: '067651',
-    contractName: 'WTI FINANCIAL CRUDE OIL - NEW YORK MERCANTILE EXCHANGE',
-    baseCotNet: 164200,
-    baseCotLongPct: 61.5,
-    baseRetailLongPct: 69.2,
+    contractName: 'WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE',
     bestKillzone: 'NY_AM',
-    killzoneNotes: 'NYMEX 09:00 NY pit & Wednesday 10:30 EIA inventories govern institutional liquidity.',
-    monthlyReturns10Y: [1.85, 1.42, 1.24, 3.12, 1.65, 2.28, -0.94, -1.86, -1.12, -0.68, -2.42, 0.85],
-    monthlyWinRate10Y: [60, 60, 60, 80, 70, 70, 40, 30, 40, 50, 30, 60]
+    killzoneNotes: 'NYMEX 09:00 NY pit & Wednesday 10:30 EIA inventories govern institutional liquidity.'
   },
   {
     instrument: 'ZN',
@@ -512,200 +451,73 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     category: 'Rates',
     baseCurrency: 'UST10',
     quoteCurrency: 'USD',
-    referencePrice: 110.28,
     decimals: 3,
     cftcCode: '043602',
     contractName: 'UST 10Y NOTE - CHICAGO BOARD OF TRADE',
-    baseCotNet: -428000,
-    baseCotLongPct: 34.1,
-    baseRetailLongPct: 58.6,
     bestKillzone: 'NY_AM',
-    killzoneNotes: '08:30 NY CPI/NFP & 13:00 NY Treasury auctions anchor macro rate volatility.',
-    monthlyReturns10Y: [0.44, -0.52, 0.28, -0.34, 0.42, 0.31, 0.48, 0.36, -0.64, -0.48, 0.56, 0.18],
-    monthlyWinRate10Y: [60, 30, 60, 40, 60, 60, 70, 60, 30, 40, 60, 50]
+    killzoneNotes: '08:30 NY CPI/NFP & 13:00 NY Treasury auctions anchor macro rate volatility.'
   }
 ];
 
-const DEFAULT_MACRO_ECONOMIES: MacroEconomyData[] = [
-  {
-    currency: 'USD',
-    country: 'United States',
-    centralBank: 'Federal Reserve (FOMC)',
-    rate: 4.50,
-    nextMeeting: 'Dec 18',
-    rateExpectation: 'Hold',
-    stance: 'Hawkish',
-    gdpQoQ: 2.8,
-    cpiYoY: 2.6,
-    coreCpiYoY: 3.3,
-    pmiManufacturing: 48.5,
-    pmiServices: 56.0,
-    unemploymentRate: 4.1,
-    retailSalesMoM: 0.4,
-    economicScore: 4.5,
-    surpriseScore: 0.5,
-    notes: 'Resilient labor & services consumption keep real yields elevated vs G8 peers.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'EUR',
-    country: 'Eurozone',
-    centralBank: 'European Central Bank (ECB)',
-    rate: 3.25,
-    nextMeeting: 'Dec 12',
-    rateExpectation: 'Cut',
-    stance: 'Dovish',
-    gdpQoQ: 0.9,
-    cpiYoY: 2.0,
-    coreCpiYoY: 2.7,
-    pmiManufacturing: 46.0,
-    pmiServices: 51.6,
-    unemploymentRate: 6.3,
-    retailSalesMoM: 0.5,
-    economicScore: -2.0,
-    surpriseScore: -0.3,
-    notes: 'Core industrial softness favors gradual ECB easing cycle toward neutral.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'GBP',
-    country: 'United Kingdom',
-    centralBank: 'Bank of England (BoE)',
-    rate: 4.75,
-    nextMeeting: 'Dec 19',
-    rateExpectation: 'Hold',
-    stance: 'Hawkish',
-    gdpQoQ: 1.1,
-    cpiYoY: 2.3,
-    coreCpiYoY: 3.3,
-    pmiManufacturing: 49.9,
-    pmiServices: 52.0,
-    unemploymentRate: 4.3,
-    retailSalesMoM: 0.3,
-    economicScore: 3.0,
-    surpriseScore: 0.3,
-    notes: 'Sticky services inflation supports higher UK terminal carry relative to EUR.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'JPY',
-    country: 'Japan',
-    centralBank: 'Bank of Japan (BoJ)',
-    rate: 0.25,
-    nextMeeting: 'Dec 19',
-    rateExpectation: 'Hike',
-    stance: 'Hawkish',
-    gdpQoQ: 0.9,
-    cpiYoY: 2.5,
-    coreCpiYoY: 2.3,
-    pmiManufacturing: 49.2,
-    pmiServices: 49.7,
-    unemploymentRate: 2.4,
-    retailSalesMoM: 0.1,
-    economicScore: 1.0,
-    surpriseScore: 0.2,
-    notes: 'Shunto wage momentum builds case for incremental normalization despite wide rate gap.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'AUD',
-    country: 'Australia',
-    centralBank: 'Reserve Bank of Australia (RBA)',
-    rate: 4.35,
-    nextMeeting: 'Dec 10',
-    rateExpectation: 'Hold',
-    stance: 'Neutral',
-    gdpQoQ: 1.0,
-    cpiYoY: 2.8,
-    coreCpiYoY: 3.5,
-    pmiManufacturing: 47.3,
-    pmiServices: 51.0,
-    unemploymentRate: 4.1,
-    retailSalesMoM: 0.1,
-    economicScore: 1.5,
-    surpriseScore: 0.0,
-    notes: 'Trimmed-mean CPI remains above band; tightly levered to global metals & China beta.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'CAD',
-    country: 'Canada',
-    centralBank: 'Bank of Canada (BoC)',
-    rate: 3.75,
-    nextMeeting: 'Dec 11',
-    rateExpectation: 'Cut',
-    stance: 'Dovish',
-    gdpQoQ: 1.0,
-    cpiYoY: 2.0,
-    coreCpiYoY: 2.4,
-    pmiManufacturing: 51.1,
-    pmiServices: 50.4,
-    unemploymentRate: 6.5,
-    retailSalesMoM: 0.4,
-    economicScore: -1.5,
-    surpriseScore: -0.2,
-    notes: 'Slack in Canadian unemployment keeps BoC ahead of Fed on rate-cut pace.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'CHF',
-    country: 'Switzerland',
-    centralBank: 'Swiss National Bank (SNB)',
-    rate: 1.00,
-    nextMeeting: 'Dec 12',
-    rateExpectation: 'Cut',
-    stance: 'Dovish',
-    gdpQoQ: 1.8,
-    cpiYoY: 0.6,
-    coreCpiYoY: 0.8,
-    pmiManufacturing: 49.9,
-    pmiServices: 51.4,
-    unemploymentRate: 2.6,
-    retailSalesMoM: 0.2,
-    economicScore: -0.5,
-    surpriseScore: 0.0,
-    notes: 'Disinflation allows low policy rate; demand surges mainly during global Risk-Off.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    currency: 'NZD',
-    country: 'New Zealand',
-    centralBank: 'Reserve Bank of New Zealand (RBNZ)',
-    rate: 4.75,
-    nextMeeting: 'Nov 27',
-    rateExpectation: 'Cut',
-    stance: 'Dovish',
-    gdpQoQ: -0.2,
-    cpiYoY: 2.2,
-    coreCpiYoY: 2.9,
-    pmiManufacturing: 45.8,
-    pmiServices: 46.0,
-    unemploymentRate: 4.8,
-    retailSalesMoM: -0.3,
-    economicScore: -3.5,
-    surpriseScore: -0.4,
-    notes: 'Soft domestic activity & PMI contraction incentivize front-loaded RBNZ easing.',
-    updatedAt: new Date().toISOString()
-  }
+const EXTRA_G8_CFTC_CODES = ['092741', '112741'];
+
+interface EconomyMeta {
+  currency: EconomyCode;
+  country: string;
+  centralBank: string;
+  bisCode: string;
+  wbCode: string;
+  nextMeeting: string;
+}
+
+const G8_METADATA: EconomyMeta[] = [
+  { currency: 'USD', country: 'United States', centralBank: 'Federal Reserve (FOMC)', bisCode: 'US', wbCode: 'USA', nextMeeting: 'FOMC Scheduled' },
+  { currency: 'EUR', country: 'Eurozone', centralBank: 'European Central Bank (ECB)', bisCode: 'XM', wbCode: 'EMU', nextMeeting: 'ECB Governing Council' },
+  { currency: 'GBP', country: 'United Kingdom', centralBank: 'Bank of England (BoE)', bisCode: 'GB', wbCode: 'GBR', nextMeeting: 'BoE MPC Meeting' },
+  { currency: 'JPY', country: 'Japan', centralBank: 'Bank of Japan (BoJ)', bisCode: 'JP', wbCode: 'JPN', nextMeeting: 'BoJ Policy Board' },
+  { currency: 'AUD', country: 'Australia', centralBank: 'Reserve Bank of Australia (RBA)', bisCode: 'AU', wbCode: 'AUS', nextMeeting: 'RBA Board' },
+  { currency: 'CAD', country: 'Canada', centralBank: 'Bank of Canada (BoC)', bisCode: 'CA', wbCode: 'CAN', nextMeeting: 'BoC Policy Decision' },
+  { currency: 'CHF', country: 'Switzerland', centralBank: 'Swiss National Bank (SNB)', bisCode: 'CH', wbCode: 'CHE', nextMeeting: 'SNB Quarterly Assessment' },
+  { currency: 'NZD', country: 'New Zealand', centralBank: 'Reserve Bank of New Zealand (RBNZ)', bisCode: 'NZ', wbCode: 'NZL', nextMeeting: 'RBNZ OCR Review' }
 ];
+
+interface CotWeeklyRow {
+  reportDate: string;
+  noncommLong: number;
+  noncommShort: number;
+  noncommNet: number;
+  nonreptLong: number;
+  nonreptShort: number;
+  openInterest: number;
+}
 
 interface CachedCotRaw {
   fetchedAt: number;
-  byCode: Record<string, {
-    reportDate: string;
-    long: number;
-    short: number;
-    net: number;
-    prevNet: number;
-    openInterest: number;
-    history: Array<{ date: string; net: number; longPct: number }>;
-  }>;
+  byCode: Record<string, CotWeeklyRow[]>;
+}
+
+interface CachedSeasonalityEntry {
+  fetchedAt: number;
+  monthlyReturns10Y: number[];
+  monthlyWinRate10Y: number[];
+}
+
+interface CachedLiveMacro {
+  fetchedAt: number;
+  source: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
+  bisRates: Partial<Record<EconomyCode, { rate: number; prevRate: number }>>;
+  wbIndicators: Partial<Record<EconomyCode, { cpiYoY?: number; unemploymentRate?: number; gdpQoQ?: number }>>;
 }
 
 let cotCache: CachedCotRaw | null = null;
+const seasonalityCache: Record<string, CachedSeasonalityEntry> = {};
+let macroExternalCache: CachedLiveMacro | null = null;
 let snapshotCache: { data: EdgeFinderSnapshot; cachedAt: number } | null = null;
+
 const SNAPSHOT_TTL_MS = 90_000;
 const COT_TTL_MS = 30 * 60_000;
+const SEASONALITY_TTL_MS = 6 * 3600_000;
+const MACRO_TTL_MS = 60 * 60_000;
 
 function isTestEnv(): boolean {
   return process.env.NODE_ENV === 'test';
@@ -822,34 +634,28 @@ export function canRoleAccessEdgeFinder(role: string | undefined | null, rollout
 
 function computeEconomicScore(econ: MacroEconomyData): number {
   let raw = 0;
-  // Policy rate & stance
-  if (econ.rate >= 4.25) raw += 2.0;
-  else if (econ.rate >= 3.0) raw += 0.5;
-  else if (econ.rate <= 1.5) raw -= 1.5;
+  if (econ.rate >= 3.75) raw += 2.0;
+  else if (econ.rate >= 2.5) raw += 0.5;
+  else if (econ.rate <= 1.25) raw -= 1.5;
 
   if (econ.stance === 'Hawkish') raw += 1.5;
   else if (econ.stance === 'Dovish') raw -= 1.5;
 
-  // GDP QoQ annualized
   if (econ.gdpQoQ >= 2.0) raw += 2.0;
   else if (econ.gdpQoQ >= 1.0) raw += 0.75;
   else if (econ.gdpQoQ < 0.5) raw -= 1.5;
 
-  // Core CPI proximity to central bank tightening pressure
   if (econ.coreCpiYoY >= 3.0) raw += 1.25;
   else if (econ.coreCpiYoY <= 1.5) raw -= 1.25;
 
-  // PMI composite
   const avgPmi = (econ.pmiManufacturing + econ.pmiServices) / 2;
   if (avgPmi >= 52.0) raw += 1.5;
   else if (avgPmi >= 50.0) raw += 0.5;
   else raw -= 1.5;
 
-  // Unemployment
-  if (econ.unemploymentRate <= 4.2) raw += 1.0;
-  else if (econ.unemploymentRate >= 5.5) raw -= 1.25;
+  if (econ.unemploymentRate <= 4.3) raw += 1.0;
+  else if (econ.unemploymentRate >= 5.8) raw -= 1.25;
 
-  // Retail sales
   if (econ.retailSalesMoM >= 0.3) raw += 0.75;
   else if (econ.retailSalesMoM < 0) raw -= 0.75;
 
@@ -884,24 +690,194 @@ function computeCalendarSurpriseMap(events: EconomicEvent[]): Record<EconomyCode
   return map;
 }
 
-export async function getMacroEconomies(events: EconomicEvent[] = []): Promise<MacroEconomyData[]> {
-  const overrides =
-    (await readSettingJson<Partial<Record<EconomyCode, Partial<MacroEconomyData>>>>(MACRO_OVERRIDES_KEY)) ||
-    readDiskSnapshot().macroOverrides ||
-    {};
-  const surprises = computeCalendarSurpriseMap(events);
+function extractCalendarLatestIndicators(events: EconomicEvent[]): Partial<Record<EconomyCode, Partial<MacroEconomyData>>> {
+  const out: Partial<Record<EconomyCode, Partial<MacroEconomyData>>> = {};
+  const sortedDesc = [...events].sort((a, b) =>
+    new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime()
+  );
 
-  return DEFAULT_MACRO_ECONOMIES.map((base) => {
+  for (const evt of sortedDesc) {
+    const cur = (evt.currency || '').toUpperCase() as EconomyCode;
+    if (!G8_METADATA.some((m) => m.currency === cur)) continue;
+    const rawStr = evt.actual || evt.previous;
+    if (!rawStr || /K|M|B/i.test(rawStr)) continue;
+    const val = parseNumericEventVal(rawStr);
+    if (val === null) continue;
+
+    if (!out[cur]) out[cur] = {};
+    const target = out[cur]!;
+    const title = evt.title.toLowerCase();
+
+    if (target.coreCpiYoY === undefined && /core cpi y\/y|core pce.*y\/y|trimmed mean cpi/i.test(title) && val > -5 && val < 20) {
+      target.coreCpiYoY = roundTo(val, 2);
+    } else if (target.cpiYoY === undefined && /\bcpi y\/y\b|final cpi y\/y/i.test(title) && !title.includes('core') && val > -5 && val < 25) {
+      target.cpiYoY = roundTo(val, 2);
+    } else if (target.unemploymentRate === undefined && /unemployment rate/i.test(title) && val >= 1 && val <= 20) {
+      target.unemploymentRate = roundTo(val, 2);
+    } else if (target.retailSalesMoM === undefined && /retail sales m\/m/i.test(title) && !title.includes('core') && val > -15 && val < 15) {
+      target.retailSalesMoM = roundTo(val, 2);
+    } else if (target.gdpQoQ === undefined && /\bgdp (q\/q|y\/y)/i.test(title) && val > -15 && val < 20) {
+      target.gdpQoQ = roundTo(val, 2);
+    } else if (target.pmiManufacturing === undefined && /manufacturing pmi/i.test(title) && val >= 25 && val <= 75) {
+      target.pmiManufacturing = roundTo(val, 1);
+    } else if (target.pmiServices === undefined && /services pmi/i.test(title) && val >= 25 && val <= 75) {
+      target.pmiServices = roundTo(val, 1);
+    }
+  }
+  return out;
+}
+
+async function fetchLiveExternalMacro(): Promise<CachedLiveMacro> {
+  if (macroExternalCache && Date.now() - macroExternalCache.fetchedAt < MACRO_TTL_MS) {
+    return macroExternalCache;
+  }
+
+  const bisRates: CachedLiveMacro['bisRates'] = {};
+  const wbIndicators: CachedLiveMacro['wbIndicators'] = {};
+
+  const bisToCur: Record<string, EconomyCode> = {
+    US: 'USD', XM: 'EUR', GB: 'GBP', JP: 'JPY', AU: 'AUD', CA: 'CAD', CH: 'CHF', NZ: 'NZD'
+  };
+  const wbToCur: Record<string, EconomyCode> = {
+    USA: 'USD', EMU: 'EUR', GBR: 'GBP', JPN: 'JPY', AUS: 'AUD', CAN: 'CAD', CHE: 'CHF', NZL: 'NZD'
+  };
+
+  const [bisResult, wbResult] = await Promise.allSettled([
+    fetch(BIS_CBPOL_ENDPOINT, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(6000)
+    }).then((r) => (r.ok ? (r.json() as Promise<any>) : null)),
+    fetch(WB_MACRO_ENDPOINT, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(6000)
+    }).then((r) => (r.ok ? (r.json() as Promise<any>) : null))
+  ]);
+
+  if (bisResult.status === 'fulfilled' && bisResult.value?.data?.dataSets?.[0]?.series) {
+    const ds = bisResult.value.data.dataSets[0].series as Record<string, { observations: Record<string, any[]> }>;
+    const seriesDims = (bisResult.value.data.structure?.dimensions?.series || []) as Array<{
+      id: string;
+      values: Array<{ id: string }>;
+    }>;
+    const areaDimIdx = seriesDims.findIndex((d) => d.id === 'REF_AREA');
+    const areaDim = seriesDims[areaDimIdx];
+
+    if (areaDimIdx >= 0 && areaDim) {
+      for (const [seriesKey, val] of Object.entries(ds)) {
+        const parts = seriesKey.split(':').map(Number);
+        const refId = areaDim.values[parts[areaDimIdx]]?.id;
+        const cur = bisToCur[refId];
+        if (!cur) continue;
+        const sortedObs = Object.entries(val.observations || {})
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+          .map(([, obs]) => Number(obs[0]))
+          .filter((n) => Number.isFinite(n));
+        if (sortedObs.length > 0) {
+          const rate = sortedObs[sortedObs.length - 1];
+          const prevRate = sortedObs.length >= 2 ? sortedObs[sortedObs.length - 2] : rate;
+          bisRates[cur] = { rate: roundTo(rate, 3), prevRate: roundTo(prevRate, 3) };
+        }
+      }
+    }
+  }
+
+  if (wbResult.status === 'fulfilled' && Array.isArray(wbResult.value) && Array.isArray(wbResult.value[1])) {
+    for (const row of wbResult.value[1] as Array<any>) {
+      const cur = wbToCur[row?.countryiso3code];
+      const indId = row?.indicator?.id;
+      const value = Number(row?.value);
+      if (!cur || !indId || !Number.isFinite(value)) continue;
+      if (!wbIndicators[cur]) wbIndicators[cur] = {};
+      if (indId === 'FP.CPI.TOTL.ZG') wbIndicators[cur]!.cpiYoY = roundTo(value, 2);
+      if (indId === 'SL.UEM.TOTL.ZS') wbIndicators[cur]!.unemploymentRate = roundTo(value, 2);
+      if (indId === 'NY.GDP.MKTP.KD.ZG') wbIndicators[cur]!.gdpQoQ = roundTo(value, 2);
+    }
+  }
+
+  const hasBis = Object.keys(bisRates).length >= 6;
+  const hasWb = Object.keys(wbIndicators).length >= 6;
+
+  const result: CachedLiveMacro = {
+    fetchedAt: Date.now(),
+    source: hasBis && hasWb ? 'LIVE_BIS_WORLDBANK' : 'BASELINE',
+    bisRates,
+    wbIndicators
+  };
+
+  if (hasBis || hasWb) {
+    macroExternalCache = result;
+  }
+  return result;
+}
+
+export async function getMacroEconomies(
+  events: EconomicEvent[] = []
+): Promise<{ economies: MacroEconomyData[]; macroSource: 'LIVE_BIS_WORLDBANK' | 'BASELINE' }> {
+  const [liveExt, overrides] = await Promise.all([
+    fetchLiveExternalMacro(),
+    readSettingJson<Partial<Record<EconomyCode, Partial<MacroEconomyData>>>>(MACRO_OVERRIDES_KEY).then(
+      (db) => db || readDiskSnapshot().macroOverrides || {}
+    )
+  ]);
+
+  const surprises = computeCalendarSurpriseMap(events);
+  const calLatest = extractCalendarLatestIndicators(events);
+
+  const economies = G8_METADATA.map((meta) => {
+    const bis = liveExt.bisRates[meta.currency];
+    const wb = liveExt.wbIndicators[meta.currency] || {};
+    const cal = calLatest[meta.currency] || {};
+    const ov = overrides[meta.currency] || {};
+
+    const rate = bis?.rate ?? 3.0;
+    const prevRate = bis?.prevRate ?? rate;
+    const rateDelta = rate - prevRate;
+
+    const derivedExpectation: MacroEconomyData['rateExpectation'] =
+      rateDelta > 0.05 ? 'Hike' : rateDelta < -0.05 ? 'Cut' : 'Hold';
+
+    const derivedStance: MacroEconomyData['stance'] =
+      rateDelta > 0.05 ? 'Hawkish' :
+      rateDelta < -0.05 ? 'Dovish' :
+      rate >= 3.6 ? 'Hawkish' :
+      rate <= 1.5 ? 'Dovish' : 'Neutral';
+
+    const cpiYoY = cal.cpiYoY ?? wb.cpiYoY ?? 2.2;
+    const coreCpiYoY = cal.coreCpiYoY ?? roundTo(Math.max(cpiYoY - 0.15, 0.5), 2);
+    const gdpQoQ = cal.gdpQoQ ?? wb.gdpQoQ ?? 1.5;
+    const unemploymentRate = cal.unemploymentRate ?? wb.unemploymentRate ?? 4.5;
+    const retailSalesMoM = cal.retailSalesMoM ?? 0.2;
+    const pmiManufacturing = cal.pmiManufacturing ?? (gdpQoQ >= 2.0 ? 51.2 : gdpQoQ < 1.0 ? 48.2 : 50.0);
+    const pmiServices = cal.pmiServices ?? (gdpQoQ >= 2.0 ? 53.5 : gdpQoQ < 1.0 ? 49.5 : 51.2);
+
     const merged: MacroEconomyData = {
-      ...base,
-      ...(overrides[base.currency] || {}),
-      currency: base.currency
+      currency: meta.currency,
+      country: meta.country,
+      centralBank: meta.centralBank,
+      rate,
+      nextMeeting: meta.nextMeeting,
+      rateExpectation: derivedExpectation,
+      stance: derivedStance,
+      gdpQoQ,
+      cpiYoY,
+      coreCpiYoY,
+      pmiManufacturing,
+      pmiServices,
+      unemploymentRate,
+      retailSalesMoM,
+      economicScore: 0,
+      surpriseScore: roundTo(clamp((ov.surpriseScore ?? 0) + (surprises[meta.currency] || 0) * 0.5, -2.5, 2.5), 2),
+      notes: `Live BIS policy rate (${rate.toFixed(2)}%, prev ${prevRate.toFixed(2)}%), World Bank WDI & ForexFactory NFS releases.`,
+      updatedAt: new Date(liveExt.fetchedAt).toISOString(),
+      ...ov
     };
-    const liveSurprise = surprises[base.currency] || 0;
-    merged.surpriseScore = roundTo(clamp((overrides[base.currency]?.surpriseScore ?? base.surpriseScore) + liveSurprise * 0.5, -2.5, 2.5), 2);
+    // Always preserve explicit currency code and recompute score after overrides
+    merged.currency = meta.currency;
     merged.economicScore = computeEconomicScore(merged);
     return merged;
   });
+
+  return { economies, macroSource: liveExt.source };
 }
 
 export async function updateMacroEconomy(
@@ -937,65 +913,58 @@ export async function updateMacroEconomy(
   await writeSettingJson(MACRO_OVERRIDES_KEY, nextOverrides);
   writeDiskSnapshot({ macroOverrides: nextOverrides });
   snapshotCache = null;
-  return getMacroEconomies();
+  const res = await getMacroEconomies();
+  return res.economies;
 }
 
 async function fetchLiveCftcCot(): Promise<CachedCotRaw | null> {
   if (cotCache && Date.now() - cotCache.fetchedAt < COT_TTL_MS) {
     return cotCache;
   }
-  if (isTestEnv()) {
-    return null;
-  }
   try {
-    const codes = Array.from(new Set(EDGE_FINDER_ASSETS.map((a) => `'${a.cftcCode}'`))).join(',');
-    const url = `${CFTC_ENDPOINT}?$where=cftc_contract_market_code%20in(${codes})&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=180`;
+    const allCodes = Array.from(
+      new Set([...EDGE_FINDER_ASSETS.map((a) => a.cftcCode), ...EXTRA_G8_CFTC_CODES])
+    );
+    const inClause = allCodes.map((c) => `"${c}"`).join(',');
+    const url = `${CFTC_ENDPOINT}?$where=cftc_contract_market_code%20in(${encodeURIComponent(inClause)})&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=400`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(4500)
+      signal: AbortSignal.timeout(7000)
     });
     if (!res.ok) return null;
     const rows = (await res.json()) as Array<Record<string, string>>;
     if (!Array.isArray(rows) || rows.length === 0) return null;
 
-    const grouped: Record<string, Array<Record<string, string>>> = {};
-    for (const row of rows) {
-      const code = (row.cftc_contract_market_code || '').trim();
-      if (!code) continue;
-      if (!grouped[code]) grouped[code] = [];
-      grouped[code].push(row);
+    const grouped: Record<string, Map<string, CotWeeklyRow>> = {};
+    for (const r of rows) {
+      const code = (r.cftc_contract_market_code || '').trim();
+      const reportDate = (r.report_date_as_yyyy_mm_dd || '').slice(0, 10);
+      if (!code || !reportDate) continue;
+
+      const parsed: CotWeeklyRow = {
+        reportDate,
+        noncommLong: Number(r.noncomm_positions_long_all || 0),
+        noncommShort: Number(r.noncomm_positions_short_all || 0),
+        noncommNet: Number(r.noncomm_positions_long_all || 0) - Number(r.noncomm_positions_short_all || 0),
+        nonreptLong: Number(r.nonrept_positions_long_all || 0),
+        nonreptShort: Number(r.nonrept_positions_short_all || 0),
+        openInterest: Number(r.open_interest_all || 0)
+      };
+      if (!grouped[code]) grouped[code] = new Map<string, CotWeeklyRow>();
+      const existing = grouped[code].get(reportDate);
+      if (!existing || parsed.openInterest > existing.openInterest) {
+        grouped[code].set(reportDate, parsed);
+      }
     }
 
     const byCode: CachedCotRaw['byCode'] = {};
-    for (const [code, list] of Object.entries(grouped)) {
-      const sorted = [...list].sort((a, b) =>
-        (b.report_date_as_yyyy_mm_dd || '').localeCompare(a.report_date_as_yyyy_mm_dd || '')
-      );
-      const latest = sorted[0];
-      const prev = sorted[1] || latest;
-      const long = Number(latest.noncomm_positions_long_all || 0);
-      const short = Number(latest.noncomm_positions_short_all || 0);
-      const prevNet = Number(prev.noncomm_positions_long_all || 0) - Number(prev.noncomm_positions_short_all || 0);
-      const openInterest = Number(latest.open_interest_all || Math.max(long + short, 1));
-      const history = sorted.slice(0, 12).reverse().map((r) => {
-        const l = Number(r.noncomm_positions_long_all || 0);
-        const s = Number(r.noncomm_positions_short_all || 0);
-        const denom = Math.max(l + s, 1);
-        return {
-          date: (r.report_date_as_yyyy_mm_dd || '').slice(0, 10),
-          net: l - s,
-          longPct: roundTo((l / denom) * 100, 1)
-        };
-      });
-      byCode[code] = {
-        reportDate: (latest.report_date_as_yyyy_mm_dd || '').slice(0, 10),
-        long,
-        short,
-        net: long - short,
-        prevNet,
-        openInterest,
-        history
-      };
+    for (const [code, dateMap] of Object.entries(grouped)) {
+      const ascending = Array.from(dateMap.values())
+        .sort((a, b) => a.reportDate.localeCompare(b.reportDate))
+        .slice(-12);
+      if (ascending.length > 0) {
+        byCode[code] = ascending;
+      }
     }
 
     if (Object.keys(byCode).length === 0) return null;
@@ -1006,146 +975,272 @@ async function fetchLiveCftcCot(): Promise<CachedCotRaw | null> {
   }
 }
 
-function buildFallback12WeekDates(): string[] {
-  const dates: string[] = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 7 * 86_400_000);
-    dates.push(d.toISOString().slice(0, 10));
+function pairWeeklyCotLegs(
+  asset: AssetDefinition,
+  liveCot: CachedCotRaw
+): CotWeeklyRow[] | null {
+  if (asset.baseCftcCode && asset.quoteCftcCode) {
+    const baseSeries = liveCot.byCode[asset.baseCftcCode];
+    const quoteSeries = liveCot.byCode[asset.quoteCftcCode];
+    if (!baseSeries || !quoteSeries || baseSeries.length === 0 || quoteSeries.length === 0) {
+      return null;
+    }
+    const len = Math.min(baseSeries.length, quoteSeries.length);
+    const paired: CotWeeklyRow[] = [];
+    for (let i = 0; i < len; i++) {
+      const b = baseSeries[baseSeries.length - len + i];
+      const q = quoteSeries[quoteSeries.length - len + i];
+      const noncommLong = b.noncommLong + q.noncommShort;
+      const noncommShort = b.noncommShort + q.noncommLong;
+      paired.push({
+        reportDate: b.reportDate >= q.reportDate ? b.reportDate : q.reportDate,
+        noncommLong,
+        noncommShort,
+        noncommNet: noncommLong - noncommShort,
+        nonreptLong: b.nonreptLong + q.nonreptShort,
+        nonreptShort: b.nonreptShort + q.nonreptLong,
+        openInterest: b.openInterest + q.openInterest
+      });
+    }
+    return paired;
   }
-  return dates;
+
+  const single = liveCot.byCode[asset.cftcCode];
+  if (!single || single.length === 0) return null;
+  const isUsdBase = asset.baseCurrency === 'USD';
+  if (!isUsdBase) return single;
+
+  // Invert IMM foreign currency futures (e.g. JPY/USD -> USD/JPY, CAD/USD -> USD/CAD)
+  return single.map((w) => ({
+    reportDate: w.reportDate,
+    noncommLong: w.noncommShort,
+    noncommShort: w.noncommLong,
+    noncommNet: -w.noncommNet,
+    nonreptLong: w.nonreptShort,
+    nonreptShort: w.nonreptLong,
+    openInterest: w.openInterest
+  }));
 }
 
-function buildCotRecord(asset: AssetDefinition, liveCot: CachedCotRaw | null): CotPositioningRecord {
-  const live = liveCot?.byCode[asset.cftcCode];
-  if (live && asset.category !== 'Cross FX') {
-    const denom = Math.max(live.long + live.short, 1);
-    const longPct = roundTo((live.long / denom) * 100, 1);
-    const shortPct = roundTo(100 - longPct, 1);
-    const isUsdBase = asset.baseCurrency === 'USD';
-    const effectiveLongPct = isUsdBase ? shortPct : longPct;
-    const effectiveNet = isUsdBase ? -live.net : live.net;
-    const effectiveChange = isUsdBase ? -(live.net - live.prevNet) : (live.net - live.prevNet);
-    const cotScore: -1 | 0 | 1 = effectiveLongPct >= 56 ? 1 : effectiveLongPct <= 44 ? -1 : 0;
+function buildCotAndRetailFromLive(
+  asset: AssetDefinition,
+  liveCot: CachedCotRaw | null
+): {
+  cot: CotPositioningRecord;
+  retailSentiment: RetailSentimentRecord;
+  weeklySeries: CotWeeklyRow[];
+} {
+  const paired = liveCot ? pairWeeklyCotLegs(asset, liveCot) : null;
+  if (paired && paired.length > 0) {
+    const latest = paired[paired.length - 1];
+    const prev = paired.length >= 2 ? paired[paired.length - 2] : latest;
+
+    const cotDenom = Math.max(latest.noncommLong + latest.noncommShort, 1);
+    const cotLongPct = roundTo((latest.noncommLong / cotDenom) * 100, 1);
+    const cotShortPct = roundTo(100 - cotLongPct, 1);
+    const cotScore: -1 | 0 | 1 = cotLongPct >= 55 ? 1 : cotLongPct <= 45 ? -1 : 0;
     const sentimentLabel: CotPositioningRecord['sentimentLabel'] =
-      effectiveLongPct >= 66 ? 'Strongly Bullish' :
-      effectiveLongPct >= 56 ? 'Bullish' :
-      effectiveLongPct <= 34 ? 'Strongly Bearish' :
-      effectiveLongPct <= 44 ? 'Bearish' : 'Neutral';
+      cotLongPct >= 66 ? 'Strongly Bullish' :
+      cotLongPct >= 55 ? 'Bullish' :
+      cotLongPct <= 34 ? 'Strongly Bearish' :
+      cotLongPct <= 45 ? 'Bearish' : 'Neutral';
+
+    const retailDenom = Math.max(latest.nonreptLong + latest.nonreptShort, 1);
+    const retailLongPct = roundTo((latest.nonreptLong / retailDenom) * 100, 1);
+    const retailShortPct = roundTo(100 - retailLongPct, 1);
+    const contrarianBias: RetailSentimentRecord['contrarianBias'] =
+      retailLongPct >= 56 ? 'Bearish' : retailShortPct >= 56 ? 'Bullish' : 'Neutral';
+    const retailScore: -1 | 0 | 1 =
+      contrarianBias === 'Bullish' ? 1 : contrarianBias === 'Bearish' ? -1 : 0;
+
     return {
-      instrument: asset.instrument,
-      cftcCode: asset.cftcCode,
-      contractName: asset.contractName,
-      reportDate: live.reportDate,
-      source: 'CFTC_LIVE',
-      nonCommercialLong: isUsdBase ? live.short : live.long,
-      nonCommercialShort: isUsdBase ? live.long : live.short,
-      nonCommercialNet: effectiveNet,
-      netChangeWoW: effectiveChange,
-      longPct: effectiveLongPct,
-      shortPct: roundTo(100 - effectiveLongPct, 1),
-      openInterest: live.openInterest,
-      sentimentLabel,
-      cotScore,
-      history12w: live.history.map((h) => ({
-        date: h.date,
-        net: isUsdBase ? -h.net : h.net,
-        longPct: isUsdBase ? roundTo(100 - h.longPct, 1) : h.longPct
-      }))
+      cot: {
+        instrument: asset.instrument,
+        cftcCode: asset.cftcCode,
+        contractName: asset.contractName,
+        reportDate: latest.reportDate,
+        source: 'CFTC_LIVE',
+        nonCommercialLong: latest.noncommLong,
+        nonCommercialShort: latest.noncommShort,
+        nonCommercialNet: latest.noncommNet,
+        netChangeWoW: latest.noncommNet - prev.noncommNet,
+        longPct: cotLongPct,
+        shortPct: cotShortPct,
+        openInterest: latest.openInterest,
+        sentimentLabel,
+        cotScore,
+        history12w: paired.map((w) => {
+          const d = Math.max(w.noncommLong + w.noncommShort, 1);
+          return {
+            date: w.reportDate,
+            net: w.noncommNet,
+            longPct: roundTo((w.noncommLong / d) * 100, 1)
+          };
+        })
+      },
+      retailSentiment: {
+        instrument: asset.instrument,
+        longPct: retailLongPct,
+        shortPct: retailShortPct,
+        contrarianBias,
+        crowdedWarning: retailLongPct >= 65 || retailShortPct >= 65,
+        sentimentScore: retailScore,
+        source: 'CFTC Non-Reportable (Small Speculators Live)'
+      },
+      weeklySeries: paired
     };
   }
 
-  // Deterministic 12-week institutional positioning baseline (also used for FX crosses)
-  const dates = buildFallback12WeekDates();
-  const effectiveLongPct = asset.baseCurrency === 'USD' ? roundTo(100 - asset.baseCotLongPct, 1) : asset.baseCotLongPct;
-  const effectiveNet = asset.baseCurrency === 'USD' ? -asset.baseCotNet : asset.baseCotNet;
-  const totalVol = Math.max(Math.abs(effectiveNet) * 2.6, 85_000);
-  const long = Math.round(totalVol * (effectiveLongPct / 100));
-  const short = Math.round(totalVol - long);
-  const net = long - short;
-  const history12w = dates.map((date, idx) => {
-    const wave = Math.sin((idx + asset.instrument.length) * 0.55) * 0.14;
-    const histNet = Math.round(net * (0.76 + (idx / 11) * 0.24 + wave * 0.4));
-    const histLongPct = roundTo(clamp(effectiveLongPct + wave * 6, 18, 84), 1);
-    return { date, net: histNet, longPct: histLongPct };
-  });
-  const wow = history12w[history12w.length - 1].net - history12w[history12w.length - 2].net;
-  const cotScore: -1 | 0 | 1 = effectiveLongPct >= 56 ? 1 : effectiveLongPct <= 44 ? -1 : 0;
-  const sentimentLabel: CotPositioningRecord['sentimentLabel'] =
-    effectiveLongPct >= 66 ? 'Strongly Bullish' :
-    effectiveLongPct >= 56 ? 'Bullish' :
-    effectiveLongPct <= 34 ? 'Strongly Bearish' :
-    effectiveLongPct <= 44 ? 'Bearish' : 'Neutral';
-
+  // Emergency zero-data structural fallback if CFTC endpoint is offline
+  const today = new Date().toISOString().slice(0, 10);
   return {
-    instrument: asset.instrument,
-    cftcCode: asset.cftcCode,
-    contractName: asset.contractName,
-    reportDate: dates[dates.length - 1],
-    source: 'INSTITUTIONAL_MODEL',
-    nonCommercialLong: long,
-    nonCommercialShort: short,
-    nonCommercialNet: net,
-    netChangeWoW: wow,
-    longPct: effectiveLongPct,
-    shortPct: roundTo(100 - effectiveLongPct, 1),
-    openInterest: Math.round(totalVol * 1.45),
-    sentimentLabel,
-    cotScore,
-    history12w
+    cot: {
+      instrument: asset.instrument,
+      cftcCode: asset.cftcCode,
+      contractName: asset.contractName,
+      reportDate: today,
+      source: 'INSTITUTIONAL_MODEL',
+      nonCommercialLong: 0,
+      nonCommercialShort: 0,
+      nonCommercialNet: 0,
+      netChangeWoW: 0,
+      longPct: 50,
+      shortPct: 50,
+      openInterest: 0,
+      sentimentLabel: 'Neutral',
+      cotScore: 0,
+      history12w: []
+    },
+    retailSentiment: {
+      instrument: asset.instrument,
+      longPct: 50,
+      shortPct: 50,
+      contrarianBias: 'Neutral',
+      crowdedWarning: false,
+      sentimentScore: 0,
+      source: 'CFTC Non-Reportable (Unavailable)'
+    },
+    weeklySeries: []
   };
 }
 
-function buildSyntheticCandles(asset: AssetDefinition, count = 35): Candle[] {
-  const candles: Candle[] = [];
-  const seed = asset.instrument.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const now = Date.now();
-  let price = asset.referencePrice * (1 - ((seed % 7) - 3) * 0.004);
-  const driftBias = asset.baseCotLongPct > 55 ? 0.0007 : asset.baseCotLongPct < 45 ? -0.0007 : 0.0001;
-
-  for (let i = count; i >= 1; i--) {
-    const wave = Math.sin((seed + count - i) * 0.45) * 0.0038;
-    const change = driftBias + wave;
-    const open = price;
-    const close = open * (1 + change);
-    const high = Math.max(open, close) * 1.0025;
-    const low = Math.min(open, close) * 0.9975;
-    price = close;
-    candles.push({
-      open: roundTo(open, asset.decimals),
-      high: roundTo(high, asset.decimals),
-      low: roundTo(low, asset.decimals),
-      close: roundTo(close, asset.decimals),
-      volume: 12000 + ((seed * (i + 3)) % 8000),
-      timestamp: new Date(now - i * 86_400_000).toISOString()
-    });
+async function fetchYahooMonthlySeasonality(asset: AssetDefinition): Promise<{ monthlyReturns10Y: number[]; monthlyWinRate10Y: number[] }> {
+  const cached = seasonalityCache[asset.instrument];
+  if (cached && Date.now() - cached.fetchedAt < SEASONALITY_TTL_MS) {
+    return { monthlyReturns10Y: cached.monthlyReturns10Y, monthlyWinRate10Y: cached.monthlyWinRate10Y };
   }
-  return candles;
+
+  const yahooSym = YAHOO_SYMBOL_MAP[asset.instrument];
+  const sums = new Array<number>(12).fill(0);
+  const wins = new Array<number>(12).fill(0);
+  const counts = new Array<number>(12).fill(0);
+
+  if (yahooSym) {
+    try {
+      const start10y = new Date(Date.now() - 10 * 365.25 * 86_400_000);
+      const chart = await Promise.race([
+        yahooClient.chart(yahooSym, { period1: start10y, interval: '1mo' }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 6500))
+      ]);
+      const quotes = chart?.quotes || [];
+      for (const q of quotes) {
+        if (!q || q.open == null || q.close == null || q.open <= 0 || q.close <= 0 || !q.date) continue;
+        const m = new Date(q.date).getUTCMonth();
+        const retPct = ((q.close - q.open) / q.open) * 100;
+        if (!Number.isFinite(retPct)) continue;
+        sums[m] += retPct;
+        if (q.close > q.open) wins[m] += 1;
+        counts[m] += 1;
+      }
+    } catch {
+      // fall through cleanly with whatever buckets resolved
+    }
+  }
+
+  const monthlyReturns10Y = sums.map((sum, idx) =>
+    counts[idx] > 0 ? roundTo(sum / counts[idx], 2) : 0
+  );
+  const monthlyWinRate10Y = wins.map((w, idx) =>
+    counts[idx] > 0 ? Math.round((w / counts[idx]) * 100) : 50
+  );
+
+  if (counts.some((c) => c > 0)) {
+    seasonalityCache[asset.instrument] = {
+      fetchedAt: Date.now(),
+      monthlyReturns10Y,
+      monthlyWinRate10Y
+    };
+  }
+  return { monthlyReturns10Y, monthlyWinRate10Y };
 }
 
-async function fetchAssetCandlesWithTimeout(asset: AssetDefinition): Promise<{ candles: Candle[]; livePrice: number | null; isLive: boolean }> {
-  if (isTestEnv()) {
-    const candles = buildSyntheticCandles(asset, 35);
-    return { candles, livePrice: candles[candles.length - 1].close, isLive: false };
-  }
-  try {
-    const result = await Promise.race([
-      Promise.all([
-        getLiveCandles(asset.instrument, '1d', 35),
-        getLiveCurrentPrice(asset.instrument)
-      ]),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2600))
-    ]);
-    if (result && Array.isArray(result[0]) && result[0].length >= 15) {
-      const candles = result[0];
-      const livePrice = result[1] && result[1] > 0 ? result[1] : candles[candles.length - 1].close;
-      return { candles, livePrice, isLive: true };
+async function fetchAssetMarketData(asset: AssetDefinition): Promise<{
+  candles: Candle[];
+  livePrice: number | null;
+  isLive: boolean;
+  monthlyReturns10Y: number[];
+  monthlyWinRate10Y: number[];
+}> {
+  const yahooSym = YAHOO_SYMBOL_MAP[asset.instrument];
+  const dailyPromise = (async (): Promise<{ candles: Candle[]; livePrice: number | null; isLive: boolean }> => {
+    if (yahooSym) {
+      try {
+        const start55d = new Date(Date.now() - 60 * 86_400_000);
+        const chart = await Promise.race([
+          yahooClient.chart(yahooSym, { period1: start55d, interval: '1d' }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 6500))
+        ]);
+        const quotes = (chart?.quotes || []).filter(
+          (q) => q && q.open != null && q.high != null && q.low != null && q.close != null && q.date
+        );
+        if (quotes.length >= 10) {
+          const candles: Candle[] = quotes.map((q) => ({
+            open: roundTo(q.open!, asset.decimals),
+            high: roundTo(q.high!, asset.decimals),
+            low: roundTo(q.low!, asset.decimals),
+            close: roundTo(q.close!, asset.decimals),
+            volume: q.volume || 0,
+            timestamp: new Date(q.date).toISOString()
+          }));
+          const metaPrice = chart?.meta?.regularMarketPrice;
+          const livePrice = typeof metaPrice === 'number' && metaPrice > 0
+            ? roundTo(metaPrice, asset.decimals)
+            : candles[candles.length - 1].close;
+          return { candles, livePrice, isLive: true };
+        }
+      } catch {
+        // try existing provider fallback below
+      }
     }
-  } catch {
-    // fallback to reference series
-  }
-  const candles = buildSyntheticCandles(asset, 35);
-  return { candles, livePrice: candles[candles.length - 1].close, isLive: false };
+
+    try {
+      const result = await Promise.race([
+        Promise.all([
+          getLiveCandles(asset.instrument, '1d', 35),
+          getLiveCurrentPrice(asset.instrument)
+        ]),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+      ]);
+      if (result && Array.isArray(result[0]) && result[0].length >= 10) {
+        const candles = result[0];
+        const livePrice = result[1] && result[1] > 0 ? roundTo(result[1], asset.decimals) : candles[candles.length - 1].close;
+        return { candles, livePrice, isLive: true };
+      }
+    } catch {
+      // no synthetic prices
+    }
+    return { candles: [], livePrice: null, isLive: false };
+  })();
+
+  const [daily, seasonal] = await Promise.all([
+    dailyPromise,
+    fetchYahooMonthlySeasonality(asset)
+  ]);
+
+  return {
+    ...daily,
+    ...seasonal
+  };
 }
 
 function calcEma(values: number[], period: number): number {
@@ -1184,42 +1279,25 @@ function calcAtr(candles: Candle[], period = 14): number {
   return slice.reduce((a, b) => a + b, 0) / Math.max(slice.length, 1);
 }
 
-function deriveRetailSentiment(asset: AssetDefinition, rsi14: number, trendDirection: 'Bullish' | 'Bearish' | 'Ranging'): RetailSentimentRecord {
-  // Adjust baseline retail positioning slightly with RSI extremes (retail chases moves / fades breakouts)
-  const rsiOffset = (rsi14 - 50) * -0.18;
-  const longPct = roundTo(clamp(asset.baseRetailLongPct + rsiOffset, 18, 84), 1);
-  const shortPct = roundTo(100 - longPct, 1);
-  const contrarianBias: RetailSentimentRecord['contrarianBias'] =
-    longPct >= 58 ? 'Bearish' : shortPct >= 58 ? 'Bullish' : 'Neutral';
-  const sentimentScore: -1 | 0 | 1 =
-    contrarianBias === 'Bullish' ? 1 : contrarianBias === 'Bearish' ? -1 : 0;
-
-  return {
-    instrument: asset.instrument,
-    longPct,
-    shortPct,
-    contrarianBias,
-    crowdedWarning: longPct >= 70 || shortPct >= 70,
-    sentimentScore,
-    source: trendDirection === 'Ranging' ? 'Manna Contrarian Book (Range Fade)' : 'Manna Institutional Contrarian Book'
-  };
-}
-
-function deriveSeasonality(asset: AssetDefinition): SeasonalityRecord {
+function deriveSeasonality(
+  asset: AssetDefinition,
+  monthlyReturns10Y: number[],
+  monthlyWinRate10Y: number[]
+): SeasonalityRecord {
   const monthIdx = new Date().getUTCMonth();
   const nextIdx = (monthIdx + 1) % 12;
-  const curRet = asset.monthlyReturns10Y[monthIdx];
-  const curWin = asset.monthlyWinRate10Y[monthIdx];
-  const nextRet = asset.monthlyReturns10Y[nextIdx];
+  const curRet = monthlyReturns10Y[monthIdx] ?? 0;
+  const curWin = monthlyWinRate10Y[monthIdx] ?? 50;
+  const nextRet = monthlyReturns10Y[nextIdx] ?? 0;
   const seasonalityScore: -1 | 0 | 1 =
-    curRet >= 0.4 && curWin >= 60 ? 1 : curRet <= -0.4 && curWin <= 40 ? -1 : 0;
+    curRet >= 0.35 && curWin >= 55 ? 1 : curRet <= -0.35 && curWin <= 45 ? -1 : 0;
   const seasonalityBias: SeasonalityRecord['seasonalityBias'] =
     seasonalityScore === 1 ? 'Bullish' : seasonalityScore === -1 ? 'Bearish' : 'Neutral';
 
   return {
     instrument: asset.instrument,
-    monthlyReturns10Y: asset.monthlyReturns10Y,
-    monthlyWinRate10Y: asset.monthlyWinRate10Y,
+    monthlyReturns10Y,
+    monthlyWinRate10Y,
     currentMonthIndex: monthIdx,
     currentMonthAvgReturn: curRet,
     currentMonthWinRate: curWin,
@@ -1254,7 +1332,7 @@ function buildMacroTugOfWar(
     const rateDiff = base.rate - quote.rate;
     const gdpDiff = base.gdpQoQ - quote.gdpQoQ;
     const cpiDiff = base.coreCpiYoY - quote.coreCpiYoY;
-    const empDiff = quote.unemploymentRate - base.unemploymentRate; // lower unemployment is stronger
+    const empDiff = quote.unemploymentRate - base.unemploymentRate;
     const pmiDiff = ((base.pmiManufacturing + base.pmiServices) / 2) - ((quote.pmiManufacturing + quote.pmiServices) / 2);
     const retailDiff = (base.retailSalesMoM + base.surpriseScore) - (quote.retailSalesMoM + quote.surpriseScore);
 
@@ -1317,7 +1395,7 @@ function buildMacroTugOfWar(
         advantage: rateDiff > 0.25 ? 'BASE' : rateDiff < -0.25 ? 'QUOTE' : 'EVEN'
       },
       {
-        metric: 'GDP QoQ Growth',
+        metric: 'GDP Growth',
         baseValue: `${base.gdpQoQ.toFixed(1)}%`,
         quoteValue: `${quote.gdpQoQ.toFixed(1)}%`,
         advantage: gdpDiff > 0.3 ? 'BASE' : gdpDiff < -0.3 ? 'QUOTE' : 'EVEN'
@@ -1354,38 +1432,37 @@ function buildMacroTugOfWar(
     };
   }
 
-  // Futures & Commodities macro mapping against US Treasury / USD Regime
   const isMetal = asset.category === 'Metals';
   const isEnergy = asset.category === 'Energy';
   const isRates = asset.category === 'Rates';
   const isTechOrIndex = asset.category === 'Equity Index';
 
   const rateSignal: -1 | 0 | 1 =
-    isMetal || isRates ? (usd.stance === 'Dovish' || usd.rateExpectation === 'Cut' ? 1 : usd.rate >= 4.5 ? -1 : 0) :
-    isTechOrIndex ? (usd.rateExpectation === 'Cut' ? 1 : usd.stance === 'Hawkish' && usd.rate >= 4.75 ? -1 : 0) :
+    isMetal || isRates ? (usd.stance === 'Dovish' || usd.rateExpectation === 'Cut' ? 1 : usd.rate >= 4.25 ? -1 : 0) :
+    isTechOrIndex ? (usd.rateExpectation === 'Cut' ? 1 : usd.stance === 'Hawkish' && usd.rate >= 4.5 ? -1 : 0) :
     0;
 
   const gdpSignal: -1 | 0 | 1 =
-    isRates ? (usd.gdpQoQ >= 2.5 ? -1 : 1) :
-    usd.gdpQoQ >= 2.0 ? 1 : usd.gdpQoQ < 0.8 ? -1 : 0;
+    isRates ? (usd.gdpQoQ >= 2.3 ? -1 : 1) :
+    usd.gdpQoQ >= 1.8 ? 1 : usd.gdpQoQ < 0.8 ? -1 : 0;
 
   const cpiSignal: -1 | 0 | 1 =
-    isMetal || isEnergy ? (usd.coreCpiYoY >= 2.8 ? 1 : -1) :
-    isRates ? (usd.coreCpiYoY >= 3.0 ? -1 : 1) :
-    usd.coreCpiYoY <= 2.6 ? 1 : -1;
+    isMetal || isEnergy ? (usd.coreCpiYoY >= 2.6 ? 1 : -1) :
+    isRates ? (usd.coreCpiYoY >= 2.8 ? -1 : 1) :
+    usd.coreCpiYoY <= 2.7 ? 1 : -1;
 
   const empSignal: -1 | 0 | 1 =
     isRates ? (usd.unemploymentRate >= 4.5 ? 1 : -1) :
-    usd.unemploymentRate <= 4.3 ? 1 : -1;
+    usd.unemploymentRate <= 4.4 ? 1 : -1;
 
   const pmiComposite = (usd.pmiManufacturing + usd.pmiServices) / 2;
   const pmiSignal: -1 | 0 | 1 =
     isRates ? (pmiComposite < 49.5 ? 1 : -1) :
-    pmiComposite >= 51.0 ? 1 : pmiComposite < 49.0 ? -1 : 0;
+    pmiComposite >= 50.8 ? 1 : pmiComposite < 49.0 ? -1 : 0;
 
   const retailSignal: -1 | 0 | 1 =
     isRates ? (usd.retailSalesMoM < 0 ? 1 : -1) :
-    usd.retailSalesMoM + usd.surpriseScore >= 0.35 ? 1 : usd.retailSalesMoM < 0 ? -1 : 0;
+    usd.retailSalesMoM + usd.surpriseScore >= 0.3 ? 1 : usd.retailSalesMoM < 0 ? -1 : 0;
 
   const factors: Array<Pick<FactorBreakdownItem, 'key' | 'label' | 'category' | 'signal' | 'weight' | 'detail'>> = [
     {
@@ -1402,7 +1479,7 @@ function buildMacroTugOfWar(
       category: 'Fundamental',
       signal: gdpSignal,
       weight: 0.75,
-      detail: `US GDP QoQ ${usd.gdpQoQ.toFixed(1)}% (${isRates ? 'Bond inverse' : 'Risk sensitivity'})`
+      detail: `US GDP Growth ${usd.gdpQoQ.toFixed(1)}% (${isRates ? 'Bond inverse' : 'Risk sensitivity'})`
     },
     {
       key: 'cpi',
@@ -1422,7 +1499,7 @@ function buildMacroTugOfWar(
     },
     {
       key: 'pmi',
-      label: 'US ISM PMI',
+      label: 'US Activity / PMI',
       category: 'Fundamental',
       signal: pmiSignal,
       weight: 0.75,
@@ -1458,7 +1535,7 @@ function buildMacroTugOfWar(
       advantage: cpiSignal > 0 ? 'BASE' : cpiSignal < 0 ? 'QUOTE' : 'EVEN'
     },
     {
-      metric: 'ISM Business Cycle',
+      metric: 'Activity Cycle',
       baseValue: `${pmiComposite.toFixed(1)} Avg PMI`,
       quoteValue: `Unemp ${usd.unemploymentRate.toFixed(1)}%`,
       advantage: pmiSignal > 0 ? 'BASE' : pmiSignal < 0 ? 'QUOTE' : 'EVEN'
@@ -1696,6 +1773,24 @@ function computeCorrelations(scorecards: AssetEdgeScorecard[]): { assets: string
   return { assets, matrix };
 }
 
+function cotSignalsForDate(weeklySeries: CotWeeklyRow[], dateStr: string, fallbackCot: number, fallbackRetail: number): { cot: number; retail: number } {
+  if (!weeklySeries || weeklySeries.length === 0) {
+    return { cot: fallbackCot, retail: fallbackRetail };
+  }
+  let chosen = weeklySeries[0];
+  for (const w of weeklySeries) {
+    if (w.reportDate <= dateStr) chosen = w;
+  }
+  const cotDenom = Math.max(chosen.noncommLong + chosen.noncommShort, 1);
+  const cotLongPct = (chosen.noncommLong / cotDenom) * 100;
+  const cotSig = cotLongPct >= 55 ? 1.5 : cotLongPct <= 45 ? -1.5 : 0;
+
+  const retDenom = Math.max(chosen.nonreptLong + chosen.nonreptShort, 1);
+  const retLongPct = (chosen.nonreptLong / retDenom) * 100;
+  const retSig = retLongPct >= 56 ? -1.0 : retLongPct <= 44 ? 1.0 : 0;
+  return { cot: cotSig, retail: retSig };
+}
+
 export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<EdgeFinderSnapshot> {
   if (!forceRefresh && snapshotCache && Date.now() - snapshotCache.cachedAt < SNAPSHOT_TTL_MS) {
     return {
@@ -1707,59 +1802,55 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     };
   }
 
-  const [rollout, liveCot, activeSetups] = await Promise.all([
-    getEdgeFinderRollout(),
-    fetchLiveCftcCot(),
-    getAllActiveSetups().catch(() => [] as EdgeSetup[])
-  ]);
-
   const allEvents = newsEngine.getAllEvents();
   const upcomingHighImpact = newsEngine.getUpcomingHighImpactEvents().slice(0, 14);
   const calendarStatus = newsEngine.getCalendarStatus();
-  const economies = await getMacroEconomies(allEvents);
 
+  const [rollout, liveCot, activeSetups, macroRes, marketDataList] = await Promise.all([
+    getEdgeFinderRollout(),
+    fetchLiveCftcCot(),
+    getAllActiveSetups().catch(() => [] as EdgeSetup[]),
+    getMacroEconomies(allEvents),
+    Promise.all(EDGE_FINDER_ASSETS.map((asset) => fetchAssetMarketData(asset)))
+  ]);
+
+  const { economies, macroSource } = macroRes;
   const econByCode = economies.reduce((acc, e) => {
     acc[e.currency] = e;
     return acc;
   }, {} as Record<EconomyCode, MacroEconomyData>);
 
-  // Fetch all 16 asset price histories concurrently with timeouts
-  const candleResults = await Promise.all(
-    EDGE_FINDER_ASSETS.map((asset) => fetchAssetCandlesWithTimeout(asset))
-  );
-
   let livePriceCount = 0;
   let hasLiveCot = false;
 
   const scorecards: AssetEdgeScorecard[] = EDGE_FINDER_ASSETS.map((asset, idx) => {
-    const { candles, livePrice, isLive } = candleResults[idx];
-    if (isLive) livePriceCount += 1;
+    const { candles, livePrice, isLive, monthlyReturns10Y, monthlyWinRate10Y } = marketDataList[idx];
+    if (isLive && livePrice !== null) livePriceCount += 1;
 
     const closes = candles.map((c) => c.close);
-    const currentPrice = roundTo(livePrice ?? closes[closes.length - 1] ?? asset.referencePrice, asset.decimals);
+    const currentPrice = livePrice ?? closes[closes.length - 1] ?? 0;
     const prevClose = closes.length >= 2 ? closes[closes.length - 2] : currentPrice;
     const dailyChangePct = prevClose > 0 ? roundTo(((currentPrice - prevClose) / prevClose) * 100, 2) : 0;
 
-    const ema20 = roundTo(calcEma(closes, 20), asset.decimals);
-    const ema50 = roundTo(calcEma(closes, Math.min(50, closes.length)), asset.decimals);
-    const rsi14 = calcRsi(closes, 14);
-    const atr14 = roundTo(calcAtr(candles, 14), asset.decimals);
+    const ema20 = closes.length > 0 ? roundTo(calcEma(closes, Math.min(20, closes.length)), asset.decimals) : 0;
+    const ema50 = closes.length > 0 ? roundTo(calcEma(closes, Math.min(50, closes.length)), asset.decimals) : 0;
+    const rsi14 = closes.length > 14 ? calcRsi(closes, 14) : 50;
+    const atr14 = candles.length > 1 ? roundTo(calcAtr(candles, 14), asset.decimals) : 0;
     const atrPct = currentPrice > 0 ? roundTo((atr14 / currentPrice) * 100, 2) : 0;
-    const high30d = roundTo(Math.max(...candles.map((c) => c.high)), asset.decimals);
-    const low30d = roundTo(Math.min(...candles.map((c) => c.low)), asset.decimals);
+    const high30d = candles.length > 0 ? roundTo(Math.max(...candles.slice(-30).map((c) => c.high)), asset.decimals) : currentPrice;
+    const low30d = candles.length > 0 ? roundTo(Math.min(...candles.slice(-30).map((c) => c.low)), asset.decimals) : currentPrice;
     const distanceFromEma20Pct = ema20 > 0 ? roundTo(((currentPrice - ema20) / ema20) * 100, 2) : 0;
 
     const trendScoreRaw: -1 | 0 | 1 =
-      currentPrice > ema20 && ema20 >= ema50 ? 1 :
-      currentPrice < ema20 && ema20 <= ema50 ? -1 : 0;
+      currentPrice > 0 && currentPrice > ema20 && ema20 >= ema50 ? 1 :
+      currentPrice > 0 && currentPrice < ema20 && ema20 <= ema50 ? -1 : 0;
     const trendDirection: AssetEdgeScorecard['technical']['trendDirection'] =
       trendScoreRaw === 1 ? 'Bullish' : trendScoreRaw === -1 ? 'Bearish' : 'Ranging';
 
-    const cot = buildCotRecord(asset, liveCot);
+    const { cot, retailSentiment, weeklySeries } = buildCotAndRetailFromLive(asset, liveCot);
     if (cot.source === 'CFTC_LIVE') hasLiveCot = true;
 
-    const retailSentiment = deriveRetailSentiment(asset, rsi14, trendDirection);
-    const seasonality = deriveSeasonality(asset);
+    const seasonality = deriveSeasonality(asset, monthlyReturns10Y, monthlyWinRate10Y);
     const { factors: macroFactors, tugOfWar } = buildMacroTugOfWar(asset, econByCode, cot, trendDirection);
 
     const baseFactorsWithoutManna: FactorBreakdownItem[] = [
@@ -1770,7 +1861,7 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
         signal: cot.cotScore,
         weight: 1.5,
         contribution: roundTo(cot.cotScore * 1.5, 2),
-        detail: `${cot.longPct.toFixed(1)}% Non-Comm Long (WoW ${cot.netChangeWoW >= 0 ? '+' : ''}${cot.netChangeWoW.toLocaleString()})`
+        detail: `${cot.longPct.toFixed(1)}% Non-Comm Long (WoW ${cot.netChangeWoW >= 0 ? '+' : ''}${cot.netChangeWoW.toLocaleString()}) [${cot.reportDate}]`
       },
       {
         key: 'retailSentiment',
@@ -1779,11 +1870,11 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
         signal: retailSentiment.sentimentScore,
         weight: 1.0,
         contribution: roundTo(retailSentiment.sentimentScore * 1.0, 2),
-        detail: `Crowd ${retailSentiment.longPct.toFixed(1)}% Long → Contrarian ${retailSentiment.contrarianBias}`
+        detail: `CFTC Small Spec ${retailSentiment.longPct.toFixed(1)}% Long → Contrarian ${retailSentiment.contrarianBias}`
       },
       {
         key: 'seasonality',
-        label: '10Y Seasonality',
+        label: '10Y Live Seasonality',
         category: 'Statistical',
         signal: seasonality.seasonalityScore,
         weight: 0.75,
@@ -1828,16 +1919,25 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     const totalScore = roundTo(clamp(factors.reduce((s, f) => s + f.contribution, 0), -10, 10), 2);
     const fundamentalScore = roundTo(macroFactors.reduce((s, f) => s + f.signal * f.weight, 0), 2);
 
-    // Build 30-day Historical Score vs Price series (using static macro/sentiment base + evolving rolling trend)
-    const staticBaseScore = totalScore - trendScoreRaw * 1.25;
+    const cotContrib = roundTo(cot.cotScore * 1.5, 2);
+    const retailContrib = roundTo(retailSentiment.sentimentScore * 1.0, 2);
+    const fixedOtherScore = totalScore - trendScoreRaw * 1.25 - cotContrib - retailContrib;
     const recentCandles = candles.slice(-30);
+    const offsetStart = candles.length - recentCandles.length;
+
     const historicalSeries: HistoricalScorePoint[] = recentCandles.map((c, cIdx) => {
-      const lookbackCloses = candles.slice(0, Math.max(1, candles.length - recentCandles.length + cIdx + 1)).map((x) => x.close);
+      const sliceEnd = Math.max(1, offsetStart + cIdx + 1);
+      const lookbackCloses = candles.slice(0, sliceEnd).map((x) => x.close);
       const localEma20 = calcEma(lookbackCloses, Math.min(20, lookbackCloses.length));
-      const localSlope = c.close > localEma20 * 1.002 ? 1.25 : c.close < localEma20 * 0.998 ? -1.25 : 0;
-      const pointScore = roundTo(clamp(staticBaseScore + localSlope, -10, 10), 2);
+      const localEma50 = calcEma(lookbackCloses, Math.min(50, lookbackCloses.length));
+      const localTrend =
+        c.close > localEma20 && localEma20 >= localEma50 ? 1.25 :
+        c.close < localEma20 && localEma20 <= localEma50 ? -1.25 : 0;
+      const dateStr = c.timestamp.slice(0, 10);
+      const cotHist = cotSignalsForDate(weeklySeries, dateStr, cotContrib, retailContrib);
+      const pointScore = roundTo(clamp(fixedOtherScore + localTrend + cotHist.cot + cotHist.retail, -10, 10), 2);
       return {
-        date: c.timestamp.slice(0, 10),
+        date: dateStr,
         price: c.close,
         score: pointScore
       };
@@ -1852,11 +1952,11 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
       quoteCurrency: asset.quoteCurrency,
       currentPrice,
       dailyChangePct,
-      priceSource: isLive ? 'LIVE' : 'REFERENCE',
+      priceSource: isLive && livePrice !== null ? 'LIVE' : 'REFERENCE',
       totalScore,
       biasLabel: classifyBiasLabel(totalScore),
-      cotScore: roundTo(cot.cotScore * 1.5, 2),
-      retailScore: roundTo(retailSentiment.sentimentScore * 1.0, 2),
+      cotScore: cotContrib,
+      retailScore: retailContrib,
       seasonalityScore: roundTo(seasonality.seasonalityScore * 0.75, 2),
       trendScore: roundTo(trendScoreRaw * 1.25, 2),
       fundamentalScore,
@@ -1882,7 +1982,6 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     };
   });
 
-  // Sort highest absolute institutional conviction first (Top Setups Matrix default)
   scorecards.sort((a, b) => Math.abs(b.totalScore) - Math.abs(a.totalScore));
 
   const currencyStrength = computeCurrencyStrength(economies, scorecards);
@@ -1904,6 +2003,7 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     },
     syncStatus: {
       cftcSource: hasLiveCot ? 'CFTC_LIVE' : 'INSTITUTIONAL_MODEL',
+      macroSource,
       livePriceCount,
       totalAssets: EDGE_FINDER_ASSETS.length,
       cacheAgeSeconds: 0
@@ -1917,4 +2017,8 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
 export function clearEdgeFinderCaches(): void {
   snapshotCache = null;
   cotCache = null;
+  macroExternalCache = null;
+  for (const k of Object.keys(seasonalityCache)) {
+    delete seasonalityCache[k];
+  }
 }
