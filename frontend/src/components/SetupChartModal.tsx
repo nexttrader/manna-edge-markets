@@ -1,6 +1,23 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useId, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { createChart, ColorType, LineStyle, CrosshairMode, CandlestickSeries, createSeriesMarkers, type IChartApi } from 'lightweight-charts';
+import {
+  createChart,
+  ColorType,
+  LineStyle,
+  CrosshairMode,
+  CandlestickSeries,
+  createSeriesMarkers,
+  type AutoscaleInfo,
+  type CandlestickData,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type MouseEventParams,
+  type SeriesMarker,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
 import type { EdgeSetup } from '../types';
 import { API_BASE } from '../config';
 import { formatTelegramTradeId } from '../utils/tradeId';
@@ -13,9 +30,80 @@ interface SetupChartModalProps {
 
 export type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
+type ExtendedSetup = EdgeSetup & {
+  entry_low?: number;
+  entry_high?: number;
+  entry_mid?: number;
+  entry_price?: number;
+  stop_loss?: number;
+  initialStop?: number;
+  target1?: number;
+  target2?: number;
+  time_entered?: string;
+  time_signaled?: string;
+  time_exited?: string;
+  execution_time?: string;
+  closed_at?: string;
+  exit_price?: number;
+  levels?: {
+    entryMin?: number;
+    entryMax?: number;
+    entryMid?: number;
+    entry_low?: number;
+    entry_high?: number;
+    stopLoss?: number;
+    stop?: number;
+    takeProfit1?: number;
+    takeProfit2?: number;
+    tp1?: number;
+    tp2?: number;
+  };
+};
+
+interface RawCandle {
+  timestamp: string | number;
+  open: number | string;
+  high: number | string;
+  low: number | string;
+  close: number | string;
+}
+
+interface SndMetadata {
+  htf_curve_proximal?: number | string;
+  htf_curve_distal?: number | string;
+  htf_curve_type?: string;
+  htf_curve_base_time?: string;
+  htf_demand_proximal?: number | string;
+  htf_demand_distal?: number | string;
+  htf_demand_base_time?: string;
+  htf_demand_formation?: string;
+  htf_supply_proximal?: number | string;
+  htf_supply_distal?: number | string;
+  htf_supply_base_time?: string;
+  htf_supply_formation?: string;
+  entry_zone_base_time?: string;
+  entry_zone_formation?: string;
+  curveLocation?: string;
+  trend15m?: string;
+  formation?: string;
+}
+
+type RoundRectCanvasCtx = CanvasRenderingContext2D & {
+  roundRect?: (x: number, y: number, w: number, h: number, r: number) => void;
+};
+
+const TIMEFRAMES: { id: ChartTimeframe; label: string; title: string; featured?: boolean }[] = [
+  { id: '1m', label: '1M', title: '1 Minute Scalp' },
+  { id: '5m', label: '5M', title: '5 Minute Precision' },
+  { id: '15m', label: '15M', title: '15 Minute Execution Standard (Entry Logic)', featured: true },
+  { id: '1h', label: '1H', title: '1 Hour Market Structure' },
+  { id: '4h', label: '4H', title: '4 Hour Trend Context' },
+  { id: '1d', label: '1D', title: 'Daily Macro View' },
+];
+
 export const TIMEZONE_OPTIONS = [
-  { value: 'America/New_York', label: 'New York (ET - Killzones)' },
-  { value: 'UTC', label: 'UTC (Universal Standard)' },
+  { value: 'America/New_York', label: 'New York (ET · Killzones)' },
+  { value: 'UTC', label: 'UTC (Universal)' },
   { value: 'Europe/London', label: 'London (GMT/BST)' },
   { value: 'Europe/Berlin', label: 'Frankfurt (CET/CEST)' },
   { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
@@ -44,7 +132,7 @@ function formatTzTime(unixSec: number, tz: string, includeSeconds = false): stri
       hour: '2-digit',
       minute: '2-digit',
       second: includeSeconds ? '2-digit' : undefined,
-      hour12: false
+      hour12: false,
     });
   } catch {
     return new Date(unixSec * 1000).toISOString().substring(11, includeSeconds ? 19 : 16);
@@ -65,37 +153,68 @@ function getTimezoneBadge(tz: string): string {
   }
 }
 
-function getCurrentCandleTime(timeframe: ChartTimeframe): number {
-  const now = Date.now();
-  const date = new Date(now);
+function getCurrentCandleTime(timeframe: ChartTimeframe): UTCTimestamp {
+  const date = new Date(Date.now());
   const minutes = date.getMinutes();
-  
+
   if (timeframe === '1m') {
     date.setSeconds(0, 0);
   } else if (timeframe === '5m') {
-    const roundedMin = Math.floor(minutes / 5) * 5;
-    date.setMinutes(roundedMin, 0, 0);
+    date.setMinutes(Math.floor(minutes / 5) * 5, 0, 0);
   } else if (timeframe === '15m') {
-    const roundedMin = Math.floor(minutes / 15) * 15;
-    date.setMinutes(roundedMin, 0, 0);
+    date.setMinutes(Math.floor(minutes / 15) * 15, 0, 0);
   } else if (timeframe === '1h') {
     date.setMinutes(0, 0, 0);
   } else if (timeframe === '4h') {
-    const hours = date.getHours();
-    const roundedHours = Math.floor(hours / 4) * 4;
-    date.setHours(roundedHours, 0, 0, 0);
+    date.setHours(Math.floor(date.getHours() / 4) * 4, 0, 0, 0);
   } else if (timeframe === '1d') {
     date.setHours(0, 0, 0, 0);
   }
-  
-  return Math.floor(date.getTime() / 1000);
+
+  return Math.floor(date.getTime() / 1000) as UTCTimestamp;
 }
 
-const parseNum = (val: any): number => {
+const parseNum = (val: unknown): number => {
   if (val === undefined || val === null) return 0;
   const n = typeof val === 'number' ? val : parseFloat(String(val));
   return isNaN(n) ? 0 : n;
 };
+
+function getInstrumentFormat(instrument: string) {
+  const sym = instrument.toUpperCase();
+  const isForex = instrument.includes('/');
+
+  if (isForex) {
+    if (sym.includes('JPY')) {
+      return { decimals: 3, minMove: 0.001, unit: 'pips' };
+    }
+    return { decimals: 5, minMove: 0.00001, unit: 'pips' };
+  }
+
+  switch (sym) {
+    case 'YM':
+      return { decimals: 0, minMove: 1, unit: 'pts' };
+    case 'SI':
+      return { decimals: 3, minMove: 0.001, unit: 'pts' };
+    case 'ZN':
+      return { decimals: 4, minMove: 0.0001, unit: 'pts' };
+    default:
+      return { decimals: 2, minMove: 0.01, unit: 'pts' };
+  }
+}
+
+function formatPrice(val: number | undefined | null, decimals: number): string {
+  if (val === undefined || val === null || isNaN(val) || val <= 0) return '--';
+  return val.toFixed(decimals);
+}
+
+function safeStorageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable in restricted contexts
+  }
+}
 
 export function getBidAskData(
   instrument: string,
@@ -104,51 +223,35 @@ export function getBidAskData(
 ) {
   const sym = instrument.toUpperCase();
   const isForex = instrument.includes('/');
+  const { decimals, unit } = getInstrumentFormat(instrument);
 
-  let decimals = 2;
-  let unit = 'pts';
-  let spread = 0.25;
-
+  let spread: number;
   if (isForex) {
-    unit = 'pips';
-    if (sym.includes('JPY')) {
-      decimals = 3;
-      spread = 0.015;
-    } else {
-      decimals = 5;
-      spread = 0.00012;
-    }
+    spread = sym.includes('JPY') ? 0.015 : 0.00012;
   } else {
     switch (sym) {
       case 'ES':
       case 'NQ':
         spread = 0.25;
-        decimals = 2;
         break;
       case 'YM':
         spread = 1.0;
-        decimals = 0;
         break;
       case 'RTY':
       case 'GC':
         spread = 0.10;
-        decimals = 2;
         break;
       case 'SI':
         spread = 0.005;
-        decimals = 3;
         break;
       case 'CL':
         spread = 0.01;
-        decimals = 2;
         break;
       case 'ZN':
         spread = 0.0156;
-        decimals = 4;
         break;
       default:
         spread = price > 1000 ? 0.25 : 0.01;
-        decimals = 2;
         break;
     }
   }
@@ -173,8 +276,6 @@ export function getBidAskData(
  *   ENTRY  SHORT → you sell at the BID  (bid = fillPrice, ask = fillPrice + spread)
  *   EXIT   LONG  → you sell at the BID  (bid = fillPrice, ask = fillPrice + spread)
  *   EXIT   SHORT → you buy  at the ASK  (ask = fillPrice, bid = fillPrice - spread)
- *
- * Returns { bid, ask, filledSide: 'bid'|'ask', spread }
  */
 export function getDirectionalBidAsk(
   instrument: string,
@@ -184,10 +285,6 @@ export function getDirectionalBidAsk(
   quote?: { bid?: number; ask?: number; spread?: number } | null
 ): { bid: number; ask: number; filledSide: 'bid' | 'ask'; spread: number; decimals: number } {
   const { spread, decimals } = getBidAskData(instrument, fillPrice, quote);
-
-  // Determine which side was actually filled
-  // Entry long  → ASK filled  |  Entry short → BID filled
-  // Exit  long  → BID filled  |  Exit  short → ASK filled
   const fillsAtAsk = (isEntry && isLong) || (!isEntry && !isLong);
 
   let bid: number;
@@ -203,24 +300,136 @@ export function getDirectionalBidAsk(
   return { bid, ask, filledSide: fillsAtAsk ? 'ask' : 'bid', spread, decimals };
 }
 
+/* ── Minimal Crisp SVG Icons (12px–14px, currentColor) ──────────────────── */
+
+const IconArrowBias = ({ isLong }: { isLong: boolean }) => (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    {isLong ? (
+      <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    ) : (
+      <path d="M8 3V13M8 13L3.5 8.5M8 13L12.5 8.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    )}
+  </svg>
+);
+
+const IconGlobe = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
+    <ellipse cx="8" cy="8" rx="2.75" ry="6.25" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M2 8H14" stroke="currentColor" strokeWidth="1.2" />
+  </svg>
+);
+
+const IconSun = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M8 1.5V3M8 13V14.5M1.5 8H3M13 8H14.5M3.4 3.4L4.45 4.45M11.55 11.55L12.6 12.6M12.6 3.4L11.55 4.45M4.45 11.55L3.4 12.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+const IconMoon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M13.5 9.8A5.7 5.7 0 0 1 6.2 2.5a5.8 5.8 0 1 0 7.3 7.3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const IconClose = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3.5 3.5L12.5 12.5M12.5 3.5L3.5 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+const IconZoomIn = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M10.5 10.5L14 14M7 5V9M5 7H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+const IconZoomOut = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M10.5 10.5L14 14M5 7H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+const IconFitAll = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M2.5 5.5V2.5H5.5M10.5 2.5H13.5V5.5M13.5 10.5V13.5H10.5M5.5 13.5H2.5V10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const IconBidAsk = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M2 5.5H14M2 10.5H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2" />
+    <circle cx="5.5" cy="5.5" r="1.5" fill="currentColor" />
+    <circle cx="10.5" cy="10.5" r="1.5" fill="currentColor" />
+  </svg>
+);
+
+const IconCopy = ({ copied }: { copied: boolean }) => (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    {copied ? (
+      <path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    ) : (
+      <>
+        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M10.5 3.5V2.8A1.3 1.3 0 0 0 9.2 1.5H2.8A1.3 1.3 0 0 0 1.5 2.8V9.2A1.3 1.3 0 0 0 2.8 10.5H3.5" stroke="currentColor" strokeWidth="1.4" />
+      </>
+    )}
+  </svg>
+);
+
+function getChartThemePalette(theme: 'dark' | 'light') {
+  const isLight = theme === 'light';
+  return {
+    bg: isLight ? '#ffffff' : '#0b0f17',
+    text: isLight ? '#475569' : '#94a3b8',
+    grid: isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(148, 163, 184, 0.06)',
+    border: isLight ? '#e2e8f0' : 'rgba(148, 163, 184, 0.16)',
+    crosshair: isLight ? 'rgba(71, 85, 105, 0.5)' : 'rgba(148, 163, 184, 0.45)',
+    crosshairLabelBg: isLight ? '#1e293b' : '#334155',
+    upColor: isLight ? '#059669' : '#10b981',
+    downColor: isLight ? '#dc2626' : '#ef4444',
+  };
+}
+
+interface CrosshairOhlc {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  timeStr: string;
+  isUp: boolean;
+}
+
 export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose }) => {
+  const headingId = useId();
+  const chartContainerId = useId();
+  const extSetup = setup as ExtendedSetup;
+
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<any>(null);
-  const seriesMarkersRef = useRef<any>(null);
-  const displayCandlesRef = useRef<any[]>([]);
-  const priceLinesRef = useRef<any[]>([]);
-  const bidLineRef = useRef<any>(null);
-  const askLineRef = useRef<any>(null);
-  const lastFittedTimeframeRef = useRef<string | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const displayCandlesRef = useRef<CandlestickData<Time>[]>([]);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
+  const bidLineRef = useRef<IPriceLine | null>(null);
+  const askLineRef = useRef<IPriceLine | null>(null);
+  const lastFittedKeyRef = useRef<string | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const liveCandleRef = useRef<any>(null);
+  const liveCandleRef = useRef<CandlestickData<Time> | null>(null);
+  const onCloseRef = useRef(onClose);
+  const levelsRef = useRef<number[]>([]);
 
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveStatusMsg, setLiveStatusMsg] = useState('');
+  const [crosshairOhlc, setCrosshairOhlc] = useState<CrosshairOhlc | null>(null);
 
-  // Timezone & Theme state with persistent localStorage
   const [selectedTz, setSelectedTz] = useState<string>(() => {
     return localStorage.getItem('manna_chart_timezone') || 'America/New_York';
   });
@@ -228,7 +437,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return (localStorage.getItem('manna_chart_theme') as 'dark' | 'light') || 'dark';
   });
 
-  // Bid & Ask toggle with persistent localStorage
   const [showBidAsk, setShowBidAsk] = useState<boolean>(() => {
     try {
       return localStorage.getItem('manna_chart_show_bid_ask') === 'true';
@@ -238,29 +446,38 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   });
   const [serverQuote, setServerQuote] = useState<{ bid?: number; ask?: number; spread?: number; price?: number } | null>(null);
   const [feedProvider, setFeedProvider] = useState<string>('');
+  const [copiedTradeId, setCopiedTradeId] = useState(false);
+
+  const announce = useCallback((msg: string) => {
+    setLiveStatusMsg('');
+    requestAnimationFrame(() => setLiveStatusMsg(msg));
+  }, []);
 
   const toggleBidAsk = () => {
     setShowBidAsk(prev => {
       const next = !prev;
-      try { localStorage.setItem('manna_chart_show_bid_ask', String(next)); } catch {}
+      safeStorageSet('manna_chart_show_bid_ask', String(next));
       return next;
     });
   };
 
   const isLong = (setup.bias || 'long').toLowerCase() === 'long';
-  const isForex = (setup.market || '').toLowerCase() === 'forex' || setup.instrument.includes('/');
+  const { decimals, minMove } = getInstrumentFormat(setup.instrument);
+  const priceEps = minMove * 2;
 
-  const levels = (setup.levels || {}) as any;
+  const levels: Partial<NonNullable<ExtendedSetup['levels']>> = extSetup.levels || {};
 
   // Robust level extraction with fallbacks for all property naming variants
-  const entryLow = parseNum(setup.entry_zone_low ?? (setup as any).entry_low ?? levels.entryMin ?? levels.entry_low);
-  const entryHigh = parseNum(setup.entry_zone_high ?? (setup as any).entry_high ?? levels.entryMax ?? levels.entry_high);
-  const entryMid = parseNum(setup.entry_zone_mid ?? (setup as any).entry_mid ?? (setup as any).entry_price ?? levels.entryMid) || (entryLow && entryHigh ? (entryLow + entryHigh) / 2 : 0);
-  const stopVal = parseNum(setup.stop ?? (setup as any).stop_loss ?? levels.stopLoss ?? levels.stop);
-  const initialStopVal = parseNum(setup.initial_stop ?? (setup as any).initialStop ?? stopVal);
-  const tp1Val = parseNum(setup.tp1 ?? (setup as any).target1 ?? levels.takeProfit1 ?? levels.tp1);
-  const tp2Val = (setup.tp2 || (setup as any).target2 || levels.takeProfit2 || levels.tp2)
-    ? parseNum(setup.tp2 ?? (setup as any).target2 ?? levels.takeProfit2 ?? levels.tp2)
+  const entryLow = parseNum(setup.entry_zone_low ?? extSetup.entry_low ?? levels.entryMin ?? levels.entry_low);
+  const entryHigh = parseNum(setup.entry_zone_high ?? extSetup.entry_high ?? levels.entryMax ?? levels.entry_high);
+  const entryMid =
+    parseNum(setup.entry_zone_mid ?? extSetup.entry_mid ?? extSetup.entry_price ?? levels.entryMid) ||
+    (entryLow && entryHigh ? (entryLow + entryHigh) / 2 : 0);
+  const stopVal = parseNum(setup.stop ?? extSetup.stop_loss ?? levels.stopLoss ?? levels.stop);
+  const initialStopVal = parseNum(setup.initial_stop ?? extSetup.initialStop ?? stopVal);
+  const tp1Val = parseNum(setup.tp1 ?? extSetup.target1 ?? levels.takeProfit1 ?? levels.tp1);
+  const tp2Val = (setup.tp2 || extSetup.target2 || levels.takeProfit2 || levels.tp2)
+    ? parseNum(setup.tp2 ?? extSetup.target2 ?? levels.takeProfit2 ?? levels.tp2)
     : undefined;
   const currentPrice = parseNum(setup.current_price);
 
@@ -269,25 +486,25 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const isRunner = setup.signal_state === 'runner';
   const isResolved = setup.signal_state === 'resolved' || setup.signal_state === 'invalidated';
 
-  const entryTimestamp = 
-    setup.entry_triggered_at || 
-    (setup as any).entryAt || 
-    (setup as any).time_entered || 
-    (setup as any).time_signaled || 
-    setup.validatedAt || 
-    setup.created_at || 
-    (setup as any).createdAt;
+  const entryTimestamp =
+    setup.entry_triggered_at ||
+    setup.entryAt ||
+    extSetup.time_entered ||
+    extSetup.time_signaled ||
+    setup.validatedAt ||
+    setup.created_at ||
+    setup.createdAt;
 
-  const resolvedTimestamp = 
-    setup.resolved_at || 
-    (setup as any).time_exited || 
-    (setup as any).execution_time || 
-    (setup as any).closed_at;
+  const resolvedTimestamp =
+    setup.resolved_at ||
+    extSetup.time_exited ||
+    extSetup.execution_time ||
+    extSetup.closed_at;
 
   const execPrice = parseNum(setup.entry_price_recorded ?? setup.entry_price_executed ?? entryMid);
 
   const exitPriceVal = parseNum(
-    setup.execution_price ?? (setup as any).exit_price ?? (
+    setup.execution_price ?? extSetup.exit_price ?? (
       isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('tp1') ? tp1Val :
       isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('tp2') ? (tp2Val || tp1Val) :
       isResolved && (setup.invalidation_reason || setup.outcome_type)?.includes('sl') ? initialStopVal :
@@ -303,19 +520,22 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   );
   const outcomePl = setup.realized_pl !== undefined ? setup.realized_pl : (outcomeR !== undefined ? outcomeR * 100 : undefined);
 
-  const [copiedTradeId, setCopiedTradeId] = useState(false);
   const tradeTelegramId = formatTelegramTradeId(setup);
-
   const isMannaSnd = setup.strategy_id === 'manna_snd';
 
-  let metadata: any = {};
-  try {
-    if (typeof setup.metadata === 'string') {
-      metadata = JSON.parse(setup.metadata);
-    } else if (setup.metadata) {
-      metadata = setup.metadata;
+  const metadata: SndMetadata = useMemo(() => {
+    try {
+      if (typeof setup.metadata === 'string') {
+        return JSON.parse(setup.metadata) as SndMetadata;
+      }
+      if (setup.metadata) {
+        return setup.metadata as SndMetadata;
+      }
+    } catch {
+      // Malformed metadata JSON falls back to defaults
     }
-  } catch {}
+    return {};
+  }, [setup.metadata]);
 
   const htfProximal = parseNum(metadata.htf_curve_proximal);
   const htfDistal = parseNum(metadata.htf_curve_distal);
@@ -324,17 +544,28 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const trend15m = metadata.trend15m || 'up';
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
-  // 1. True 1H HTF Demand Curve Zone (Emerald Green)
   const activeDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : (entryLow ? entryLow * 0.995 : 0)));
   const activeDemandDist = parseNum(metadata.htf_demand_distal || (htfType === 'demand' ? htfDistal : (activeDemandProx ? activeDemandProx * 0.997 : 0)));
   const activeDemandTime = metadata.htf_demand_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
-  // 2. True 1H HTF Supply Curve Zone (Rose Red)
   const activeSupplyProx = parseNum(metadata.htf_supply_proximal || (htfType === 'supply' ? htfProximal : (entryHigh ? entryHigh * 1.005 : 0)));
   const activeSupplyDist = parseNum(metadata.htf_supply_distal || (htfType === 'supply' ? htfDistal : (activeSupplyProx ? activeSupplyProx * 1.003 : 0)));
   const activeSupplyTime = metadata.htf_supply_base_time || metadata.htf_curve_base_time || metadata.entry_zone_base_time;
 
-  // Zoom control helpers
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    levelsRef.current = [
+      entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+      activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist,
+    ].filter((p): p is number => typeof p === 'number' && p > 0);
+  }, [
+    entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+    activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist,
+  ]);
+
   const handleZoom = (zoomIn: boolean) => {
     if (!chartRef.current) return;
     const timeScale = chartRef.current.timeScale();
@@ -347,20 +578,563 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     }
   };
 
-  // Keydown listener for Escape key to close modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  const handleFitAll = () => {
+    if (!chartRef.current) return;
+    chartRef.current.priceScale('right').applyOptions({ autoScale: true });
+    chartRef.current.timeScale().fitContent();
+    setTimeout(() => {
+      chartRef.current?.priceScale('right').applyOptions({ autoScale: false });
+    }, 100);
+    announce('Chart view fitted to all candles and levels');
+  };
 
-  const levelsRef = useRef<number[]>([]);
-  levelsRef.current = [
-    entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
-    activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist
-  ].filter((p): p is number => typeof p === 'number' && p > 0);
+  const handleCopyTradeId = async () => {
+    try {
+      await navigator.clipboard.writeText(tradeTelegramId);
+      setCopiedTradeId(true);
+      announce(`Copied trade ID ${tradeTelegramId}`);
+      setTimeout(() => setCopiedTradeId(false), 2000);
+    } catch {
+      announce('Copy failed');
+    }
+  };
+
+  const handleRequestClose = useCallback(() => {
+    const dialog = dialogRef.current;
+    if (dialog && dialog.open) {
+      dialog.close();
+    } else {
+      onCloseRef.current();
+    }
+  }, []);
+
+  const drawZones = useCallback(() => {
+    if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d') as RoundRectCanvasCtx | null;
+    if (!ctx) return;
+
+    const container = chartContainerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width <= 0 || height <= 0) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const series = candleSeriesRef.current;
+    const timeScale = chartRef.current.timeScale();
+    const isLight = theme === 'light';
+
+    let priceScaleWidth = 84;
+    try {
+      const w = chartRef.current.priceScale('right').width();
+      if (w > 40) priceScaleWidth = w + 10;
+    } catch {
+      // Default right margin used when scale width is unavailable
+    }
+    const plotRightEdge = Math.max(120, width - priceScaleWidth);
+
+    const getY = (price: number) => {
+      if (!price || price <= 0) return null;
+      try {
+        return series.priceToCoordinate(price);
+      } catch {
+        return null;
+      }
+    };
+
+    const getCandleX = (targetUnix: number): number | null => {
+      const candles = displayCandlesRef.current;
+      if (!candles || candles.length === 0) return null;
+
+      try {
+        const exactX = timeScale.timeToCoordinate(targetUnix as UTCTimestamp);
+        if (exactX !== null && !isNaN(exactX) && exactX >= 0 && exactX <= width) {
+          return exactX;
+        }
+      } catch {
+        // Fallback to closest candle below
+      }
+
+      let closestCandle = candles[0];
+      let minDiff = Infinity;
+      for (let i = 0; i < candles.length; i++) {
+        const diff = Math.abs((candles[i].time as number) - targetUnix);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestCandle = candles[i];
+        }
+      }
+
+      if (closestCandle) {
+        try {
+          const cX = timeScale.timeToCoordinate(closestCandle.time);
+          if (cX !== null && !isNaN(cX)) {
+            return cX;
+          }
+        } catch {
+          return null;
+        }
+      }
+
+      return null;
+    };
+
+    const getX = (timeStr?: string) => {
+      if (!timeStr) return 0;
+      try {
+        const unixTime = Math.floor(new Date(timeStr).getTime() / 1000);
+        return getCandleX(unixTime) ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const drawZonePill = (text: string, x: number, y: number, fg: string, border: string) => {
+      ctx.save();
+      ctx.font = '600 10px "JetBrains Mono", monospace';
+      const padX = 6;
+      const textW = ctx.measureText(text).width;
+      const pillW = textW + padX * 2;
+      const pillH = 16;
+      const clampedX = Math.max(8, Math.min(plotRightEdge - pillW - 6, x));
+      const clampedY = Math.max(6, Math.min(height - pillH - 28, y));
+
+      ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(11, 15, 23, 0.9)';
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(clampedX, clampedY, pillW, pillH, 3);
+      } else {
+        ctx.rect(clampedX, clampedY, pillW, pillH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = fg;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, clampedX + padX, clampedY + pillH / 2 + 0.5);
+      ctx.restore();
+    };
+
+    // 1. Draw 1H HTF Demand & Supply Curve Zones for Manna SnD
+    if (isMannaSnd) {
+      if (activeDemandProx > 0 && activeDemandDist > 0) {
+        const rawY1 = series.priceToCoordinate(activeDemandProx);
+        const rawY2 = series.priceToCoordinate(activeDemandDist);
+
+        const y1 = rawY1 !== null ? rawY1 : height - 20;
+        const y2 = rawY2 !== null ? rawY2 : height - 5;
+
+        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
+        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
+        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
+        const startX = getX(activeDemandTime);
+
+        let endX = plotRightEdge;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = Math.min(plotRightEdge, resolvedX);
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const baseUnix = activeDemandTime ? Math.floor(new Date(activeDemandTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            if ((c.time as number) > baseUnix && c.low < Math.min(activeDemandProx, activeDemandDist)) {
+              const bX = getCandleX(c.time as number);
+              if (bX !== null && bX > startX) { endX = Math.min(plotRightEdge, bX); break; }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
+
+        ctx.save();
+        ctx.fillStyle = isLight ? 'rgba(5, 150, 105, 0.07)' : 'rgba(16, 185, 129, 0.08)';
+        ctx.strokeStyle = isLight ? 'rgba(5, 150, 105, 0.4)' : 'rgba(16, 185, 129, 0.38)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+        ctx.restore();
+
+        const dMin = formatPrice(Math.min(activeDemandProx, activeDemandDist), decimals);
+        const dMax = formatPrice(Math.max(activeDemandProx, activeDemandDist), decimals);
+        const form = metadata.htf_demand_formation ? ` · ${metadata.htf_demand_formation}` : '';
+        drawZonePill(
+          `1H DEMAND${form} ${dMin}–${dMax}`,
+          startX + 8,
+          topY + 4,
+          isLight ? '#047857' : '#34d399',
+          isLight ? 'rgba(5, 150, 105, 0.35)' : 'rgba(16, 185, 129, 0.4)'
+        );
+      }
+
+      if (activeSupplyProx > 0 && activeSupplyDist > 0) {
+        const rawY1 = series.priceToCoordinate(activeSupplyProx);
+        const rawY2 = series.priceToCoordinate(activeSupplyDist);
+
+        const y1 = rawY1 !== null ? rawY1 : 5;
+        const y2 = rawY2 !== null ? rawY2 : 20;
+
+        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
+        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
+        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
+        const startX = getX(activeSupplyTime);
+
+        let endX = plotRightEdge;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = Math.min(plotRightEdge, resolvedX);
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const baseUnix = activeSupplyTime ? Math.floor(new Date(activeSupplyTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            if ((c.time as number) > baseUnix && c.high > Math.max(activeSupplyProx, activeSupplyDist)) {
+              const bX = getCandleX(c.time as number);
+              if (bX !== null && bX > startX) { endX = Math.min(plotRightEdge, bX); break; }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
+
+        ctx.save();
+        ctx.fillStyle = isLight ? 'rgba(220, 38, 38, 0.06)' : 'rgba(239, 68, 68, 0.08)';
+        ctx.strokeStyle = isLight ? 'rgba(220, 38, 38, 0.38)' : 'rgba(239, 68, 68, 0.38)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+        ctx.restore();
+
+        const sMin = formatPrice(Math.min(activeSupplyProx, activeSupplyDist), decimals);
+        const sMax = formatPrice(Math.max(activeSupplyProx, activeSupplyDist), decimals);
+        const form = metadata.htf_supply_formation ? ` · ${metadata.htf_supply_formation}` : '';
+        drawZonePill(
+          `1H SUPPLY${form} ${sMin}–${sMax}`,
+          startX + 8,
+          topY + 4,
+          isLight ? '#b91c1c' : '#f87171',
+          isLight ? 'rgba(220, 38, 38, 0.35)' : 'rgba(239, 68, 68, 0.4)'
+        );
+      }
+    }
+
+    // 2. Draw 15M Entry Zone Shaded Box
+    if (entryLow > 0 && entryHigh > 0) {
+      const y1 = getY(entryHigh);
+      const y2 = getY(entryLow);
+
+      if (y1 !== null && y2 !== null) {
+        const topY = Math.min(y1, y2);
+        const boxHeight = Math.max(4, Math.abs(y2 - y1));
+        const zoneBaseTime = metadata.entry_zone_base_time || setup.created_at || setup.createdAt;
+        let startX = getX(zoneBaseTime);
+        if ((startX === null || startX === undefined) && setup.created_at) {
+          startX = getX(setup.created_at);
+        }
+        if (startX === null || startX === undefined) {
+          startX = 0;
+        }
+
+        let endX = plotRightEdge;
+        if (isResolved && resolvedTimestamp) {
+          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+          const resolvedX = getCandleX(exitUnix);
+          if (resolvedX !== null && resolvedX > startX) {
+            endX = Math.min(plotRightEdge, resolvedX);
+          }
+        } else {
+          const candles = displayCandlesRef.current;
+          const zoneBaseUnix = zoneBaseTime ? Math.floor(new Date(zoneBaseTime).getTime() / 1000) : 0;
+          for (const c of candles) {
+            const cUnix = c.time as number;
+            if (cUnix > zoneBaseUnix) {
+              const isBreached = isLong ? c.low < entryLow : c.high > entryHigh;
+              if (isBreached) {
+                const breachX = getCandleX(cUnix);
+                if (breachX !== null && breachX > startX) {
+                  endX = Math.min(plotRightEdge, breachX);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        const boxWidth = Math.max(10, endX - startX);
+
+        ctx.save();
+        ctx.fillStyle = isLong
+          ? (isLight ? 'rgba(217, 119, 6, 0.08)' : 'rgba(245, 158, 11, 0.09)')
+          : (isLight ? 'rgba(220, 38, 38, 0.07)' : 'rgba(239, 68, 68, 0.09)');
+        ctx.strokeStyle = isLong
+          ? (isLight ? 'rgba(180, 83, 9, 0.45)' : 'rgba(245, 158, 11, 0.45)')
+          : (isLight ? 'rgba(185, 28, 28, 0.45)' : 'rgba(239, 68, 68, 0.45)');
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.fillRect(startX, topY, boxWidth, boxHeight);
+        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
+        ctx.restore();
+
+        drawZonePill(
+          `15M ZONE ${formatPrice(entryLow, decimals)}–${formatPrice(entryHigh, decimals)}`,
+          startX + 8,
+          topY - 20 > 8 ? topY - 20 : topY + 4,
+          isLong ? (isLight ? '#92400e' : '#fbbf24') : (isLight ? '#991b1b' : '#fca5a5'),
+          isLong
+            ? (isLight ? 'rgba(180, 83, 9, 0.35)' : 'rgba(245, 158, 11, 0.4)')
+            : (isLight ? 'rgba(185, 28, 28, 0.35)' : 'rgba(239, 68, 68, 0.4)')
+        );
+      }
+    }
+
+    // 3. Draw Exact Entry Point Marker & Smart Non-Colliding Pill Badge
+    const targetEntryTime = entryTimestamp
+      ? new Date(entryTimestamp).getTime()
+      : (displayCandlesRef.current.length > 0 ? (displayCandlesRef.current[displayCandlesRef.current.length - 1].time as number) * 1000 : null);
+
+    if (targetEntryTime) {
+      try {
+        const entryUnix = Math.floor(targetEntryTime / 1000);
+        const entryX = getCandleX(entryUnix);
+        const entryPriceVal = execPrice > 0 ? execPrice : (entryMid > 0 ? entryMid : (entryLow + entryHigh) / 2);
+        const entryY = entryPriceVal > 0 ? getY(entryPriceVal) : null;
+
+        if (entryX !== null && entryX > 0 && entryX < plotRightEdge) {
+          let line1Text: string;
+          let line2Text: string | null = null;
+          if (showBidAsk && entryPriceVal > 0) {
+            const { bid: entryBid, ask: entryAsk, filledSide } = getDirectionalBidAsk(
+              setup.instrument, entryPriceVal, isLong, true, serverQuote
+            );
+            if (filledSide === 'ask') {
+              line1Text = `${isLong ? '▲' : '▼'} ENTRY · ASK ${entryAsk.toFixed(decimals)}`;
+              line2Text = `BID AT FILL ${entryBid.toFixed(decimals)}`;
+            } else {
+              line1Text = `${isLong ? '▲' : '▼'} ENTRY · BID ${entryBid.toFixed(decimals)}`;
+              line2Text = `ASK AT FILL ${entryAsk.toFixed(decimals)}`;
+            }
+          } else {
+            const formatted = entryPriceVal > 0 ? formatPrice(entryPriceVal, decimals) : 'Zone';
+            line1Text = `${isPending ? 'TARGET' : (isLong ? '▲ ENTRY' : '▼ ENTRY')} ${formatted}`;
+          }
+
+          ctx.save();
+          ctx.strokeStyle = isLight ? 'rgba(3, 105, 161, 0.22)' : 'rgba(56, 189, 248, 0.22)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(entryX, 0);
+          ctx.lineTo(entryX, height);
+          ctx.stroke();
+          ctx.restore();
+
+          if (entryY !== null && !isNaN(entryY) && entryY >= 0 && entryY <= height) {
+            ctx.save();
+            const accentColor = isLong ? (isLight ? '#0284c7' : '#38bdf8') : (isLight ? '#c2410c' : '#fb923c');
+
+            ctx.beginPath();
+            ctx.arc(entryX, entryY, 10, 0, Math.PI * 2);
+            ctx.fillStyle = isLong
+              ? (isLight ? 'rgba(2, 132, 199, 0.22)' : 'rgba(56, 189, 248, 0.26)')
+              : (isLight ? 'rgba(194, 65, 12, 0.22)' : 'rgba(251, 146, 60, 0.26)');
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(entryX, entryY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = accentColor;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.fillStyle = accentColor;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            if (isLong) {
+              const tipY = entryY + 8;
+              ctx.moveTo(entryX, tipY);
+              ctx.lineTo(entryX - 5, tipY + 9);
+              ctx.lineTo(entryX + 5, tipY + 9);
+            } else {
+              const tipY = entryY - 8;
+              ctx.moveTo(entryX, tipY);
+              ctx.lineTo(entryX - 5, tipY - 9);
+              ctx.lineTo(entryX + 5, tipY - 9);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = '700 11px "JetBrains Mono", monospace';
+            const padX = 9;
+            const line1W = ctx.measureText(line1Text).width;
+            ctx.font = '500 10px "JetBrains Mono", monospace';
+            const line2W = line2Text ? ctx.measureText(line2Text).width : 0;
+            const badgeW = Math.max(line1W, line2W) + padX * 2;
+            const badgeH = line2Text ? 36 : 22;
+
+            let pillX = entryX + 14;
+            if (pillX + badgeW > plotRightEdge - 8) {
+              pillX = Math.max(8, entryX - badgeW - 14);
+            }
+            let pillY = isLong ? entryY - badgeH - 10 : entryY + 12;
+            if (pillY < 10) pillY = entryY + 12;
+            if (pillY + badgeH > height - 28) pillY = Math.max(10, entryY - badgeH - 10);
+
+            ctx.shadowColor = isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 2;
+
+            ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(15, 23, 42, 0.94)';
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 1.25;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(pillX, pillY, badgeW, badgeH, 5);
+            } else {
+              ctx.rect(pillX, pillY, badgeW, badgeH);
+            }
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+            ctx.stroke();
+
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = accentColor;
+            ctx.font = '700 11px "JetBrains Mono", monospace';
+            ctx.fillText(line1Text, pillX + padX, line2Text ? pillY + 11 : pillY + badgeH / 2);
+
+            if (line2Text) {
+              ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
+              ctx.font = '500 10px "JetBrains Mono", monospace';
+              ctx.fillText(line2Text, pillX + padX, pillY + 25);
+            }
+
+            ctx.restore();
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to draw entry marker:', err);
+      }
+    }
+
+    // 4. Subtle Vertical Resolved Timestamp Line (Review Charts Only)
+    if (resolvedTimestamp && isResolved) {
+      try {
+        const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
+        const resX = getCandleX(resUnix);
+
+        if (resX !== null && resX > 0 && resX < plotRightEdge) {
+          const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
+          const isWin = reason.includes('TP');
+          const flagColor = isWin
+            ? (isLight ? 'rgba(5, 150, 105, 0.25)' : 'rgba(16, 185, 129, 0.25)')
+            : (isLight ? 'rgba(220, 38, 38, 0.25)' : 'rgba(239, 68, 68, 0.25)');
+
+          ctx.save();
+          ctx.strokeStyle = flagColor;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(resX, 0);
+          ctx.lineTo(resX, height);
+          ctx.stroke();
+          ctx.restore();
+        }
+      } catch {
+        // Ignore unparseable resolved timestamp
+      }
+    }
+  }, [
+    isMannaSnd, entryLow, entryHigh, entryMid,
+    isLong, isResolved, isPending, metadata, entryTimestamp,
+    resolvedTimestamp, execPrice, theme, showBidAsk, serverQuote,
+    decimals, activeDemandProx, activeDemandDist, activeDemandTime,
+    activeSupplyProx, activeSupplyDist, activeSupplyTime, setup.created_at,
+    setup.createdAt, setup.invalidation_reason, setup.instrument,
+  ]);
+
+  // 0. Open native <dialog> in the top layer on mount and wire native close/Esc
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+
+    const handleClose = () => {
+      onCloseRef.current();
+    };
+    dialog.addEventListener('close', handleClose);
+
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      if (dialog.open) {
+        dialog.close();
+      }
+    };
+  }, []);
+
+  // 0b. Toolbar roving-tabindex fallback only where native focusgroup is unsupported
+  useEffect(() => {
+    const bar = toolbarRef.current;
+    if (!bar || 'focusGroup' in HTMLElement.prototype) return;
+
+    const getItems = () => Array.from(bar.querySelectorAll<HTMLButtonElement>('button:not([disabled])'));
+    const initialItems = getItems();
+    initialItems.forEach((b, i) => {
+      b.tabIndex = i === 0 ? 0 : -1;
+    });
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const items = getItems();
+      const target = e.target as HTMLButtonElement | null;
+      if (target && items.includes(target)) {
+        items.forEach((b) => {
+          b.tabIndex = b === target ? 0 : -1;
+        });
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const items = getItems();
+      if (items.length === 0) return;
+      const activeIdx = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (activeIdx === -1) return;
+
+      const rtl = getComputedStyle(bar).direction === 'rtl';
+      const step =
+        e.key === 'ArrowRight' ? (rtl ? -1 : 1) :
+        e.key === 'ArrowLeft' ? (rtl ? 1 : -1) :
+        e.key === 'Home' ? -activeIdx :
+        e.key === 'End' ? items.length - 1 - activeIdx : 0;
+
+      if (step === 0 && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      const nextIdx = (activeIdx + step + items.length) % items.length;
+      items[nextIdx].focus();
+    };
+
+    bar.addEventListener('focusin', handleFocusIn);
+    bar.addEventListener('keydown', handleKeyDown);
+    return () => {
+      bar.removeEventListener('focusin', handleFocusIn);
+      bar.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // 1. Initialize Chart Canvas ONCE on mount
   useEffect(() => {
@@ -370,48 +1144,50 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     container.innerHTML = '';
 
     const containerHeight = container.clientHeight || (window.innerHeight - 140);
-    const isLight = theme === 'light';
-    const targetTz = getEffectiveTimezone(selectedTz);
+    const initialTheme = (localStorage.getItem('manna_chart_theme') as 'dark' | 'light') || 'dark';
+    const initialTz = localStorage.getItem('manna_chart_timezone') || 'America/New_York';
+    const palette = getChartThemePalette(initialTheme);
+    const targetTz = getEffectiveTimezone(initialTz);
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: isLight ? '#ffffff' : '#090314' },
-        textColor: isLight ? '#0f172a' : '#e056fd',
-        fontSize: 12,
+        background: { type: ColorType.Solid, color: palette.bg },
+        textColor: palette.text,
+        fontSize: 11,
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
-        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid },
       },
       width: container.clientWidth,
       height: containerHeight,
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: isLight ? '#6366f1' : '#e056fd',
+          color: palette.crosshair,
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+          labelBackgroundColor: palette.crosshairLabelBg,
         },
         horzLine: {
-          color: isLight ? '#6366f1' : '#e056fd',
+          color: palette.crosshair,
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+          labelBackgroundColor: palette.crosshairLabelBg,
         },
       },
       rightPriceScale: {
-        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+        borderColor: palette.border,
         scaleMargins: { top: 0.1, bottom: 0.1 },
         autoScale: true,
       },
       timeScale: {
-        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+        borderColor: palette.border,
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 6,
-        tickMarkFormatter: (time: any, tickMarkType: number, locale: string) => {
+        rightOffset: 8,
+        tickMarkFormatter: (time: Time, tickMarkType: number, locale: string) => {
           try {
             const d = new Date((time as number) * 1000);
             if (tickMarkType < 3) {
@@ -421,10 +1197,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           } catch {
             return '';
           }
-        }
+        },
       },
       localization: {
-        timeFormatter: (time: number) => {
+        timeFormatter: (time: Time) => {
           try {
             const d = new Date((time as number) * 1000);
             return d.toLocaleString('en-US', {
@@ -434,23 +1210,23 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               day: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
-              hour12: false
+              hour12: false,
             });
           } catch {
             return new Date((time as number) * 1000).toISOString();
           }
-        }
-      }
+        },
+      },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: isLight ? '#00b060' : '#00e676',
-      downColor: isLight ? '#ef4444' : '#ff1744',
-      borderUpColor: isLight ? '#00b060' : '#00e676',
-      borderDownColor: isLight ? '#ef4444' : '#ff1744',
-      wickUpColor: isLight ? '#00b060' : '#00e676',
-      wickDownColor: isLight ? '#ef4444' : '#ff1744',
-      autoscaleInfoProvider: (original: any) => {
+      upColor: palette.upColor,
+      downColor: palette.downColor,
+      borderUpColor: palette.upColor,
+      borderDownColor: palette.downColor,
+      wickUpColor: palette.upColor,
+      wickDownColor: palette.downColor,
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null): AutoscaleInfo | null => {
         const res = original();
         let min = res?.priceRange?.minValue;
         let max = res?.priceRange?.maxValue;
@@ -466,14 +1242,48 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           max += margin;
         }
 
-        return {
-          priceRange: {
-            minValue: min,
-            maxValue: max,
-          },
-        };
+        return min !== undefined && max !== undefined
+          ? { priceRange: { minValue: min, maxValue: max } }
+          : res;
       },
     });
+
+    const handleCrosshairMove = (param: MouseEventParams<Time>) => {
+      if (!param || !param.time || !param.seriesData) {
+        setCrosshairOhlc(null);
+        return;
+      }
+      const bar = param.seriesData.get(candleSeries) as CandlestickData<Time> | undefined;
+      if (!bar || bar.open === undefined) {
+        setCrosshairOhlc(null);
+        return;
+      }
+      const tz = getEffectiveTimezone(localStorage.getItem('manna_chart_timezone') || 'America/New_York');
+      let timeStr: string;
+      try {
+        const d = new Date((param.time as number) * 1000);
+        timeStr = d.toLocaleString('en-US', {
+          timeZone: tz,
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+      } catch {
+        timeStr = '';
+      }
+      setCrosshairOhlc({
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        timeStr,
+        isUp: bar.close >= bar.open,
+      });
+    };
+
+    chart.subscribeCrosshairMove(handleCrosshairMove);
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
@@ -498,6 +1308,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     }
 
     return () => {
+      try { chart.unsubscribeCrosshairMove(handleCrosshairMove); } catch { /* ignored */ }
       window.removeEventListener('resize', handleResize);
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -508,61 +1319,72 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     };
   }, []);
 
+  // Update series priceFormat precision dynamically for the active instrument
+  useEffect(() => {
+    if (!candleSeriesRef.current) return;
+    candleSeriesRef.current.applyOptions({
+      priceFormat: {
+        type: 'price',
+        precision: decimals,
+        minMove,
+      },
+    });
+  }, [decimals, minMove]);
 
   // Dynamically update theme options on existing chart canvas
   useEffect(() => {
-    localStorage.setItem('manna_chart_theme', theme);
+    safeStorageSet('manna_chart_theme', theme);
     if (!chartRef.current) return;
 
-    const isLight = theme === 'light';
+    const palette = getChartThemePalette(theme);
     chartRef.current.applyOptions({
       layout: {
-        background: { type: ColorType.Solid, color: isLight ? '#ffffff' : '#090314' },
-        textColor: isLight ? '#0f172a' : '#e056fd',
+        background: { type: ColorType.Solid, color: palette.bg },
+        textColor: palette.text,
       },
       grid: {
-        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
-        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(224, 86, 253, 0.06)' },
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid },
       },
       crosshair: {
         vertLine: {
-          color: isLight ? '#6366f1' : '#e056fd',
-          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+          color: palette.crosshair,
+          labelBackgroundColor: palette.crosshairLabelBg,
         },
         horzLine: {
-          color: isLight ? '#6366f1' : '#e056fd',
-          labelBackgroundColor: isLight ? '#6366f1' : '#e056fd',
+          color: palette.crosshair,
+          labelBackgroundColor: palette.crosshairLabelBg,
         },
       },
       rightPriceScale: {
-        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+        borderColor: palette.border,
       },
       timeScale: {
-        borderColor: isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(224, 86, 253, 0.2)',
+        borderColor: palette.border,
       },
     });
 
     if (candleSeriesRef.current) {
       candleSeriesRef.current.applyOptions({
-        upColor: isLight ? '#00b060' : '#00e676',
-        downColor: isLight ? '#ef4444' : '#ff1744',
-        borderUpColor: isLight ? '#00b060' : '#00e676',
-        borderDownColor: isLight ? '#ef4444' : '#ff1744',
-        wickUpColor: isLight ? '#00b060' : '#00e676',
-        wickDownColor: isLight ? '#ef4444' : '#ff1744',
+        upColor: palette.upColor,
+        downColor: palette.downColor,
+        borderUpColor: palette.upColor,
+        borderDownColor: palette.downColor,
+        wickUpColor: palette.upColor,
+        wickDownColor: palette.downColor,
       });
     }
   }, [theme]);
 
   // Dynamically update timezone formatting on existing chart canvas
   useEffect(() => {
-    localStorage.setItem('manna_chart_timezone', selectedTz);
+    safeStorageSet('manna_chart_timezone', selectedTz);
     if (!chartRef.current) return;
 
     const targetTz = getEffectiveTimezone(selectedTz);
     chartRef.current.applyOptions({
       timeScale: {
-        tickMarkFormatter: (time: any, tickMarkType: number, locale: string) => {
+        tickMarkFormatter: (time: Time, tickMarkType: number, locale: string) => {
           try {
             const d = new Date((time as number) * 1000);
             if (tickMarkType < 3) {
@@ -572,10 +1394,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           } catch {
             return '';
           }
-        }
+        },
       },
       localization: {
-        timeFormatter: (time: number) => {
+        timeFormatter: (time: Time) => {
           try {
             const d = new Date((time as number) * 1000);
             return d.toLocaleString('en-US', {
@@ -585,13 +1407,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               day: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
-              hour12: false
+              hour12: false,
             });
           } catch {
             return new Date((time as number) * 1000).toISOString();
           }
-        }
-      }
+        },
+      },
     });
   }, [selectedTz]);
 
@@ -605,19 +1427,21 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     const candleSeries = candleSeriesRef.current;
 
-    // Clear previous price lines
     priceLinesRef.current.forEach(line => {
-      try { candleSeries.removePriceLine(line); } catch {}
+      try { candleSeries.removePriceLine(line); } catch { /* ignored */ }
     });
     priceLinesRef.current = [];
 
-    // Determine count based on timeframe for deep historical chart scrolling
-    let count = timeframe === '1m' ? 1000 : timeframe === '5m' ? 1000 : timeframe === '15m' ? 800 : timeframe === '1h' ? 720 : timeframe === '4h' ? 500 : 365;
+    let count =
+      timeframe === '1m' ? 1000 :
+      timeframe === '5m' ? 1000 :
+      timeframe === '15m' ? 800 :
+      timeframe === '1h' ? 720 :
+      timeframe === '4h' ? 500 : 365;
     if (isResolved) {
       count = Math.max(count, 2000);
     }
 
-    // Fetch candles from backend
     const encodedInst = encodeURIComponent(setup.instrument);
     fetch(`${API_BASE}/api/candles/${encodedInst}?timeframe=${timeframe}&count=${count}`)
       .then(res => {
@@ -630,28 +1454,22 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           throw new Error('No candle data available for ' + setup.instrument);
         }
 
-        if (data.quote) {
-          setServerQuote(data.quote);
-        }
+        if (data.quote) setServerQuote(data.quote);
+        if (data.provider) setFeedProvider(data.provider);
 
-        if (data.provider) {
-          setFeedProvider(data.provider);
-        }
-
-        const formattedCandles = data.candles.map((c: any) => ({
-          time: Math.floor(new Date(c.timestamp).getTime() / 1000) as any,
+        const formattedCandles: CandlestickData<Time>[] = (data.candles as RawCandle[]).map((c) => ({
+          time: Math.floor(new Date(c.timestamp).getTime() / 1000) as UTCTimestamp,
           open: Number(c.open),
           high: Number(c.high),
           low: Number(c.low),
           close: Number(c.close),
         }));
 
-        // Truncate price action after trade exit strictly on review charts (resolved/invalidated)
         let displayCandles = formattedCandles;
         if (isResolved && resolvedTimestamp) {
           try {
             const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-            const filtered = formattedCandles.filter((c: any) => (c.time as number) <= exitUnix);
+            const filtered = formattedCandles.filter((c) => (c.time as number) <= exitUnix);
             if (filtered.length > 0) {
               displayCandles = filtered;
             }
@@ -663,119 +1481,109 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         displayCandlesRef.current = displayCandles;
         candleSeries.setData(displayCandles);
 
-        // Superimpose Target & Stop Levels for ALL trades (awaiting_entry, active, runner, resolved)
-        // Decluttered & De-duplicated: prevent badge collisions on right price axis
-        const lines: any[] = [];
-        const statusPrefix = isPending ? '⏳ PENDING ' : isRunner ? '🏃 RUNNER ' : isActive ? '🔥 ACTIVE ' : '';
+        const lines: IPriceLine[] = [];
         const primaryEntry = execPrice > 0 ? execPrice : (entryMid > 0 ? entryMid : ((entryLow + entryHigh) / 2));
+        const isBeStopAtEntry = primaryEntry > 0 && stopVal > 0 && Math.abs(stopVal - primaryEntry) <= priceEps;
 
-        // 1. Primary Entry Line
-        // For filled trades (active, runner, resolved), draw ONE clean line at fill price.
-        // For pending trades, draw ONE clean line at entry mid.
+        // 1. Entry Line
         if (!isPending && primaryEntry > 0) {
-          const isBeStopAtEntry = stopVal > 0 && Math.abs(stopVal - primaryEntry) < 0.02;
           lines.push(candleSeries.createPriceLine({
             price: primaryEntry,
-            color: '#ffb703',
+            color: '#f59e0b',
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: true,
-            title: isBeStopAtEntry
-              ? `🎯 ENTRY / BE STOP (${primaryEntry})`
-              : `🎯 ${statusPrefix}ENTRY (${primaryEntry})`,
+            title: isBeStopAtEntry ? 'ENTRY / BE' : 'ENTRY',
           }));
         } else if (isPending && entryMid > 0) {
           lines.push(candleSeries.createPriceLine({
             price: entryMid,
-            color: '#ffb703',
+            color: '#f59e0b',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🎯 PENDING ENTRY (${entryMid})`,
+            title: 'PENDING',
           }));
         }
 
         // 2. Initial Stop Line
         const effectiveInitialStop = initialStopVal > 0 ? initialStopVal : stopVal;
-        const exitMatchesStop = exitPriceVal > 0 && Math.abs(exitPriceVal - effectiveInitialStop) < 0.02;
-        if (effectiveInitialStop > 0 && !exitMatchesStop) {
+        const exitMatchesStop = exitPriceVal > 0 && Math.abs(exitPriceVal - effectiveInitialStop) <= priceEps;
+        if (effectiveInitialStop > 0 && !exitMatchesStop && !(isBeStopAtEntry && Math.abs(effectiveInitialStop - primaryEntry) <= priceEps)) {
           lines.push(candleSeries.createPriceLine({
             price: effectiveInitialStop,
-            color: '#ff1744',
+            color: '#ef4444',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: isResolved ? `🛑 INITIAL STOP (${effectiveInitialStop})` : `🛑 ${statusPrefix}STOP (${effectiveInitialStop})`,
+            title: isResolved ? 'INIT SL' : 'SL',
           }));
         }
 
-        // 3. Trailed / Break Even Stop Line
-        // Suppress if identical to initial stop OR already merged into primaryEntry
-        const isBeMerged = primaryEntry > 0 && Math.abs(stopVal - primaryEntry) < 0.02;
-        if (stopVal > 0 && Math.abs(stopVal - effectiveInitialStop) > 0.01 && !isBeMerged) {
-          const exitMatchesTrailedStop = exitPriceVal > 0 && Math.abs(exitPriceVal - stopVal) < 0.02;
+        // 3. Trailed / Break-Even Stop Line
+        if (stopVal > 0 && Math.abs(stopVal - effectiveInitialStop) > priceEps && !isBeStopAtEntry) {
+          const exitMatchesTrailedStop = exitPriceVal > 0 && Math.abs(exitPriceVal - stopVal) <= priceEps;
           if (!exitMatchesTrailedStop) {
             lines.push(candleSeries.createPriceLine({
               price: stopVal,
-              color: '#ffd700',
+              color: '#eab308',
               lineWidth: 2,
               lineStyle: LineStyle.Dashed,
               axisLabelVisible: true,
-              title: isRunner ? `🛡️ BE STOP (${stopVal})` : `🛡️ TRAILED STOP (${stopVal})`,
+              title: isRunner ? 'BE SL' : 'TRAIL SL',
             }));
           }
         }
 
         // 4. Target 1 (TP1) Line
-        const exitMatchesTp1 = isResolved && exitPriceVal > 0 && Math.abs(exitPriceVal - tp1Val) < 0.02;
+        const exitMatchesTp1 = isResolved && exitPriceVal > 0 && Math.abs(exitPriceVal - tp1Val) <= priceEps;
         if (tp1Val > 0) {
           lines.push(candleSeries.createPriceLine({
             price: tp1Val,
-            color: '#00e676',
-            lineWidth: 2,
-            lineStyle: LineStyle.Dashed,
+            color: '#10b981',
+            lineWidth: isRunner ? 1 : 2,
+            lineStyle: isRunner ? LineStyle.Dotted : LineStyle.Dashed,
             axisLabelVisible: true,
             title: exitMatchesTp1
-              ? `🏁 EXIT @ TP1 (+${setup.r_multiple_1 || 2.0}R: ${tp1Val})`
-              : (isRunner ? `✓ TP1 REACHED (+${setup.r_multiple_1 || 2.0}R)` : `🟢 ${statusPrefix}TP1 (+${setup.r_multiple_1 || 2.0}R: ${tp1Val})`),
+              ? `EXIT TP1 +${setup.r_multiple_1 || 2.0}R`
+              : (isRunner ? `TP1 ✓ +${setup.r_multiple_1 || 2.0}R` : `TP1 +${setup.r_multiple_1 || 2.0}R`),
           }));
         }
 
         // 5. Target 2 (TP2) Line
-        const exitMatchesTp2 = isResolved && exitPriceVal > 0 && tp2Val && Math.abs(exitPriceVal - tp2Val) < 0.02;
+        const exitMatchesTp2 = isResolved && exitPriceVal > 0 && tp2Val && Math.abs(exitPriceVal - tp2Val) <= priceEps;
         if (tp2Val && tp2Val > 0) {
           lines.push(candleSeries.createPriceLine({
             price: tp2Val,
-            color: '#00e676',
+            color: '#10b981',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
             title: exitMatchesTp2
-              ? `🏁 EXIT @ TP2 (+${setup.r_multiple_2 || 3.0}R: ${tp2Val})`
-              : (isRunner ? `🎯 RUNNER TP2 (+${setup.r_multiple_2 || 3.0}R)` : `🟢 ${statusPrefix}TP2 (+${setup.r_multiple_2 || 3.0}R: ${tp2Val})`),
+              ? `EXIT TP2 +${setup.r_multiple_2 || 3.0}R`
+              : `TP2 +${setup.r_multiple_2 || 3.0}R`,
           }));
         }
 
-        // 6. Exit Price Line (only if resolved and not matching TP1, TP2, or Stop)
+        // 6. Exit Price Line
         if (exitPriceVal > 0 && isResolved && !exitMatchesTp1 && !exitMatchesTp2 && !exitMatchesStop) {
           lines.push(candleSeries.createPriceLine({
             price: exitPriceVal,
-            color: '#00e5ff',
+            color: '#38bdf8',
             lineWidth: 2,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🏁 EXIT (${exitPriceVal})`,
+            title: 'EXIT',
           }));
         }
 
         priceLinesRef.current = lines;
 
-        // Superimpose Candlestick Markers for Exit Point (Entry is rendered precisely via canvas overlay)
-        const markers: any[] = [];
+        // Candlestick Markers for Exit Point
+        const markers: SeriesMarker<Time>[] = [];
         if (resolvedTimestamp && isResolved) {
           try {
-            const resTimeMs = new Date(resolvedTimestamp).getTime();
-            const resUnix = Math.floor(resTimeMs / 1000);
+            const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
             let closestRes = displayCandles[displayCandles.length - 1];
             let minDiff = Infinity;
             for (const c of displayCandles) {
@@ -793,26 +1601,27 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               if (exitPriceVal > 0) {
                 if (showBidAsk) {
                   const { bid: exitBid, ask: exitAsk, filledSide: exitSide } = getDirectionalBidAsk(
-                    setup.instrument, exitPriceVal, isLong, false, serverQuote
+                    setup.instrument, exitPriceVal, isLong, false, data.quote || null
                   );
-                  // Long exits at BID, Short exits at ASK
                   exitPriceLabel = exitSide === 'bid'
-                    ? `BID(EXIT):${exitBid.toFixed(4)} ASK:${exitAsk.toFixed(4)}`
-                    : `ASK(EXIT):${exitAsk.toFixed(4)} BID:${exitBid.toFixed(4)}`;
+                    ? `BID ${exitBid.toFixed(decimals)} · ASK ${exitAsk.toFixed(decimals)}`
+                    : `ASK ${exitAsk.toFixed(decimals)} · BID ${exitBid.toFixed(decimals)}`;
                 } else {
-                  exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
+                  exitPriceLabel = formatPrice(exitPriceVal, decimals);
                 }
               }
               markers.push({
                 time: closestRes.time,
                 position: isWin ? 'aboveBar' : 'belowBar',
-                color: isWin ? '#00e676' : '#ff1744',
+                color: isWin ? '#10b981' : '#ef4444',
                 shape: 'circle',
-                text: exitPriceLabel ? `🏁 ${cleanReason} (${exitPriceLabel})` : `🏁 ${cleanReason}`,
+                text: exitPriceLabel ? `${cleanReason} · ${exitPriceLabel}` : cleanReason,
                 size: 2,
               });
             }
-          } catch {}
+          } catch {
+            // Skip malformed marker timestamps
+          }
         }
 
         if (markers.length > 0) {
@@ -829,11 +1638,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         } else if (seriesMarkersRef.current) {
           try {
             seriesMarkersRef.current.setMarkers([]);
-          } catch {}
+          } catch {
+            // Series may already be disposed
+          }
         }
 
-        // Auto Scale to fit candles ONCE per timeframe selection
-        if (lastFittedTimeframeRef.current !== timeframe) {
+        // Auto Scale to fit candles ONCE per setup + timeframe selection
+        const fitKey = `${setup.id}:${setup.instrument}:${timeframe}`;
+        if (lastFittedKeyRef.current !== fitKey) {
           chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
 
           if (isResolved && (entryTimestamp || resolvedTimestamp)) {
@@ -842,17 +1654,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               const exitUnix = resolvedTimestamp ? Math.floor(new Date(resolvedTimestamp).getTime() / 1000) : null;
 
               let minIdx = -1;
-              let maxIdx = -1;
-
-              displayCandles.forEach((c: any, idx: number) => {
+              displayCandles.forEach((c, idx) => {
                 const t = c.time as number;
                 if (entryUnix && Math.abs(t - entryUnix) < 86400) {
                   if (minIdx === -1 || idx < minIdx) minIdx = idx;
-                  if (idx > maxIdx) maxIdx = idx;
                 }
                 if (exitUnix && Math.abs(t - exitUnix) < 86400) {
                   if (minIdx === -1 || idx < minIdx) minIdx = idx;
-                  if (idx > maxIdx) maxIdx = idx;
                 }
               });
 
@@ -860,7 +1668,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                 const pad = 15;
                 chartRef.current?.timeScale().setVisibleLogicalRange({
                   from: Math.max(0, minIdx - pad),
-                  to: displayCandles.length - 1
+                  to: displayCandles.length - 1,
                 });
               } else {
                 chartRef.current?.timeScale().fitContent();
@@ -872,48 +1680,52 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             chartRef.current?.timeScale().fitContent();
           }
 
-          lastFittedTimeframeRef.current = timeframe;
+          lastFittedKeyRef.current = fitKey;
         }
 
         setLoading(false);
-        // Force trigger canvas overlay draw immediately and after scale stabilization
         requestAnimationFrame(() => drawZones());
         setTimeout(() => drawZones(), 60);
         setTimeout(() => drawZones(), 250);
       })
       .catch(err => {
         if (!isMounted) return;
-        setError(err.message || 'Failed to load chart data');
+        setError(err instanceof Error ? err.message : 'Failed to load chart data');
         setLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [setup.id, setup.instrument, entryLow, entryHigh, entryMid, stopVal, initialStopVal, exitPriceVal, tp1Val, tp2Val, timeframe, isPending, isActive, isRunner, isResolved, resolvedTimestamp, entryTimestamp, selectedTz]);
+  }, [
+    setup.id, setup.instrument, setup.r_multiple_1, setup.r_multiple_2,
+    setup.outcome_type, setup.invalidation_reason,
+    entryLow, entryHigh, entryMid, execPrice, stopVal, initialStopVal,
+    exitPriceVal, tp1Val, tp2Val, timeframe, isLong, isPending, isActive,
+    isRunner, isResolved, resolvedTimestamp, entryTimestamp, selectedTz,
+    decimals, priceEps, showBidAsk, drawZones,
+  ]);
 
   // 3. Dynamic Real-Time Candle Drawing (Live Signals ONLY)
   useEffect(() => {
     if (isResolved) return;
     if (!candleSeriesRef.current || !setup.current_price) return;
 
-    const currentPrice = Number(setup.current_price);
+    const curPrice = Number(setup.current_price);
     const candleTime = getCurrentCandleTime(timeframe);
 
-    // If we don't have a live candle yet, or if the time rolled over, initialize it.
     if (!liveCandleRef.current || liveCandleRef.current.time !== candleTime) {
       liveCandleRef.current = {
         time: candleTime,
-        open: currentPrice,
-        high: currentPrice,
-        low: currentPrice,
-        close: currentPrice
+        open: curPrice,
+        high: curPrice,
+        low: curPrice,
+        close: curPrice,
       };
     } else {
-      // Update the current candle values based on the new price tick
-      liveCandleRef.current.high = Math.max(liveCandleRef.current.high, currentPrice);
-      liveCandleRef.current.low = Math.min(liveCandleRef.current.low, currentPrice);
-      liveCandleRef.current.close = currentPrice;
+      liveCandleRef.current.high = Math.max(liveCandleRef.current.high, curPrice);
+      liveCandleRef.current.low = Math.min(liveCandleRef.current.low, curPrice);
+      liveCandleRef.current.close = curPrice;
     }
 
     try {
@@ -928,62 +1740,60 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     if (!candleSeriesRef.current) return;
     const candleSeries = candleSeriesRef.current;
 
-    // Remove existing bid and ask lines
     if (bidLineRef.current) {
-      try { candleSeries.removePriceLine(bidLineRef.current); } catch {}
+      try { candleSeries.removePriceLine(bidLineRef.current); } catch { /* ignored */ }
       bidLineRef.current = null;
     }
     if (askLineRef.current) {
-      try { candleSeries.removePriceLine(askLineRef.current); } catch {}
+      try { candleSeries.removePriceLine(askLineRef.current); } catch { /* ignored */ }
       askLineRef.current = null;
     }
 
-    // Do not draw today's live bid/ask lines on historical review charts
     if (isResolved) return;
 
-    const price = currentPrice && currentPrice > 0 
-      ? currentPrice 
+    const price = currentPrice && currentPrice > 0
+      ? currentPrice
       : (serverQuote?.price && serverQuote.price > 0 ? serverQuote.price : 0);
 
     if (!showBidAsk || price <= 0) return;
 
-    const { bid, ask, decimals } = getBidAskData(setup.instrument, price, serverQuote);
+    const { bid, ask } = getBidAskData(setup.instrument, price, serverQuote);
 
     try {
       bidLineRef.current = candleSeries.createPriceLine({
         price: bid,
-        color: '#00e5ff',
+        color: '#38bdf8',
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `🔵 BID (${bid.toFixed(decimals)})`,
+        title: 'BID',
       });
 
       askLineRef.current = candleSeries.createPriceLine({
         price: ask,
-        color: '#ff5252',
+        color: '#f43f5e',
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `🔴 ASK (${ask.toFixed(decimals)})`,
+        title: 'ASK',
       });
     } catch (err) {
       console.warn('Failed to draw bid/ask lines:', err);
     }
 
     return () => {
-      if (bidLineRef.current && candleSeriesRef.current) {
-        try { candleSeriesRef.current.removePriceLine(bidLineRef.current); } catch {}
+      if (bidLineRef.current) {
+        try { candleSeries.removePriceLine(bidLineRef.current); } catch { /* ignored */ }
         bidLineRef.current = null;
       }
-      if (askLineRef.current && candleSeriesRef.current) {
-        try { candleSeriesRef.current.removePriceLine(askLineRef.current); } catch {}
+      if (askLineRef.current) {
+        try { candleSeries.removePriceLine(askLineRef.current); } catch { /* ignored */ }
         askLineRef.current = null;
       }
     };
-  }, [showBidAsk, currentPrice, serverQuote, setup.instrument, timeframe]);
+  }, [showBidAsk, currentPrice, serverQuote, setup.instrument, timeframe, isResolved]);
 
-  // 4b. Refresh exit marker label when Bid/Ask toggle changes (no re-fetch needed)
+  // 4b. Refresh exit marker label when Bid/Ask toggle changes
   useEffect(() => {
     if (!isResolved || !resolvedTimestamp || !candleSeriesRef.current) return;
     const displayCandles = displayCandlesRef.current;
@@ -1009,448 +1819,33 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             setup.instrument, exitPriceVal, isLong, false, serverQuote
           );
           exitPriceLabel = exitSide === 'bid'
-            ? `BID(EXIT):${exitBid.toFixed(4)} ASK:${exitAsk.toFixed(4)}`
-            : `ASK(EXIT):${exitAsk.toFixed(4)} BID:${exitBid.toFixed(4)}`;
+            ? `BID ${exitBid.toFixed(decimals)} · ASK ${exitAsk.toFixed(decimals)}`
+            : `ASK ${exitAsk.toFixed(decimals)} · BID ${exitBid.toFixed(decimals)}`;
         } else {
-          exitPriceLabel = isForex ? exitPriceVal.toFixed(exitPriceVal < 2 ? 5 : 3) : exitPriceVal.toFixed(2);
+          exitPriceLabel = formatPrice(exitPriceVal, decimals);
         }
       }
-      const newMarkers = [{
+      const newMarkers: SeriesMarker<Time>[] = [{
         time: closestRes.time,
         position: isWin ? 'aboveBar' : 'belowBar',
-        color: isWin ? '#00e676' : '#ff1744',
+        color: isWin ? '#10b981' : '#ef4444',
         shape: 'circle',
-        text: exitPriceLabel ? `🏁 ${cleanReason} (${exitPriceLabel})` : `🏁 ${cleanReason}`,
+        text: exitPriceLabel ? `${cleanReason} · ${exitPriceLabel}` : cleanReason,
         size: 2,
       }];
       if (seriesMarkersRef.current) {
-        try { seriesMarkersRef.current.setMarkers(newMarkers); } catch {}
+        try { seriesMarkersRef.current.setMarkers(newMarkers); } catch { /* ignored */ }
       }
-    } catch {}
-  }, [showBidAsk, serverQuote, isResolved, resolvedTimestamp, exitPriceVal, isForex, setup.instrument, setup.outcome_type, setup.invalidation_reason]);
-
-  const drawZones = useCallback(() => {
-    if (!chartRef.current || !candleSeriesRef.current || !overlayCanvasRef.current || !chartContainerRef.current) return;
-    const canvas = overlayCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const container = chartContainerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    if (width <= 0 || height <= 0) return;
-
-    canvas.width = width;
-    canvas.height = height;
-    ctx.clearRect(0, 0, width, height);
-
-    const series = candleSeriesRef.current;
-    const timeScale = chartRef.current.timeScale();
-    const isLight = theme === 'light';
-
-    const getY = (price: number) => {
-      if (!price || price <= 0) return null;
-      try {
-        return series.priceToCoordinate(price);
-      } catch {
-        return null;
-      }
-    };
-
-    const getCandleX = (targetUnix: number): number | null => {
-      const candles = displayCandlesRef.current;
-      if (!candles || candles.length === 0) return null;
-
-      // 1. Try exact timeScale coordinate
-      try {
-        const exactX = timeScale.timeToCoordinate(targetUnix as any);
-        if (exactX !== null && !isNaN(exactX) && exactX >= 0 && exactX <= width) {
-          return exactX;
-        }
-      } catch {}
-
-      // 2. Find closest candle in displayCandles
-      let closestCandle = candles[0];
-      let minDiff = Infinity;
-      for (let i = 0; i < candles.length; i++) {
-        const diff = Math.abs((candles[i].time as number) - targetUnix);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestCandle = candles[i];
-        }
-      }
-
-      if (closestCandle) {
-        try {
-          const cX = timeScale.timeToCoordinate(closestCandle.time as any);
-          if (cX !== null && !isNaN(cX)) {
-            return cX;
-          }
-        } catch {}
-      }
-
-      return null;
-    };
-
-    const getX = (timeStr?: string) => {
-      if (!timeStr) return 0;
-      try {
-        const unixTime = Math.floor(new Date(timeStr).getTime() / 1000);
-        return getCandleX(unixTime) ?? 0;
-      } catch {
-        return 0;
-      }
-    };
-
-    // 1. Draw 1H HTF Demand & Supply Curve Zones for Manna SnD
-    if (isMannaSnd) {
-      if (activeDemandProx > 0 && activeDemandDist > 0) {
-        const rawY1 = series.priceToCoordinate(activeDemandProx);
-        const rawY2 = series.priceToCoordinate(activeDemandDist);
-
-        const y1 = rawY1 !== null ? rawY1 : height - 20;
-        const y2 = rawY2 !== null ? rawY2 : height - 5;
-
-        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
-        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
-        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
-        const startX = getX(activeDemandTime);
-
-        // Cap endX if trade resolved or if price breached below distal floor
-        let endX = width;
-        if (isResolved && resolvedTimestamp) {
-          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-          const resolvedX = getCandleX(exitUnix);
-          if (resolvedX !== null && resolvedX > startX) {
-            endX = resolvedX;
-          }
-        } else {
-          const candles = displayCandlesRef.current;
-          const baseUnix = activeDemandTime ? Math.floor(new Date(activeDemandTime).getTime() / 1000) : 0;
-          for (const c of candles) {
-            if ((c.time as number) > baseUnix && c.low < Math.min(activeDemandProx, activeDemandDist)) {
-              const bX = getCandleX(c.time as number);
-              if (bX !== null && bX > startX) { endX = bX; break; }
-            }
-          }
-        }
-        const boxWidth = Math.max(10, endX - startX);
-
-        ctx.save();
-        ctx.fillStyle = isLight ? 'rgba(0, 176, 96, 0.05)' : 'rgba(0, 230, 118, 0.06)';
-        ctx.strokeStyle = isLight ? 'rgba(0, 163, 85, 0.35)' : 'rgba(0, 230, 118, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-
-        ctx.fillRect(startX, topY, boxWidth, boxHeight);
-        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
-
-        ctx.fillStyle = isLight ? 'rgba(0, 133, 68, 0.85)' : 'rgba(0, 230, 118, 0.8)';
-        ctx.font = '10px monospace';
-        const form = metadata.htf_demand_formation ? ` (${metadata.htf_demand_formation})` : '';
-        const labelStr = `1H DEMAND${form}: ${Math.min(activeDemandProx, activeDemandDist)} - ${Math.max(activeDemandProx, activeDemandDist)}`;
-        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(12, boxHeight / 2 + 3));
-        ctx.restore();
-      }
-
-      if (activeSupplyProx > 0 && activeSupplyDist > 0) {
-        const rawY1 = series.priceToCoordinate(activeSupplyProx);
-        const rawY2 = series.priceToCoordinate(activeSupplyDist);
-
-        const y1 = rawY1 !== null ? rawY1 : 5;
-        const y2 = rawY2 !== null ? rawY2 : 20;
-
-        const topY = Math.max(0, Math.min(height - 25, Math.min(y1, y2)));
-        const bottomY = Math.max(0, Math.min(height - 2, Math.max(y1, y2)));
-        const boxHeight = Math.max(12, Math.abs(bottomY - topY));
-        const startX = getX(activeSupplyTime);
-
-        // Cap endX if trade resolved or if price breached above distal ceiling
-        let endX = width;
-        if (isResolved && resolvedTimestamp) {
-          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-          const resolvedX = getCandleX(exitUnix);
-          if (resolvedX !== null && resolvedX > startX) {
-            endX = resolvedX;
-          }
-        } else {
-          const candles = displayCandlesRef.current;
-          const baseUnix = activeSupplyTime ? Math.floor(new Date(activeSupplyTime).getTime() / 1000) : 0;
-          for (const c of candles) {
-            if ((c.time as number) > baseUnix && c.high > Math.max(activeSupplyProx, activeSupplyDist)) {
-              const bX = getCandleX(c.time as number);
-              if (bX !== null && bX > startX) { endX = bX; break; }
-            }
-          }
-        }
-        const boxWidth = Math.max(10, endX - startX);
-
-        ctx.save();
-        ctx.fillStyle = isLight ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255, 23, 68, 0.06)';
-        ctx.strokeStyle = isLight ? 'rgba(220, 38, 38, 0.35)' : 'rgba(255, 23, 68, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-
-        ctx.fillRect(startX, topY, boxWidth, boxHeight);
-        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
-
-        ctx.fillStyle = isLight ? 'rgba(185, 28, 28, 0.85)' : 'rgba(255, 82, 82, 0.8)';
-        ctx.font = '10px monospace';
-        const form = metadata.htf_supply_formation ? ` (${metadata.htf_supply_formation})` : '';
-        const labelStr = `1H SUPPLY${form}: ${Math.min(activeSupplyProx, activeSupplyDist)} - ${Math.max(activeSupplyProx, activeSupplyDist)}`;
-        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(12, boxHeight / 2 + 3));
-        ctx.restore();
-      }
+    } catch {
+      // Ignore marker refresh errors
     }
-
-    // 2. Draw 15M Entry Zone Shaded Box (Starts on Zone Base Candle Timestamp)
-    if (entryLow > 0 && entryHigh > 0) {
-      const y1 = getY(entryHigh);
-      const y2 = getY(entryLow);
-
-      if (y1 !== null && y2 !== null) {
-        const topY = Math.min(y1, y2);
-        const boxHeight = Math.max(3, Math.abs(y2 - y1));
-        const zoneBaseTime = metadata.entry_zone_base_time || setup.created_at || (setup as any).createdAt;
-        let startX = getX(zoneBaseTime);
-        if ((startX === null || startX === undefined) && setup.created_at) {
-          startX = getX(setup.created_at);
-        }
-        if (startX === null || startX === undefined) {
-          startX = 0;
-        }
-
-        // Cap endX at trade resolution or when price penetrates distal boundary
-        let endX = width;
-        if (isResolved && resolvedTimestamp) {
-          const exitUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-          const resolvedX = getCandleX(exitUnix);
-          if (resolvedX !== null && resolvedX > startX) {
-            endX = resolvedX;
-          }
-        } else {
-          const candles = displayCandlesRef.current;
-          const zoneBaseUnix = zoneBaseTime ? Math.floor(new Date(zoneBaseTime).getTime() / 1000) : 0;
-          for (const c of candles) {
-            const cUnix = c.time as number;
-            if (cUnix > zoneBaseUnix) {
-              const isBreached = isLong ? c.low < entryLow : c.high > entryHigh;
-              if (isBreached) {
-                const breachX = getCandleX(cUnix);
-                if (breachX !== null && breachX > startX) {
-                  endX = breachX;
-                  break;
-                }
-              }
-            }
-          }
-        }
-        const boxWidth = Math.max(10, endX - startX);
-
-        ctx.save();
-        ctx.fillStyle = isLong
-          ? (isLight ? 'rgba(217, 119, 6, 0.06)' : 'rgba(255, 171, 0, 0.07)')
-          : (isLight ? 'rgba(220, 38, 38, 0.06)' : 'rgba(255, 82, 82, 0.07)');
-        ctx.strokeStyle = isLong 
-          ? (isLight ? 'rgba(217, 119, 6, 0.45)' : 'rgba(255, 171, 0, 0.45)') 
-          : (isLight ? 'rgba(220, 38, 38, 0.45)' : 'rgba(255, 82, 82, 0.45)');
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-
-        ctx.fillRect(startX, topY, boxWidth, boxHeight);
-        ctx.strokeRect(startX, topY, boxWidth, boxHeight);
-
-        // Label inside box
-        ctx.fillStyle = isLong ? (isLight ? '#92400e' : '#ffab00') : (isLight ? '#991b1b' : '#ff5252');
-        ctx.font = '10px monospace';
-        const labelStr = `15M ZONE (${formation}: ${entryLow} - ${entryHigh})`;
-        ctx.fillText(labelStr, Math.max(10, startX + 10), topY + Math.min(14, boxHeight / 2 + 3));
-        ctx.restore();
-      }
-    }
-
-    // 3. Draw Exact Entry Point Marker (Blob + Arrow + Price Badge) & Vertical Marker Line
-    // Works on BOTH Live Signal Cards (pending, active, runner) and Review Trades
-    const targetEntryTime = entryTimestamp 
-      ? new Date(entryTimestamp).getTime() 
-      : (displayCandlesRef.current.length > 0 ? (displayCandlesRef.current[displayCandlesRef.current.length - 1].time as number) * 1000 : null);
-
-    if (targetEntryTime) {
-      try {
-        const entryUnix = Math.floor(targetEntryTime / 1000);
-        const entryX = getCandleX(entryUnix);
-        const entryPriceVal = execPrice > 0 ? execPrice : (entryMid > 0 ? entryMid : (entryLow + entryHigh) / 2);
-        const entryY = entryPriceVal > 0 ? getY(entryPriceVal) : null;
-
-        if (entryX !== null && entryX > 0 && entryX < width) {
-          // Compute bid/ask at entry for badge display using correct fill-side logic
-          let priceText: string;
-          let bidAskLine: string | null = null; // second line shown when toggle is ON
-          if (showBidAsk && entryPriceVal > 0) {
-            const { bid: entryBid, ask: entryAsk, filledSide } = getDirectionalBidAsk(
-              setup.instrument, entryPriceVal, isLong, true, serverQuote
-            );
-            // Highlight the side that was actually hit at fill
-            if (filledSide === 'ask') {
-              priceText = `ASK (FILLED): ${entryAsk.toFixed(4)}`;
-              bidAskLine = `BID at fill:  ${entryBid.toFixed(4)}`;
-            } else {
-              priceText = `BID (FILLED): ${entryBid.toFixed(4)}`;
-              bidAskLine = `ASK at fill:  ${entryAsk.toFixed(4)}`;
-            }
-          } else {
-            priceText = entryPriceVal > 0
-              ? (isForex ? entryPriceVal.toFixed(entryPriceVal < 2 ? 5 : 3) : entryPriceVal.toFixed(2))
-              : 'Zone';
-          }
-
-          // Subtle vertical entry guideline
-          ctx.save();
-          ctx.strokeStyle = isLight ? 'rgba(2, 132, 199, 0.25)' : 'rgba(0, 229, 255, 0.25)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 4]);
-
-          ctx.beginPath();
-          ctx.moveTo(entryX, 0);
-          ctx.lineTo(entryX, height);
-          ctx.stroke();
-          ctx.restore();
-
-          // Draw Blob + Arrow + Price Badge at (entryX, entryY)
-          if (entryY !== null && !isNaN(entryY) && entryY >= 0 && entryY <= height) {
-            ctx.save();
-            const blobColor = isLong ? (isLight ? '#0284c7' : '#00e5ff') : (isLight ? '#ea580c' : '#ff9100');
-            const arrowColor = isLong ? (isLight ? '#0369a1' : '#00e5ff') : (isLight ? '#c2410c' : '#ff9100');
-
-            // 1. Draw Outer Halo / Pulsing Glow Ring
-            ctx.beginPath();
-            ctx.arc(entryX, entryY, 11, 0, Math.PI * 2);
-            ctx.fillStyle = isLong 
-              ? (isLight ? 'rgba(2, 132, 199, 0.28)' : 'rgba(0, 229, 255, 0.35)')
-              : (isLight ? 'rgba(234, 88, 12, 0.28)' : 'rgba(255, 145, 0, 0.35)');
-            ctx.fill();
-
-            // 2. Draw Solid Core Blob
-            ctx.beginPath();
-            ctx.arc(entryX, entryY, 5.5, 0, Math.PI * 2);
-            ctx.fillStyle = blobColor;
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            // 3. Draw Center White Pip
-            ctx.beginPath();
-            ctx.arc(entryX, entryY, 1.8, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-
-            // 4. Draw Directional Arrow pointing into the blob
-            ctx.fillStyle = arrowColor;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            if (isLong) {
-              const arrowTipY = entryY + 8;
-              ctx.moveTo(entryX, arrowTipY);
-              ctx.lineTo(entryX - 6, arrowTipY + 11);
-              ctx.lineTo(entryX + 6, arrowTipY + 11);
-              ctx.closePath();
-            } else {
-              const arrowTipY = entryY - 8;
-              ctx.moveTo(entryX, arrowTipY);
-              ctx.lineTo(entryX - 6, arrowTipY - 11);
-              ctx.lineTo(entryX + 6, arrowTipY - 11);
-              ctx.closePath();
-            }
-            ctx.fill();
-            ctx.stroke();
-
-            // 5. Draw Entry Price Badge Pill right beside the blob
-            // Two-line pill when bid/ask toggle is ON, single line otherwise
-            const line1 = `${isPending ? '🎯 TARGET' : (isLong ? '▲' : '▼')} ENTRY: ${priceText}`;
-            ctx.font = 'bold 12px monospace';
-            const badgePaddingX = 8;
-            const lineH = 16;
-            const badgeH = bidAskLine ? lineH * 2 + 10 : 20;
-            const line1W = ctx.measureText(line1).width;
-            const line2W = bidAskLine ? ctx.measureText(bidAskLine).width : 0;
-            const badgeW = Math.max(line1W, line2W) + badgePaddingX * 2;
-
-            // Position badge to the right if space permits, else to the left
-            let pillX = entryX + 16;
-            if (pillX + badgeW > width - 10) {
-              pillX = entryX - badgeW - 16;
-            }
-            let pillY = entryY - badgeH / 2;
-            pillY = Math.max(10, Math.min(height - badgeH - 10, pillY));
-
-            ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(10, 4, 24, 0.94)';
-            ctx.strokeStyle = blobColor;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            if ((ctx as any).roundRect) {
-              (ctx as any).roundRect(pillX, pillY, badgeW, badgeH, 4);
-            } else {
-              ctx.rect(pillX, pillY, badgeW, badgeH);
-            }
-            ctx.fill();
-            ctx.stroke();
-
-            // Line 1 — filled side (bold, highlighted colour)
-            ctx.fillStyle = blobColor;
-            ctx.font = 'bold 12px monospace';
-            ctx.fillText(line1, pillX + badgePaddingX, pillY + lineH - 2);
-
-            // Line 2 — other side (dimmer, normal weight)
-            if (bidAskLine) {
-              ctx.fillStyle = isLight ? 'rgba(100,100,100,0.85)' : 'rgba(180,180,180,0.75)';
-              ctx.font = '11px monospace';
-              ctx.fillText(bidAskLine, pillX + badgePaddingX, pillY + lineH * 2 + 2);
-            }
-
-            ctx.restore();
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to draw entry marker:', err);
-      }
-    }
-
-    // 4. Draw Subtle Vertical Resolved Timestamp Marker Line (Review Charts Only)
-    if (resolvedTimestamp && isResolved) {
-      try {
-        const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-        const resX = getCandleX(resUnix);
-
-        if (resX !== null && resX > 0 && resX < width) {
-          const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
-          const isWin = reason.includes('TP');
-          const flagColor = isWin 
-            ? (isLight ? 'rgba(5, 150, 105, 0.25)' : 'rgba(0, 230, 118, 0.25)') 
-            : (isLight ? 'rgba(220, 38, 38, 0.25)' : 'rgba(255, 23, 68, 0.25)');
-
-          ctx.save();
-          ctx.strokeStyle = flagColor;
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 4]);
-
-          ctx.beginPath();
-          ctx.moveTo(resX, 0);
-          ctx.lineTo(resX, height);
-          ctx.stroke();
-          ctx.restore();
-        }
-      } catch {}
-    }
-  }, [isMannaSnd, htfProximal, htfDistal, htfType, entryLow, entryHigh, entryMid, isLong, isForex, isResolved, isPending, formation, metadata, entryTimestamp, resolvedTimestamp, execPrice, theme, selectedTz, showBidAsk, serverQuote]);
+  }, [showBidAsk, serverQuote, isResolved, resolvedTimestamp, exitPriceVal, isLong, decimals, setup.instrument, setup.outcome_type, setup.invalidation_reason]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
     if (!chartRef.current) return;
     const timeScale = chartRef.current.timeScale();
-    
+
     drawZones();
     timeScale.subscribeVisibleLogicalRangeChange(drawZones);
 
@@ -1464,7 +1859,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     }
 
     return () => {
-      try { timeScale.unsubscribeVisibleLogicalRangeChange(drawZones); } catch {}
+      try { timeScale.unsubscribeVisibleLogicalRangeChange(drawZones); } catch { /* ignored */ }
       window.removeEventListener('resize', drawZones);
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -1472,77 +1867,83 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     };
   }, [drawZones]);
 
-  const effectivePrice = currentPrice && currentPrice > 0 
-    ? currentPrice 
+  const effectivePrice = currentPrice && currentPrice > 0
+    ? currentPrice
     : (serverQuote?.price && serverQuote.price > 0 ? serverQuote.price : 0);
   const liveBidAsk = getBidAskData(setup.instrument, effectivePrice, serverQuote);
 
+  const primaryEntryPrice = execPrice > 0 ? execPrice : (entryMid > 0 ? entryMid : (entryLow + entryHigh) / 2);
+  const isBeStop = primaryEntryPrice > 0 && stopVal > 0 && Math.abs(stopVal - primaryEntryPrice) <= priceEps;
+
+  const statusMeta = isPending
+    ? { cls: 'pending', short: 'PENDING', full: 'PENDING ENTRY · AWAITING FILL' }
+    : isRunner
+      ? { cls: 'runner', short: 'RUNNER +2R', full: 'ACTIVE RUNNER · TP1 +2R LOGGED · TRACKING TP2' }
+      : isActive
+        ? { cls: 'active', short: 'ACTIVE', full: 'ACTIVE TRADE · IN POSITION' }
+        : { cls: 'resolved', short: 'RESOLVED', full: 'RESOLVED TRADE · REVIEW' };
+
+  const toolbarFocusGroupAttrs = { focusgroup: 'toolbar wrap' } as Record<string, string>;
+
   return createPortal(
-    <div className="chart-modal-backdrop font-sans">
-      <div className={`chart-modal-content animate-fade-in theme-${theme}`}>
-        {/* Fullscreen Header (Tier 1: Trade Info & Window Actions) */}
-        <div className="chart-modal-header">
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={headingId}
+      className={`chart-modal-dialog theme-${theme}`}
+    >
+      <div className="chart-modal-content">
+        {/* Live region outside toolbar for screen-reader action confirmations */}
+        <p role="status" className="sr-only">{liveStatusMsg}</p>
+
+        {/* Tier 1: Primary Identity, Context & Window Controls */}
+        <header className="chart-modal-header">
           <div className="header-left">
-            <h2 className="chart-symbol font-mono">{setup.instrument}</h2>
+            <h2 id={headingId} className="chart-symbol">{setup.instrument}</h2>
+
             <span className={`bias-tag ${isLong ? 'long' : 'short'}`}>
-              {isLong ? '⬆ LONG' : '⬇ SHORT'}
+              <IconArrowBias isLong={isLong} />
+              <span>{isLong ? 'LONG' : 'SHORT'}</span>
             </span>
 
-            {/* Trade ID Badge */}
-            <span 
-              className="chart-trade-id-badge font-mono" 
-              title={`Trade ID: ${setup.id}\nClick to copy Trade ID`}
-              onClick={() => {
-                navigator.clipboard.writeText(tradeTelegramId);
-                setCopiedTradeId(true);
-                setTimeout(() => setCopiedTradeId(false), 2000);
-              }}
+            <button
+              type="button"
+              className={`chart-trade-id-badge ${copiedTradeId ? 'is-copied' : ''}`}
+              title={`Trade ID: ${setup.id} — Click to copy ${tradeTelegramId}`}
+              onClick={handleCopyTradeId}
             >
-              {copiedTradeId ? '✓ COPIED' : tradeTelegramId}
+              <IconCopy copied={copiedTradeId} />
+              <span>{copiedTradeId ? 'COPIED' : tradeTelegramId}</span>
+            </button>
+
+            <span className={`state-status-tag ${statusMeta.cls}`} title={statusMeta.full}>
+              <span className="status-dot" aria-hidden="true" />
+              <span className="full-label">{statusMeta.full}</span>
+              <span className="short-label">{statusMeta.short}</span>
             </span>
 
-            {/* Status Badge */}
-            {isPending && (
-              <span className="state-status-tag pending font-mono">
-                ⏳ <span className="full-label">PENDING ENTRY (NOT ENTERED YET)</span><span className="short-label">PENDING</span>
+            <div className="context-chips" aria-label="Market context">
+              <span className="ctx-chip">{(setup.market || 'futures').toUpperCase()}</span>
+              <span className="ctx-chip">
+                <span className="full-label">{(setup.killzone_origin || 'NY AM').toUpperCase()} SESSION</span>
+                <span className="short-label">{(setup.killzone_origin || 'NY AM').toUpperCase()}</span>
               </span>
-            )}
-            {isRunner && (
-              <span className="state-status-tag runner font-mono">
-                🏃 <span className="full-label">ACTIVE RUNNER (TP1 +2R LOGGED · TRACKING TP2)</span><span className="short-label">RUNNER (+2R)</span>
+              <span className="ctx-chip feed-chip">
+                <span className="live-pulse" aria-hidden="true" />
+                <span className="full-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS RAW ECN' : 'FUTURES FEED')}</span>
+                <span className="short-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS' : 'FUTURES')}</span>
               </span>
-            )}
-            {isActive && (
-              <span className="state-status-tag active font-mono">
-                🔥 <span className="full-label">ACTIVE TRADE (IN POSITION)</span><span className="short-label">ACTIVE</span>
-              </span>
-            )}
-            {isResolved && (
-              <span className="state-status-tag resolved font-mono">
-                🏁 <span className="full-label">RESOLVED TRADE</span><span className="short-label">RESOLVED</span>
-              </span>
-            )}
-
-            <span className="market-tag font-mono">{(setup.market || 'futures').toUpperCase()}</span>
-            <span className="kz-tag font-mono">
-              <span className="full-label">{(setup.killzone_origin || 'NY AM').toUpperCase()} SESSION</span>
-              <span className="short-label">{(setup.killzone_origin || 'NY AM').toUpperCase()}</span>
-            </span>
-            <span className="feed-tag font-mono">
-              ⚡ <span className="full-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS RAW ECN' : 'FUTURES FEED')}</span>
-              <span className="short-label">{feedProvider || (setup.instrument?.includes('/') ? 'IC MARKETS' : 'FUTURES')}</span>
-            </span>
+            </div>
           </div>
 
           <div className="header-right">
-            {/* Timezone Selector Dropdown */}
-            <div className="tz-selector-wrapper font-mono">
-              <span className="tz-label">🌐 TZ:</span>
+            <label className="tz-selector-wrapper" title="Chart display timezone (does not alter signal execution)">
+              <IconGlobe />
+              <span className="tz-label">TZ</span>
               <select
+                aria-label="Chart timezone"
                 className="tz-select"
                 value={selectedTz}
                 onChange={(e) => setSelectedTz(e.target.value)}
-                title="Change Chart Timezone (Display only — does not affect signals or feeds)"
               >
                 {TIMEZONE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -1550,131 +1951,186 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
 
-            {/* Light / Dark Mode Toggle Button */}
             <button
               type="button"
-              className={`theme-toggle-btn font-mono ${theme}`}
+              className="header-action-btn"
+              aria-pressed={theme === 'dark'}
               onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
               title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             >
-              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+              {theme === 'dark' ? <IconSun /> : <IconMoon />}
+              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
             </button>
 
-            {/* Pinned Close Button */}
-            <button className="close-btn font-mono" onClick={onClose} title="Close Chart (ESC)">
-              <span className="full-label">✕ CLOSE (ESC)</span>
-              <span className="short-label">✕ CLOSE</span>
+            <button
+              type="button"
+              className="close-btn"
+              onClick={handleRequestClose}
+              title="Close Chart (ESC)"
+            >
+              <IconClose />
+              <span>Close</span>
+              <kbd className="esc-kbd">ESC</kbd>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Chart Navigation Toolbar (Tier 2: Multi-Timeframe, Zoom, Bid/Ask) */}
+        {/* Tier 2: Accessible Chart Toolbar & Live Bid/Ask Readout */}
         <div className="chart-modal-toolbar">
-          <div className="toolbar-left">
-            {/* Multi-Timeframe Selector */}
-            <div className="tf-selector font-mono">
-              <button className={timeframe === '1m' ? 'active' : ''} onClick={() => setTimeframe('1m')} title="1 Minute Scalp">1M</button>
-              <button className={timeframe === '5m' ? 'active' : ''} onClick={() => setTimeframe('5m')} title="5 Minute Precision">5M</button>
-              <button className={timeframe === '15m' ? 'active' : ''} onClick={() => setTimeframe('15m')} title="15 Minute Execution (Entry Logic)">15M ★</button>
-              <button className={timeframe === '1h' ? 'active' : ''} onClick={() => setTimeframe('1h')} title="1 Hour Market Structure">1H</button>
-              <button className={timeframe === '4h' ? 'active' : ''} onClick={() => setTimeframe('4h')} title="4 Hour Trend Context">4H</button>
-              <button className={timeframe === '1d' ? 'active' : ''} onClick={() => setTimeframe('1d')} title="Daily Macro View">1D</button>
+          <div
+            ref={toolbarRef}
+            role="toolbar"
+            aria-label="Chart controls"
+            aria-controls={chartContainerId}
+            {...toolbarFocusGroupAttrs}
+            className="toolbar-left"
+          >
+            <div role="group" aria-label="Timeframe" className="tf-selector">
+              {TIMEFRAMES.map((tf) => (
+                <button
+                  key={tf.id}
+                  type="button"
+                  aria-pressed={timeframe === tf.id}
+                  onClick={() => setTimeframe(tf.id)}
+                  title={tf.title}
+                >
+                  <span>{tf.label}</span>
+                  {tf.featured && <span className="tf-star" aria-label="Entry standard">★</span>}
+                </button>
+              ))}
             </div>
 
-            {/* Zoom & Scroll Toolbar */}
-            <div className="zoom-toolbar font-mono">
-              <button className="zoom-btn" onClick={() => handleZoom(true)} title="Zoom In">🔍 +</button>
-              <button className="zoom-btn" onClick={() => handleZoom(false)} title="Zoom Out">🔍 -</button>
-              <button className="reset-view-btn font-mono" onClick={() => {
-                chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-                chartRef.current?.timeScale().fitContent();
-                setTimeout(() => {
-                  chartRef.current?.priceScale('right').applyOptions({ autoScale: false });
-                }, 100);
-              }} title="Reset View & Scale">
-                🔄 Fit All
+            <span role="separator" aria-orientation="vertical" className="toolbar-sep" />
+
+            <div role="group" aria-label="Chart zoom and fit" className="zoom-toolbar">
+              <button
+                type="button"
+                className="zoom-btn"
+                aria-label="Zoom in"
+                onClick={() => handleZoom(true)}
+                title="Zoom In"
+              >
+                <IconZoomIn />
+              </button>
+              <button
+                type="button"
+                className="zoom-btn"
+                aria-label="Zoom out"
+                onClick={() => handleZoom(false)}
+                title="Zoom Out"
+              >
+                <IconZoomOut />
+              </button>
+              <button
+                type="button"
+                className="reset-view-btn"
+                onClick={handleFitAll}
+                title="Fit all candles & levels"
+              >
+                <IconFitAll />
+                <span>Fit All</span>
               </button>
             </div>
 
-            {/* Bid / Ask Price Lines Toggle Button */}
+            <span role="separator" aria-orientation="vertical" className="toolbar-sep" />
+
             <button
               type="button"
-              className={`bid-ask-toggle-btn font-mono ${showBidAsk ? 'active' : ''}`}
+              className="bid-ask-toggle-btn"
+              aria-pressed={showBidAsk}
               onClick={toggleBidAsk}
-              title={showBidAsk ? 'Turn off Bid & Ask price lines' : 'Turn on Bid & Ask price lines on chart'}
+              title={showBidAsk ? 'Hide Bid & Ask lines' : 'Show Bid & Ask lines on chart'}
             >
-              <span className="bid-ask-icon">⚖️</span>
-              <span>BID / ASK: {showBidAsk ? 'ON' : 'OFF'}</span>
+              <IconBidAsk />
+              <span>Bid / Ask</span>
+              <span className="toggle-pill">{showBidAsk ? 'ON' : 'OFF'}</span>
             </button>
           </div>
 
           <div className="toolbar-right">
-            <span className="chart-shortcuts-hint font-mono">
-              [ESC] Close • Scroll to zoom • Drag to pan
+            {!isResolved && showBidAsk && (
+              <div className="bid-ask-ticker" aria-label="Live bid, ask, and spread">
+                <span className="ticker-cell bid">
+                  <span className="ticker-k">BID</span>
+                  <span className="ticker-v">{liveBidAsk.bid.toFixed(liveBidAsk.decimals)}</span>
+                </span>
+                <span className="ticker-divider" aria-hidden="true" />
+                <span className="ticker-cell ask">
+                  <span className="ticker-k">ASK</span>
+                  <span className="ticker-v">{liveBidAsk.ask.toFixed(liveBidAsk.decimals)}</span>
+                </span>
+                <span className="ticker-divider" aria-hidden="true" />
+                <span className="ticker-cell spread">
+                  <span className="ticker-k">SPR</span>
+                  <span className="ticker-v">{liveBidAsk.spread.toFixed(liveBidAsk.decimals)} {liveBidAsk.unit}</span>
+                </span>
+              </div>
+            )}
+            <span className="chart-shortcuts-hint">
+              Scroll zoom · Drag pan · ESC close
             </span>
           </div>
         </div>
 
-        {/* Trade Review Audit Strip for Resolved Closed Trades */}
+        {/* Tier 3a: Trade Review Audit Strip (Resolved Closed Trades) */}
         {isResolved && (
-          <div className="trade-review-audit-strip font-mono animate-fade-in">
-            {/* Card 1: ENTRY */}
+          <div className="trade-review-audit-strip">
             <div className="audit-card entry-card">
               <div className="audit-card-title">
-                <span>🎯 ENTRY</span>
-                <span className="audit-card-badge">{setup.time_to_fill_min !== undefined ? `${setup.time_to_fill_min}m fill` : 'FILLED'}</span>
+                <span>ENTRY</span>
+                <span className="audit-card-badge">
+                  {setup.time_to_fill_min !== undefined ? `${setup.time_to_fill_min}m fill` : 'FILLED'}
+                </span>
               </div>
               <div className="audit-card-main">
-                {execPrice > 0 ? execPrice : entryMid}
+                {formatPrice(execPrice > 0 ? execPrice : entryMid, decimals)}
               </div>
               <div className="audit-card-sub">
-                Zone: {entryLow} – {entryHigh}
+                Zone {formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)}
               </div>
               <div className="audit-card-time">
-                {entryTimestamp ? formatTzTime(Math.floor(new Date(entryTimestamp).getTime() / 1000), selectedTz, true) + ` ${getTimezoneBadge(selectedTz)}` : '--'}
+                {entryTimestamp ? `${formatTzTime(Math.floor(new Date(entryTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}` : '--'}
               </div>
             </div>
 
-            {/* Card 2: INITIAL STOP */}
             <div className="audit-card stop-card">
               <div className="audit-card-title">
-                <span>🛑 INITIAL STOP</span>
+                <span>INITIAL STOP</span>
                 <span className="audit-card-badge stop-badge">-1.00R</span>
               </div>
               <div className="audit-card-main">
-                {initialStopVal > 0 ? initialStopVal : stopVal}
+                {formatPrice(initialStopVal > 0 ? initialStopVal : stopVal, decimals)}
               </div>
               <div className="audit-card-sub">
-                Risk: {(execPrice > 0 && initialStopVal > 0) ? Math.abs(execPrice - initialStopVal).toFixed(setup.instrument.includes('/') ? 4 : 2) : '--'}
+                Risk {(execPrice > 0 && initialStopVal > 0) ? Math.abs(execPrice - initialStopVal).toFixed(decimals) : '--'}
               </div>
               <div className="audit-card-time">
-                {Math.abs(stopVal - initialStopVal) > 0.0001 ? `BE Stop: ${stopVal}` : 'Initial Stop'}
+                {Math.abs(stopVal - initialStopVal) > priceEps ? `BE Stop: ${formatPrice(stopVal, decimals)}` : 'Initial Stop'}
               </div>
             </div>
 
-            {/* Card 3: TARGETS */}
             <div className="audit-card targets-card">
               <div className="audit-card-title">
-                <span>🟢 TARGETS</span>
+                <span>TARGETS</span>
                 <span className="audit-card-badge tp-badge">TP1 / TP2</span>
               </div>
               <div className="audit-card-main">
-                TP1: {tp1Val > 0 ? tp1Val : '--'} <span className="r-pill">+{setup.r_multiple_1 || 2.0}R</span>
+                <span>TP1 {formatPrice(tp1Val, decimals)}</span>
+                <span className="r-pill">+{setup.r_multiple_1 || 2.0}R</span>
               </div>
               <div className="audit-card-sub">
-                TP2: {tp2Val && tp2Val > 0 ? `${tp2Val} (+${setup.r_multiple_2 || 3.0}R)` : 'None'}
+                TP2 {tp2Val && tp2Val > 0 ? `${formatPrice(tp2Val, decimals)} (+${setup.r_multiple_2 || 3.0}R)` : 'None'}
               </div>
               <div className="audit-card-time">
-                Strategy: {setup.strategy_id || 'manna_snd'} ({setup.conviction_score || 85}%)
+                {setup.strategy_id || 'manna_snd'} · {setup.conviction_score || 85}% conviction
               </div>
             </div>
 
-            {/* Card 4: EXIT & END RESULT */}
             <div className={`audit-card result-card ${outcomeR !== undefined && outcomeR > 0 ? 'is-win' : outcomeR !== undefined && outcomeR < 0 ? 'is-loss' : 'is-be'}`}>
               <div className="audit-card-title">
-                <span>🏁 END RESULT</span>
+                <span>END RESULT</span>
                 <span className={`audit-card-badge result-pill ${outcomeR !== undefined && outcomeR > 0 ? 'win' : outcomeR !== undefined && outcomeR < 0 ? 'loss' : 'be'}`}>
                   {(setup.outcome_type || setup.invalidation_reason || 'RESOLVED').toUpperCase()}
                 </span>
@@ -1686,75 +2142,133 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                 )}
               </div>
               <div className="audit-card-sub">
-                Exit Price: {exitPriceVal > 0 ? exitPriceVal : '--'}
+                Exit {formatPrice(exitPriceVal, decimals)}
               </div>
               <div className="audit-card-time">
-                Held: {setup.holding_duration_min !== undefined ? `${setup.holding_duration_min}m` : setup.duration_min !== undefined ? `${setup.duration_min}m` : '--'} │ {resolvedTimestamp ? formatTzTime(Math.floor(new Date(resolvedTimestamp).getTime() / 1000), selectedTz, true) + ` ${getTimezoneBadge(selectedTz)}` : '--'}
+                Held {setup.holding_duration_min !== undefined ? `${setup.holding_duration_min}m` : setup.duration_min !== undefined ? `${setup.duration_min}m` : '--'} · {resolvedTimestamp ? `${formatTzTime(Math.floor(new Date(resolvedTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}` : '--'}
               </div>
             </div>
           </div>
         )}
 
-        {/* Level Legend Bar (Active/Pending Trades Only - Review Trades have Audit Strip) */}
+        {/* Tier 3b: Compact Scannable Telemetry Strip (Active / Pending / Runner) */}
         {!isResolved && (
-          <div className="level-legend-bar font-mono">
-            <span className="legend-item tf-tag">
-              ⏱️ VIEW TIMEFRAME: <strong>{timeframe.toUpperCase()}</strong> {timeframe === '15m' ? '(Entry Execution Standard)' : ''}
-            </span>
-            <span className="legend-item entry">
-              🟡 {isPending ? 'Pending Entry:' : 'Entry Zone:'} {entryLow} – {entryHigh}
-            </span>
-            <span className="legend-item stop">🛑 Stop Loss: {stopVal}</span>
-            <span className="legend-item tp">🎯 Target 1: {tp1Val} (+{setup.r_multiple_1 || 2.0}R)</span>
-            {tp2Val && tp2Val > 0 && <span className="legend-item tp">🎯 Target 2: {tp2Val} (+{setup.r_multiple_2 || 3.0}R)</span>}
-            {currentPrice > 0 && <span className="legend-item live">🌐 Live Price: {currentPrice}</span>}
-            {showBidAsk && (
-              <span className="legend-item bid-ask-legend animate-fade-in">
-                <span className="legend-bid">🔵 BID: <strong>{liveBidAsk.bid.toFixed(liveBidAsk.decimals)}</strong></span>
-                <span className="legend-sep">│</span>
-                <span className="legend-ask">🔴 ASK: <strong>{liveBidAsk.ask.toFixed(liveBidAsk.decimals)}</strong></span>
-                <span className="legend-sep">│</span>
-                <span className="legend-spread">SPREAD: <strong>{liveBidAsk.spread} {liveBidAsk.unit}</strong></span>
+          <div className="level-legend-bar" aria-label="Trade price levels">
+            <div className="level-metric tf-metric">
+              <span className="metric-label">VIEW</span>
+              <span className="metric-value">
+                {timeframe.toUpperCase()}
+                {timeframe === '15m' && <span className="metric-tag">EXEC STD</span>}
               </span>
+            </div>
+
+            <div className="level-metric entry">
+              <span className="metric-dot" aria-hidden="true" />
+              <span className="metric-label">{isPending ? 'PENDING ZONE' : 'ENTRY ZONE'}</span>
+              <span className="metric-value">{formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)}</span>
+            </div>
+
+            <div className={`level-metric ${isBeStop ? 'be' : 'stop'}`}>
+              <span className="metric-dot" aria-hidden="true" />
+              <span className="metric-label">{isBeStop ? 'BE STOP' : 'STOP LOSS'}</span>
+              <span className="metric-value">{formatPrice(stopVal, decimals)}</span>
+            </div>
+
+            <div className="level-metric tp">
+              <span className="metric-dot" aria-hidden="true" />
+              <span className="metric-label">TP1 (+{setup.r_multiple_1 || 2.0}R){isRunner ? ' ✓' : ''}</span>
+              <span className="metric-value">{formatPrice(tp1Val, decimals)}</span>
+            </div>
+
+            {tp2Val && tp2Val > 0 && (
+              <div className="level-metric tp">
+                <span className="metric-dot" aria-hidden="true" />
+                <span className="metric-label">TP2 (+{setup.r_multiple_2 || 3.0}R)</span>
+                <span className="metric-value">{formatPrice(tp2Val, decimals)}</span>
+              </div>
+            )}
+
+            {currentPrice > 0 && (
+              <div className="level-metric live">
+                <span className="metric-dot" aria-hidden="true" />
+                <span className="metric-label">LIVE PRICE</span>
+                <span className="metric-value">{formatPrice(currentPrice, decimals)}</span>
+              </div>
             )}
           </div>
         )}
 
-        {/* MANNA SND Specific Visual Indicator Overlay Bar */}
+        {/* Tier 4: Compact Manna SnD Structural Context Bar */}
         {isMannaSnd && (
-          <div className="manna-snd-legend-bar font-mono">
-            <span className="snd-badge">🟡 MANNA SND INDICATORS</span>
+          <div className="manna-snd-legend-bar" aria-label="Manna SnD indicators">
+            <span className="snd-badge">MANNA SND</span>
             <span className="snd-item curve">
-              🔮 1H Curve Location: <strong>{curveLocation.toUpperCase()}</strong>
+              <span className="snd-k">1H CURVE</span>
+              <strong>{curveLocation.toUpperCase()}</strong>
             </span>
             {activeDemandProx > 0 && (
               <span className="snd-item demand">
-                🟢 1H Demand Curve: {activeDemandProx} – {activeDemandDist}
+                <span className="snd-dot" aria-hidden="true" />
+                <span className="snd-k">1H DEMAND</span>
+                <span>{formatPrice(activeDemandProx, decimals)} – {formatPrice(activeDemandDist, decimals)}</span>
               </span>
             )}
             {activeSupplyProx > 0 && (
               <span className="snd-item supply">
-                🔴 1H Supply Curve: {activeSupplyProx} – {activeSupplyDist}
+                <span className="snd-dot" aria-hidden="true" />
+                <span className="snd-k">1H SUPPLY</span>
+                <span>{formatPrice(activeSupplyProx, decimals)} – {formatPrice(activeSupplyDist, decimals)}</span>
               </span>
             )}
             <span className="snd-item trend">
-              📈 15M Trend: <strong>{trend15m.toUpperCase()}</strong>
+              <span className="snd-k">15M TREND</span>
+              <strong>{trend15m.toUpperCase()}</strong>
             </span>
             <span className="snd-item zone">
-              ⚡ 15M Entry Zone: <strong>{formation}</strong> ({entryLow} – {entryHigh})
+              <span className="snd-k">15M ZONE</span>
+              <strong>{formation}</strong>
+              <span className="snd-range">({formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)})</span>
             </span>
           </div>
         )}
 
-        {/* Fullscreen Chart Container */}
-        <div className="chart-container-wrapper">
-          {loading && <div className="chart-overlay-loader">Loading TradingView {timeframe.toUpperCase()} Live Candles & Levels...</div>}
-          {error && <div className="chart-overlay-error">Unable to load live candles: {error}</div>}
+        {/* Chart Canvas Viewport */}
+        <div id={chartContainerId} className="chart-container-wrapper">
+          {/* Non-blocking OHLC Crosshair HUD (TradingView style) */}
+          {crosshairOhlc && !loading && !error && (
+            <div className="chart-ohlc-hud" aria-hidden="true">
+              <span className="ohlc-time">{crosshairOhlc.timeStr}</span>
+              <span className="ohlc-pair">
+                <span>O</span><strong className={crosshairOhlc.isUp ? 'up' : 'down'}>{crosshairOhlc.open.toFixed(decimals)}</strong>
+              </span>
+              <span className="ohlc-pair">
+                <span>H</span><strong className={crosshairOhlc.isUp ? 'up' : 'down'}>{crosshairOhlc.high.toFixed(decimals)}</strong>
+              </span>
+              <span className="ohlc-pair">
+                <span>L</span><strong className={crosshairOhlc.isUp ? 'up' : 'down'}>{crosshairOhlc.low.toFixed(decimals)}</strong>
+              </span>
+              <span className="ohlc-pair">
+                <span>C</span><strong className={crosshairOhlc.isUp ? 'up' : 'down'}>{crosshairOhlc.close.toFixed(decimals)}</strong>
+              </span>
+            </div>
+          )}
+
+          {loading && (
+            <div className="chart-overlay-loader" role="status">
+              <span className="loader-spinner" aria-hidden="true" />
+              <span>Loading {setup.instrument} {timeframe.toUpperCase()} candles…</span>
+            </div>
+          )}
+          {error && (
+            <div className="chart-overlay-error" role="alert">
+              Unable to load live candles: {error}
+            </div>
+          )}
           <div ref={chartContainerRef} className="chart-canvas-container" />
           <canvas ref={overlayCanvasRef} className="zone-overlay-canvas" />
         </div>
       </div>
-    </div>,
+    </dialog>,
     document.body
   );
 };
