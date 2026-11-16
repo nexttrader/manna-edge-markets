@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { FAQ_DATA } from '../data/faqData';
+import { FAQ_DATA, type FaqItem } from '../data/faqData';
+import { EDGE_FINDER_KB_TOPICS } from '../data/edgeFinderKnowledgeBase';
 import { useAuth } from '../context/AuthContext';
+import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
 import './FaqModal.css';
 
 interface FaqModalProps {
@@ -10,7 +12,8 @@ interface FaqModalProps {
 
 export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { canAccessEdgeFinder, isSuperAdmin, isAdmin: isEdgeFinderAdmin } = useEdgeFinderAccess();
+  const isAdmin = isEdgeFinderAdmin || isSuperAdmin || user?.role === 'admin' || user?.role === 'super_admin';
 
   // User profile active strategies & tier (defaults to all active for admin/pro, dynamic for profile)
   const activeStrategies = useMemo(() => {
@@ -25,9 +28,38 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin'>('all');
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
 
+  // Merge core FAQ items with gated EdgeFinder Knowledge Base (always visible to Super Admin, gated by rollout for Admin & Trader)
+  const combinedFaqData = useMemo<FaqItem[]>(() => {
+    if (!canAccessEdgeFinder) {
+      return FAQ_DATA;
+    }
+    const edgeFinderFaqs: FaqItem[] = EDGE_FINDER_KB_TOPICS.map((topic) => ({
+      id: `ef-kb-${topic.id}`,
+      category: '🧭 EdgeFinder Pro Knowledge Base',
+      question: `${topic.title} [${topic.badge}]`,
+      answer: [
+        `${topic.summary} (${topic.updateCadence} · ${topic.dataSource})`,
+        ``,
+        `WHAT IT DOES:\n${topic.whatItIs}`,
+        ``,
+        `EXACT CALCULATION & THRESHOLDS:\n${topic.calculationFormula.map((f) => `• ${f}`).join('\n')}`,
+        ``,
+        `TRADING PLAYBOOK:\n• ⚡ Scalper (M5–M15): ${topic.howToTrade.scalper}\n• ⏱️ Intraday (H1–H4): ${topic.howToTrade.intraday}\n• 🏛️ Swing (D1–W1): ${topic.howToTrade.swing}`,
+        ``,
+        `SIGNAL CHECKLIST:\n${topic.readingSignals.map((s) => `✓ ${s}`).join('\n')}`
+      ].join('\n'),
+      roleRequired: 'all',
+      strategyRequired: 'all',
+      tierRequired: 'free',
+      tags: ['edgefinder', topic.shortTitle.toLowerCase(), topic.category.toLowerCase(), ...topic.relatedIds],
+      updatedAt: '2026-11-16'
+    }));
+    return [...FAQ_DATA, ...edgeFinderFaqs];
+  }, [canAccessEdgeFinder]);
+
   // Dynamic filtering based on user role, active strategies, and tier
   const availableFaqs = useMemo(() => {
-    return FAQ_DATA.filter(item => {
+    return combinedFaqData.filter(item => {
       // 1. Role check (Admin vs Trader)
       if (item.roleRequired === 'admin' && !isAdmin) return false;
       if (roleFilter === 'admin' && item.roleRequired !== 'admin') return false;
@@ -44,7 +76,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
 
       return true;
     });
-  }, [isAdmin, roleFilter, activeStrategies, userTier]);
+  }, [combinedFaqData, isAdmin, roleFilter, activeStrategies, userTier]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();

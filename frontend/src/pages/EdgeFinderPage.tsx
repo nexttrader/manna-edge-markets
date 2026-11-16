@@ -10,6 +10,12 @@ import {
   YieldCurveSvg
 } from '../components/edge-finder/EdgeFinderCharts';
 import {
+  EdgeFinderHelpButton,
+  EdgeFinderKbDialog,
+  EdgeFinderKbExplorer
+} from '../components/edge-finder/EdgeFinderKnowledgeBase';
+import { type EdgeFinderKbTopicId } from '../data/edgeFinderKnowledgeBase';
+import {
   type AssetEdgeScorecard,
   type EconomyCode,
   type MacroEconomyData,
@@ -29,7 +35,8 @@ type WorkspaceTab =
   | 'smart_money'
   | 'sentiment'
   | 'seasonality'
-  | 'macro';
+  | 'macro'
+  | 'knowledge_base';
 
 type AssetFilterMode =
   | 'ALL'
@@ -102,7 +109,8 @@ const TAB_ITEMS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
   { id: 'smart_money', label: 'Smart Money & Targets', icon: '🏛️' },
   { id: 'sentiment', label: 'Retail Contrarian', icon: '🧭' },
   { id: 'seasonality', label: 'Seasonality & Killzones', icon: '🗓️' },
-  { id: 'macro', label: 'Macro, Futures & Crypto', icon: '🌐' }
+  { id: 'macro', label: 'Macro, Futures & Crypto', icon: '🌐' },
+  { id: 'knowledge_base', label: 'Knowledge Base', icon: '📘' }
 ];
 
 const KEY_CORR_ASSETS = [
@@ -242,7 +250,12 @@ export const EdgeFinderPage: React.FC = () => {
   const [selectedHistoryCurrency, setSelectedHistoryCurrency] = useState<EconomyCode>('USD');
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [editingEcon, setEditingEcon] = useState<MacroEconomyData | null>(null);
+  const [activeKbTopicId, setActiveKbTopicId] = useState<EdgeFinderKbTopicId | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const openKbTopic = (topicId: EdgeFinderKbTopicId) => {
+    setActiveKbTopicId(topicId);
+  };
 
   const toggleWatchlist = (instrument: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -481,6 +494,13 @@ export const EdgeFinderPage: React.FC = () => {
             </button>
             <button
               type="button"
+              className={`ef-btn ${activeTab === 'knowledge_base' ? 'ef-btn-gold' : ''}`}
+              onClick={() => setActiveTab('knowledge_base')}
+            >
+              📘 Knowledge Base
+            </button>
+            <button
+              type="button"
               className="ef-btn ef-btn-gold"
               onClick={refreshData}
               disabled={refreshing || loading}
@@ -588,7 +608,10 @@ export const EdgeFinderPage: React.FC = () => {
             {showCadencePanel && snapshot.syncStatus.feedCadences && (
               <section className="ef-card ef-perf-section" aria-label="Live Data Feed Refresh Cadences">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">Live Data Architecture &amp; Update Cadences (No Simulated Data)</h2>
+                  <div className="ef-title-help-wrap">
+                    <h2 className="ef-card-title">Live Data Architecture &amp; Update Cadences (No Simulated Data)</h2>
+                    <EdgeFinderHelpButton topicId="feed_health_cadences" onOpenTopic={openKbTopic} />
+                  </div>
                   <span className="ef-card-meta">
                     Last Sync: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : new Date(snapshot.generatedAt).toLocaleTimeString()} · Cache Age: {snapshot.syncStatus.cacheAgeSeconds}s
                   </span>
@@ -619,7 +642,10 @@ export const EdgeFinderPage: React.FC = () => {
               {/* Risk On / Off Gauge */}
               <div className="ef-card">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">Global Risk Regime</h2>
+                  <div className="ef-title-help-wrap">
+                    <h2 className="ef-card-title">Global Risk Regime</h2>
+                    <EdgeFinderHelpButton topicId="risk_regime" onOpenTopic={openKbTopic} />
+                  </div>
                   <span className="ef-card-meta">{snapshot.riskGauge.regime}</span>
                 </div>
                 <div className="ef-risk-score-row">
@@ -651,7 +677,10 @@ export const EdgeFinderPage: React.FC = () => {
               {/* Multi-Asset Strength Meter (FX + Futures + Crypto) */}
               <div className="ef-card">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">Multi-Asset Strength Meter</h2>
+                  <div className="ef-title-help-wrap">
+                    <h2 className="ef-card-title">Multi-Asset Strength Meter</h2>
+                    <EdgeFinderHelpButton topicId="strength_meter" onOpenTopic={openKbTopic} />
+                  </div>
                   <div className="ef-filter-pills">
                     <button
                       type="button"
@@ -776,7 +805,10 @@ export const EdgeFinderPage: React.FC = () => {
               {/* Manna Synergy & Data Health */}
               <div className="ef-card">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">Manna Feed Health</h2>
+                  <div className="ef-title-help-wrap">
+                    <h2 className="ef-card-title">Manna Feed Health</h2>
+                    <EdgeFinderHelpButton topicId="feed_health_cadences" onOpenTopic={openKbTopic} />
+                  </div>
                   <span className="ef-card-meta">
                     {autoRefresh ? `60s Poll · Next ${secondsUntilRefresh}s` : 'Auto-Poll Paused'} · {new Date(snapshot.generatedAt).toLocaleTimeString()}
                   </span>
@@ -814,9 +846,12 @@ export const EdgeFinderPage: React.FC = () => {
             <section className="ef-horizon-bar ef-perf-section" aria-label="Trading Timeframe and Holding Horizon Selector">
               <div className="ef-horizon-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#DFC46B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    🎯 Active Execution Horizon
-                  </span>
+                  <div className="ef-title-help-wrap">
+                    <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#DFC46B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      🎯 Active Execution Horizon
+                    </span>
+                    <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                  </div>
                   <span className="ef-mini-chip">
                     Signals &amp; Bias adapt to {activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes}) — or compare all 3 horizons per asset
                   </span>
@@ -891,9 +926,12 @@ export const EdgeFinderPage: React.FC = () => {
                 {/* Diverging Conviction Leaders */}
                 <section className="ef-card ef-perf-section" aria-label="Top Conviction Leaders">
                   <div className="ef-card-header">
-                    <h2 className="ef-card-title">
-                      Top {activeHorizonMeta.label} Conviction Radar ({activeHorizonMeta.executionTimeframes})
-                    </h2>
+                    <div className="ef-title-help-wrap">
+                      <h2 className="ef-card-title">
+                        Top {activeHorizonMeta.label} Conviction Radar ({activeHorizonMeta.executionTimeframes})
+                      </h2>
+                      <EdgeFinderHelpButton topicId="conviction_radar" onOpenTopic={openKbTopic} />
+                    </div>
                     <button
                       type="button"
                       className="ef-btn"
@@ -990,7 +1028,12 @@ export const EdgeFinderPage: React.FC = () => {
                 >
                   <table className="ef-table">
                     <caption id="ef-scanner-caption">
-                      Manna EdgeFinder Institutional Matrix ({filteredScorecards.length} / {scorecards.length} Assets) — Active View: <strong>{activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes})</strong> · 60s Live Auto-Sync.
+                      <span className="ef-title-help-wrap">
+                        <span>
+                          Manna EdgeFinder Institutional Matrix ({filteredScorecards.length} / {scorecards.length} Assets) — Active View: <strong>{activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes})</strong> · 60s Live Auto-Sync.
+                        </span>
+                        <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
+                      </span>
                     </caption>
                     <thead>
                       <tr>
@@ -1007,25 +1050,37 @@ export const EdgeFinderPage: React.FC = () => {
                           </button>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'totalScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('totalScore')}>
-                            <span>{selectedHorizon === 'SCALP' ? 'Scalp (M5-15)' : selectedHorizon === 'INTRADAY' ? 'Intra (H1-4)' : 'Swing (D1-W1)'}</span>
-                            <span>{sortKey === 'totalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('totalScore')}>
+                              <span>{selectedHorizon === 'SCALP' ? 'Scalp (M5-15)' : selectedHorizon === 'INTRADAY' ? 'Intra (H1-4)' : 'Swing (D1-W1)'}</span>
+                              <span>{sortKey === 'totalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col">
-                          <span style={{ display: 'block', padding: '11px 12px' }}>3-TF Matrix (S · I · SW)</span>
+                          <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
+                            <span>3-TF Matrix (S · I · SW)</span>
+                            <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'cotScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('cotScore')}>
-                            <span>COT Flow</span>
-                            <span>{sortKey === 'cotScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('cotScore')}>
+                              <span>COT Flow</span>
+                              <span>{sortKey === 'cotScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="cot_positioning" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'retailScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('retailScore')}>
-                            <span>Retail Fade</span>
-                            <span>{sortKey === 'retailScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('retailScore')}>
+                              <span>Retail Fade</span>
+                              <span>{sortKey === 'retailScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="retail_contrarian" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'trendScore' ? sortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('trendScore')}>
@@ -1034,25 +1089,37 @@ export const EdgeFinderPage: React.FC = () => {
                           </button>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'volatilityPct' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
-                            <span>ADR / 7-TF MTF</span>
-                            <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
+                              <span>ADR / 7-TF MTF</span>
+                              <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'fundamentalScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('fundamentalScore')}>
-                            <span>Macro Diff</span>
-                            <span>{sortKey === 'fundamentalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('fundamentalScore')}>
+                              <span>Macro Diff</span>
+                              <span>{sortKey === 'fundamentalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'mannaFlowScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('mannaFlowScore')}>
-                            <span>Manna KZ</span>
-                            <span>{sortKey === 'mannaFlowScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('mannaFlowScore')}>
+                              <span>Manna KZ</span>
+                              <span>{sortKey === 'mannaFlowScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                            <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                         <th scope="col">
-                          <span style={{ display: 'block', padding: '11px 12px' }}>{selectedHorizon} Signal &amp; Guard</span>
+                          <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
+                            <span>{selectedHorizon} Signal &amp; Guard</span>
+                            <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                          </div>
                         </th>
                       </tr>
                     </thead>
@@ -1194,7 +1261,10 @@ export const EdgeFinderPage: React.FC = () => {
                 {showCorrelations && (
                   <section className="ef-card ef-perf-section" aria-label="Cross-Asset Daily Return Correlations">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">30-Day Cross-Asset Return Correlation Matrix (Key Benchmarks)</h2>
+                      <div className="ef-title-help-wrap">
+                        <h2 className="ef-card-title">30-Day Cross-Asset Return Correlation Matrix (Key Benchmarks)</h2>
+                        <EdgeFinderHelpButton topicId="correlation_matrix" onOpenTopic={openKbTopic} />
+                      </div>
                       <span className="ef-card-meta">Pearson r (-1.00 inverse to +1.00 coupled)</span>
                     </div>
                     <div className="ef-seasonality-grid">
@@ -1292,9 +1362,12 @@ export const EdgeFinderPage: React.FC = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">
-                            {activeScorecard.instrument} · {activeHp.label} Gauge
-                          </h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">
+                              {activeScorecard.instrument} · {activeHp.label} Gauge
+                            </h2>
+                            <EdgeFinderHelpButton topicId="scorecard_gauge" onOpenTopic={openKbTopic} />
+                          </div>
                           <span className="ef-card-meta">
                             {activeScorecard.priceSource} FEED · 60s SYNC · {activeHp.holdDuration}
                           </span>
@@ -1325,7 +1398,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">7-Timeframe Structure &amp; Killzone Synergy</h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">7-Timeframe Structure &amp; Killzone Synergy</h2>
+                            <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
+                          </div>
                           <span
                             className={`ef-kz-pill ${
                               activeScorecard.killzoneAlignment.alignmentStatus === 'ALIGNED'
@@ -1426,7 +1502,10 @@ export const EdgeFinderPage: React.FC = () => {
                       {/* Base vs Quote Macro Tug of War */}
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">Base vs Quote Tug-of-War</h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">Base vs Quote Tug-of-War</h2>
+                            <EdgeFinderHelpButton topicId="tug_of_war" onOpenTopic={openKbTopic} />
+                          </div>
                           <span className="ef-card-meta">
                             {activeScorecard.tugOfWar.baseLabel} vs {activeScorecard.tugOfWar.quoteLabel}
                           </span>
@@ -1467,7 +1546,10 @@ export const EdgeFinderPage: React.FC = () => {
                       {/* Multi-Timeframe Horizon Comparison Cards */}
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">Multi-Timeframe Signal Breakdown — {activeScorecard.instrument}</h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">Multi-Timeframe Signal Breakdown — {activeScorecard.instrument}</h2>
+                            <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                          </div>
                           <span className="ef-card-meta">
                             {activeScorecard.timeframeConfluence?.summary || 'Scalp · Intraday · Swing'} ({activeScorecard.technical.intradaySource === 'LIVE_15M_H1_H4' ? 'Live 15m Bars · 60s Sync' : 'Daily'})
                           </span>
@@ -1514,7 +1596,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">30-Day Price (Gold) vs Historical Swing Score (Cyan)</h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">30-Day Price (Gold) vs Historical Swing Score (Cyan)</h2>
+                            <EdgeFinderHelpButton topicId="historical_score_chart" onOpenTopic={openKbTopic} />
+                          </div>
                           <span className="ef-card-meta">
                             EMA5: {activeScorecard.technical.ema5} · EMA20: {activeScorecard.technical.ema20} · EMA50: {activeScorecard.technical.ema50} · 2m Sync
                           </span>
@@ -1527,7 +1612,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
-                          <h2 className="ef-card-title">11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)</h2>
+                          <div className="ef-title-help-wrap">
+                            <h2 className="ef-card-title">11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)</h2>
+                            <EdgeFinderHelpButton topicId="eleven_pillars" onOpenTopic={openKbTopic} />
+                          </div>
                           <span className="ef-card-meta">Weighted Sum Normalized to [-10, +10]</span>
                         </div>
                         <div className="ef-pill-grid">
@@ -1565,7 +1653,10 @@ export const EdgeFinderPage: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">COMEX Gold (GC / XAU) Macro Swing Gauge</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">COMEX Gold (GC / XAU) Macro Swing Gauge</h2>
+                          <EdgeFinderHelpButton topicId="gold_scorecard" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">7-Pillar D1–W1 Precious Metals Model</span>
                       </div>
                       <ScoreGaugeSvg
@@ -1582,7 +1673,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">Macro Gold Inputs (Live)</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">Macro Gold Inputs (Live)</h2>
+                          <EdgeFinderHelpButton topicId="gold_scorecard" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">FRED + Yahoo 5m · CFTC 30m Sync</span>
                       </div>
                       <div className="ef-sync-stats">
@@ -1615,7 +1709,10 @@ export const EdgeFinderPage: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">30-Day COMEX Gold (Gold) vs US Dollar Index DXY (Cyan)</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">30-Day COMEX Gold (Gold) vs US Dollar Index DXY (Cyan)</h2>
+                          <EdgeFinderHelpButton topicId="gold_scorecard" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">52W COT Index: {snapshot.goldScorecard.cotIndex52w.toFixed(1)}% · 5m–30m Sync</span>
                       </div>
                       <GoldVsDxyChartSvg series={snapshot.goldScorecard.series30d} />
@@ -1623,7 +1720,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">7-Pillar Gold Model Attribution</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">7-Pillar Gold Model Attribution</h2>
+                          <EdgeFinderHelpButton topicId="gold_scorecard" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">Real Rate · Dollar Inverse · Haven · COT</span>
                       </div>
                       <div className="ef-pill-grid">
@@ -1682,7 +1782,12 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-carry-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-carry-caption">
-                      Manna Multi-Asset Carry, Futures Roll &amp; Crypto Basis Scanner ({sortedCarryTrades.length} Assets) — FX Central Bank Differentials, Treasury/Futures Roll Regime, and CFTC Crypto Basis vs US 3M T-Bill Funding.
+                      <span className="ef-title-help-wrap">
+                        <span>
+                          Manna Multi-Asset Carry, Futures Roll &amp; Crypto Basis Scanner ({sortedCarryTrades.length} Assets) — FX Central Bank Differentials, Treasury/Futures Roll Regime, and CFTC Crypto Basis vs US 3M T-Bill Funding.
+                        </span>
+                        <EdgeFinderHelpButton topicId="carry_scanner" onOpenTopic={openKbTopic} />
+                      </span>
                     </caption>
                     <thead>
                       <tr>
@@ -1791,9 +1896,12 @@ export const EdgeFinderPage: React.FC = () => {
                 {activeScorecard && (
                   <section className="ef-card ef-perf-section">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">
-                        12-Week Managed Money Net Positioning — {activeScorecard.instrument} ({activeScorecard.cot.contractName})
-                      </h2>
+                      <div className="ef-title-help-wrap">
+                        <h2 className="ef-card-title">
+                          12-Week Managed Money Net Positioning — {activeScorecard.instrument} ({activeScorecard.cot.contractName})
+                        </h2>
+                        <EdgeFinderHelpButton topicId="cot_positioning" onOpenTopic={openKbTopic} />
+                      </div>
                       <span className="ef-card-meta">
                         Source: {activeScorecard.cot.source} (30m Poll · Weekly Fri 15:30 ET) · 52W Idx: {activeScorecard.cot.cotIndex52w.toFixed(1)}% · Report {activeScorecard.cot.reportDate}
                       </span>
@@ -1840,7 +1948,12 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-cot-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-cot-caption">
-                      CFTC Commitments of Traders — Non-Commercial &amp; Commercial Hedger Positioning + 52-Week Percentile Index Across All {pickerScorecards.length} Filtered Assets ({scorecards.length} Total).
+                      <span className="ef-title-help-wrap">
+                        <span>
+                          CFTC Commitments of Traders — Non-Commercial &amp; Commercial Hedger Positioning + 52-Week Percentile Index Across All {pickerScorecards.length} Filtered Assets ({scorecards.length} Total).
+                        </span>
+                        <EdgeFinderHelpButton topicId="cot_positioning" onOpenTopic={openKbTopic} />
+                      </span>
                     </caption>
                     <thead>
                       <tr>
@@ -1935,7 +2048,12 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-targets-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-targets-caption">
-                      Wall Street Institutional Analyst Consensus Targets Across Macro, Energy, Metals &amp; Crypto Equities (COIN, MSTR, NVDA, XOM, NEM — 60m Live Sync).
+                      <span className="ef-title-help-wrap">
+                        <span>
+                          Wall Street Institutional Analyst Consensus Targets Across Macro, Energy, Metals &amp; Crypto Equities (COIN, MSTR, NVDA, XOM, NEM — 60m Live Sync).
+                        </span>
+                        <EdgeFinderHelpButton topicId="smart_money_tracker" onOpenTopic={openKbTopic} />
+                      </span>
                     </caption>
                     <thead>
                       <tr>
@@ -1979,7 +2097,10 @@ export const EdgeFinderPage: React.FC = () => {
                   <div tabIndex={0} role="region" aria-labelledby="ef-insiders-caption" className="ef-table-wrapper ef-perf-section">
                     <table className="ef-table">
                       <caption id="ef-insiders-caption">
-                        SEC Form 4 Corporate Insider Filings (Live Officers &amp; Directors Buys/Sales).
+                        <span className="ef-title-help-wrap">
+                          <span>SEC Form 4 Corporate Insider Filings (Live Officers &amp; Directors Buys/Sales).</span>
+                          <EdgeFinderHelpButton topicId="smart_money_tracker" onOpenTopic={openKbTopic} />
+                        </span>
                       </caption>
                       <thead>
                         <tr>
@@ -2026,7 +2147,10 @@ export const EdgeFinderPage: React.FC = () => {
                   <div tabIndex={0} role="region" aria-labelledby="ef-whales-caption" className="ef-table-wrapper ef-perf-section">
                     <table className="ef-table">
                       <caption id="ef-whales-caption">
-                        13F Institutional Whale Holdings (Largest Reported Equity Stakes &amp; QoQ Change).
+                        <span className="ef-title-help-wrap">
+                          <span>13F Institutional Whale Holdings (Largest Reported Equity Stakes &amp; QoQ Change).</span>
+                          <EdgeFinderHelpButton topicId="smart_money_tracker" onOpenTopic={openKbTopic} />
+                        </span>
                       </caption>
                       <thead>
                         <tr>
@@ -2073,7 +2197,10 @@ export const EdgeFinderPage: React.FC = () => {
               >
                 <section className="ef-card ef-perf-section">
                   <div className="ef-card-header">
-                    <h2 className="ef-card-title">Retail Crowd Contrarian Radar (All {scorecards.length} FX, Futures &amp; Crypto Assets)</h2>
+                    <div className="ef-title-help-wrap">
+                      <h2 className="ef-card-title">Retail Crowd Contrarian Radar (All {scorecards.length} FX, Futures &amp; Crypto Assets)</h2>
+                      <EdgeFinderHelpButton topicId="retail_contrarian" onOpenTopic={openKbTopic} />
+                    </div>
                     <span className="ef-card-meta">
                       CFTC Non-Reportables · 30m Poll / Weekly Fri · {crowdedRetailCount} Crowded Extremes
                     </span>
@@ -2132,9 +2259,12 @@ export const EdgeFinderPage: React.FC = () => {
                 {activeScorecard && (
                   <section className="ef-card ef-perf-section">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">
-                        10-Year Monthly Seasonality Distribution — {activeScorecard.instrument}
-                      </h2>
+                      <div className="ef-title-help-wrap">
+                        <h2 className="ef-card-title">
+                          10-Year Monthly Seasonality Distribution — {activeScorecard.instrument}
+                        </h2>
+                        <EdgeFinderHelpButton topicId="seasonality_killzones" onOpenTopic={openKbTopic} />
+                      </div>
                       <span className="ef-card-meta">
                         Yahoo 10Y Monthly · 6h Sync · Best Session: {activeScorecard.seasonality.bestKillzone} · Avg:{' '}
                         {formatSigned(activeScorecard.seasonality.currentMonthAvgReturn, 2)}% ({activeScorecard.seasonality.currentMonthWinRate}% Win)
@@ -2233,7 +2363,10 @@ export const EdgeFinderPage: React.FC = () => {
                 <div className="ef-two-col-grid">
                   <section className="ef-card ef-perf-section">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">Futures Institutional Sector Rotation (5 Sectors · 18 Contracts)</h2>
+                      <div className="ef-title-help-wrap">
+                        <h2 className="ef-card-title">Futures Institutional Sector Rotation (5 Sectors · 18 Contracts)</h2>
+                        <EdgeFinderHelpButton topicId="futures_crypto_macro" onOpenTopic={openKbTopic} />
+                      </div>
                       <span className="ef-card-meta">CFTC 30m + Yahoo 60s Sync</span>
                     </div>
                     <div className="ef-pill-grid">
@@ -2263,7 +2396,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                   <section className="ef-card ef-perf-section">
                     <div className="ef-card-header">
-                      <h2 className="ef-card-title">Crypto Institutional Matrix (10 CME &amp; Coinbase COT Contracts)</h2>
+                      <div className="ef-title-help-wrap">
+                        <h2 className="ef-card-title">Crypto Institutional Matrix (10 CME &amp; Coinbase COT Contracts)</h2>
+                        <EdgeFinderHelpButton topicId="futures_crypto_macro" onOpenTopic={openKbTopic} />
+                      </div>
                       <span className="ef-card-meta">60s Price/M15 · Weekly CFTC COT</span>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
@@ -2309,7 +2445,10 @@ export const EdgeFinderPage: React.FC = () => {
                   <div className="ef-two-col-grid">
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">US Treasury Yield Curve &amp; Intermarket Regime (5m Sync)</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">US Treasury Yield Curve &amp; Intermarket Regime (5m Sync)</h2>
+                          <EdgeFinderHelpButton topicId="yield_curve_fred" onOpenTopic={openKbTopic} />
+                        </div>
                         <span
                           className={`ef-kz-pill ${
                             snapshot.macroInternals.yieldCurve.curveRegime.includes('Inverted')
@@ -2370,7 +2509,10 @@ export const EdgeFinderPage: React.FC = () => {
 
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">Live FRED US Macro Health &amp; Valuation</h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">Live FRED US Macro Health &amp; Valuation</h2>
+                          <EdgeFinderHelpButton topicId="yield_curve_fred" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">5m Poll · Release {snapshot.macroInternals.fredUsMacro.updatedAt}</span>
                       </div>
                       <div className="ef-sync-stats">
@@ -2421,7 +2563,12 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-macro-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-macro-caption">
-                      G8 Sovereign Economies, Central Bank Rate Probabilities &amp; Policy Matrix — {isSuperAdmin ? 'Super Admin can edit macro parameters live.' : 'Live macro differential feeds.'}
+                      <span className="ef-title-help-wrap">
+                        <span>
+                          G8 Sovereign Economies, Central Bank Rate Probabilities &amp; Policy Matrix — {isSuperAdmin ? 'Super Admin can edit macro parameters live.' : 'Live macro differential feeds.'}
+                        </span>
+                        <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
+                      </span>
                     </caption>
                     <thead>
                       <tr>
@@ -2505,9 +2652,12 @@ export const EdgeFinderPage: React.FC = () => {
                   return (
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">
-                          {activeEcon.country} ({activeEcon.currency}) Multi-Year Sovereign Macro Trends
-                        </h2>
+                        <div className="ef-title-help-wrap">
+                          <h2 className="ef-card-title">
+                            {activeEcon.country} ({activeEcon.currency}) Multi-Year Sovereign Macro Trends
+                          </h2>
+                          <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
+                        </div>
                         <span className="ef-card-meta">12M BIS Policy Rate + 6Y World Bank WDI History</span>
                       </div>
                       <div className="ef-filter-pills" style={{ marginBottom: 12 }}>
@@ -2575,7 +2725,10 @@ export const EdgeFinderPage: React.FC = () => {
                 {/* Live High-Impact Economic Calendar */}
                 <section className="ef-card ef-perf-section">
                   <div className="ef-card-header">
-                    <h2 className="ef-card-title">Live High-Impact Macro Calendar (NewsEngine Sync)</h2>
+                    <div className="ef-title-help-wrap">
+                      <h2 className="ef-card-title">Live High-Impact Macro Calendar (NewsEngine Sync)</h2>
+                      <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
+                    </div>
                     <span className="ef-card-meta">
                       {snapshot.calendar.upcomingHighImpact.length} upcoming high-impact releases ({snapshot.calendar.allEventsCount} total tracked)
                     </span>
@@ -2605,9 +2758,31 @@ export const EdgeFinderPage: React.FC = () => {
                 </section>
               </div>
             )}
+
+            {/* TAB 7: EDGEFINDER PRO KNOWLEDGE BASE */}
+            {activeTab === 'knowledge_base' && (
+              <div
+                role="tabpanel"
+                id="panel-knowledge_base"
+                aria-labelledby="tab-knowledge_base"
+                className="ef-tabpanel"
+              >
+                <EdgeFinderKbExplorer />
+              </div>
+            )}
           </>
         )}
       </div>
+
+      <EdgeFinderKbDialog
+        activeTopicId={activeKbTopicId}
+        onSelectTopic={setActiveKbTopicId}
+        onClose={() => setActiveKbTopicId(null)}
+        onOpenFullTab={() => {
+          setActiveKbTopicId(null);
+          setActiveTab('knowledge_base');
+        }}
+      />
 
       {/* Super Admin Macro Editor Modal */}
       {editingEcon && isSuperAdmin && (
