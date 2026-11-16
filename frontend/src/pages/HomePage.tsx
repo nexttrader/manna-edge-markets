@@ -168,23 +168,23 @@ export const HomePage: React.FC = () => {
             <div className="hero-copy-col">
               <div className="hero-badge">
                 <span className="hero-badge-dot" aria-hidden="true" />
-                <span>AUTOMATED INSTITUTIONAL SIGNAL ENGINE</span>
-                <span className="hero-vip-pill">14-DAY VIP TRIAL · NO CARD</span>
+                <span>STOP GUESSING YOUR TRADES</span>
+                <span className="hero-vip-pill">14 DAYS FREE · NO CARD REQUIRED</span>
               </div>
 
               <h1 className="hero-title">
-                Precision Futures &amp; Forex Signals. Built for Active Killzones.
+                Get Exact Futures &amp; Forex Trade Setups — Without Staring at Charts All Day.
               </h1>
 
               <p className="hero-subtitle">
-                Automated trade setups across Asia, London, and New York sessions. Inspect exact entry zones, visual Stop-to-Target ladders, and live risk-to-reward updates in one calm institutional workspace.
+                We scan the markets 24/5 and hand you the exact entry price, stop loss, and profit targets before the move happens. No complicated indicators. No second-guessing. Just clean setups you can act on in 30 seconds.
               </p>
 
               <div className="hero-cta-group">
                 {!user ? (
                   <>
                     <Link to="/signup" className="btn-hero-main">
-                      Start 14-Day Free Trial →
+                      Claim Your 14-Day Free Trial →
                     </Link>
                     <Link to="/login" className="btn-hero-outline">
                       Member Sign In
@@ -192,25 +192,25 @@ export const HomePage: React.FC = () => {
                   </>
                 ) : (
                   <Link to="/dashboard" className="btn-hero-main">
-                    Open Live Terminal →
+                    Open Live Signals →
                   </Link>
                 )}
               </div>
 
               <div className="hero-kpi-strip font-mono">
                 <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">4 Sessions</span>
-                  <span className="hero-kpi-lbl">Asia · London · NY AM/PM</span>
+                  <span className="hero-kpi-val">4 Market Windows</span>
+                  <span className="hero-kpi-lbl">We Watch Every Session For You</span>
                 </div>
                 <div className="hero-kpi-divider" aria-hidden="true" />
                 <div className="hero-kpi-item">
                   <span className="hero-kpi-val">Futures &amp; FX</span>
-                  <span className="hero-kpi-lbl">Indices, Metals &amp; Majors</span>
+                  <span className="hero-kpi-lbl">Gold, Indices &amp; Major Pairs</span>
                 </div>
                 <div className="hero-kpi-divider" aria-hidden="true" />
                 <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">Live R:R</span>
-                  <span className="hero-kpi-lbl">Auto-Breakeven &amp; TP1/TP2</span>
+                  <span className="hero-kpi-val">2R–3R Targets</span>
+                  <span className="hero-kpi-lbl">Clear Stop &amp; Profit Levels</span>
                 </div>
               </div>
             </div>
@@ -335,40 +335,40 @@ export const HomePage: React.FC = () => {
         {/* Bento Feature Showcase Grid */}
         <section className="features-section container">
           <div className="section-header-block">
-            <span className="section-kicker font-mono">PLATFORM ARCHITECTURE</span>
-            <h2 className="section-title">Why Traders Execute With Manna Edge</h2>
+            <span className="section-kicker font-mono">HOW IT WORKS</span>
+            <h2 className="section-title">Everything You Need to Trade Faster — Without the Guesswork</h2>
           </div>
 
           <div className="features-grid">
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">01</div>
-              <h3>Peak Killzone Scans</h3>
+              <h3>We Watch the Charts So You Don&apos;t Have To</h3>
               <p>
-                Scans high-volume institutional windows across Asia, London, NY AM, and NY PM sessions to surface high-probability opportunities automatically.
+                Most traders burn out staring at screens for hours every day. We scan Asia, London, and New York sessions around the clock and only put real setups in front of you.
               </p>
             </article>
 
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">02</div>
-              <h3>Visual Trade Ladders</h3>
+              <h3>Know Your Exact Numbers in 3 Seconds</h3>
               <p>
-                Read Stop Loss, Entry Zone, live price position, and TP1/TP2 profit milestones in under a second on every signal card.
+                No messy lines or confusing jargon. Every trade card shows your exact entry price, your stop loss, and where to take profit — laid out on one simple visual bar.
               </p>
             </article>
 
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">03</div>
-              <h3>Live R:R &amp; Breakeven</h3>
+              <h3>Risk Small. Aim for 2x to 3x Back.</h3>
               <p>
-                Know your exact risk-to-reward ratio before entering. Track active runners, TP1 hits, and automated breakeven protection in real time.
+                Stop risking big just to make small wins. Every setup is built on clear risk-to-reward math and shows you when to move your stop to breakeven so you protect your profits.
               </p>
             </article>
 
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">04</div>
-              <h3>Smart Signal Protection</h3>
+              <h3>Bad Setups Get Filtered Out Automatically</h3>
               <p>
-                Automated invalidation and high-impact news scheduling filter out stale setups so you focus strictly on valid market structure.
+                Big news spikes and stale trades are where accounts get wrecked. When a setup goes invalid or major news is about to drop, we flag it or pull it before you get caught.
               </p>
             </article>
           </div>
@@ -377,7 +377,7 @@ export const HomePage: React.FC = () => {
 
       {/* Footer */}
       <footer className="home-footer container">
-        <span>MANNA EDGE MARKETS — Automated Trading Intelligence</span>
+        <span>MANNA EDGE MARKETS — Clear Numbers. Zero Guesswork.</span>
         <span>© 2026 All Rights Reserved</span>
       </footer>
     </div>
