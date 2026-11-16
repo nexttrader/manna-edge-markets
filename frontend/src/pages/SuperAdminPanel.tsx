@@ -12,6 +12,7 @@ import { API_BASE } from '../config';
 import { UserManagementSystem } from '../components/admin/UserManagementSystem';
 import { MaintenanceControlCard } from '../components/admin/MaintenanceControlCard';
 import { StrategyComparisonDashboard } from '../components/admin/StrategyComparisonDashboard';
+import { TradingStyleComparisonCard } from '../components/admin/TradingStyleComparisonCard';
 import { AssetControlHub } from '../components/admin/AssetControlHub';
 import { formatETDate, formatETTime } from '../utils/time';
 import { ExclusiveSignalsDashboard } from '../components/admin/ExclusiveSignalsDashboard';
@@ -749,6 +750,7 @@ export const SuperAdminPanel: React.FC = () => {
       />
 
       <main className="container" style={{ maxWidth: '1540px', margin: '20px auto', padding: '0 24px' }}>
+        <TradingStyleComparisonCard />
         {/* LANDING SECTION: MISSION CONTROL DESTINATION TILES */}
         {activeTab === 'overview' && (
           <>
