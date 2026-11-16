@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { API_BASE } from '../config';
 import './LoginPage.css';
 
@@ -223,6 +224,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialMode }) => {
   return (
     <div className="login-page-container">
       <div className="login-backdrop-glow" />
+      <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 50 }}>
+        <ThemeToggle />
+      </div>
 
       <div className="login-card glass-card animate-scale-up">
         {/* Logo Header */}

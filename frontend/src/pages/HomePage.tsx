@@ -1,47 +1,69 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KillzoneClock } from '../components/KillzoneClock';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { type DashboardStyleTab, useMtfPreview } from '../hooks/useMtfSignals';
 import './HomePage.css';
 
-const LiveTickerWidget: React.FC = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
+interface MarketTickerItem {
+  symbol: string;
+  label: string;
+  market: 'FUTURES' | 'FOREX';
+  fallbackPrice: string;
+}
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    containerRef.current.innerHTML = '';
+const HOME_MARKETS: MarketTickerItem[] = [
+  { symbol: 'NQ', label: 'Nasdaq 100', market: 'FUTURES', fallbackPrice: '20,528.50' },
+  { symbol: 'ES', label: 'S&P 500', market: 'FUTURES', fallbackPrice: '5,942.25' },
+  { symbol: 'GC', label: 'Gold', market: 'FUTURES', fallbackPrice: '2,659.40' },
+  { symbol: 'SI', label: 'Silver', market: 'FUTURES', fallbackPrice: '31.420' },
+  { symbol: 'CL', label: 'Crude Oil', market: 'FUTURES', fallbackPrice: '71.85' },
+  { symbol: 'EUR/USD', label: 'Euro / Dollar', market: 'FOREX', fallbackPrice: '1.08480' },
+  { symbol: 'GBP/USD', label: 'Pound / Dollar', market: 'FOREX', fallbackPrice: '1.29640' }
+];
 
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      symbols: [
-        { proName: 'CME_MINI:NQ1!', title: 'NQ Futures' },
-        { proName: 'CME_MINI:ES1!', title: 'ES Futures' },
-        { proName: 'COMEX:GC1!', title: 'Gold' },
-        { proName: 'COMEX:SI1!', title: 'Silver' },
-        { proName: 'FX:EURUSD', title: 'EUR/USD' },
-        { proName: 'FX:GBPUSD', title: 'GBP/USD' },
-        { proName: 'NYMEX:CL1!', title: 'Crude Oil' }
-      ],
-      showSymbolLogo: false,
-      colorTheme: 'dark',
-      isTransparent: true,
-      displayMode: 'adaptive',
-      locale: 'en'
-    });
-
-    containerRef.current.appendChild(script);
-  }, []);
+const LiveTickerWidget: React.FC<{
+  scalpPrice?: string | number | null;
+  scalpSymbol?: string | null;
+  swingPrice?: string | number | null;
+  swingSymbol?: string | null;
+}> = ({ scalpPrice, scalpSymbol, swingPrice, swingSymbol }) => {
+  const resolvePrice = (item: MarketTickerItem) => {
+    if (scalpSymbol && scalpPrice && item.symbol.toUpperCase() === scalpSymbol.toUpperCase()) {
+      return String(scalpPrice);
+    }
+    if (swingSymbol && swingPrice && item.symbol.toUpperCase() === swingSymbol.toUpperCase()) {
+      return String(swingPrice);
+    }
+    return item.fallbackPrice;
+  };
 
   return (
-    <div className="home-ticker-shell">
-      <div
-        ref={containerRef}
-        className="tradingview-widget-container"
-        style={{ width: '100%' }}
-      />
+    <div className="home-ticker-shell" aria-label="Covered Markets Strip">
+      <div className="home-ticker-header font-mono">
+        <span className="home-ticker-badge">
+          <span className="home-ticker-dot" aria-hidden="true" />
+          24/5 MONITORED MARKETS
+        </span>
+        <span className="home-ticker-note">Futures · Metals · Energy · Major FX</span>
+      </div>
+      <div className="home-ticker-grid font-mono">
+        {HOME_MARKETS.map((item) => (
+          <div key={item.symbol} className="home-ticker-item">
+            <div className="home-ticker-top">
+              <span className="home-ticker-sym">{item.symbol}</span>
+              <span className={`home-ticker-tag ${item.market === 'FUTURES' ? 'is-futures' : 'is-forex'}`}>
+                {item.market}
+              </span>
+            </div>
+            <div className="home-ticker-bottom">
+              <span className="home-ticker-name">{item.label}</span>
+              <span className="home-ticker-price">{resolvePrice(item)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -130,6 +152,7 @@ export const HomePage: React.FC = () => {
           </div>
 
           <div className="nav-actions">
+            <ThemeToggle />
             {user ? (
               <div className="user-badge-box">
                 <span className="user-role-tag">{user.role.toUpperCase()}</span>
@@ -173,11 +196,11 @@ export const HomePage: React.FC = () => {
               </div>
 
               <h1 className="hero-title">
-                Get Exact Futures &amp; Forex Trade Setups — Without Staring at Charts All Day.
+                Clear Futures &amp; Forex Trade Ideas — Without Staring at Charts All Day.
               </h1>
 
               <p className="hero-subtitle">
-                We scan the markets 24/5 and hand you the exact entry price, stop loss, and profit targets before the move happens. No complicated indicators. No second-guessing. Just clean setups you can act on in 30 seconds.
+                Whether you&apos;re a scalper catching fast moves, an intraday trader working daily sessions, or a swing trader riding multi-day trends — we scan the markets 24/5, rank the strongest pairs with EdgeFinder, and lay out your entry zone, stop loss, and profit targets in plain sight.
               </p>
 
               <div className="hero-cta-group">
@@ -199,13 +222,13 @@ export const HomePage: React.FC = () => {
 
               <div className="hero-kpi-strip font-mono">
                 <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">4 Market Windows</span>
-                  <span className="hero-kpi-lbl">We Watch Every Session For You</span>
+                  <span className="hero-kpi-val">3 Trading Styles</span>
+                  <span className="hero-kpi-lbl">Scalpers · Intraday · Swing</span>
                 </div>
                 <div className="hero-kpi-divider" aria-hidden="true" />
                 <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">Futures &amp; FX</span>
-                  <span className="hero-kpi-lbl">Gold, Indices &amp; Major Pairs</span>
+                  <span className="hero-kpi-val">EdgeFinder Ranked</span>
+                  <span className="hero-kpi-lbl">Focus Only on Top Markets</span>
                 </div>
                 <div className="hero-kpi-divider" aria-hidden="true" />
                 <div className="hero-kpi-item">
@@ -328,7 +351,12 @@ export const HomePage: React.FC = () => {
 
           {/* Live Quote Ticker Strip */}
           <div className="hero-ticker-wrap">
-            <LiveTickerWidget />
+            <LiveTickerWidget
+              scalpPrice={mtfPreview.scalp?.current_price}
+              scalpSymbol={mtfPreview.scalp?.instrument}
+              swingPrice={mtfPreview.swing?.current_price}
+              swingSymbol={mtfPreview.swing?.instrument}
+            />
           </div>
         </section>
 
@@ -342,25 +370,25 @@ export const HomePage: React.FC = () => {
           <div className="features-grid">
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">01</div>
-              <h3>We Watch the Charts So You Don&apos;t Have To</h3>
+              <h3>Built for Scalpers, Intraday &amp; Swing Traders</h3>
               <p>
-                Most traders burn out staring at screens for hours every day. We scan Asia, London, and New York sessions around the clock and only put real setups in front of you.
+                Want fast 5-to-15 minute moves, clean session trades, or multi-day swings? Pick your trading style and get setups matched to your pace without the clutter.
               </p>
             </article>
 
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">02</div>
-              <h3>Know Your Exact Numbers in 3 Seconds</h3>
+              <h3>EdgeFinder Ranks the Best Markets First</h3>
               <p>
-                No messy lines or confusing jargon. Every trade card shows your exact entry price, your stop loss, and where to take profit — laid out on one simple visual bar.
+                Stop wasting time flipping through 20 dead charts. EdgeFinder scores and ranks every market in real time so you immediately see where the strongest momentum is right now.
               </p>
             </article>
 
             <article className="feature-card">
               <div className="feature-icon-box" aria-hidden="true">03</div>
-              <h3>Risk Small. Aim for 2x to 3x Back.</h3>
+              <h3>See Entry, Stop, and Targets in 3 Seconds</h3>
               <p>
-                Stop risking big just to make small wins. Every setup is built on clear risk-to-reward math and shows you when to move your stop to breakeven so you protect your profits.
+                No messy lines or confusing jargon. Every trade card lays out your entry zone, stop loss, and 2x–3x profit targets on one clean visual bar — plus breakeven alerts.
               </p>
             </article>
 

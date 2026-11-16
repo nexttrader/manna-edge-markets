@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import './DashboardHeader.css';
 import { KillzoneClock } from './KillzoneClock';
+import { ThemeToggle } from './ThemeToggle';
 import { CircuitBreakerIndicator } from './CircuitBreakerIndicator';
 import { EconomicCalendarModal } from './EconomicCalendarModal';
 import { FaqModal } from './FaqModal';
@@ -248,6 +249,8 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             <div className="header-circuit-breaker-wrap">
               <CircuitBreakerIndicator />
             </div>
+
+            <ThemeToggle />
 
             {/* Account Dropdown Menu */}
             {user ? (

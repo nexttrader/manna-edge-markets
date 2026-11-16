@@ -720,17 +720,138 @@
 
 .hp-tel-v.is-green { color: #6ee7b7; }
 
-/* Ticker Shell */
+/* Ticker Shell (Native Theme-Aware Market Strip) */
 .hero-ticker-wrap {
   margin-top: 34px;
 }
 
 .home-ticker-shell {
-  border-radius: 12px;
-  background: rgba(17, 10, 30, 0.78);
+  border-radius: 14px;
+  background: rgba(17, 10, 30, 0.88);
   border: 1px solid var(--kdt-purple-border);
-  padding: 4px 10px;
+  padding: 12px 14px;
   overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.home-ticker-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.home-ticker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--kdt-gold-light);
+}
+
+.home-ticker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+.home-ticker-note {
+  font-size: 0.68rem;
+  color: var(--kdt-white-muted);
+}
+
+.home-ticker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.home-ticker-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.home-ticker-item:hover {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.home-ticker-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.home-ticker-sym {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.home-ticker-tag {
+  font-size: 0.56rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.home-ticker-tag.is-futures {
+  background: rgba(212, 175, 55, 0.15);
+  color: var(--kdt-gold-light);
+}
+
+.home-ticker-tag.is-forex {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+}
+
+.home-ticker-bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.home-ticker-name {
+  font-size: 0.63rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-ticker-price {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+
+@media (max-width: 1080px) {
+  .home-ticker-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .home-ticker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Bento Feature Section */
