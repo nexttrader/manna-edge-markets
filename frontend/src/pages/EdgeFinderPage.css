@@ -1,22 +1,22 @@
-/* Manna EdgeFinder Pro — KDT Imperial Royal Purple & Brushed Gold */
+/* Manna EdgeFinder Pro — Obsidian Royal & Brushed Champagne Gold */
 
 .ef-page {
   min-height: 100vh;
-  background: radial-gradient(circle at 18% 0%, rgba(124, 58, 237, 0.16), transparent 45%),
-    radial-gradient(circle at 86% 12%, rgba(201, 168, 76, 0.12), transparent 40%),
-    var(--kdt-purple-deep, #140926);
+  background: radial-gradient(circle at 18% 0%, rgba(124, 58, 237, 0.09), transparent 45%),
+    radial-gradient(circle at 86% 12%, rgba(212, 175, 55, 0.06), transparent 40%),
+    var(--surface-0, #090512);
   color: #f3efff;
   font-family: var(--font-body, 'Inter', system-ui, sans-serif);
   padding-bottom: 56px;
 }
 
 .ef-container {
-  max-width: 1520px;
+  max-width: 1560px;
   margin: 0 auto;
-  padding: 20px 24px 0;
+  padding: 18px 24px 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* Top Navigation / Utility Strip */
@@ -26,10 +26,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 20px;
-  background: rgba(30, 13, 56, 0.88);
-  border: 1px solid rgba(201, 168, 76, 0.28);
-  border-radius: 14px;
+  padding: 13px 18px;
+  background: rgba(17, 10, 30, 0.92);
+  border: 1px solid rgba(212, 175, 55, 0.24);
+  border-radius: 12px;
   backdrop-filter: blur(12px);
 }
 
@@ -206,10 +206,15 @@
 }
 
 .ef-card {
-  background: var(--kdt-purple-card, #1e0d38);
-  border: 1px solid var(--kdt-purple-border, rgba(167, 139, 250, 0.22));
-  border-radius: 14px;
-  padding: 16px 18px;
+  background: var(--surface-1, #110A1E);
+  border: 1px solid rgba(180, 130, 255, 0.14);
+  border-radius: 12px;
+  padding: 15px 17px;
+  transition: border-color 0.18s ease;
+}
+
+.ef-card:hover {
+  border-color: rgba(212, 175, 55, 0.34);
 }
 
 .ef-perf-section {
@@ -1259,13 +1264,68 @@
   }
 }
 
+/* Asymmetric Split Workspace: 62% Scanner Table + 38% Pinned Scorecard Inspector */
+.ef-split-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(350px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.ef-pinned-inspector {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-color: rgba(212, 175, 55, 0.28);
+  background: linear-gradient(180deg, rgba(20, 11, 36, 0.96), rgba(14, 7, 26, 0.98));
+}
+
+.ef-inspector-mtf-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.ef-inspector-mtf-cell {
+  padding: 4px 2px;
+  border-radius: 5px;
+  text-align: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.ef-inspector-drivers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ef-inspector-driver-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(9, 5, 18, 0.68);
+  border: 1px solid rgba(180, 130, 255, 0.14);
+  font-size: 0.7rem;
+}
+
 @media (max-width: 1180px) {
+  .ef-split-workspace,
   .ef-pulse-grid,
   .ef-two-col-grid,
   .ef-horizon-grid,
   .ef-tf-cards-grid,
   .ef-kb-horizon-grid {
     grid-template-columns: 1fr;
+  }
+  .ef-pinned-inspector {
+    position: static;
   }
   .ef-deepdive-grid {
     grid-template-columns: 1fr;

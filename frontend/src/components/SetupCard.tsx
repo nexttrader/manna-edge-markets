@@ -45,7 +45,9 @@ interface SetupCardProps {
 export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist, isTagged = false, onToggleTag, onInvalidate }) => {
   const { user, originalAdmin, isImpersonating } = useAuth();
   const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
+  const isAdmin = isImpersonating
+    ? (user?.role === 'admin' || user?.role === 'super_admin')
+    : (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
   const {
     canAccessEdgeFinder,
     loading: edgeFinderLoading,
@@ -251,20 +253,57 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
   const strategyId = setup.strategy_id || 'sentinel_v2';
   const displayStrategyName = strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1.2';
-    
+
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }
   })();
 
+  // Visual Trade Progress Ladder Calculation (0% Stop -> 33% Entry -> 70% TP1 -> 98% TP2)
+  const entryMid = setup.entry_zone_mid ?? ((entryLow + entryHigh) / 2);
+  const hasTp2 = tp2Val !== undefined && tp2Val !== tp1Val;
+  const tp1Pct = hasTp2 ? 70 : 96;
+  const tp2Pct = 98;
+  const entryPct = 33;
+  const stopPct = 2;
+
+  const liveLadderPct = (() => {
+    if (currentPrice === undefined || currentPrice <= 0) return null;
+    const dir = isLong ? 1 : -1;
+    const dCurr = currentPrice * dir;
+    const dStop = stopVal * dir;
+    const dEntry = entryMid * dir;
+    const dTp1 = tp1Val * dir;
+    const dTp2 = (hasTp2 ? tp2Val! : tp1Val) * dir;
+
+    const lerp = (p: number, p0: number, p1: number, x0: number, x1: number) => {
+      if (p1 === p0) return x0;
+      const t = Math.max(0, Math.min(1, (p - p0) / (p1 - p0)));
+      return x0 + t * (x1 - x0);
+    };
+
+    if (dCurr <= dStop) return stopPct;
+    if (dCurr <= dEntry) return lerp(currentPrice, stopVal, entryMid, stopPct, entryPct);
+    if (dCurr <= dTp1) return lerp(currentPrice, entryMid, tp1Val, entryPct, tp1Pct);
+    if (hasTp2 && dCurr <= dTp2) return lerp(currentPrice, tp1Val, tp2Val!, tp1Pct, tp2Pct);
+    return tp2Pct;
+  })();
+
+  const isInProfitZone = liveLadderPct !== null && liveLadderPct >= entryPct;
+
   return (
-    <div className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${(strategyId).toLowerCase()}`}>
-      <div className="sc-header">
+    <article className={`setup-card glass-card state-${stateStr.toLowerCase()} strat-border-${(strategyId).toLowerCase()}`}>
+      {/* Tier 1: Symbol Header + Badges + Conviction */}
+      <header className="sc-header">
         <div className="sc-title-group">
           <div className="sc-symbol-row">
             <span className="sc-instrument">{setup.instrument}</span>
-            <span className="sc-market font-mono font-bold">{(setup.market || 'futures').toUpperCase()}</span>
+            <span className="sc-market font-mono">{(setup.market || 'futures').toUpperCase()}</span>
+            <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
+              {displayStrategyName}
+            </span>
             {setup.id && (
-              <span 
+              <button
+                type="button"
                 className="sc-trade-id-badge font-mono"
                 title={`Telegram Trade ID: ${telegramId}\nClick to copy`}
                 onClick={(e) => {
@@ -275,26 +314,30 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 }}
               >
                 {copiedId ? '✓ COPIED' : telegramId}
-              </span>
+              </button>
             )}
           </div>
+
           <div className="sc-badges-row">
-            <span className={`strategy-badge strat-${(strategyId).toLowerCase()} ${strategyId === 'sentinel_v2' ? 'strategy-tag-sentinel_v2' : ''}`}>
-              {displayStrategyName}
+            <span className={`sc-bias ${isLong ? 'bias-long' : 'bias-short'}`}>
+              {isLong ? '▲ LONG' : '▼ SHORT'}
+            </span>
+            <span className="order-type-badge font-mono" title={`Order Type: ${orderTypeStr}`}>
+              {orderTypeStr}
             </span>
             {strategyId === 'sentinel_v2' && isSuperAdmin ? (
               <>
                 {meta?.context_tf && (
-                  <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700 }}>{meta.context_tf}</span>
+                  <span className="sc-meta-tag font-mono">{meta.context_tf}</span>
                 )}
                 {meta?.entry_tf && (
-                  <span className="market-tag font-mono" style={{ background: 'rgba(156, 39, 176, 0.2)', color: '#ce93d8', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700 }}>{meta.entry_tf}</span>
+                  <span className="sc-meta-tag font-mono">{meta.entry_tf}</span>
                 )}
                 {meta?.poi_type && (
                   <span className="poi-badge font-mono">{meta.poi_type}</span>
                 )}
                 {meta?.cycle_priority && (
-                  <span className="cycle-priority-badge font-mono">🔥 CYCLE PRIORITY</span>
+                  <span className="cycle-priority-badge font-mono">CYCLE PRIORITY</span>
                 )}
               </>
             ) : (
@@ -303,16 +346,20 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 <span className="tf-badge ltf">15M Entry</span>
               </>
             )}
+            {isStillInZone && (
+              <span className="sc-pill-in-zone font-mono">IN ENTRY ZONE</span>
+            )}
             {isTp1Won ? (
-              <span className="badge-tp1 font-mono" style={{ background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', color: '#10b981', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 800 }}>
-                🎯 TP1 HIT (+{r1}R)
+              <span className="badge-tp1 font-mono">
+                TP1 HIT +{r1}R
               </span>
             ) : isBreakeven ? (
-              <span className="be-badge font-mono animate-pulse" title="Stop Loss moved to Entry to lock in risk-free position">
-                🛡️ BREAK EVEN
+              <span className="be-badge font-mono" title="Stop Loss moved to Entry to lock in risk-free position">
+                BREAK EVEN
               </span>
             ) : null}
           </div>
+
           {strategyId === 'sentinel_v2' && isSuperAdmin && (
             <div className="sentinel-pipeline font-mono">
               {['HTF Expansion', 'POI Detected', 'POI Mitigated', '15M Confirmed', '1M Entry'].map((phase, i) => {
@@ -328,44 +375,173 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             </div>
           )}
         </div>
+
         <div className="sc-header-actions font-mono">
-          {onToggleWatchlist && (
-            <button 
-              className={`sc-eye-btn ${isWatchlisted ? 'is-starred' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleWatchlist(setup.id); }}
-              title={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
-              aria-label={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          <div className="sc-right-stack">
+            <div className="sc-top-ctrl-row">
+              {onToggleWatchlist && (
+                <button
+                  type="button"
+                  className={`sc-eye-btn ${isWatchlisted ? 'is-starred' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onToggleWatchlist(setup.id); }}
+                  title={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  aria-label={isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                >
+                  <span className="eye-icon">{isWatchlisted ? '★' : '☆'}</span>
+                  <span>{isWatchlisted ? 'Watching' : 'Watch'}</span>
+                </button>
+              )}
+              <StatusBadge status={stateStr} />
+            </div>
+            <span className="conviction-text-badge">{convictionVal}% Conviction</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Tier 2: Horizontal Visual Trade Progress Ladder */}
+      <div className="sc-ladder-box font-mono" aria-label="Trade price progress ladder">
+        <div className="sc-ladder-track">
+          <div className="sc-ladder-risk-seg" style={{ width: `${entryPct}%` }} />
+          <div
+            className="sc-ladder-profit-seg"
+            style={{
+              left: `${entryPct}%`,
+              width: `${tp2Pct - entryPct}%`
+            }}
+          />
+          {liveLadderPct !== null && (
+            <div
+              className={`sc-ladder-fill ${isInProfitZone ? 'is-profit' : 'is-risk'}`}
               style={{
-                borderRadius: '16px',
-                width: 'auto',
-                padding: '0 8px 0 6px',
-                gap: '4px',
-                display: 'inline-flex',
-                alignItems: 'center'
+                left: `${Math.min(entryPct, liveLadderPct)}%`,
+                width: `${Math.abs(liveLadderPct - entryPct)}%`
               }}
-            >
-              <span className="eye-icon" style={{ display: 'inline-block', transform: 'translateY(-1px)' }}>{isWatchlisted ? '👁️' : '👁️‍🗨️'}</span>
-              <span style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                {isWatchlisted ? 'Watching' : 'Watch'}
-              </span>
-            </button>
+            />
           )}
-          <StatusBadge status={stateStr} />
+          <span className="sc-ladder-node is-stop" style={{ left: `${stopPct}%` }} />
+          <span className={`sc-ladder-entry-band ${isStillInZone ? 'is-in-zone' : ''}`} style={{ left: `${entryPct}%` }} />
+          <span className={`sc-ladder-node is-tp1 ${isTp1Won ? 'is-hit' : ''}`} style={{ left: `${tp1Pct}%` }} />
+          {hasTp2 && <span className="sc-ladder-node is-tp2" style={{ left: `${tp2Pct}%` }} />}
+
+          {liveLadderPct !== null && (
+            <div
+              className={`sc-ladder-live-dot ${isInProfitZone ? 'is-profit' : 'is-risk'} tick-${priceTick}`}
+              style={{ left: `${liveLadderPct}%` }}
+              title={`Current Price: ${currentPrice}`}
+            />
+          )}
+        </div>
+
+        <div className={`sc-ladder-labels ${hasTp2 ? 'cols-4' : 'cols-3'}`}>
+          <div className="sc-ll-col align-left">
+            <span className="sc-ll-k">STOP LOSS {isBreakeven ? '(BE)' : ''}</span>
+            <span className="sc-ll-v text-red">{stopVal}</span>
+          </div>
+          <div className="sc-ll-col align-center">
+            <span className="sc-ll-k">ENTRY ZONE</span>
+            <span className="sc-ll-v text-gold">{entryLow} – {entryHigh}</span>
+          </div>
+          <div className={`sc-ll-col ${hasTp2 ? 'align-center' : 'align-right'}`}>
+            <span className="sc-ll-k">TP1 (+{r1}R)</span>
+            <span className="sc-ll-v text-green">{tp1Val}</span>
+          </div>
+          {hasTp2 && (
+            <div className="sc-ll-col align-right">
+              <span className="sc-ll-k">TP2 (+{r2}R)</span>
+              <span className="sc-ll-v text-green">{tp2Val}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="sc-bias-row">
-        <div className={`sc-bias ${isLong ? 'bias-long' : 'bias-short'}`}>
-          {isLong ? '⬆ LONG' : '⬇ SHORT'}
+      {/* Tier 3: Compact 2-Column Telemetry Grid */}
+      <div className="sc-telemetry-grid font-mono">
+        <div className="sc-tel-cell">
+          <span className="sc-tel-k">Signal Sent</span>
+          <span className="sc-tel-v">
+            {formatETDate(signalSentTime || createdTime)} · {formatETTime(signalSentTime || createdTime)}
+          </span>
         </div>
-        <span className="order-type-badge font-mono" title={`Order Type: ${orderTypeStr}`}>
-          📌 {orderTypeStr}
-        </span>
-        <div className="sc-conviction font-mono">
-          <span className="conviction-text-badge">{convictionVal}% Conviction</span>
+
+        <div className="sc-tel-cell">
+          <span className="sc-tel-k">Time Entered</span>
+          {entryTimestamp ? (
+            <span className="sc-tel-v text-green">
+              {formatETDate(entryTimestamp)} · {formatETTime(entryTimestamp)}
+              {getEntrySessionName() ? ` (${getEntrySessionName()})` : ''}
+            </span>
+          ) : (
+            <span className="sc-tel-v" style={{ color: stateStr === 'awaiting_entry' ? 'var(--kdt-gold)' : 'var(--text-muted)' }}>
+              {stateStr === 'awaiting_entry' ? 'Awaiting Entry' : 'Not Entered'}
+            </span>
+          )}
+        </div>
+
+        {currentPrice !== undefined && currentPrice > 0 && (
+          <div
+            className={`sc-tel-cell is-live tick-${priceTick}`}
+            style={{ cursor: isForex ? 'default' : 'pointer' }}
+            onClick={() => { if (!isForex) setShowPriceDropdown(!showPriceDropdown); }}
+            title={isForex ? undefined : 'Click to inspect live price feed status'}
+          >
+            <span className="sc-tel-k">
+              {isForex ? 'Live Feed' : setup.is_ibkr_fresh ? 'Live (I-Feed)' : 'Delayed (Y-Feed) ▾'}
+            </span>
+            <span className="sc-tel-v">
+              <strong>{currentPrice}</strong>{' '}
+              <span className={priceTick === 'up' ? 'text-green' : priceTick === 'down' ? 'text-red' : ''}>
+                {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : '•'}
+              </span>
+            </span>
+          </div>
+        )}
+
+        <div className="sc-tel-cell">
+          {stateStr === 'active' && setup.unrealizedR !== undefined ? (
+            <>
+              <span className="sc-tel-k">
+                {exactFill ? `Fill ${exactFill} · Live RR` : 'Live RR'}
+              </span>
+              <span className={`sc-tel-v ${(setup.unrealizedR ?? 0) >= 0 ? 'text-green' : 'text-red'}`}>
+                {(setup.unrealizedR ?? 0) > 0 ? '+' : ''}{(setup.unrealizedR ?? 0).toFixed(2)}R
+                {isBreakeven ? ' (BE)' : ''}
+              </span>
+            </>
+          ) : stateStr === 'awaiting_entry' && setup.distance_to_entry_r !== undefined ? (
+            <>
+              <span className="sc-tel-k">Entry Proximity</span>
+              <span className={`sc-tel-v ${setup.distance_to_entry_r === 0 ? 'text-green' : 'text-gold'}`}>
+                {setup.distance_to_entry_r === 0 ? 'In Zone (Ready)' : `${setup.distance_to_entry_r.toFixed(2)}R away`}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="sc-tel-k">Trade State</span>
+              <span className="sc-tel-v">{stateStr.replace('_', ' ').toUpperCase()}</span>
+            </>
+          )}
         </div>
       </div>
 
+      {!isForex && showPriceDropdown && (
+        <div className="sc-feed-note font-mono">
+          {setup.is_ibkr_fresh ? (
+            <span className="text-green">Feed active — receiving real-time I-Feed price ticks.</span>
+          ) : (
+            <div>
+              <div style={{ color: '#F59E0B', fontWeight: 700, marginBottom: 4 }}>
+                Showing 15-minute delayed Y-Feed market data while I-Feed syncs.
+              </div>
+              <div style={{ color: '#B8AFCE' }}>
+                Discovery, entry detection, and invalidation remain real-time and unaffected.
+                {setup.ibkr_price ? ` Last I-Feed print: ${setup.ibkr_price}` : ''}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tier 4: Collapsed EdgeFinder Confluence Bar (Role-Gated: SuperAdmin Always / Admin & Client via Toggle) */}
       {canAccessEdgeFinder && (
         <div
           className={`sc-edgefinder-panel font-mono state-${(edgeFinderConfluence?.state || 'LOADING').toLowerCase()} ${edgeFinderExpanded ? 'is-expanded' : 'is-collapsed'}`}
@@ -381,16 +557,16 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             }}
           >
             <span className="sc-ef-status-group">
-              <span className="sc-ef-kicker">🧭 EDGEFINDER CONFLUENCE</span>
+              <span className="sc-ef-kicker">EDGEFINDER CONFLUENCE</span>
               {edgeFinderConfluence ? (
                 <span className={`sc-ef-badge is-${edgeFinderConfluence.state.toLowerCase()}`}>
                   {edgeFinderConfluence.state === 'STRONG_AGREEMENT'
-                    ? '🔥 '
+                    ? '✓ '
                     : edgeFinderConfluence.state === 'AGREES'
-                      ? '✅ '
+                      ? '✓ '
                       : edgeFinderConfluence.state === 'COUNTER'
-                        ? '⚠️ '
-                        : '⚖️ '}
+                        ? '! '
+                        : '≈ '}
                   {edgeFinderConfluence.badgeText}
                 </span>
               ) : edgeFinderLoading ? (
@@ -401,7 +577,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             </span>
 
             <span className="sc-ef-chevron">
-              {edgeFinderExpanded ? '▲ Hide' : '▼ Expand'}
+              {edgeFinderExpanded ? 'Hide ▲' : 'Expand ▾'}
             </span>
           </button>
 
@@ -445,296 +621,77 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
       )}
 
       {setup.opposing_strategy_warning && (
-        <div className="font-mono text-gold animate-fade-in" style={{ background: 'rgba(255, 215, 0, 0.1)', border: '1px solid rgba(255, 215, 0, 0.4)', borderRadius: '6px', padding: '8px 12px', fontSize: '0.78rem', margin: '10px 0', lineHeight: 1.3 }}>
+        <div className="sc-inline-alert is-gold font-mono animate-fade-in">
           {setup.opposing_strategy_warning}
         </div>
       )}
 
-      {isStillInZone && (
-        <div className="sc-in-zone-opportunity font-mono animate-pulse">
-          <div className="in-zone-left">
-            <span className="in-zone-icon">🎯</span>
-            <span className="in-zone-title">STILL IN ENTRY ZONE ({currentPrice})</span>
-          </div>
-          <div className="in-zone-right">
-            <span className="in-zone-badge">VALID ENTRY OPPORTUNITY</span>
-          </div>
-        </div>
-      )}
-
-      <div className="sc-levels font-mono">
-        <div className="level-row">
-          <span className="level-label">Entry Zone</span>
-          <span className="level-val">{entryLow} — {entryHigh}</span>
-          <span className="level-pips text-gold">📍 Zone</span>
-        </div>
-        {exactFill && (
-          <div className="level-row entry-fill-row">
-            <span className="level-label text-gold">Exact Fill</span>
-            <span className="level-val text-gold font-bold">{exactFill}</span>
-            <span className="level-pips text-gold">⚡ FILLED</span>
-          </div>
-        )}
-        {/* Signal Sent Time - Always visible on every signal card */}
-        <div className="level-row signal-sent-row">
-          <span className="level-label text-cyan font-bold">Signal Sent</span>
-          <span className="level-val entry-datetime-val">
-            <span className="entry-val-date">{formatETDate(signalSentTime || createdTime)}</span>
-            <span className="entry-val-sep"> · </span>
-            <span className="entry-val-time">{formatETTime(signalSentTime || createdTime)}</span>
-          </span>
-          <span className="level-pips text-cyan font-bold">📡 SENT</span>
-        </div>
-
-        {/* Time Entered - Always visible on every signal card */}
-        {entryTimestamp ? (
-          <div className="level-row entry-session-row">
-            <span className="level-label text-green font-bold">Time Entered</span>
-            <span className="level-val text-green font-bold entry-datetime-val">
-              <span className="entry-val-date">{formatETDate(entryTimestamp)}</span>
-              <span className="entry-val-sep"> · </span>
-              <span className="entry-val-time">{formatETTime(entryTimestamp)}</span>
-              {getEntrySessionName() && (
-                <span className="entry-val-session"> ({getEntrySessionName()})</span>
-              )}
-            </span>
-            <span className="level-pips text-green font-bold">📥 ENTERED</span>
-          </div>
-        ) : (
-          <div className="level-row entry-session-row awaiting-entry-row">
-            <span className="level-label text-muted font-bold">Time Entered</span>
-            <span className="level-val entry-datetime-val" style={{ color: stateStr === 'awaiting_entry' ? 'var(--kdt-gold)' : 'var(--kdt-white-muted)' }}>
-              {stateStr === 'awaiting_entry' ? 'Awaiting Entry...' : 'Not Entered'}
-            </span>
-            <span className="level-pips font-bold" style={{ color: stateStr === 'awaiting_entry' ? 'var(--kdt-gold)' : 'var(--kdt-white-muted)' }}>
-              {stateStr === 'awaiting_entry' ? '⏳ PENDING' : '⛔ UNFILLED'}
-            </span>
-          </div>
-        )}
-        <div className="level-row">
-          <span className="level-label">Stop Loss</span>
-          <span className="level-val">
-            {stopVal} {isBreakeven ? <span className="text-gold">(BE)</span> : null}
-          </span>
-          <span className="level-pips text-red">
-            {isBreakeven ? '🛡️ Risk Free' : '🔴 Stop'}
-          </span>
-        </div>
-        <div className="level-row">
-          <span className="level-label">TP1 ({r1}R)</span>
-          <span className="level-val">{tp1Val}</span>
-          <span className="level-pips text-green">🟢 Target 1</span>
-        </div>
-        {tp2Val !== undefined && (
-          <div className="level-row">
-            <span className="level-label">TP2 ({r2}R)</span>
-            <span className="level-val">{tp2Val}</span>
-            <span className="level-pips text-green">🟢 Target 2</span>
-          </div>
-        )}
-        {/* Live Price Bubble inside the black levels section below TP2 */}
-        {currentPrice !== undefined && currentPrice > 0 && (
-          <>
-            <div 
-              className={`level-row live-price-level-row tick-${priceTick}`}
-              style={{ cursor: isForex ? 'default' : 'pointer', transition: 'background-color 0.2s' }}
-              onClick={() => {
-                if (!isForex) {
-                  setShowPriceDropdown(!showPriceDropdown);
-                }
-              }}
-              title={isForex ? undefined : "Click to view feed details and true live price"}
-            >
-              {isForex ? (
-                <>
-                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE</span>
-                  <span className="level-val font-bold text-white">
-                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
-                  </span>
-                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ Live Feed</span>
-                </>
-              ) : setup.is_ibkr_fresh ? (
-                <>
-                  <span className="level-label font-bold" style={{ color: '#00e676' }}>● LIVE (I)</span>
-                  <span className="level-val font-bold text-white">
-                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
-                  </span>
-                  <span className="level-pips font-bold" style={{ color: '#00e676' }}>⚡ I-Feed</span>
-                </>
-              ) : (
-                <>
-                  <span className="level-label font-bold" style={{ color: '#ffb703' }}>
-                    ● DELAY (Y) <span style={{ cursor: 'pointer', marginLeft: '2px', fontSize: '0.8rem' }} title="Why is this delayed?">❓</span>
-                  </span>
-                  <span className="level-val font-bold text-white">
-                    {currentPrice} {priceTick === 'up' ? '▲' : priceTick === 'down' ? '▼' : ''}
-                  </span>
-                  <span className="level-pips font-bold" style={{ color: '#ffb703' }}>⏱️ Y-Feed</span>
-                </>
-              )}
-            </div>
-            {!isForex && showPriceDropdown && (
-              <div 
-                className="font-mono text-left" 
-                style={{ 
-                  margin: '-8px 8px 8px 8px', 
-                  padding: '10px 12px', 
-                  background: 'rgba(255, 255, 255, 0.03)', 
-                  border: '1px solid rgba(255, 255, 255, 0.08)', 
-                  borderRadius: '4px',
-                  fontSize: '0.75rem',
-                  lineHeight: '1.4'
-                }}
-              >
-                {setup.is_ibkr_fresh ? (
-                  <div style={{ color: '#00e676' }}>
-                    🟢 Feed active. Receiving real-time ticks from I-Feed.
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ color: '#ffab00', fontWeight: 'bold', marginBottom: '6px' }}>
-                      ⚠️ I-Feed is currently offline or subscribing.
-                    </div>
-                    <div style={{ color: '#aaa', marginBottom: '8px' }}>
-                      Showing 15-minute delayed market data from Y-Feed.
-                    </div>
-                    <div style={{ padding: '8px', background: 'rgba(255, 171, 0, 0.08)', borderLeft: '3px solid #ffab00', borderRadius: '4px', color: '#ffd700', fontSize: '0.72rem', marginBottom: '8px', lineHeight: '1.3' }}>
-                      <strong>🛡️ SIGNALS STILL TRUSTWORTHY:</strong> The discovery, entry-detection, and outvalidation engines remain fully functional and accurate.
-                    </div>
-                    {setup.ibkr_price ? (
-                      <div style={{ color: '#00e5ff' }}>
-                        📊 Last known I-Feed price: <span style={{ fontWeight: 'bold' }}>{setup.ibkr_price}</span>
-                      </div>
-                    ) : (
-                      <div style={{ color: '#ff1744' }}>
-                        ❌ No cached I-Feed price ticks recorded yet.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {stateStr === 'active' && (setup.unrealizedR !== undefined || setup.current_price) && (
-        <div className={`sc-unrealized-banner ${((setup.unrealizedR ?? 0) >= 0) ? 'is-profit' : 'is-drawdown'}`}>
-          <div className="unrealized-left">
-            <span className="unrealized-fire">{isBreakeven ? '🛡️' : (setup.unrealizedR ?? 0) >= 0 ? '🔥' : '🔻'}</span>
-            <span className="unrealized-title">LIVE RR:</span>
-            {isBreakeven && (
-              <span className="font-mono text-gold" style={{ fontSize: '0.75rem', fontWeight: 800, marginLeft: '6px' }}>
-                (RISK FREE)
-              </span>
-            )}
-          </div>
-          <div className="unrealized-right font-mono">
-            <span className="unrealized-r-val">
-              {(setup.unrealizedR ?? 0) > 0 ? '+' : ''}{(setup.unrealizedR ?? 0).toFixed(2)}R
-            </span>
-            {setup.current_price && (
-              <span className="unrealized-price-sub">
-                (Price: {setup.current_price})
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {stateStr === 'awaiting_entry' && setup.distance_to_entry_r !== undefined && (
-        <div className={`sc-unrealized-banner ${setup.distance_to_entry_r === 0 ? 'is-in-zone' : 'is-pending-dist'}`}>
-          <div className="unrealized-left">
-            <span className="unrealized-fire">{setup.distance_to_entry_r === 0 ? '⚡' : '📍'}</span>
-            <span className="unrealized-title">
-              {setup.distance_to_entry_r === 0 ? 'IN ENTRY ZONE:' : 'DISTANCE TO ENTRY:'}
-            </span>
-          </div>
-          <div className="unrealized-right font-mono">
-            <span className="unrealized-r-val">
-              {setup.distance_to_entry_r === 0 ? '0.00R (READY)' : `${setup.distance_to_entry_r.toFixed(2)}R`}
-            </span>
-            {setup.current_price && (
-              <span className="unrealized-price-sub">
-                (Price: {setup.current_price})
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       {rescanMessage && (
-        <div style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'rgba(0, 229, 255, 0.1)', border: '1px solid #00e5ff', borderRadius: '6px', color: '#00e5ff', marginBottom: '12px' }} className="font-mono animate-fade-in">
+        <div className="sc-inline-alert is-cyan font-mono animate-fade-in">
           {rescanMessage}
         </div>
       )}
 
       {setup.correlation_note && (
-        <div style={{ margin: '8px 0 12px 0', padding: '10px 12px', background: 'rgba(255, 171, 0, 0.08)', borderLeft: '3px solid #ffab00', borderRadius: '6px', fontSize: '0.8rem', color: '#ffd700', lineHeight: 1.4 }} className="font-mono animate-fade-in">
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ffab00', textTransform: 'uppercase', marginBottom: '4px' }}>
-            ⚠️ Correlated Outlier Notice (-15% Conviction)
-          </div>
+        <div className="sc-inline-alert is-gold font-mono animate-fade-in">
+          <strong>Correlated Outlier Notice (-15% Conviction): </strong>
           {setup.correlation_note}
         </div>
       )}
 
-      <div className="sc-actions font-mono">
-        <button className="btn-action btn-copy" onClick={handleCopy}>
-          {copied ? 'Copied! ✓' : '📋 Copy'}
+      <footer className="sc-actions font-mono">
+        <button type="button" className="btn-action btn-chart" onClick={() => setShowChart(true)}>
+          Chart
         </button>
-        <button className="btn-action btn-chart" onClick={() => setShowChart(true)}>
-          📈 Chart
-        </button>
-        {isSuperAdmin && (
-          <button
-            className="btn-action btn-resend-tg"
-            onClick={() => setShowTelegramResend(true)}
-            style={{
-              background: 'rgba(41, 182, 246, 0.16)',
-              color: '#29b6f6',
-              border: '1px solid rgba(41, 182, 246, 0.4)',
-              fontWeight: 700
-            }}
-            title="Super Admin Only: Resend this signal to Telegram (with optional new Trade ID)"
-          >
-            📲 Resend to TG
-          </button>
-        )}
-        {isAdmin && stateStr === 'awaiting_entry' && (
-          <button 
-            className="btn-action btn-rescan" 
-            onClick={handleSingleRescan} 
-            disabled={rescanning}
-            style={{ background: 'rgba(0, 229, 255, 0.12)', color: '#00e5ff', border: '1px solid rgba(0, 229, 255, 0.4)' }}
-            title="Run single-asset rescan for this pending setup (Admin Only)"
-          >
-            {rescanning ? '⏳ Scanning...' : '🔍 Rescan'}
-          </button>
-        )}
-        {isSuperAdmin && stateStr !== 'resolved' && stateStr !== 'invalidated' && (
-          <button
-            className="btn-action btn-invalidate"
-            onClick={handleInvalidateSignal}
-            disabled={invalidating}
-            style={{ background: 'rgba(255, 23, 68, 0.16)', color: '#ff1744', border: '1px solid rgba(255, 23, 68, 0.5)', fontWeight: 800 }}
-            title="Super Admin Only: Invalidate and remove this signal from client dashboard"
-          >
-            {invalidating ? '⏳ Removing...' : '⛔ Remove'}
-          </button>
-        )}
-        <button className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'Hide Details' : 'Show Details'}
+        <button type="button" className="btn-action btn-copy" onClick={handleCopy}>
+          {copied ? 'Copied ✓' : 'Copy'}
         </button>
         {onToggleTag && (
           <button
+            type="button"
             className={`btn-action btn-tag${isTagged ? ' btn-tag--active' : ''}`}
             onClick={() => onToggleTag(setup.id, setup)}
             title={isTagged ? 'Remove demo tag from this signal' : 'Tag this signal — you plan to demo trade it'}
           >
-            {isTagged ? '🏷️ Tagged' : '🏷️ Tag'}
+            {isTagged ? 'Tagged ★' : 'Tag'}
           </button>
         )}
-      </div>
+        <button type="button" className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
+          {expanded ? 'Hide Details' : 'Details'}
+        </button>
+        {isAdmin && stateStr === 'awaiting_entry' && (
+          <button
+            type="button"
+            className="btn-action btn-rescan"
+            onClick={handleSingleRescan}
+            disabled={rescanning}
+            title="Admin Only: Run single-asset rescan for this pending setup"
+          >
+            {rescanning ? 'Scanning...' : 'Rescan'}
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            className="btn-action btn-resend-tg"
+            onClick={() => setShowTelegramResend(true)}
+            title="Super Admin Only: Resend this signal to Telegram (with optional new Trade ID)"
+          >
+            Resend TG
+          </button>
+        )}
+        {isSuperAdmin && stateStr !== 'resolved' && stateStr !== 'invalidated' && (
+          <button
+            type="button"
+            className="btn-action btn-invalidate"
+            onClick={handleInvalidateSignal}
+            disabled={invalidating}
+            title="Super Admin Only: Invalidate and remove this signal from client dashboard"
+          >
+            {invalidating ? 'Removing...' : 'Remove'}
+          </button>
+        )}
+      </footer>
 
       {showChart && (
         <SetupChartModal setup={setup} onClose={() => setShowChart(false)} />
@@ -827,11 +784,11 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           </div>
 
           <div className="sc-rationale-box">
-            <span className="rationale-label">🎯 Why This Trade Was Selected:</span>
+            <span className="rationale-label">Selection Rationale</span>
             <p className="rationale-text">{getSelectionRationale(setup)}</p>
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 };

@@ -208,117 +208,145 @@ export const Dashboard: React.FC = () => {
           />
         )}
 
-        {/* Main Filter & Control Panel */}
-        <div className="filter-bar glass-card font-mono">
+        {/* Streamlined Obsidian Command Filter Bar */}
+        <section className="filter-bar glass-card font-mono" aria-label="Signal Filters">
           <div className="filter-top-row">
-            {/* Primary Market & Watchlist Tabs */}
-            <div className="tabs">
-              <button 
+            {/* Primary Market & Watchlist Segmented Tabs */}
+            <div className="tabs" role="tablist" aria-label="Market Categories">
+              <button
+                type="button"
                 className={`tab ${marketFilter === 'all' ? 'active' : ''}`}
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'all')}
               >
-                🌐 All Markets ({setups.length})
+                <span>All Markets</span>
+                <span className="tab-count">{setups.length}</span>
               </button>
-              <button 
+              <button
+                type="button"
                 className={`tab ${marketFilter === 'futures' ? 'active' : ''}`}
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'futures')}
               >
-                📊 Futures ({futuresCount})
+                <span>Futures</span>
+                <span className="tab-count">{futuresCount}</span>
               </button>
-              <button 
+              <button
+                type="button"
                 className={`tab ${marketFilter === 'forex' ? 'active' : ''}`}
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'forex')}
               >
-                💱 Forex ({forexCount})
+                <span>Forex</span>
+                <span className="tab-count">{forexCount}</span>
               </button>
-              <button 
+              <button
+                type="button"
                 className={`tab tab-watchlist ${marketFilter === 'watchlist' ? 'active' : ''}`}
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'watchlist')}
               >
-                ⭐ Watchlist ({watchlistCount})
+                <span>★ Watchlist</span>
+                <span className="tab-count">{watchlistCount}</span>
               </button>
             </div>
 
+            <div className="filter-top-meta">
+              <div className="auto-refresh" title="Auto-refreshing live signals every 5 seconds">
+                <span className="refresh-dot" />
+                <span>LIVE · 5s Poll</span>
+              </div>
+              {hasActiveFilter && (
+                <button type="button" className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Secondary Controls: Core Filters */}
+          {/* Inline Core Filter Selects */}
           <div className="filter-controls-row">
             <div className="filter-group">
-              <label>State:</label>
-              <select value={stateFilter} onChange={(e) => updateFilter(setStateFilter, 'stateFilter', e.target.value as StateFilter)}>
+              <label htmlFor="dash-state-filter">State</label>
+              <select
+                id="dash-state-filter"
+                value={stateFilter}
+                onChange={(e) => updateFilter(setStateFilter, 'stateFilter', e.target.value as StateFilter)}
+              >
                 <option value="all">All States</option>
-                <option value="active">🟢 Active Positions</option>
-                <option value="runner">🏃 Active Runners (TP1 Logged)</option>
-                <option value="in_zone">🎯 Still In Entry Zone</option>
-                <option value="awaiting_entry">⏳ Awaiting Entry</option>
-                <option value="resolved">🏁 Resolved (History)</option>
-                <option value="invalidated">❌ Invalidated</option>
+                <option value="active">Active Positions</option>
+                <option value="runner">Active Runners (TP1 Hit)</option>
+                <option value="in_zone">In Entry Zone</option>
+                <option value="awaiting_entry">Awaiting Entry</option>
+                <option value="resolved">Resolved (History)</option>
+                <option value="invalidated">Invalidated</option>
               </select>
             </div>
 
             <div className="filter-group">
-              <label>Direction:</label>
-              <select value={biasFilter} onChange={(e) => updateFilter(setBiasFilter, 'biasFilter', e.target.value as BiasFilter)}>
+              <label htmlFor="dash-bias-filter">Direction</label>
+              <select
+                id="dash-bias-filter"
+                value={biasFilter}
+                onChange={(e) => updateFilter(setBiasFilter, 'biasFilter', e.target.value as BiasFilter)}
+              >
                 <option value="all">All Directions</option>
-                <option value="long">⬆ Long Only</option>
-                <option value="short">⬇ Short Only</option>
+                <option value="long">Long Only</option>
+                <option value="short">Short Only</option>
               </select>
             </div>
 
             <div className="filter-group">
-              <label>Strategy:</label>
-              <select value={strategyFilter} onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}>
-                <option value="all">⚡ All Strategies</option>
-                <option value="sentinel_v2">🟣 {isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
-                <option value="manna_snd">🟡 Manna SnD</option>
+              <label htmlFor="dash-strategy-filter">Strategy</label>
+              <select
+                id="dash-strategy-filter"
+                value={strategyFilter}
+                onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}
+              >
+                <option value="all">All Strategies</option>
+                <option value="sentinel_v2">{isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
+                <option value="manna_snd">Manna SnD</option>
               </select>
             </div>
 
             <div className="filter-group">
-              <label>Sort By:</label>
-              <select value={sortBy} onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}>
-                <option value="conviction">🔥 Highest Conviction</option>
-                <option value="newest">⏱️ Newest Discovered</option>
-                <option value="live_rr">📈 Highest Live RR</option>
-                <option value="closest_entry">📍 Closest to Entry Zone</option>
+              <label htmlFor="dash-sort-filter">Sort</label>
+              <select
+                id="dash-sort-filter"
+                value={sortBy}
+                onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}
+              >
+                <option value="conviction">Highest Conviction</option>
+                <option value="newest">Newest Discovered</option>
+                <option value="live_rr">Highest Live RR</option>
+                <option value="closest_entry">Closest to Entry Zone</option>
               </select>
             </div>
 
-            <div className="auto-refresh" style={{ margin: 0, alignSelf: 'center' }}>
-              <span className="refresh-dot"></span>
-              Live (5s poll)
-            </div>
-
-            {/* Advanced Filters Toggle */}
             <button
+              type="button"
               className="advanced-filters-toggle font-mono"
+              aria-expanded={showAdvancedFilters}
               onClick={() => setShowAdvancedFilters(prev => !prev)}
               title="Toggle advanced filter options"
             >
-              ⚙️ Advanced {showAdvancedFilters ? '▲' : '▼'}
+              Order Type {showAdvancedFilters ? '▲' : '▾'}
             </button>
-
-            {hasActiveFilter && (
-              <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">
-                ↺ Reset Filters
-              </button>
-            )}
           </div>
 
-          {/* Advanced Filters: Order Type (hidden by default) */}
           {showAdvancedFilters && (
             <div className="filter-controls-row filter-advanced-row">
               <div className="filter-group">
-                <label>Order Type:</label>
-                <select value={orderTypeFilter} onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}>
+                <label htmlFor="dash-order-filter">Order Type</label>
+                <select
+                  id="dash-order-filter"
+                  value={orderTypeFilter}
+                  onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}
+                >
                   <option value="all">All Orders</option>
-                  <option value="market">📌 Market Orders</option>
-                  <option value="limit">📌 Limit Orders</option>
+                  <option value="market">Market Orders</option>
+                  <option value="limit">Limit Orders</option>
                 </select>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Setups Display */}
         {showMaintenanceLock ? (

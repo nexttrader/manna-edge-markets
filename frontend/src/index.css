@@ -25,44 +25,55 @@ p, h1, h2, h3, h4, h5, h6 {
   overflow-wrap: break-word;
 }
 
-/* KDT Institute Color Palette & Design Tokens */
+/* Manna Edge Markets 2.0 — Obsidian Royal & Brushed Champagne Gold Tokens */
 :root {
+  color-scheme: dark;
+
+  /* Layered Obsidian-Imperial Surfaces */
+  --surface-0: #090512;
+  --surface-1: #110A1E;
+  --surface-2: #160E26;
+  --surface-3: #1E1433;
+
   /* Brand Core Colors */
-  --kdt-purple-deep: #140926;       /* Deep Imperial Royal Purple (Body BG) */
-  --kdt-purple-mid: #1a0a2e;        /* Dark Purple Navigation / Sections */
-  --kdt-purple-card: #1e0d38;       /* Rich Royal Purple Surface Cards */
-  --kdt-purple-border: rgba(180, 130, 255, 0.18); /* Purple Glow Borders */
-  
+  --kdt-purple-deep: var(--surface-0);
+  --kdt-purple-mid: var(--surface-1);
+  --kdt-purple-card: rgba(17, 10, 30, 0.94);
+  --kdt-purple-border: rgba(180, 130, 255, 0.14);
+
   /* Gold Accents */
-  --kdt-gold: #C9A84C;              /* Primary Kingdom Brushed Gold */
-  --kdt-gold-light: #DFC46B;        /* Bright Gold Highlight */
-  --kdt-gold-dark: #A38534;         /* Deep Antique Gold */
-  --kdt-gold-dim: rgba(201, 168, 76, 0.15); /* Translucent Gold Glow */
+  --kdt-gold: #D4AF37;              /* Brushed Champagne Gold */
+  --kdt-gold-light: #E5C453;        /* Bright Gold Highlight */
+  --kdt-gold-dark: #A68523;         /* Deep Antique Gold */
+  --kdt-gold-dim: rgba(212, 175, 55, 0.14);
+  --border-gold-hairline: rgba(212, 175, 55, 0.28);
 
   /* Text & Neutral Colors */
-  --kdt-white: #FFFFFF;
-  --kdt-white-muted: #C5BCDA;       /* Soft Purple-tinted Silver */
-  --text-primary: #FFFFFF;
-  --text-secondary: #C5BCDA;
-  --text-muted: #9589B3;
+  --kdt-white: #F8F7FC;
+  --kdt-white-muted: #B8AFCE;
+  --text-primary: #F8F7FC;
+  --text-secondary: #B8AFCE;
+  --text-muted: #867BA2;
 
   /* Trading State Colors */
-  --green: #00E676;                 /* Long / Target Met */
-  --green-dim: rgba(0, 230, 118, 0.15);
-  --red: #FF5252;                   /* Short / Stop Loss */
-  --red-dim: rgba(255, 82, 82, 0.15);
-  --amber: #FFC107;                 /* Pending / Warning */
-  --amber-dim: rgba(255, 193, 7, 0.15);
-  --blue: #448AFF;                  /* Execution Info */
-  --blue-dim: rgba(68, 138, 255, 0.15);
+  --green: #10B981;
+  --green-bright: #00E676;
+  --green-dim: rgba(16, 185, 129, 0.15);
+  --red: #EF4444;
+  --red-bright: #FF5252;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --amber: #F59E0B;
+  --amber-dim: rgba(245, 158, 11, 0.15);
+  --blue: #38BDF8;
+  --blue-dim: rgba(56, 189, 248, 0.15);
 
   /* Legacy Variable Mapping for Compatibility */
-  --bg-primary: var(--kdt-purple-deep);
-  --bg-secondary: var(--kdt-purple-mid);
+  --bg-primary: var(--surface-0);
+  --bg-secondary: var(--surface-1);
   --bg-card: var(--kdt-purple-card);
-  --bg-glass: rgba(30, 13, 56, 0.85);
+  --bg-glass: rgba(17, 10, 30, 0.88);
   --border-subtle: var(--kdt-purple-border);
-  --border-glass: rgba(201, 168, 76, 0.25);
+  --border-glass: var(--border-gold-hairline);
 
   /* Brand Typography */
   --font-headline: 'Barlow Condensed', sans-serif;
@@ -70,21 +81,21 @@ p, h1, h2, h3, h4, h5, h6 {
   --font-body: 'Barlow', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Shadows and Glass Effects */
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.25);
-  --shadow-glow-green: 0 0 20px rgba(0, 230, 118, 0.3);
-  --shadow-glow-red: 0 0 20px rgba(255, 82, 82, 0.3);
-  --glass-blur: blur(16px);
+  /* Subtle Bento Elevation */
+  --shadow-card: 0 6px 24px rgba(0, 0, 0, 0.45);
+  --shadow-gold: 0 0 18px rgba(212, 175, 55, 0.18);
+  --shadow-glow-green: 0 0 16px rgba(16, 185, 129, 0.24);
+  --shadow-glow-red: 0 0 16px rgba(239, 68, 68, 0.24);
+  --glass-blur: blur(14px);
 }
 
 body {
-  background-color: var(--kdt-purple-deep);
+  background-color: var(--surface-0);
   color: var(--text-primary);
   font-family: var(--font-body);
-  background-image: 
-    radial-gradient(circle at 15% 20%, rgba(201, 168, 76, 0.04) 0%, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(120, 50, 200, 0.08) 0%, transparent 50%);
+  background-image:
+    radial-gradient(circle at 18% 0%, rgba(124, 58, 237, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 86% 12%, rgba(212, 175, 55, 0.05) 0%, transparent 40%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -307,5 +318,20 @@ html, body {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 1rem;
+}
+
+/* Forced Colors / High Contrast Accessibility Support */
+@media (forced-colors: active) {
+  .glass-card,
+  .setup-card,
+  .ef-card,
+  .filter-bar {
+    border: 1px solid CanvasText !important;
+  }
+
+  .kdt-btn-primary,
+  .tab.active {
+    border: 2px solid Highlight !important;
+  }
 }
 

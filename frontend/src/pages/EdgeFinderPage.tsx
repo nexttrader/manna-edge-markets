@@ -940,7 +940,7 @@ export const EdgeFinderPage: React.FC = () => {
               </div>
             </nav>
 
-            {/* TAB 1: TOP SETUPS & SCANNER MATRIX */}
+            {/* TAB 1: TOP SETUPS & SPLIT SCANNER + PINNED SCORECARD WORKSPACE */}
             {activeTab === 'scanner' && (
               <div
                 role="tabpanel"
@@ -948,338 +948,485 @@ export const EdgeFinderPage: React.FC = () => {
                 aria-labelledby="tab-scanner"
                 className="ef-tabpanel"
               >
-                {/* Diverging Conviction Leaders */}
-                <section className="ef-card ef-perf-section" aria-label="Top Conviction Leaders">
-                  <div className="ef-card-header">
-                    <div className="ef-title-help-wrap">
-                      <h2 className="ef-card-title">
+                {/* Collapsible Top Conviction Radar (content-first-noise-reduction) */}
+                <details className="ef-kb-details ef-perf-section">
+                  <summary className="ef-kb-summary-btn">
+                    <span className="ef-kb-sum-main">
+                      <span className="ef-kb-sum-title">
                         Top {activeHorizonMeta.label} Conviction Radar ({activeHorizonMeta.executionTimeframes})
-                      </h2>
-                      <EdgeFinderHelpButton topicId="conviction_radar" onOpenTopic={openKbTopic} />
-                    </div>
-                    <button
-                      type="button"
-                      className="ef-btn"
-                      onClick={() => setShowCorrelations((v) => !v)}
-                    >
-                      {showCorrelations ? 'Hide Correlation Matrix' : 'Show G16 Correlation Heatmap'}
-                    </button>
-                  </div>
-                  <div className="ef-diverging-list">
-                    {topSetupsPreview.map((sc) => {
-                      const hp = getHorizonProfile(sc, selectedHorizon);
-                      const pctHalf = Math.min(50, (Math.abs(hp.score) / 10) * 50);
-                      const isPos = hp.score >= 0;
-                      return (
-                        <div
-                          key={sc.instrument}
-                          className="ef-diverging-row"
-                          onClick={() => handleSelectAssetForDeepDive(sc.instrument)}
-                          title={`${hp.label}: ${hp.actionNote}`}
-                        >
-                          <span className="ef-num" style={{ fontWeight: 700, color: '#ffffff' }}>
-                            {sc.instrument}
-                          </span>
-                          <div className="ef-diverging-track">
-                            <div className="ef-diverging-center" />
-                            <div
-                              className="ef-diverging-fill"
-                              style={{
-                                left: isPos ? '50%' : `${50 - pctHalf}%`,
-                                width: `${Math.max(2, pctHalf)}%`,
-                                background: isPos ? '#00E676' : '#FF5252'
-                              }}
-                            />
-                          </div>
-                          <span
-                            className="ef-num"
-                            style={{
-                              textAlign: 'right',
-                              fontWeight: 700,
-                              color: isPos ? '#69F0AE' : '#FF8A80'
-                            }}
-                          >
-                            {formatSigned(hp.score, 1)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                {/* Filter Toolbar */}
-                <div className="ef-toolbar">
-                  <div className="ef-filter-pills" role="group" aria-label="Scanner Asset Filters">
-                    {(
-                      [
-                        ['ALL', `All Assets (${scorecards.length})`],
-                        ['FOREX', `Forex (${forexCount})`],
-                        ['FUTURES', `Futures (${futuresCount})`],
-                        ['CRYPTO', `Crypto (${cryptoCount})`],
-                        ['TF_ALIGNED', `3/3 TF Aligned (${tfAlignedCount})`],
-                        ['EXTREME_COT', `52W COT Extremes (${cotExtremeCount})`],
-                        ['ALIGNED', `Killzone Aligned (${alignedCount})`],
-                        ['STRONG', 'Strong Bias (|Score| >= 5)'],
-                        ['WATCHLIST', `★ Watchlist (${watchlist.length})`]
-                      ] as Array<[AssetFilterMode, string]>
-                    ).map(([mode, label]) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        className={`ef-filter-btn ${filterMode === mode ? 'is-active' : ''}`}
-                        onClick={() => setFilterMode(mode)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <input
-                    type="search"
-                    className="ef-search-input"
-                    placeholder="Filter instrument or class..."
-                    aria-label="Filter scanner instruments"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-
-                {/* Responsive Sortable Scanner Table */}
-                <div
-                  tabIndex={0}
-                  role="region"
-                  aria-labelledby="ef-scanner-caption"
-                  className="ef-table-wrapper ef-perf-section"
-                >
-                  <table className="ef-table">
-                    <caption id="ef-scanner-caption">
-                      <span className="ef-title-help-wrap">
-                        <span>
-                          Manna EdgeFinder Institutional Matrix ({filteredScorecards.length} / {scorecards.length} Assets) — Active View: <strong>{activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes})</strong> · 60s Live Auto-Sync.
-                        </span>
-                        <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
                       </span>
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th scope="col" aria-sort={sortKey === 'instrument' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('instrument')}>
-                            <span>Instrument</span>
-                            <span>{sortKey === 'instrument' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'currentPrice' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('currentPrice')}>
-                            <span>Price / 1D</span>
-                            <span>{sortKey === 'currentPrice' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'totalScore' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('totalScore')}>
-                              <span>{selectedHorizon === 'SCALP' ? 'Scalp (M5-15)' : selectedHorizon === 'INTRADAY' ? 'Intra (H1-4)' : 'Swing (D1-W1)'}</span>
-                              <span>{sortKey === 'totalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col">
-                          <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
-                            <span>3-TF Matrix (S · I · SW)</span>
-                            <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'cotScore' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('cotScore')}>
-                              <span>COT Flow</span>
-                              <span>{sortKey === 'cotScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="cot_positioning" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'retailScore' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('retailScore')}>
-                              <span>Retail Fade</span>
-                              <span>{sortKey === 'retailScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="retail_contrarian" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'trendScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('trendScore')}>
-                            <span>D1 Trend</span>
-                            <span>{sortKey === 'trendScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'volatilityPct' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
-                              <span>ADR / 7-TF MTF</span>
-                              <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'fundamentalScore' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('fundamentalScore')}>
-                              <span>Macro Diff</span>
-                              <span>{sortKey === 'fundamentalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col" aria-sort={sortKey === 'mannaFlowScore' ? sortDir : undefined}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
-                            <button type="button" className="ef-sort-btn" onClick={() => handleSort('mannaFlowScore')}>
-                              <span>Manna KZ</span>
-                              <span>{sortKey === 'mannaFlowScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                            </button>
-                            <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                        <th scope="col">
-                          <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
-                            <span>{selectedHorizon} Signal &amp; Guard</span>
-                            <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredScorecards.map((sc) => {
-                        const isStarred = watchlist.includes(sc.instrument);
-                        const isSelected = activeScorecard?.instrument === sc.instrument;
+                      <span className="ef-kb-sum-sub">
+                        Diverging leaders bar chart (-10 to +10) &amp; optional 30-day Cross-Asset Correlation Matrix
+                      </span>
+                    </span>
+                    <span className="ef-kb-sum-badges">
+                      <EdgeFinderHelpButton topicId="conviction_radar" onOpenTopic={openKbTopic} />
+                      <span className="ef-kz-pill ef-kz-aligned">Top 8 Leaders</span>
+                    </span>
+                  </summary>
+                  <div className="ef-kb-details-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        className="ef-btn"
+                        onClick={() => setShowCorrelations((v) => !v)}
+                      >
+                        {showCorrelations ? 'Hide Correlation Matrix' : 'Show G16 Correlation Heatmap'}
+                      </button>
+                    </div>
+                    <div className="ef-diverging-list">
+                      {topSetupsPreview.map((sc) => {
                         const hp = getHorizonProfile(sc, selectedHorizon);
-                        const scalp = getHorizonProfile(sc, 'SCALP');
-                        const intra = getHorizonProfile(sc, 'INTRADAY');
-                        const swing = getHorizonProfile(sc, 'SWING');
+                        const pctHalf = Math.min(50, (Math.abs(hp.score) / 10) * 50);
+                        const isPos = hp.score >= 0;
                         return (
-                          <tr
+                          <div
                             key={sc.instrument}
-                            className={isSelected ? 'is-selected' : ''}
-                            onClick={() => handleSelectAssetForDeepDive(sc.instrument)}
+                            className="ef-diverging-row"
+                            onClick={() => setSelectedSymbol(sc.instrument)}
+                            title={`${hp.label}: ${hp.actionNote}`}
                           >
-                            <th scope="row">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => toggleWatchlist(sc.instrument, e)}
-                                  aria-label={isStarred ? `Remove ${sc.instrument} from watchlist` : `Add ${sc.instrument} to watchlist`}
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: isStarred ? '#DFC46B' : '#6b5b95',
-                                    fontSize: '0.95rem',
-                                    padding: 0
-                                  }}
-                                >
-                                  {isStarred ? '★' : '☆'}
-                                </button>
-                                <div>
-                                  <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
-                                  <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>
-                                    {sc.category} · {sc.assetClass.toUpperCase()}
-                                  </div>
-                                </div>
-                              </div>
-                            </th>
-                            <td>
-                              <div className="ef-num" style={{ color: '#ffffff', fontWeight: 600 }}>{sc.currentPrice}</div>
+                            <span className="ef-num" style={{ fontWeight: 700, color: '#ffffff' }}>
+                              {sc.instrument}
+                            </span>
+                            <div className="ef-diverging-track">
+                              <div className="ef-diverging-center" />
                               <div
-                                className="ef-num"
+                                className="ef-diverging-fill"
                                 style={{
-                                  fontSize: '0.73rem',
-                                  color: sc.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80'
+                                  left: isPos ? '50%' : `${50 - pctHalf}%`,
+                                  width: `${Math.max(2, pctHalf)}%`,
+                                  background: isPos ? '#00E676' : '#FF5252'
                                 }}
-                              >
-                                {formatSigned(sc.dailyChangePct, 2)}% (1D)
-                              </div>
-                            </td>
-                            <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(hp.score)}>
-                                {formatSigned(hp.score, 1)}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="ef-tf-strip" title={sc.timeframeConfluence?.summary || ''}>
-                                <span className="ef-tf-chip" style={scoreCellStyle(scalp.score)}>
-                                  S {formatSigned(scalp.score, 1)}
-                                </span>
-                                <span className="ef-tf-chip" style={scoreCellStyle(intra.score)}>
-                                  I {formatSigned(intra.score, 1)}
-                                </span>
-                                <span className="ef-tf-chip" style={scoreCellStyle(swing.score)}>
-                                  SW {formatSigned(swing.score, 1)}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: '0.67rem', color: sc.timeframeConfluence?.allAligned ? '#DFC46B' : '#9f91c2', marginTop: 3 }}>
-                                {sc.timeframeConfluence?.allAligned ? '★ 3/3 TF ALIGNED' : `${sc.timeframeConfluence?.alignedCount ?? 0}/3 TF Agree`}
-                              </div>
-                            </td>
-                            <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.cotScore)}>
-                                {formatSigned(sc.cotScore, 1)}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.retailScore)}>
-                                {formatSigned(sc.retailScore, 1)}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.trendScore)}>
-                                {formatSigned(sc.trendScore, 2)}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="ef-num" style={{ fontSize: '0.74rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
-                                {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR · {formatSigned(sc.technical.return1hPct ?? 0, 2)}% 1H
-                              </div>
-                              <div style={{ fontSize: '0.68rem', color: '#a99bc9' }}>
-                                MTF {sc.technical.mtfAlignment.alignedCount}/7 · RSI M15 {sc.technical.rsi14M15?.toFixed(0) ?? sc.technical.rsi14.toFixed(0)}
-                              </div>
-                            </td>
-                            <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.fundamentalScore)}>
-                                {formatSigned(sc.fundamentalScore, 2)}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className={`ef-kz-pill ${
-                                  sc.killzoneAlignment.alignmentStatus === 'ALIGNED'
-                                    ? 'ef-kz-aligned'
-                                    : sc.killzoneAlignment.alignmentStatus === 'CONFLICT'
-                                      ? 'ef-kz-conflict'
-                                      : 'ef-kz-standby'
-                                }`}
-                              >
-                                {sc.killzoneAlignment.activeSetupCount > 0
-                                  ? `${sc.killzoneAlignment.direction} · ${sc.killzoneAlignment.killzone}`
-                                  : `BEST: ${sc.seasonality.bestKillzone}`}
-                              </span>
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span className={biasBadgeClass(hp.biasLabel)}>{hp.biasLabel}</span>
-                                <div style={{ fontSize: '0.67rem', color: hp.adrWarning ? '#FF8A80' : hp.htfConfluence === 'COUNTER_TREND' ? '#ffe082' : '#9f91c2' }}>
-                                  {hp.adrWarning
-                                    ? '⚠ ADR STRETCHED'
-                                    : hp.htfConfluence === 'COUNTER_TREND'
-                                      ? 'COUNTER-HTF'
-                                      : `${hp.executionTimeframes.split(' ')[0]} · ${hp.confidencePct}%`}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
+                              />
+                            </div>
+                            <span
+                              className="ef-num"
+                              style={{
+                                textAlign: 'right',
+                                fontWeight: 700,
+                                color: isPos ? '#69F0AE' : '#FF8A80'
+                              }}
+                            >
+                              {formatSigned(hp.score, 1)}
+                            </span>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+                </details>
+
+                {/* Asymmetric 62% Scanner Table + 38% Pinned Scorecard Inspector */}
+                <div className="ef-split-workspace">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                    {/* Filter Toolbar */}
+                    <div className="ef-toolbar">
+                      <div className="ef-filter-pills" role="group" aria-label="Scanner Asset Filters">
+                        {(
+                          [
+                            ['ALL', `All (${scorecards.length})`],
+                            ['FOREX', `Forex (${forexCount})`],
+                            ['FUTURES', `Futures (${futuresCount})`],
+                            ['CRYPTO', `Crypto (${cryptoCount})`],
+                            ['TF_ALIGNED', `3/3 Aligned (${tfAlignedCount})`],
+                            ['EXTREME_COT', `COT Extremes (${cotExtremeCount})`],
+                            ['ALIGNED', `KZ Aligned (${alignedCount})`],
+                            ['STRONG', 'Strong Bias (|5+|)'],
+                            ['WATCHLIST', `★ Watchlist (${watchlist.length})`]
+                          ] as Array<[AssetFilterMode, string]>
+                        ).map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`ef-filter-btn ${filterMode === mode ? 'is-active' : ''}`}
+                            onClick={() => setFilterMode(mode)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <input
+                        type="search"
+                        className="ef-search-input"
+                        placeholder="Filter instrument or class..."
+                        aria-label="Filter scanner instruments"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Responsive Sortable Scanner Table */}
+                    <div
+                      tabIndex={0}
+                      role="region"
+                      aria-labelledby="ef-scanner-caption"
+                      className="ef-table-wrapper ef-perf-section"
+                    >
+                      <table className="ef-table">
+                        <caption id="ef-scanner-caption">
+                          <span className="ef-title-help-wrap">
+                            <span>
+                              Institutional Matrix ({filteredScorecards.length} / {scorecards.length}) — Click any row to inspect in Pinned Scorecard · Double-click for Deep-Dive
+                            </span>
+                            <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
+                          </span>
+                        </caption>
+                        <thead>
+                          <tr>
+                            <th scope="col" aria-sort={sortKey === 'instrument' ? sortDir : undefined}>
+                              <button type="button" className="ef-sort-btn" onClick={() => handleSort('instrument')}>
+                                <span>Instrument</span>
+                                <span>{sortKey === 'instrument' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                              </button>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'currentPrice' ? sortDir : undefined}>
+                              <button type="button" className="ef-sort-btn" onClick={() => handleSort('currentPrice')}>
+                                <span>Price / 1D</span>
+                                <span>{sortKey === 'currentPrice' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                              </button>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'totalScore' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('totalScore')}>
+                                  <span>{selectedHorizon === 'SCALP' ? 'Scalp (M5-15)' : selectedHorizon === 'INTRADAY' ? 'Intra (H1-4)' : 'Swing (D1-W1)'}</span>
+                                  <span>{sortKey === 'totalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col">
+                              <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
+                                <span>3-TF (S · I · SW)</span>
+                                <EdgeFinderHelpButton topicId="scanner_matrix" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'cotScore' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('cotScore')}>
+                                  <span>COT Flow</span>
+                                  <span>{sortKey === 'cotScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="cot_positioning" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'retailScore' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('retailScore')}>
+                                  <span>Retail Fade</span>
+                                  <span>{sortKey === 'retailScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="retail_contrarian" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'trendScore' ? sortDir : undefined}>
+                              <button type="button" className="ef-sort-btn" onClick={() => handleSort('trendScore')}>
+                                <span>D1 Trend</span>
+                                <span>{sortKey === 'trendScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                              </button>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'volatilityPct' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
+                                  <span>ADR / MTF</span>
+                                  <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'fundamentalScore' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('fundamentalScore')}>
+                                  <span>Macro</span>
+                                  <span>{sortKey === 'fundamentalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="sovereign_macro_matrix" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col" aria-sort={sortKey === 'mannaFlowScore' ? sortDir : undefined}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 8 }}>
+                                <button type="button" className="ef-sort-btn" onClick={() => handleSort('mannaFlowScore')}>
+                                  <span>Manna KZ</span>
+                                  <span>{sortKey === 'mannaFlowScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
+                                </button>
+                                <EdgeFinderHelpButton topicId="killzone_synergy" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                            <th scope="col">
+                              <div className="ef-title-help-wrap" style={{ padding: '11px 12px' }}>
+                                <span>{selectedHorizon} Signal</span>
+                                <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredScorecards.map((sc) => {
+                            const isStarred = watchlist.includes(sc.instrument);
+                            const isSelected = activeScorecard?.instrument === sc.instrument;
+                            const hp = getHorizonProfile(sc, selectedHorizon);
+                            const scalp = getHorizonProfile(sc, 'SCALP');
+                            const intra = getHorizonProfile(sc, 'INTRADAY');
+                            const swing = getHorizonProfile(sc, 'SWING');
+                            return (
+                              <tr
+                                key={sc.instrument}
+                                className={isSelected ? 'is-selected' : ''}
+                                onClick={() => setSelectedSymbol(sc.instrument)}
+                                onDoubleClick={() => handleSelectAssetForDeepDive(sc.instrument)}
+                              >
+                                <th scope="row">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => toggleWatchlist(sc.instrument, e)}
+                                      aria-label={isStarred ? `Remove ${sc.instrument} from watchlist` : `Add ${sc.instrument} to watchlist`}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: isStarred ? '#D4AF37' : '#6b5b95',
+                                        fontSize: '0.95rem',
+                                        padding: 0
+                                      }}
+                                    >
+                                      {isStarred ? '★' : '☆'}
+                                    </button>
+                                    <div>
+                                      <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
+                                      <div style={{ fontSize: '0.68rem', color: '#9f91c2', fontWeight: 400 }}>
+                                        {sc.category}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </th>
+                                <td>
+                                  <div className="ef-num" style={{ color: '#ffffff', fontWeight: 600 }}>{sc.currentPrice}</div>
+                                  <div
+                                    className="ef-num"
+                                    style={{
+                                      fontSize: '0.71rem',
+                                      color: sc.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80'
+                                    }}
+                                  >
+                                    {formatSigned(sc.dailyChangePct, 2)}%
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(hp.score)}>
+                                    {formatSigned(hp.score, 1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="ef-tf-strip" title={sc.timeframeConfluence?.summary || ''}>
+                                    <span className="ef-tf-chip" style={scoreCellStyle(scalp.score)}>
+                                      S {formatSigned(scalp.score, 1)}
+                                    </span>
+                                    <span className="ef-tf-chip" style={scoreCellStyle(intra.score)}>
+                                      I {formatSigned(intra.score, 1)}
+                                    </span>
+                                    <span className="ef-tf-chip" style={scoreCellStyle(swing.score)}>
+                                      SW {formatSigned(swing.score, 1)}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '0.65rem', color: sc.timeframeConfluence?.allAligned ? '#DFC46B' : '#9f91c2', marginTop: 2 }}>
+                                    {sc.timeframeConfluence?.allAligned ? '★ 3/3 ALIGNED' : `${sc.timeframeConfluence?.alignedCount ?? 0}/3 TF`}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(sc.cotScore)}>
+                                    {formatSigned(sc.cotScore, 1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(sc.retailScore)}>
+                                    {formatSigned(sc.retailScore, 1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(sc.trendScore)}>
+                                    {formatSigned(sc.trendScore, 1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="ef-num" style={{ fontSize: '0.72rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
+                                    {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR
+                                  </div>
+                                  <div style={{ fontSize: '0.66rem', color: '#a99bc9' }}>
+                                    MTF {sc.technical.mtfAlignment.alignedCount}/7
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(sc.fundamentalScore)}>
+                                    {formatSigned(sc.fundamentalScore, 1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span
+                                    className={`ef-kz-pill ${
+                                      sc.killzoneAlignment.alignmentStatus === 'ALIGNED'
+                                        ? 'ef-kz-aligned'
+                                        : sc.killzoneAlignment.alignmentStatus === 'CONFLICT'
+                                          ? 'ef-kz-conflict'
+                                          : 'ef-kz-standby'
+                                    }`}
+                                  >
+                                    {sc.killzoneAlignment.activeSetupCount > 0
+                                      ? `${sc.killzoneAlignment.direction} · ${sc.killzoneAlignment.killzone}`
+                                      : sc.seasonality.bestKillzone}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={biasBadgeClass(hp.biasLabel)}>{hp.biasLabel}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Right 38%: Pinned Asset Scorecard Quick Inspector */}
+                  {activeScorecard && (() => {
+                    const inspHp = getHorizonProfile(activeScorecard, selectedHorizon);
+                    return (
+                      <aside className="ef-card ef-pinned-inspector" aria-label={`${activeScorecard.instrument} Pinned Scorecard Inspector`}>
+                        <div className="ef-card-header" style={{ marginBottom: 0 }}>
+                          <div>
+                            <div className="ef-title-help-wrap">
+                              <h2 className="ef-card-title" style={{ fontSize: '1rem' }}>
+                                {activeScorecard.instrument} · {activeScorecard.displayName}
+                              </h2>
+                              <EdgeFinderHelpButton topicId="scorecard_gauge" onOpenTopic={openKbTopic} />
+                            </div>
+                            <div className="ef-card-meta" style={{ marginTop: 2 }}>
+                              <strong style={{ color: '#ffffff' }}>{activeScorecard.currentPrice}</strong>{' '}
+                              <span style={{ color: activeScorecard.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                                ({formatSigned(activeScorecard.dailyChangePct, 2)}% 1D)
+                              </span>{' '}
+                              · {inspHp.label}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="ef-btn ef-btn-gold"
+                            style={{ padding: '5px 10px', fontSize: '0.72rem' }}
+                            onClick={() => handleSelectAssetForDeepDive(activeScorecard.instrument)}
+                          >
+                            Deep-Dive →
+                          </button>
+                        </div>
+
+                        <ScoreGaugeSvg score={inspHp.score} biasLabel={inspHp.biasLabel} />
+
+                        <div
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(9, 5, 18, 0.72)',
+                            border: '1px solid rgba(212, 175, 55, 0.24)',
+                            fontSize: '0.74rem',
+                            color: '#e9e2fb',
+                            lineHeight: 1.4
+                          }}
+                        >
+                          <strong style={{ color: '#D4AF37' }}>{inspHp.executionTimeframes}:</strong> {inspHp.actionNote}
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                              7-TF Structure ({activeScorecard.technical.mtfAlignment.alignedCount}/7 Aligned)
+                            </span>
+                            <span className="ef-card-meta">ADR {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}%</span>
+                          </div>
+                          <div className="ef-inspector-mtf-grid">
+                            {(
+                              [
+                                ['M15', activeScorecard.technical.mtfAlignment.m15 || 'Flat'],
+                                ['H1', activeScorecard.technical.mtfAlignment.h1 || 'Flat'],
+                                ['H4', activeScorecard.technical.mtfAlignment.h4 || 'Flat'],
+                                ['5D', activeScorecard.technical.mtfAlignment.d5],
+                                ['20D', activeScorecard.technical.mtfAlignment.d20],
+                                ['50D', activeScorecard.technical.mtfAlignment.d50],
+                                ['1M', activeScorecard.technical.mtfAlignment.monthly]
+                              ] as Array<[string, 'Bullish' | 'Bearish' | 'Flat']>
+                            ).map(([tf, dir]) => (
+                              <div
+                                key={tf}
+                                className="ef-inspector-mtf-cell"
+                                style={{
+                                  background:
+                                    dir === 'Bullish'
+                                      ? 'rgba(16, 185, 129, 0.16)'
+                                      : dir === 'Bearish'
+                                        ? 'rgba(239, 68, 68, 0.16)'
+                                        : 'rgba(255, 255, 255, 0.05)',
+                                  color: dir === 'Bullish' ? '#6ee7b7' : dir === 'Bearish' ? '#fca5a5' : '#cfc5e8'
+                                }}
+                              >
+                                {tf}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                              30D Price vs Edge Score
+                            </span>
+                            <EdgeFinderHelpButton topicId="historical_score_chart" onOpenTopic={openKbTopic} />
+                          </div>
+                          <HistoricalScorePriceSvg
+                            series={activeScorecard.historicalSeries}
+                            instrument={activeScorecard.instrument}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                              Key Edge Drivers
+                            </span>
+                            <EdgeFinderHelpButton topicId="eleven_pillars" onOpenTopic={openKbTopic} />
+                          </div>
+                          <div className="ef-inspector-drivers">
+                            {activeScorecard.factors.slice(0, 6).map((f) => (
+                              <div key={f.key} className="ef-inspector-driver-chip">
+                                <span style={{ color: '#dcd3f2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {f.label}
+                                </span>
+                                <span
+                                  className="ef-num"
+                                  style={{
+                                    fontWeight: 700,
+                                    whiteSpace: 'nowrap',
+                                    color:
+                                      f.signal > 0
+                                        ? '#6ee7b7'
+                                        : f.signal < 0
+                                          ? '#fca5a5'
+                                          : '#fcd34d'
+                                  }}
+                                >
+                                  {isSuperAdmin
+                                    ? `${formatSigned(f.contribution, 1)} (w=${f.weight})`
+                                    : f.signal > 0
+                                      ? '▲ Bull'
+                                      : f.signal < 0
+                                        ? '▼ Bear'
+                                        : '• Neut'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </aside>
+                    );
+                  })()}
                 </div>
 
                 {/* Optional Cross-Asset Correlation Matrix */}
