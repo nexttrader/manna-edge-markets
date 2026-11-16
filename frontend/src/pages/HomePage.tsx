@@ -220,20 +220,42 @@ export const HomePage: React.FC = () => {
                 )}
               </div>
 
-              <div className="hero-kpi-strip font-mono">
-                <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">3 Trading Styles</span>
-                  <span className="hero-kpi-lbl">Scalpers · Intraday · Swing</span>
+              <div className="hero-kpi-strip">
+                <div className="hero-kpi-item is-emerald">
+                  <div className="hero-kpi-icon is-emerald" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L4.5 13.5H11.5L10.5 22L19.5 10.5H12.5L13 2Z" />
+                    </svg>
+                  </div>
+                  <div className="hero-kpi-text">
+                    <span className="hero-kpi-val">3 Trading Styles</span>
+                    <span className="hero-kpi-lbl font-mono">Scalpers · Intraday · Swing</span>
+                  </div>
                 </div>
-                <div className="hero-kpi-divider" aria-hidden="true" />
-                <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">EdgeFinder Ranked</span>
-                  <span className="hero-kpi-lbl">Focus Only on Top Markets</span>
+                <div className="hero-kpi-item is-gold">
+                  <div className="hero-kpi-icon is-gold" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+                    </svg>
+                  </div>
+                  <div className="hero-kpi-text">
+                    <span className="hero-kpi-val">EdgeFinder Ranked</span>
+                    <span className="hero-kpi-lbl font-mono">Focus Only on Top Markets</span>
+                  </div>
                 </div>
-                <div className="hero-kpi-divider" aria-hidden="true" />
-                <div className="hero-kpi-item">
-                  <span className="hero-kpi-val">2R–3R Targets</span>
-                  <span className="hero-kpi-lbl">Clear Stop &amp; Profit Levels</span>
+                <div className="hero-kpi-item is-blue">
+                  <div className="hero-kpi-icon is-blue" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 17L8.5 11.5L12.5 15L21 6.5" />
+                      <path d="M16 6.5H21V11.5" />
+                    </svg>
+                  </div>
+                  <div className="hero-kpi-text">
+                    <span className="hero-kpi-val">2R–3R Targets</span>
+                    <span className="hero-kpi-lbl font-mono">Clear Stop &amp; Profit Levels</span>
+                  </div>
                 </div>
               </div>
             </div>

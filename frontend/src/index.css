@@ -509,13 +509,34 @@ html[data-theme="light"] .home-footer {
 }
 
 html[data-theme="light"] .hero-badge,
-html[data-theme="light"] .hero-kpi-strip,
+html[data-theme="light"] .hero-kpi-item,
 html[data-theme="light"] .hero-preview-card,
 html[data-theme="light"] .home-ticker-shell,
 html[data-theme="light"] .feature-card {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.1);
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .hero-kpi-strip {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+html[data-theme="light"] .hero-kpi-icon.is-emerald {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+html[data-theme="light"] .hero-kpi-icon.is-gold {
+  color: #9a6d04;
+  background: rgba(212, 175, 55, 0.16);
+}
+
+html[data-theme="light"] .hero-kpi-icon.is-blue {
+  color: #0369a1;
+  background: rgba(56, 189, 248, 0.14);
 }
 
 html[data-theme="light"] .hp-style-tabs,

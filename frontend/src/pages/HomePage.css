@@ -279,38 +279,101 @@
 }
 
 .hero-kpi-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 8px;
-  padding: 11px 16px;
-  border-radius: 10px;
-  background: rgba(17, 10, 30, 0.85);
-  border: 1px solid var(--kdt-purple-border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  width: 100%;
 }
 
 .hero-kpi-item {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(17, 10, 30, 0.9);
+  border: 1px solid rgba(180, 130, 255, 0.2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  transition: transform 0.16s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hero-kpi-item:hover {
+  transform: translateY(-2px);
+}
+
+.hero-kpi-item.is-emerald {
+  border-top: 2px solid #10b981;
+}
+
+.hero-kpi-item.is-gold {
+  border-top: 2px solid #d4af37;
+}
+
+.hero-kpi-item.is-blue {
+  border-top: 2px solid #38bdf8;
+}
+
+.hero-kpi-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-kpi-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hero-kpi-icon.is-emerald {
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.42);
+  color: #34d399;
+}
+
+.hero-kpi-icon.is-gold {
+  background: rgba(212, 175, 55, 0.16);
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  color: #fbbf24;
+}
+
+.hero-kpi-icon.is-blue {
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.42);
+  color: #38bdf8;
+}
+
+.hero-kpi-text {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .hero-kpi-val {
-  font-size: 0.88rem;
-  font-weight: 800;
+  font-family: var(--font-headline);
+  font-size: 1.24rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.08;
   color: #ffffff;
 }
 
 .hero-kpi-lbl {
-  font-size: 0.67rem;
-  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--kdt-white-muted);
 }
 
-.hero-kpi-divider {
-  width: 1px;
-  height: 26px;
-  background: rgba(180, 130, 255, 0.16);
+@media (max-width: 780px) {
+  .hero-kpi-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Sample Signal Card Preview Bento Widget */
