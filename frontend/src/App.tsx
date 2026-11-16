@@ -15,6 +15,7 @@ import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { MasterPasscodeModal } from './components/MasterPasscodeModal';
 import { FirstLoginPasswordModal } from './components/FirstLoginPasswordModal';
 import { TrialExpiredModal } from './components/TrialExpiredModal';
+import { NewFeaturesModal } from './components/NewFeaturesModal';
 import { telemetryTracker } from './services/telemetryTracker';
 
 function ProtectedTraderRoute({ children }: { children: React.ReactNode }) {
@@ -140,6 +141,7 @@ function App() {
       <ImpersonationBanner />
       <FirstLoginPasswordModal />
       <TrialExpiredModal />
+      <NewFeaturesModal />
       {showSecretModal && (
         <MasterPasscodeModal
           onSuccess={() => setShowSecretModal(false)}

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import './DashboardHeader.css';
 import { KillzoneClock } from './KillzoneClock';
 import { ThemeToggle } from './ThemeToggle';
+import { OPEN_NEW_FEATURES_EVENT } from './NewFeaturesModal';
 import { CircuitBreakerIndicator } from './CircuitBreakerIndicator';
 import { EconomicCalendarModal } from './EconomicCalendarModal';
 import { FaqModal } from './FaqModal';
@@ -249,6 +250,16 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             <div className="header-circuit-breaker-wrap">
               <CircuitBreakerIndicator />
             </div>
+
+            <button
+              type="button"
+              className="new-features-flash-btn font-mono"
+              onClick={() => window.dispatchEvent(new CustomEvent(OPEN_NEW_FEATURES_EVENT))}
+              title="See what's new in Manna Edge"
+            >
+              <span className="nf-flash-dot" aria-hidden="true" />
+              NEW FEATURES
+            </button>
 
             <ThemeToggle />
 

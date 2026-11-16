@@ -1,0 +1,271 @@
+.nf-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(5, 3, 12, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.nf-modal-card {
+  width: 100%;
+  max-width: 760px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(20, 13, 36, 0.98), rgba(11, 7, 20, 0.99));
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: 18px;
+  padding: 24px 26px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65), 0 0 36px rgba(212, 175, 55, 0.14);
+  color: #f8f7fc;
+}
+
+.nf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.nf-header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nf-pill-live {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  color: #fde68a;
+}
+
+.nf-pill-count {
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.nf-close-x {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nf-close-x:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.nf-modal-title {
+  font-family: var(--font-headline, 'Barlow Condensed', sans-serif);
+  font-size: clamp(1.45rem, 1.15rem + 1vw, 2rem);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.nf-modal-intro {
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: #cbd5e1;
+  margin-bottom: 18px;
+}
+
+.nf-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.nf-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left-width: 3px;
+}
+
+.nf-feature-item.accent-gold { border-left-color: #d4af37; }
+.nf-feature-item.accent-emerald { border-left-color: #10b981; }
+.nf-feature-item.accent-amber { border-left-color: #f59e0b; }
+.nf-feature-item.accent-blue { border-left-color: #38bdf8; }
+.nf-feature-item.accent-purple { border-left-color: #a855f7; }
+
+.nf-feature-num {
+  flex: 0 0 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fde68a;
+}
+
+.nf-feature-body {
+  min-width: 0;
+}
+
+.nf-feature-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #e5c453;
+  margin-bottom: 3px;
+}
+
+.nf-feature-item.accent-emerald .nf-feature-tag { color: #6ee7b7; }
+.nf-feature-item.accent-blue .nf-feature-tag { color: #7dd3fc; }
+.nf-feature-item.accent-purple .nf-feature-tag { color: #d8b4fe; }
+
+.nf-feature-body h3 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.nf-feature-body p {
+  font-size: 0.87rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.nf-compliance-box {
+  font-size: 0.74rem;
+  line-height: 1.48;
+  color: #94a3b8;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+
+.nf-modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.nf-btn-secondary {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nf-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.nf-btn-primary {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.65);
+  background: linear-gradient(135deg, #d4af37, #b8860b);
+  color: #090512;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.28);
+}
+
+.nf-btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+/* Light Mode Support */
+html[data-theme="light"] .nf-modal-card {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(184, 134, 11, 0.45);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+}
+
+html[data-theme="light"] .nf-modal-title,
+html[data-theme="light"] .nf-feature-body h3 {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .nf-modal-intro,
+html[data-theme="light"] .nf-feature-body p {
+  color: #334155;
+}
+
+html[data-theme="light"] .nf-feature-item {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .nf-feature-num {
+  background: rgba(15, 23, 42, 0.08);
+  color: #7a5500;
+}
+
+html[data-theme="light"] .nf-feature-tag { color: #9a6d04; }
+html[data-theme="light"] .nf-feature-item.accent-emerald .nf-feature-tag { color: #047857; }
+html[data-theme="light"] .nf-feature-item.accent-blue .nf-feature-tag { color: #0369a1; }
+html[data-theme="light"] .nf-feature-item.accent-purple .nf-feature-tag { color: #6d28d9; }
+
+html[data-theme="light"] .nf-pill-live {
+  color: #7a5500;
+  background: rgba(212, 175, 55, 0.16);
+}
+
+html[data-theme="light"] .nf-pill-count {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+html[data-theme="light"] .nf-compliance-box {
+  background: #f1f5f9;
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #475569;
+}
+
+html[data-theme="light"] .nf-close-x,
+html[data-theme="light"] .nf-btn-secondary {
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.16);
+}

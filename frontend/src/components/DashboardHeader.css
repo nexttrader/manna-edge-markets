@@ -598,3 +598,52 @@
   }
 }
 
+/* Flashing "New Features" Button */
+@keyframes newFeaturesFlash {
+  0%, 100% {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.28), rgba(16, 185, 129, 0.22));
+    border-color: rgba(212, 175, 55, 0.85);
+    box-shadow: 0 0 16px rgba(212, 175, 55, 0.45), 0 0 6px rgba(16, 185, 129, 0.25);
+    color: #fde68a;
+  }
+  50% {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(212, 175, 55, 0.16));
+    border-color: rgba(16, 185, 129, 0.9);
+    box-shadow: 0 0 22px rgba(16, 185, 129, 0.52), 0 0 8px rgba(212, 175, 55, 0.35);
+    color: #a7f3d0;
+  }
+}
+
+.new-features-flash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.8);
+  font-size: 0.69rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: newFeaturesFlash 1.7s ease-in-out infinite;
+  transition: transform 0.15s ease;
+}
+
+.new-features-flash-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.nf-flash-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+html[data-theme="light"] .new-features-flash-btn {
+  color: #0f172a;
+}
+
