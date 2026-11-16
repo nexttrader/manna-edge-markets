@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDecisionMatrix, type DecisionMatrixItem } from '../hooks/useDecisionMatrix';
+import {
+  computeSignalEdgeConfluence,
+  findEdgeFinderScorecard,
+  resolveEdgeFinderInstrument,
+  type SignalEdgeConfluence,
+  useEdgeFinderAccess,
+  useEdgeFinderData
+} from '../hooks/useEdgeFinder';
 import type { EdgeSetup } from '../types';
 import './AssetDecisionMatrix.css';
 
@@ -9,25 +18,80 @@ interface AssetDecisionMatrixProps {
   defaultMaximized?: boolean;
 }
 
+type MatrixFilterTab = 'strong_confluence' | 'all' | 'futures' | 'forex' | 'imminent';
+
 export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({ 
   onOpenCalculator, 
   rawSetups = [],
   defaultMaximized = false
 }) => {
   const { matrix, topFocus, loading, refetch } = useDecisionMatrix();
+  const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { snapshot: efSnapshot, loading: efLoading } = useEdgeFinderData(canAccessEdgeFinder);
+
   const [isMaximized, setIsMaximized] = useState<boolean>(defaultMaximized);
-  const [marketFilter, setMarketFilter] = useState<'all' | 'futures' | 'forex' | 'imminent'>('all');
+  const [marketFilter, setMarketFilter] = useState<MatrixFilterTab>(
+    canAccessEdgeFinder ? 'strong_confluence' : 'all'
+  );
+  const userSelectedTabRef = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Filter matrix items
-  const filteredMatrix = matrix.filter(item => {
-    if (marketFilter === 'futures') return item.market === 'futures';
-    if (marketFilter === 'forex') return item.market === 'forex';
-    if (marketFilter === 'imminent') return item.priority_tier === 'IMMINENT_FOCUS' || item.is_in_zone;
-    return true;
-  });
+  useEffect(() => {
+    if (userSelectedTabRef.current) return;
+    if (canAccessEdgeFinder) {
+      setMarketFilter('strong_confluence');
+    } else if (marketFilter === 'strong_confluence') {
+      setMarketFilter('all');
+    }
+  }, [canAccessEdgeFinder, marketFilter]);
 
-  const activeTopFocus = topFocus || (filteredMatrix.length > 0 ? filteredMatrix[0] : null);
+  const handleSelectFilter = (tab: MatrixFilterTab) => {
+    userSelectedTabRef.current = true;
+    setMarketFilter(tab);
+  };
+
+  // Compute read-only EdgeFinder confluence per asset (only when EdgeFinder is enabled for this role)
+  const confluenceById = useMemo(() => {
+    const map = new Map<string, { resolvedSymbol: string; confluence: SignalEdgeConfluence | null }>();
+    if (!canAccessEdgeFinder || !efSnapshot?.scorecards) return map;
+    for (const item of matrix) {
+      const sc = findEdgeFinderScorecard(item.instrument, efSnapshot.scorecards);
+      const confluence = sc ? computeSignalEdgeConfluence(item.bias, sc) : null;
+      map.set(item.id, {
+        resolvedSymbol: resolveEdgeFinderInstrument(item.instrument),
+        confluence
+      });
+    }
+    return map;
+  }, [canAccessEdgeFinder, efSnapshot?.scorecards, matrix]);
+
+  const strongConfluenceCount = useMemo(() => {
+    if (!canAccessEdgeFinder) return 0;
+    return matrix.filter((item) => confluenceById.get(item.id)?.confluence?.state === 'STRONG_AGREEMENT').length;
+  }, [canAccessEdgeFinder, matrix, confluenceById]);
+
+  // Filter matrix items
+  const filteredMatrix = useMemo(() => {
+    return matrix.filter((item) => {
+      if (marketFilter === 'strong_confluence') {
+        if (!canAccessEdgeFinder) return true;
+        // While EdgeFinder snapshot is still loading, show nothing misleading or wait cleanly
+        if (!efSnapshot?.scorecards) return false;
+        return confluenceById.get(item.id)?.confluence?.state === 'STRONG_AGREEMENT';
+      }
+      if (marketFilter === 'futures') return item.market === 'futures';
+      if (marketFilter === 'forex') return item.market === 'forex';
+      if (marketFilter === 'imminent') return item.priority_tier === 'IMMINENT_FOCUS' || item.is_in_zone;
+      return true;
+    });
+  }, [matrix, marketFilter, canAccessEdgeFinder, efSnapshot?.scorecards, confluenceById]);
+
+  const activeTopFocus =
+    filteredMatrix.length > 0
+      ? filteredMatrix[0]
+      : marketFilter === 'strong_confluence'
+        ? null
+        : topFocus;
 
   const handleCalculatorClick = (item: DecisionMatrixItem) => {
     if (!onOpenCalculator) return;
@@ -113,27 +177,36 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
         
         <div className="matrix-controls">
           <div className="matrix-filter-tabs">
+            {canAccessEdgeFinder && (
+              <button
+                className={`filter-tab filter-tab-ef ${marketFilter === 'strong_confluence' ? 'active' : ''}`}
+                onClick={() => handleSelectFilter('strong_confluence')}
+                title="Show only assets where EdgeFinder confirms Strong Confluence (3/3 TF aligned)"
+              >
+                🔥 STRONG CONFLUENCE ({strongConfluenceCount})
+              </button>
+            )}
             <button 
               className={`filter-tab ${marketFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('all')}
+              onClick={() => handleSelectFilter('all')}
             >
               ALL ASSETS ({matrix.length})
             </button>
             <button 
               className={`filter-tab ${marketFilter === 'imminent' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('imminent')}
+              onClick={() => handleSelectFilter('imminent')}
             >
               🎯 TOP FOCUS
             </button>
             <button 
               className={`filter-tab ${marketFilter === 'futures' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('futures')}
+              onClick={() => handleSelectFilter('futures')}
             >
               FUTURES
             </button>
             <button 
               className={`filter-tab ${marketFilter === 'forex' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('forex')}
+              onClick={() => handleSelectFilter('forex')}
             >
               FOREX
             </button>
@@ -167,6 +240,15 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
                 <span className="spotlight-symbol">{activeTopFocus.instrument}</span>
                 {getBiasBadge(activeTopFocus.bias)}
                 <span className="spotlight-market">{activeTopFocus.market.toUpperCase()}</span>
+                {canAccessEdgeFinder && confluenceById.get(activeTopFocus.id)?.confluence?.state === 'STRONG_AGREEMENT' && (
+                  <Link
+                    to={`/edge-finder?asset=${encodeURIComponent(confluenceById.get(activeTopFocus.id)!.resolvedSymbol)}&tab=scorecard`}
+                    className="matrix-ef-strong-pill"
+                    title="EdgeFinder confirms 3/3 Timeframe Strong Confluence — Click to open Scorecard"
+                  >
+                    🔥 EDGEFINDER STRONG CONFLUENCE →
+                  </Link>
+                )}
               </div>
 
               <div className="spotlight-metrics-row">
@@ -246,14 +328,31 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
       )}
 
       {/* Decision Matrix Grid / Table */}
-      {loading && filteredMatrix.length === 0 ? (
-        <div className="matrix-loading">Evaluating asset signals and scanning real-time order flow...</div>
+      {(loading || (marketFilter === 'strong_confluence' && canAccessEdgeFinder && efLoading && !efSnapshot)) && filteredMatrix.length === 0 ? (
+        <div className="matrix-loading">Evaluating asset signals and EdgeFinder multi-timeframe confluence...</div>
       ) : filteredMatrix.length === 0 ? (
-        <div className="matrix-empty">No active setups match the selected filter.</div>
+        <div className="matrix-empty">
+          {marketFilter === 'strong_confluence' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <span>No active setups currently have EdgeFinder Strong Confluence (3/3 Timeframes aligned).</span>
+              <button
+                type="button"
+                className="maximize-matrix-btn"
+                onClick={() => handleSelectFilter('all')}
+              >
+                View All {matrix.length} Assets
+              </button>
+            </div>
+          ) : (
+            'No active setups match the selected filter.'
+          )}
+        </div>
       ) : (
         <div className="matrix-grid">
           {filteredMatrix.map((item) => {
             const isExpanded = expandedId === item.id;
+            const efInfo = confluenceById.get(item.id);
+            const isStrongEf = canAccessEdgeFinder && efInfo?.confluence?.state === 'STRONG_AGREEMENT';
             return (
               <div 
                 key={item.id} 
@@ -277,6 +376,16 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
                     <span className={`status-pill ${item.is_in_zone ? 'in-zone' : ''}`}>
                       {item.status_label}
                     </span>
+                    {isStrongEf && efInfo && (
+                      <Link
+                        to={`/edge-finder?asset=${encodeURIComponent(efInfo.resolvedSymbol)}&tab=scorecard`}
+                        className="matrix-ef-strong-pill"
+                        onClick={(e) => e.stopPropagation()}
+                        title="EdgeFinder confirms 3/3 Timeframe Strong Confluence — Click to open Scorecard"
+                      >
+                        🔥 3/3 EF CONFLUENCE →
+                      </Link>
+                    )}
                     <span className="distance-text">
                       {item.is_in_zone ? '🎯 Inside Zone' : `${item.distance_in_r || 0} R away`}
                     </span>
