@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './SetupCard.css';
 import { type EdgeSetup } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -30,6 +31,7 @@ import { SignalReplaceModal } from './SignalReplaceModal';
 import { TelegramResendModal } from './TelegramResendModal';
 import { API_BASE } from '../config';
 import { useAuth } from '../context/AuthContext';
+import { useEdgeFinderSignalConfluence } from '../hooks/useEdgeFinder';
 
 interface SetupCardProps {
   setup: EdgeSetup;
@@ -44,6 +46,13 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const { user, originalAdmin, isImpersonating } = useAuth();
   const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
+  const {
+    canAccessEdgeFinder,
+    loading: edgeFinderLoading,
+    resolvedSymbol,
+    scorecard: edgeFinderScorecard,
+    confluence: edgeFinderConfluence
+  } = useEdgeFinderSignalConfluence(setup?.instrument || '', setup?.bias || 'long');
 
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -355,6 +364,68 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
           <span className="conviction-text-badge">{convictionVal}% Conviction</span>
         </div>
       </div>
+
+      {canAccessEdgeFinder && (
+        <div
+          className={`sc-edgefinder-panel font-mono state-${(edgeFinderConfluence?.state || 'LOADING').toLowerCase()}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="sc-ef-top-row">
+            <div className="sc-ef-status-group">
+              <span className="sc-ef-kicker">🧭 EDGEFINDER CONFLUENCE</span>
+              {edgeFinderConfluence ? (
+                <span className={`sc-ef-badge is-${edgeFinderConfluence.state.toLowerCase()}`}>
+                  {edgeFinderConfluence.state === 'STRONG_AGREEMENT'
+                    ? '🔥 '
+                    : edgeFinderConfluence.state === 'AGREES'
+                      ? '✅ '
+                      : edgeFinderConfluence.state === 'COUNTER'
+                        ? '⚠️ '
+                        : '⚖️ '}
+                  {edgeFinderConfluence.badgeText}
+                </span>
+              ) : edgeFinderLoading ? (
+                <span className="sc-ef-loading">Syncing EdgeFinder bias...</span>
+              ) : (
+                <span className="sc-ef-badge is-neutral">ASSET SCORECARD AVAILABLE</span>
+              )}
+            </div>
+
+            <Link
+              to={`/edge-finder?asset=${encodeURIComponent(resolvedSymbol)}&tab=scorecard`}
+              className="sc-ef-link-btn"
+              title={`Open ${resolvedSymbol} EdgeFinder Pro Scorecard`}
+            >
+              Open {resolvedSymbol} EdgeFinder →
+            </Link>
+          </div>
+
+          {edgeFinderConfluence && edgeFinderScorecard && (
+            <>
+              <div className="sc-ef-horizons-row">
+                {edgeFinderConfluence.horizons.map((h) => (
+                  <span
+                    key={h.key}
+                    className={`sc-ef-h-chip status-${h.status.toLowerCase()}`}
+                    title={`${h.label} EdgeFinder view: ${h.biasLabel} (${h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})`}
+                  >
+                    <span className="sc-ef-h-name">{h.label}:</span>{' '}
+                    <strong>{h.biasLabel}</strong>
+                    <span className="sc-ef-h-score">
+                      {' '}
+                      ({h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <div className="sc-ef-note-row">
+                <span className="sc-ef-summary">{edgeFinderConfluence.summaryText}</span>
+                <span className="sc-ef-readonly-tag">Read-only context · Signal unchanged</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {setup.opposing_strategy_warning && (
         <div className="font-mono text-gold animate-fade-in" style={{ background: 'rgba(255, 215, 0, 0.1)', border: '1px solid rgba(255, 215, 0, 0.4)', borderRadius: '6px', padding: '8px 12px', fontSize: '0.78rem', margin: '10px 0', lineHeight: 1.3 }}>

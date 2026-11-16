@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   CotHistoryChartSvg,
   CountryHistoryTrendSvg,
@@ -21,6 +21,7 @@ import {
   type MacroEconomyData,
   type TimeframeEdgeProfile,
   type TraderHorizon,
+  resolveEdgeFinderInstrument,
   useEdgeFinderAccess,
   useEdgeFinderData
 } from '../hooks/useEdgeFinder';
@@ -73,6 +74,7 @@ const HORIZON_OPTIONS: Array<{
   executionTimeframes: string;
   holdDuration: string;
   description: string;
+  superAdminDescription: string;
 }> = [
   {
     id: 'SCALP',
@@ -80,7 +82,8 @@ const HORIZON_OPTIONS: Array<{
     label: 'Scalper Mode',
     executionTimeframes: 'M1 / M5 / M15 (H1 Filter)',
     holdDuration: 'Hold: 15m – 2h',
-    description: '70% M15/H1 Flow, 1H Velocity, Manna Killzone & ADR Guard · 30% Retail Fade & Macro Guard'
+    description: 'Fast session flow, short-term momentum, active Killzone window & daily range exhaustion guard',
+    superAdminDescription: '70% M15/H1 Flow, 1H Velocity, Manna Killzone & ADR Guard · 30% Retail Fade & Macro Guard'
   },
   {
     id: 'INTRADAY',
@@ -88,7 +91,8 @@ const HORIZON_OPTIONS: Array<{
     label: 'Intraday / Day Trade',
     executionTimeframes: 'M15 / H1 / H4 (D1 Bias)',
     holdDuration: 'Hold: 2h – 24h',
-    description: '55% H1/H4/D1 Structure & Killzones · 25% COT/Retail Flow · 20% Macro Diff'
+    description: 'Session trend alignment, intraday momentum, institutional positioning & economic bias',
+    superAdminDescription: '55% H1/H4/D1 Structure & Killzones · 25% COT/Retail Flow · 20% Macro Diff'
   },
   {
     id: 'SWING',
@@ -96,7 +100,8 @@ const HORIZON_OPTIONS: Array<{
     label: 'Swing / Position',
     executionTimeframes: 'H4 / D1 / W1 (10Y Macro)',
     holdDuration: 'Hold: 3d – 4w',
-    description: '47.5% Macro & Rates · 25% COT & Retail Fade · 20% D1/W1 Trend & 10Y Seasonal · 7.5% Killzone'
+    description: 'Big-picture central bank & growth strength, hedge-fund COT flow, daily trend & 10Y seasonality',
+    superAdminDescription: '47.5% Macro & Rates · 25% COT & Retail Fade · 20% D1/W1 Trend & 10Y Seasonal · 7.5% Killzone'
   }
 ];
 
@@ -231,6 +236,7 @@ export const EdgeFinderPage: React.FC = () => {
     updateMacroEconomy
   } = useEdgeFinderData(true);
 
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('scanner');
   const [selectedHorizon, setSelectedHorizon] = useState<TraderHorizon>('INTRADAY');
   const [strengthTab, setStrengthTab] = useState<'FX' | 'FUTURES' | 'CRYPTO'>('FX');
@@ -252,6 +258,23 @@ export const EdgeFinderPage: React.FC = () => {
   const [editingEcon, setEditingEcon] = useState<MacroEconomyData | null>(null);
   const [activeKbTopicId, setActiveKbTopicId] = useState<EdgeFinderKbTopicId | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    const assetParam = searchParams.get('asset');
+    const tabParam = searchParams.get('tab') as WorkspaceTab | null;
+
+    if (assetParam) {
+      const resolved = resolveEdgeFinderInstrument(assetParam);
+      setSelectedSymbol(resolved);
+      setPickerClassFilter('ALL');
+      if (!tabParam) {
+        setActiveTab('scorecard');
+      }
+    }
+    if (tabParam && TAB_ITEMS.some((t) => t.id === tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   const openKbTopic = (topicId: EdgeFinderKbTopicId) => {
     setActiveKbTopicId(topicId);
@@ -881,7 +904,9 @@ export const EdgeFinderPage: React.FC = () => {
                       <div className="ef-horizon-meta" style={{ color: '#e9e2fb', fontWeight: 600 }}>
                         {opt.holdDuration} · {activeSignals} Directional Setups
                       </div>
-                      <div className="ef-horizon-meta">{opt.description}</div>
+                      <div className="ef-horizon-meta">
+                        {isSuperAdmin ? opt.superAdminDescription : opt.description}
+                      </div>
                     </button>
                   );
                 })}
@@ -1613,10 +1638,16 @@ export const EdgeFinderPage: React.FC = () => {
                       <section className="ef-card ef-perf-section">
                         <div className="ef-card-header">
                           <div className="ef-title-help-wrap">
-                            <h2 className="ef-card-title">11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)</h2>
+                            <h2 className="ef-card-title">
+                              {isSuperAdmin
+                                ? '11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)'
+                                : '11-Pillar Institutional Drivers (Swing D1–W1 View)'}
+                            </h2>
                             <EdgeFinderHelpButton topicId="eleven_pillars" onOpenTopic={openKbTopic} />
                           </div>
-                          <span className="ef-card-meta">Weighted Sum Normalized to [-10, +10]</span>
+                          <span className="ef-card-meta">
+                            {isSuperAdmin ? 'Weighted Sum Normalized to [-10, +10]' : 'Simple Factor Direction Overview'}
+                          </span>
                         </div>
                         <div className="ef-pill-grid">
                           {activeScorecard.factors.map((f) => (
@@ -1625,8 +1656,17 @@ export const EdgeFinderPage: React.FC = () => {
                                 <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9', letterSpacing: '0.04em' }}>
                                   {f.category}
                                 </span>
-                                <span className="ef-heatmap-cell" style={scoreCellStyle(f.contribution * 2)}>
-                                  {formatSigned(f.contribution, 2)} (w={f.weight})
+                                <span
+                                  className="ef-heatmap-cell"
+                                  style={scoreCellStyle(isSuperAdmin ? f.contribution * 2 : f.signal * 2)}
+                                >
+                                  {isSuperAdmin
+                                    ? `${formatSigned(f.contribution, 2)} (w=${f.weight})`
+                                    : f.signal > 0
+                                      ? '▲ Bullish'
+                                      : f.signal < 0
+                                        ? '▼ Bearish'
+                                        : '• Neutral'}
                                 </span>
                               </div>
                               <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{f.label}</div>
@@ -1721,7 +1761,9 @@ export const EdgeFinderPage: React.FC = () => {
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
                         <div className="ef-title-help-wrap">
-                          <h2 className="ef-card-title">7-Pillar Gold Model Attribution</h2>
+                          <h2 className="ef-card-title">
+                            {isSuperAdmin ? '7-Pillar Gold Model Attribution' : '7-Pillar Gold Macro Drivers'}
+                          </h2>
                           <EdgeFinderHelpButton topicId="gold_scorecard" onOpenTopic={openKbTopic} />
                         </div>
                         <span className="ef-card-meta">Real Rate · Dollar Inverse · Haven · COT</span>
@@ -1731,8 +1773,17 @@ export const EdgeFinderPage: React.FC = () => {
                           <div key={d.key} className="ef-pillar-card">
                             <div className="ef-pillar-top">
                               <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9' }}>{d.category}</span>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(d.contribution)}>
-                                {formatSigned(d.contribution, 2)} (w={d.weight})
+                              <span
+                                className="ef-heatmap-cell"
+                                style={scoreCellStyle(isSuperAdmin ? d.contribution : d.signal * 2)}
+                              >
+                                {isSuperAdmin
+                                  ? `${formatSigned(d.contribution, 2)} (w=${d.weight})`
+                                  : d.signal > 0
+                                    ? '▲ Bullish'
+                                    : d.signal < 0
+                                      ? '▼ Bearish'
+                                      : '• Neutral'}
                               </span>
                             </div>
                             <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{d.label}</div>

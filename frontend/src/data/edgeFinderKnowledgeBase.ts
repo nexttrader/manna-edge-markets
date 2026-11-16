@@ -39,6 +39,7 @@ export interface EdgeFinderKbTopic {
   dataSource: string;
   summary: string;
   whatItIs: string;
+  simpleExplanation: string[];
   calculationFormula: string[];
   howToTrade: {
     scalper: string;
@@ -59,9 +60,15 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
     updateCadence: '60s Live Auto-Sync (M15/H1/H4) + 2m–60m Macro',
     dataSource: 'Yahoo 15m Bars · D1 Bars · CFTC COT · BIS Macro · Manna Killzones',
     summary:
-      'Separates Buy/Sell directional conviction into three explicit holding periods—Scalper (M5–M15), Intraday (H1–H4), and Swing (D1–W1)—each scored on [-10, +10].',
+      'Separates Buy/Sell directional bias into three clear holding styles—Scalper (M5–M15), Intraday (H1–H4), and Swing (D1–W1)—each graded from -10 to +10.',
     whatItIs:
-      'Traders lose edge when an indicator calls "Buy" or "Sell" without saying whether it refers to a 20-minute scalp or a 3-week position trade. Manna EdgeFinder Pro solves this by running three distinct weighted models in parallel from live 15-minute intraday bars, daily/monthly structure, CFTC COT, and central bank macro data.',
+      'Traders lose edge when an indicator calls "Buy" or "Sell" without saying whether it refers to a 20-minute scalp or a 3-week swing trade. Manna EdgeFinder Pro solves this by evaluating short-term price speed, session momentum, and big-picture macro strength separately for each holding style.',
+    simpleExplanation: [
+      'Scalper Mode focuses on fast session speed, short-term trend alignment, whether price is inside an active Manna Killzone session, and whether today’s move is already stretched too far.',
+      'Intraday Mode balances today’s H1/H4 trend direction with session institutional flow, retail positioning, and currency/asset macro strength.',
+      'Swing Mode zooms out to the big picture: central bank interest rates, economic growth, weekly hedge-fund positioning (COT), retail extremes, 10-year seasonal tendencies, and daily trends.',
+      'Every mode outputs an easy score from -10 (Strongest Sell) to +10 (Strongest Buy), with -2 to +2 treated as Neutral.'
+    ],
     calculationFormula: [
       'SCALP (M1/M5/M15 · Hold 15m–2h): M15 EMA(9/21) [w=2.5] + H1 EMA(20/50) [w=1.75] + 1H Velocity [w=1.0] + 4H Velocity [w=0.75] + Manna Killzone [w=1.5] + M15 RSI Zone [w=0.75] + Retail Contrarian [w=0.75] + Macro Directional Guard [w=1.0]. Total max weight = 10.0.',
       'SCALP Exhaustion Guard (adrWarning): If Daily ADR used >= 95% OR M15 RSI >= 75 or <= 25, raw score is damped x0.72 so scalpers avoid chasing stretched tops/bottoms.',
@@ -96,6 +103,12 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Synthesizes cross-asset risk appetite on a 0–100 scale to tell you whether global capital is flowing into growth/carry or hiding in safe havens.',
     whatItIs:
       'Markets move in synchronized risk regimes. Before taking a trade in high-beta FX, Equity Indices, Commodities, or Crypto, institutional desks check whether capital prefers growth assets (Risk-On) or defensive hedges (Risk-Off).',
+    simpleExplanation: [
+      'Think of this gauge as the market’s daily "weather mood" from 0 to 100.',
+      'High readings (60+) mean Risk-On: investors feel confident, stock indices like S&P 500 (ES) and Nasdaq (NQ) are climbing, and money flows into growth assets.',
+      'Low readings (40 or below) mean Risk-Off: investors are cautious and moving money into safe havens like Gold, US Treasury Bonds, USD, JPY, and CHF.',
+      'Between 41 and 59 is a mixed, selective rotation where both buyers and sellers are active.'
+    ],
     calculationFormula: [
       'Starts from a balanced neutral baseline of 50.',
       'Adds risk appetite impulse: + (ES Total Score × 2.2) + (NQ Total Score × 1.5) + (GBP/JPY Total Score × 1.6).',
@@ -129,6 +142,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Ranks relative strength from -10 to +10 across all 8 major currencies, all 5 Futures sectors, and all 10 institutional Crypto contracts.',
     whatItIs:
       'Strongest-vs-weakest pairing is one of the highest-probability institutional methods. Instead of guessing a single chart in isolation, this meter lets you toggle between G8 Currencies, 5 Futures Sectors, and 10 Crypto assets to spot capital rotation instantly.',
+    simpleExplanation: [
+      'Every currency, futures sector, and crypto coin is ranked from strongest (top) to weakest (bottom).',
+      'In Forex, matching one of the strongest currencies (#1 or #2) against one of the weakest (#7 or #8) points you toward cleaner, smoother trends.',
+      'In Futures and Crypto, you can quickly see which entire sector (like Metals or Equity Indices) or coin is leading money inflow right now.'
+    ],
     calculationFormula: [
       'FX (8 Currencies): Composite = (Currency Economic Score × 0.60) + (Average FX Scorecard Bias across all pairs containing that currency × 0.40), ranked #1 to #8.',
       'Futures (5 Sectors — Equity Index, Metals, Energy, Rates, Agriculture): Average Swing Total Score across every futures contract in that sector, paired with mean CFTC Non-Commercial Long% and Top/Weakest contract.',
@@ -161,6 +179,10 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Audits live connectivity across all 56 instruments and reports the exact polling TTL and upstream release frequency of all 8 institutional data pipelines.',
     whatItIs:
       'Institutional reliability requires knowing both where every data point comes from and how frequently it refreshes. Every badge across Manna EdgeFinder Pro discloses its exact refresh cadence rather than using an ambiguous "Live" label.',
+    simpleExplanation: [
+      'Different market reports come out at different speeds in real life—price moves every minute, while weekly hedge-fund positioning comes out every Friday afternoon.',
+      'This panel shows you the live countdown timer, whether all 56 markets are connected cleanly, and how often each data feed updates automatically so you always know how fresh your numbers are.'
+    ],
     calculationFormula: [
       '1. Live Quotes (Spot/Futures/Crypto): Polled every 60s via Yahoo 15m + Meta quote (Auto-Sync countdown).',
       '2. Intraday M15 / H1 / H4 Structure: Rebuilt every 60s from real 14-day Yahoo 15m OHLC candles.',
@@ -195,6 +217,10 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Visualizes the 8 strongest directional opportunities right now for your chosen horizon (Scalper, Intraday, or Swing) plotted from a central zero line.',
     whatItIs:
       'Instead of scanning 56 rows manually, the Diverging Radar immediately bubbles up the highest absolute conviction scores (|Score| closest to 10.0) dynamically filtered by your active Execution Horizon.',
+    simpleExplanation: [
+      'This chart puts the top 8 clearest market opportunities right at the top of your screen so you do not have to hunt through 56 rows.',
+      'Long green bars pushing right show the strongest Buy setups for your chosen trading style (Scalper, Intraday, or Swing). Long red bars pushing left show the strongest Sell setups.'
+    ],
     calculationFormula: [
       'Reads `sc.timeframes[selectedHorizon].score` for all 56 assets.',
       'Sorts descending by `Math.abs(score)` and displays the Top 8 instruments.',
@@ -226,6 +252,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Sortable institutional heatmap matrix combining horizon-specific Edge Scores, 3-Timeframe (`S · I · SW`) alignment, COT Flow, Retail Fade, ADR/MTF volatility, Macro Diff, and Manna Killzone status.',
     whatItIs:
       'The core screening desk of Manna EdgeFinder Pro. It brings FX pairs, Futures contracts (Equity Index, Metals, Energy, Rates, Agriculture), and Crypto assets onto one unified sortable table with watchlist starring and multi-horizon clarity.',
+    simpleExplanation: [
+      'This main table lets you see every major Forex, Futures, and Crypto market in one view, ranked and filterable by your trading style.',
+      'The `S · I · SW` column shows the Scalp, Intraday, and Swing scores side by side—when you see `★ 3/3 TF ALIGNED`, all three trading timeframes agree on the same direction.',
+      'The Volatility/ADR column warns you if price has already moved most of its typical daily range so you avoid buying the exact top or selling the exact bottom.'
+    ],
     calculationFormula: [
       'Active Horizon Score column (`Scalp`, `Intra`, or `Swing`) renders `sc.timeframes[selectedHorizon].score` on [-10, +10].',
       '3-TF Matrix column (`S · I · SW`) displays `SCALP`, `INTRADAY`, and `SWING` scores side-by-side; `★ 3/3 TF ALIGNED` triggers when all 3 horizons agree in the same direction (all >= +2.0 or all <= -2.0).',
@@ -256,7 +287,12 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
     summary:
       'Measures linear return correlation `r` (`-1.00` inverse to `+1.00` coupled) across 16 benchmark FX, Index, Bond, Commodity, and Crypto markets.',
     whatItIs:
-      'Taking three Long positions in `EUR/USD`, `GBP/USD`, and `AUD/USD` simultaneously is not three independent trades—it is triple-leveraged USD short risk. This Pearson matrix exposes hidden portfolio overlap and hedging pairs.',
+      'Taking three Long positions in `EUR/USD`, `GBP/USD`, and `AUD/USD` simultaneously is not three independent trades—it is triple-leveraged USD short risk. This matrix exposes hidden portfolio overlap and hedging pairs.',
+    simpleExplanation: [
+      'Green squares near `+1.00` show markets that usually move up and down together (like EUR/USD and GBP/USD, or ES and NQ).',
+      'Red squares near `-1.00` show markets that usually move in opposite directions (like US Dollar strength vs Gold).',
+      'Check this table before opening several trades at once so you do not accidentally double or triple your risk on the same market move.'
+    ],
     calculationFormula: [
       'Computes 30-day daily percentage returns `r_t = (Close_t - Close_{t-1}) / Close_{t-1}` for each asset.',
       'Applies sample Pearson Correlation: `r(X,Y) = Σ((X_i - μ_X)(Y_i - μ_Y)) / sqrt(Σ(X_i - μ_X)² · Σ(Y_i - μ_Y)²)`.',
@@ -289,6 +325,10 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Displays the active horizon’s [-10, +10] score dial, Bias Classification, Signal Confidence %, and exact actionable note for the selected instrument.',
     whatItIs:
       'Inside the Asset Scorecard Deep-Dive, the top-left Edge Gauge dynamically adapts to whichever horizon you selected (Scalper M5–M15, Intraday H1–H4, or Swing D1–W1) while displaying live price and 1D change%.',
+    simpleExplanation: [
+      'The speedometer needle moves right into green when buyers hold the upper hand, and left into red when sellers control the market.',
+      'Confidence % shows how strongly the underlying indicators agree with one another right now, and HTF Confluence tells you whether a short-term Scalp or Intraday call agrees with the bigger multi-day Swing trend.'
+    ],
     calculationFormula: [
       'Gauge score = `timeframes[selectedHorizon].score` clamped to [-10, +10].',
       'Confidence % (32%–97%) combines absolute score magnitude with agreement count across constituent timeframes, reduced when ADR exhaustion warning triggers.',
@@ -320,6 +360,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Tracks real trend alignment across 7 timeframes (`M15, H1, H4, 5D, 20D, 50D, Monthly`), intraday 1H/4H momentum, Daily ADR% exhaustion, and live Manna Killzone signals.',
     whatItIs:
       'Combining EdgeFinder’s macro/structural edge with Manna Edge Markets’ live Killzone Order-Flow engine prevents traders from buying dead Asia consolidation or shorting into an active NY AM Killzone reversal setup.',
+    simpleExplanation: [
+      'The 7-Timeframe tiles give you a quick green/red weather check from 15-minute candles all the way up to Monthly structure.',
+      'Daily ADR Used % tells you how much of an asset’s normal daily travel has already happened today—once it nears 95%–100%, chasing breakouts gets riskier.',
+      'Killzone Synergy checks whether Manna’s active live signal agrees with EdgeFinder’s overall bias (`ALIGNED`) or opposes it (`CONFLICT`).'
+    ],
     calculationFormula: [
       '7-TF Matrix: M15 (EMA9/21), H1 (EMA20/50), H4 (EMA12/26) from live 15m bars; plus 5D (return >= ±0.25% vs EMA5), 20D (return >= ±0.4% vs EMA20), 50D (EMA20 vs EMA50), and Monthly (22D return >= ±0.5% vs EMA50).',
       'Daily ADR Used % = `(Today High - Today Low) / 14D ATR × 100`. Volatility Percentile ranks today’s True Range across the last 30 sessions (0–100%ile).',
@@ -334,7 +379,7 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
         'Ensure `5D`, `20D`, `50D`, and `Monthly` tiles share direction before adding swing size.'
     },
     readingSignals: [
-      '`ALIGNED` Gold pill = Active Manna Killzone setup confirms quantitative Edge direction (+0.75 Swing / +1.5 Scalp flow boost).',
+      '`ALIGNED` Gold pill = Active Manna Killzone setup confirms quantitative Edge direction for higher-confidence alignment.',
       '`CONFLICT` Red pill = Short-term Killzone setup runs counter to macro edge; wait for resolution or tighten targets.'
     ],
     relatedIds: ['horizon_engine', 'seasonality_killzones', 'eleven_pillars']
@@ -351,6 +396,10 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Pits the Base currency/asset directly against the Quote currency (or USD Liquidity Regime for Futures & Crypto) across policy rates, growth, inflation, labor, and COT flow.',
     whatItIs:
       'Pairs only sustain trends when one leg exhibits clear structural superiority over the other. Tug-of-War highlights in green/red which side holds the macro advantage on every key metric.',
+    simpleExplanation: [
+      'Every currency pair is a tug-of-war between the left currency (Base) and right currency (Quote)—or between a Futures/Crypto contract and the US Dollar liquidity environment.',
+      'Each row compares interest rates, economic growth, inflation, jobs, and hedge-fund demand side by side, lighting up whichever side currently holds the stronger hand.'
+    ],
     calculationFormula: [
       'Forex pairs compare Base Economy vs Quote Economy side-by-side: Policy Rate (adv threshold ±0.25%), GDP QoQ (±0.3%), Core CPI YoY (±0.3%), Unemployment inverse (±0.4%), Composite Economy Score (±0.5), and CFTC Non-Commercial Long% vs Short%.',
       'Futures & Crypto compare Asset Beta / Commodity-Index sensitivity against the USD Liquidity Regime (Fed Funds Stance, US GDP, US Core CPI, US PMI/Unemployment, and Contract COT Managed Money).'
@@ -381,6 +430,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Dual-axis chart plotting 30-day asset Price (Gold line) against its reconstructed daily Historical Swing Edge Score (Cyan line).',
     whatItIs:
       'Verifies empirically whether rising Edge Scores preceded price expansion or when price has disconnected ahead of quantitative institutional backing.',
+    simpleExplanation: [
+      'The Gold line shows where price moved over the past 30 trading days, while the Cyan line tracks how bullish or bearish the Edge Score was on each day.',
+      'When both lines rise together, institutional fundamentals and price momentum are marching in lockstep.',
+      'When price makes a new high while the Cyan score line begins dropping, it often signals waning buyer conviction behind the rally.'
+    ],
     calculationFormula: [
       'For each of the last 30 trading days `t`, recalculates local rolling `EMA20` vs `EMA50` trend signal (`±1.25`).',
       'Looks up the exact historical weekly CFTC report active on date `t` (`w.reportDate <= dateStr`) to compute point-in-time COT (`±1.5`) and Retail Fade (`±1.0`) contributions.',
@@ -402,16 +456,21 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
   },
   {
     id: 'eleven_pillars',
-    title: '11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)',
+    title: '11-Pillar Institutional Drivers (Swing D1–W1 View)',
     shortTitle: '11-Pillar Swing Model',
     category: 'Scoring & Horizons',
-    badge: '10.0 TOTAL WEIGHT',
+    badge: '11 EDGE DRIVERS',
     updateCadence: '60s–60m Multi-Feed Composite',
     dataSource: 'CFTC, Yahoo Finance, BIS, World Bank, IMF, ForexFactory, Manna Engine',
     summary:
-      'Transparently breaks down every single factor contributing to an asset’s Swing Edge Score (`totalScore` on `-10` to `+10`). Exact weights sum to `10.00`.',
+      'Breaks down the 11 institutional forces—Macro Fundamentals, Smart Money COT, Retail Positioning, Seasonality, Daily Trend, and Manna Order-Flow—that shape an asset’s overall Swing bias from -10 to +10.',
     whatItIs:
-      'No black boxes. Every point in the Swing score comes from 11 auditable pillars grouped across Sentiment (2.50), Technical (1.25), Statistical (0.75), Fundamental (4.75), and Manna Order-Flow (0.75).',
+      'No black boxes. Every overall Edge Score combines five clear pillars of institutional market behavior: Sentiment, Technical Trend, Seasonality, Economic Fundamentals, and Manna Killzone Order-Flow.',
+    simpleExplanation: [
+      'Each card shows whether a specific economic or market driver is currently pushing the asset Bullish (Green), Bearish (Red), or Neutral (Gold).',
+      'Core economic drivers (central bank interest rates, inflation, growth, and jobs) are paired with institutional COT futures demand and retail contrarian positioning.',
+      'You do not need to calculate anything manually—simply scan whether most pillars glow green or red and check which fundamental reason explains why the market is moving.'
+    ],
     calculationFormula: [
       'Sentiment (2.50): COT Smart Money [w=1.50] + Retail Contrarian Small Spec [w=1.00].',
       'Statistical & Technical (2.00): 10Y Live Seasonality [w=0.75] + Daily EMA20/50 & RSI Trend [w=1.25].',
@@ -428,8 +487,8 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
         'Require multi-pillar alignment across Fundamentals, COT, and Daily Trend (>= +5.0 or <= -5.0) for multi-week holds.'
     },
     readingSignals: [
-      'Pillars with higher weight (COT 1.5, Rates 1.25, Daily Trend 1.25) anchor structural direction.',
-      'Zero signals (`0.00`) indicate the spread between Base & Quote lies inside the neutral deadband threshold.'
+      'Major macro drivers (Interest Rates, CFTC Smart Money, and Daily Trend) anchor multi-week structural direction.',
+      'Neutral drivers indicate the difference between both currencies or macro legs is currently too narrow to give a strong edge.'
     ],
     relatedIds: ['horizon_engine', 'scorecard_gauge', 'tug_of_war']
   },
@@ -445,6 +504,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Specialized 7-factor Gold valuation engine built around the true institutional drivers of bullion: US 10Y TIPS Real Yields, DXY Inverse Dollar Flow, VIX Haven Bid, and COMEX Positioning.',
     whatItIs:
       'Gold does not trade like an ordinary currency pair—it is a zero-yielding monetary hedge driven primarily by real interest rates (`DFII10`), US Dollar liquidity (`DXY`), and systemic volatility (`VIX`).',
+    simpleExplanation: [
+      'Gold prefers falling inflation-adjusted US yields (because holding Gold costs less when bonds pay less) and a weaker US Dollar.',
+      'When market fear rises (higher VIX) or large COMEX funds increase Gold futures buying, this specialized 7-driver model shifts Bullish.',
+      'The Gold/Silver Ratio tells you whether Gold is expensive or cheap compared to Silver—helping metals traders pick which precious metal has catch-up potential.'
+    ],
     calculationFormula: [
       '10Y TIPS Real Yield [w=2.25]: Bullish (+1) if DFII10 <= 1.20%, Bearish (-1) if >= 2.20%.',
       'DXY Inverse Flow [w=1.75]: Bullish if DXY <= 99 or 1D <= -0.20%; Bearish if DXY >= 105 or 1D >= +0.25%.',
@@ -478,6 +542,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Ranks all 56 assets—FX interest rate carry, Futures curve roll/cost-of-carry, and Crypto CME/Perp funding basis—scaled by daily volatility (Carry/ATR Ratio).',
     whatItIs:
       'Carry is the institutional yield earned simply for holding a position over time, normalized against how volatile the asset is. Expanding beyond FX, EdgeFinder computes real Treasury curve carry, Futures backwardation/contango regime, and Crypto basis funding.',
+    simpleExplanation: [
+      'In Forex, holding a higher-interest-rate currency against a lower-interest-rate currency naturally attracts institutional capital over time.',
+      'In Futures and Crypto, this scanner checks bond yield curves, commercial hedger tightness, and funding demand so you can spot whether holding costs help or hurt a trade.',
+      'Look for the `CARRY + EDGE ALIGNED` tag to find markets where overnight yield and macro direction point the exact same way.'
+    ],
     calculationFormula: [
       'Forex (28 Pairs · `FX_RATE_DIFF`): `Spread = Base CB Rate - Quote CB Rate` (bps = Spread × 100). `Carry / ATR Ratio = |Spread%| / ATR%`.',
       'Futures Rates (`ZN`, `ZB` · `FUTURES_ROLL_YIELD`): True curve duration spread (`10Y` or `30Y` Treasury yield minus US 3M T-Bill `m3`). Positive spread = positive roll down the yield curve.',
@@ -510,6 +579,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Decodes weekly futures positioning across Hedge Funds (Non-Commercials) and Commercial Hedgers for all 56 Forex, Futures, and Crypto assets—including 52-week extremes.',
     whatItIs:
       'Every Tuesday (released Friday 15:30 ET), the CFTC reports exact contract counts held by large institutional speculators (`Non-Commercial`) vs corporate hedgers (`Commercial`). EdgeFinder automates 52 weeks of history, Cross-FX leg pairing, and `USD/*` IMM inversion.',
+    simpleExplanation: [
+      'This report shows real-money futures positions held by large hedge funds ("Non-Commercials") and commercial corporations ("Commercials"), updated from official weekly government filings.',
+      'When large funds steadily buy more contracts week over week (`WoW`), it tells you big money is building positions in that direction.',
+      'The `52W COT Index` tells you whether fund positioning is near a 1-year extreme high (80%–100%) or extreme low (0%–20%), alerting you when a crowded trend might pause or turn.'
+    ],
     calculationFormula: [
       'IMM & Cross Pairing: `USD/*` pairs (USD/JPY, USD/CAD, USD/CHF) invert foreign IMM futures. Cross FX pairs (`EUR/GBP`, `GBP/JPY`, etc.) net Base futures positions against inverted Quote futures positions.',
       'Non-Commercial Long% = `noncommLong / (noncommLong + noncommShort) × 100`. Signal = `+1` if >= 55%, `-1` if <= 45%.',
@@ -543,6 +617,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Tracks corporate insider buys/sales (Form 4), largest institutional fund stakes (13F Whales), and Wall Street consensus upside targets across macro & crypto bellwethers.',
     whatItIs:
       'Macro, Indices, Metals, Energy, and Crypto correlate tightly with bellwether corporate capital (`NVDA, AAPL, MSFT, AMZN, TSLA, JPM, GS, XOM, NEM, FCX, COIN, MSTR`). Monitoring insider conviction and 13F whale rotation adds micro equity confirmation to macro index and crypto calls.',
+    simpleExplanation: [
+      'Watch what company executives (Form 4 Insiders) and giant institutional funds (13F Whales) are actually buying or selling with their own money.',
+      'Bellwether tech stocks (`NVDA`, `AAPL`, `MSFT`) lead the Nasdaq (`NQ`), big banks (`JPM`, `GS`) reflect financial health (`ES`), mining giants (`NEM`, `FCX`) track Gold and Copper, and `COIN`/`MSTR` track institutional Crypto appetite.',
+      'Street Price Targets compare Wall Street analyst average targets against current market price to show expected upside or downside.'
+    ],
     calculationFormula: [
       'Wall Street Targets: Extracts `targetLowPrice`, `targetMeanPrice`, `targetHighPrice`, recommendation rating, and analyst coverage count (`upsidePct = (targetMean - currentPrice) / currentPrice × 100`).',
       'SEC Form 4 Insiders: Parses latest Officer/Director transactions (`BUY`, `SELL`, `OTHER`), shares, USD value, and filing date sorted newest-first.',
@@ -574,6 +653,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Fades crowded retail/small-speculator positioning to identify stop-hunt liquidity pools across all 56 Forex, Futures, and Crypto markets.',
     whatItIs:
       'Small non-reportable speculators tend to average into losing trends and crowd at extremes right before institutional liquidity sweeps. EdgeFinder tracks their exact Long/Short ratio directly from CFTC Non-Reportable contract data—never fabricated percentages.',
+    simpleExplanation: [
+      'Historically, small retail speculators tend to pile into the wrong side right near market turns or before institutional stop hunts.',
+      'The green/red bar shows what small traders are actually holding. When the Contrarian Signal says `BULLISH`, it means the small-trader crowd is heavily Short—so institutions often hunt stops upward.',
+      'Look for gold `CROWD EXTREME` borders where 65% or more of small speculators are stuck leaning on one side.'
+    ],
     calculationFormula: [
       'Crowd Long% = `nonreptLong / (nonreptLong + nonreptShort) × 100`. Short% = `100 - Crowd Long%`.',
       'Contrarian Bearish (`-1`): triggered when Crowd Long >= 56.0%.',
@@ -586,7 +670,7 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       intraday:
         'Best fading signal occurs when Small Specs are >= 65% Long while Large Speculators (COT) are Net Short.',
       swing:
-        'Use Retail Contrarian (`w=1.0`) as confirmation for turning points when COT also hits a 52W extreme.'
+        'Use Retail Contrarian as confirmation for turning points when COT also hits a 52W extreme.'
     },
     readingSignals: [
       'Green/Red split bar shows raw Crowd Long% vs Crowd Short%.',
@@ -606,6 +690,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Computes average monthly return% and positive win-rate% across the past 10 years for every asset (up to max available history on newer crypto), paired with optimal ICT Killzone session.',
     whatItIs:
       'Fiscal tax cycles, commodity harvests, holiday liquidity, and bond refunding create recurring seasonal tendencies. Combining monthly historical probabilities with each instrument’s highest-displacement intraday Killzone aligns timing across macro and intraday execution.',
+    simpleExplanation: [
+      'This calendar checks the past 10 years of real market history for every month of the year so you can see whether an asset usually climbs or falls during the current month.',
+      'Switch between `Avg Monthly Return (%)` and `Win Rate (%)` to see both how much an asset tends to move and how often it finished that month green.',
+      'Each asset also shows its `Best KZ` (Asia, London, NY AM, or NY PM)—the exact session when liquidity and price movement are sharpest.'
+    ],
     calculationFormula: [
       'Fetches 10 years of monthly OHLC bars (`interval: 1mo`) per instrument.',
       'Monthly Return `m` = mean of `((Close - Open) / Open) × 100` for calendar month `m`.',
@@ -638,6 +727,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Tracks the full US Treasury term structure (`3M, 2Y, 5Y, 10Y, 30Y`), curve regime, 10Y TIPS Real Yield, Nonfarm Payrolls, M2 liquidity, Housing Starts, and the Buffett Indicator.',
     whatItIs:
       'Sovereign bond markets lead every asset class. An inverted curve prices slowing growth and eventual rate cuts; rising `DFII10` real yields tighten financial conditions across tech, gold, and crypto; expanding M2 liquidity fuels risk assets.',
+    simpleExplanation: [
+      'Interest rates on US government bonds set the borrowing cost for the entire global financial system.',
+      'When short-term yields (3M or 2Y) pay more than long-term 10Y yields, the curve is "Inverted"—historically warning of tighter economic growth ahead.',
+      'Watch `10Y TIPS Real Yield`: when inflation-adjusted bond yields fall, Gold and Bitcoin generally perform better; when they jump sharply, Tech stocks (`NQ`) and Gold face headwinds.'
+    ],
     calculationFormula: [
       'Curve Regime: `Inverted Curve` if `10Y - 2Y < -0.05%` or `10Y - 3M < -0.05%`; `Normal Steepening` if `10Y - 2Y >= +0.25%` AND `10Y - 3M >= +0.15%`; else `Flat Curve`.',
       'Buffett Indicator = `(Wilshire 5000 Index Cap / US Nominal GDP in Billions) × 100` (`>= 160%` indicates stretched equity valuation).',
@@ -669,6 +763,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Unifies central bank policy rates, stance (`Hawkish / Neutral / Dovish`), quantitative Hike/Hold/Cut probability odds, 6Y sovereign history charts, and Super Admin live overrides.',
     whatItIs:
       'Currency trends are ultimately repricings of central bank expectations. This hub pulls live official policy rates (BIS), multi-year GDP/CPI/Unemployment (IMF & World Bank), and real-time economic release surprises from Manna’s NewsEngine.',
+    simpleExplanation: [
+      'Every major economy’s central bank raises rates ("Hawkish") to fight inflation or lowers rates ("Dovish") to boost growth—and big money follows higher-yielding, stronger economies.',
+      'The table summarizes each G8 country’s interest rate, growth, inflation, jobs, and estimated odds of a rate Hike, Hold, or Cut at its next meeting.',
+      'Click any currency pill in the Multi-Year Explorer below to see 6 years of real economic trends and upcoming high-impact calendar events.'
+    ],
     calculationFormula: [
       'Economy Score (`-10 to +10`): Weighs Policy Rate level, Stance (`±1.5`), GDP QoQ (`-1.5 to +2.0`), Core CPI (`±1.25`), Composite PMI (`±1.5`), Unemployment (`-1.25 to +1.0`), Retail MoM (`±0.75`), and News Surprise Score (`±2.0`).',
       'Implied Rate Probabilities (`Hike% / Hold% / Cut%`): Softmax exponential model over Core CPI gap vs `2.2%`, GDP gap vs `1.5%`, rate delta, unemployment gap vs `4.4%`, real rate (`rate - CPI`), and news surprise—always summing to `100%`.'
@@ -699,6 +798,11 @@ export const EDGE_FINDER_KB_TOPICS: EdgeFinderKbTopic[] = [
       'Dedicated institutional desk tracking capital rotation across all 5 Futures Sectors (Equity Index, Metals, Energy, Rates, Agriculture) and all 10 CFTC-regulated Cryptoassets.',
     whatItIs:
       'Extends EdgeFinder beyond Forex so futures index/commodity traders and crypto traders get sector breadth, CFTC Speculative Long%, and multi-timeframe (`Scalp / Intra / Swing`) alignment for every contract.',
+    simpleExplanation: [
+      'Shows all 5 Futures groups—Equity Indices, Metals, Energy, Rates, and Agriculture—plus all 10 major Crypto markets in one clean view.',
+      'Green sectors (`Accumulation`) show where big funds are leaning bullish; Red sectors (`Distribution`) show where money is flowing out.',
+      'Click any sector card or Crypto coin row to open its full multi-timeframe scorecard and see how Scalp, Intraday, and Swing compare.'
+    ],
     calculationFormula: [
       'Futures Sectors (`Equity Index`, `Metals`, `Energy`, `Rates`, `Agriculture`): Averages component contracts’ Swing scores, 1D momentum, and CFTC Long%, classifying `Institutional Accumulation` (>= +2.0), `Institutional Distribution` (<= -2.0), or `Mixed`.',
       'Futures/Crypto Macro Scoring adjusts macro weights by asset class—treating High Real Rates/Hawkish Fed as headwinds to Tech/Crypto/Bonds/Metals while tracking CPI as a commodity/hard-asset tailwind.'

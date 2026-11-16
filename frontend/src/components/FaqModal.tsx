@@ -42,7 +42,13 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
         ``,
         `WHAT IT DOES:\n${topic.whatItIs}`,
         ``,
-        `EXACT CALCULATION & THRESHOLDS:\n${topic.calculationFormula.map((f) => `• ${f}`).join('\n')}`,
+        `HOW IT WORKS (SIMPLE GUIDE):\n${topic.simpleExplanation.map((s) => `• ${s}`).join('\n')}`,
+        ...(isSuperAdmin
+          ? [
+              ``,
+              `PROPRIETARY CALCULATION & WEIGHTS (SUPER ADMIN ONLY):\n${topic.calculationFormula.map((f) => `• ${f}`).join('\n')}`
+            ]
+          : []),
         ``,
         `TRADING PLAYBOOK:\n• ⚡ Scalper (M5–M15): ${topic.howToTrade.scalper}\n• ⏱️ Intraday (H1–H4): ${topic.howToTrade.intraday}\n• 🏛️ Swing (D1–W1): ${topic.howToTrade.swing}`,
         ``,
@@ -55,7 +61,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
       updatedAt: '2026-11-16'
     }));
     return [...FAQ_DATA, ...edgeFinderFaqs];
-  }, [canAccessEdgeFinder]);
+  }, [canAccessEdgeFinder, isSuperAdmin]);
 
   // Dynamic filtering based on user role, active strategies, and tier
   const availableFaqs = useMemo(() => {

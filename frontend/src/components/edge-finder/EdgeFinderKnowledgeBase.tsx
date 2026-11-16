@@ -6,6 +6,7 @@ import {
   type EdgeFinderKbTopicId,
   getEdgeFinderKbTopic
 } from '../../data/edgeFinderKnowledgeBase';
+import { useEdgeFinderAccess } from '../../hooks/useEdgeFinder';
 
 interface EdgeFinderHelpButtonProps {
   topicId: EdgeFinderKbTopicId;
@@ -35,78 +36,95 @@ interface TopicBodyProps {
   onSelectTopic?: (id: EdgeFinderKbTopicId) => void;
 }
 
-const TopicDetailsContent: React.FC<TopicBodyProps> = ({ topic, onSelectTopic }) => (
-  <div className="ef-kb-body">
-    <div className="ef-kb-meta-row">
-      <span className="ef-kz-pill ef-kz-aligned">{topic.category}</span>
-      <span className="ef-mini-chip">Source: {topic.dataSource}</span>
-      <span className="ef-mini-chip">Refresh: {topic.updateCadence}</span>
-    </div>
+const TopicDetailsContent: React.FC<TopicBodyProps> = ({ topic, onSelectTopic }) => {
+  const { isSuperAdmin } = useEdgeFinderAccess();
 
-    <p className="ef-kb-summary">{topic.summary}</p>
+  return (
+    <div className="ef-kb-body">
+      <div className="ef-kb-meta-row">
+        <span className="ef-kz-pill ef-kz-aligned">{topic.category}</span>
+        <span className="ef-mini-chip">Source: {topic.dataSource}</span>
+        <span className="ef-mini-chip">Refresh: {topic.updateCadence}</span>
+      </div>
 
-    <div className="ef-kb-section">
-      <div className="ef-kb-section-label">What It Does &amp; Why Traders Use It</div>
-      <p className="ef-kb-text">{topic.whatItIs}</p>
-    </div>
+      <p className="ef-kb-summary">{topic.summary}</p>
 
-    <div className="ef-kb-section">
-      <div className="ef-kb-section-label">Exact Calculation &amp; Thresholds</div>
-      <ul className="ef-kb-list">
-        {topic.calculationFormula.map((line, i) => (
-          <li key={i}>{line}</li>
-        ))}
-      </ul>
-    </div>
+      <div className="ef-kb-section">
+        <div className="ef-kb-section-label">What It Does &amp; Why Traders Use It</div>
+        <p className="ef-kb-text">{topic.whatItIs}</p>
+      </div>
 
-    <div className="ef-kb-section">
-      <div className="ef-kb-section-label">Execution Playbook by Trading Style</div>
-      <div className="ef-kb-horizon-grid">
-        <div className="ef-kb-horizon-box">
-          <div className="ef-kb-h-title">⚡ Scalper (M5–M15 · 15m–2h)</div>
-          <p className="ef-kb-h-text">{topic.howToTrade.scalper}</p>
+      <div className="ef-kb-section ef-kb-section-simple">
+        <div className="ef-kb-section-label">💡 How It Works (Simple Language)</div>
+        <ul className="ef-kb-list">
+          {topic.simpleExplanation.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      </div>
+
+      {isSuperAdmin && (
+        <div className="ef-kb-section ef-kb-section-superadmin">
+          <div className="ef-kb-section-label" style={{ color: '#f3c6ff' }}>
+            👑 Super Admin Only — Proprietary Calculation &amp; Weights
+          </div>
+          <ul className="ef-kb-list">
+            {topic.calculationFormula.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
         </div>
-        <div className="ef-kb-horizon-box">
-          <div className="ef-kb-h-title">⏱️ Intraday (H1–H4 · 2h–24h)</div>
-          <p className="ef-kb-h-text">{topic.howToTrade.intraday}</p>
-        </div>
-        <div className="ef-kb-horizon-box">
-          <div className="ef-kb-h-title">🏛️ Swing (D1–W1 · 3d–4w)</div>
-          <p className="ef-kb-h-text">{topic.howToTrade.swing}</p>
+      )}
+
+      <div className="ef-kb-section">
+        <div className="ef-kb-section-label">Execution Playbook by Trading Style</div>
+        <div className="ef-kb-horizon-grid">
+          <div className="ef-kb-horizon-box">
+            <div className="ef-kb-h-title">⚡ Scalper (M5–M15 · 15m–2h)</div>
+            <p className="ef-kb-h-text">{topic.howToTrade.scalper}</p>
+          </div>
+          <div className="ef-kb-horizon-box">
+            <div className="ef-kb-h-title">⏱️ Intraday (H1–H4 · 2h–24h)</div>
+            <p className="ef-kb-h-text">{topic.howToTrade.intraday}</p>
+          </div>
+          <div className="ef-kb-horizon-box">
+            <div className="ef-kb-h-title">🏛️ Swing (D1–W1 · 3d–4w)</div>
+            <p className="ef-kb-h-text">{topic.howToTrade.swing}</p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div className="ef-kb-section">
-      <div className="ef-kb-section-label">Reading Signals Quickly</div>
-      <ul className="ef-kb-list">
-        {topic.readingSignals.map((sig, i) => (
-          <li key={i}>{sig}</li>
-        ))}
-      </ul>
-    </div>
-
-    {topic.relatedIds.length > 0 && onSelectTopic && (
-      <div className="ef-kb-related">
-        <span style={{ fontSize: '0.73rem', color: '#a99bc9', fontWeight: 600 }}>Related Topics:</span>
-        {topic.relatedIds.map((relId) => {
-          const rel = getEdgeFinderKbTopic(relId);
-          return (
-            <button
-              key={relId}
-              type="button"
-              className="ef-filter-btn"
-              style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-              onClick={() => onSelectTopic(relId)}
-            >
-              {rel.shortTitle} →
-            </button>
-          );
-        })}
+      <div className="ef-kb-section">
+        <div className="ef-kb-section-label">Reading Signals Quickly</div>
+        <ul className="ef-kb-list">
+          {topic.readingSignals.map((sig, i) => (
+            <li key={i}>{sig}</li>
+          ))}
+        </ul>
       </div>
-    )}
-  </div>
-);
+
+      {topic.relatedIds.length > 0 && onSelectTopic && (
+        <div className="ef-kb-related">
+          <span style={{ fontSize: '0.73rem', color: '#a99bc9', fontWeight: 600 }}>Related Topics:</span>
+          {topic.relatedIds.map((relId) => {
+            const rel = getEdgeFinderKbTopic(relId);
+            return (
+              <button
+                key={relId}
+                type="button"
+                className="ef-filter-btn"
+                style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                onClick={() => onSelectTopic(relId)}
+              >
+                {rel.shortTitle} →
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface EdgeFinderKbDialogProps {
   activeTopicId: EdgeFinderKbTopicId | null;
@@ -234,6 +252,7 @@ const KB_CATEGORIES: Array<'ALL' | EdgeFinderKbCategory> = [
 ];
 
 export const EdgeFinderKbExplorer: React.FC = () => {
+  const { isSuperAdmin } = useEdgeFinderAccess();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | EdgeFinderKbCategory>('ALL');
   const [openIds, setOpenIds] = useState<Set<EdgeFinderKbTopicId>>(
@@ -252,14 +271,15 @@ export const EdgeFinderKbExplorer: React.FC = () => {
         t.summary,
         t.whatItIs,
         t.dataSource,
-        ...t.calculationFormula,
+        ...t.simpleExplanation,
+        ...(isSuperAdmin ? t.calculationFormula : []),
         ...t.readingSignals
       ]
         .join(' ')
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, isSuperAdmin]);
 
   const allExpanded = filteredTopics.length > 0 && filteredTopics.every((t) => openIds.has(t.id));
 
@@ -293,7 +313,9 @@ export const EdgeFinderKbExplorer: React.FC = () => {
             📘 Manna EdgeFinder Pro Knowledge Base ({EDGE_FINDER_KB_TOPICS.length} Interactive Guides)
           </h2>
           <p className="ef-subtitle" style={{ marginTop: 4 }}>
-            Complete formulas, scoring weights, live feed cadences, and Scalper / Intraday / Swing playbooks for every EdgeFinder display.
+            {isSuperAdmin
+              ? 'Full guides, proprietary calculation weights, live feed cadences, and Scalper / Intraday / Swing playbooks for every EdgeFinder display.'
+              : 'Plain-English guides, live feed cadences, and Scalper / Intraday / Swing playbooks for every EdgeFinder display.'}
           </p>
         </div>
         <button
@@ -323,7 +345,7 @@ export const EdgeFinderKbExplorer: React.FC = () => {
         <input
           type="search"
           className="ef-search-input"
-          placeholder="Search formulas, COT, ADR, Futures, Crypto..."
+          placeholder={isSuperAdmin ? 'Search guides, formulas, COT, ADR, Futures, Crypto...' : 'Search guides, COT, ADR, Futures, Crypto...'}
           aria-label="Search EdgeFinder Knowledge Base"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}

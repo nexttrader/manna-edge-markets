@@ -1079,6 +1079,16 @@
   border: 1px solid rgba(167, 139, 250, 0.18);
 }
 
+.ef-kb-section-simple {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.ef-kb-section-superadmin {
+  background: rgba(156, 39, 176, 0.11);
+  border-color: rgba(206, 147, 216, 0.38);
+}
+
 .ef-kb-section-label {
   font-size: 0.74rem;
   font-weight: 700;
