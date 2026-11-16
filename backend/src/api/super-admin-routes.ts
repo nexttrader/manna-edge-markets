@@ -12,6 +12,8 @@ import { signalAuditService } from '../analytics/signal-audit-service';
 import { getTwelveDataUsage } from '../discovery/twelvedata-provider';
 import { telegramBotService } from '../notifications/telegram-bot';
 import { instrumentStateTelemetry, DASHBOARD_PHASES } from '../discovery/strategies/elite-fractal';
+import { getMtfStyleSignals } from '../discovery/mtf-style-signals';
+import { getTradingStyleComparisonReport } from '../discovery/mtf-style-tracker';
 
 
 const router = express.Router();
@@ -1638,6 +1640,22 @@ async function calculateStrategyComparisonData(filters?: {
     tradeLogs
   };
 }
+
+router.get('/strategy-analytics/style-comparison', async (req: Request, res: Response) => {
+  try {
+    const forceSync = req.query.refresh === '1' || req.query.refresh === 'true';
+    if (forceSync) {
+      await Promise.allSettled([
+        getMtfStyleSignals('scalp', 'd1_h4', true),
+        getMtfStyleSignals('swing', 'd1_h4', true)
+      ]);
+    }
+    const report = await getTradingStyleComparisonReport();
+    return res.json({ success: true, ...report });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to compute trading style comparison', details: err.message });
+  }
+});
 
 router.get('/strategy-analytics/comparison', async (req: Request, res: Response) => {
   try {

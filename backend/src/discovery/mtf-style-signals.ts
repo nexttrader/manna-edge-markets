@@ -4,6 +4,7 @@ import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from 
 import { getLogicalStopDistance } from './stop-loss-rules';
 import { Bias, Candle } from './types';
 import { getLiveCandles, getLiveCurrentPrice } from './yahoo-provider';
+import { recordAndSyncMtfSetups } from './mtf-style-tracker';
 
 export type TradingStyleMode = 'scalp' | 'swing';
 export type SwingPairMode = 'd1_h4' | 'h4_h1';
@@ -330,6 +331,7 @@ export async function getMtfStyleSignals(
       cached: false
     };
 
+    await recordAndSyncMtfSetups(setups);
     snapshotCache.set(cacheKey, { data: snapshot, ts: Date.now() });
     return snapshot;
   })().finally(() => {
