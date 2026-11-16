@@ -46,9 +46,9 @@ export const EarlyScanNewsBanner: React.FC = () => {
   const [status, setStatus] = useState<EarlyScanStatus | null>(null);
   const [isMinimized, setIsMinimized] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('early_scan_banner_minimized') === 'true';
+      return localStorage.getItem('early_scan_banner_minimized') !== 'false';
     } catch {
-      return false;
+      return true;
     }
   });
 

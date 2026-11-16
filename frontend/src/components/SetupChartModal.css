@@ -40,7 +40,7 @@
   min-width: 0;
 }
 
-.header-left {
+.chart-modal-header .header-left {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -630,7 +630,7 @@
     gap: 8px;
     padding: 8px 12px;
   }
-  .header-left {
+  .chart-modal-header .header-left {
     justify-content: flex-start;
     width: 100%;
     gap: 6px 8px;

@@ -1,17 +1,39 @@
 .runners-panel {
-  margin-bottom: 24px;
-  padding: 16px 20px;
-  background: rgba(10, 15, 29, 0.75);
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  border-radius: 12px;
+  margin-bottom: 0;
+  padding: 14px 18px;
+  background: var(--kdt-purple-card, rgba(17, 10, 30, 0.94));
+  border: 1px solid var(--kdt-purple-border, rgba(180, 130, 255, 0.14));
+  border-radius: 10px;
   backdrop-filter: blur(12px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .runners-panel.minimized {
-  padding: 12px 20px;
-  background: rgba(10, 15, 29, 0.55);
-  border-color: rgba(255, 171, 0, 0.25);
+  min-height: 44px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--kdt-purple-card, rgba(17, 10, 30, 0.94));
+  border-color: var(--kdt-purple-border, rgba(180, 130, 255, 0.14));
+}
+
+.runners-panel.minimized::before {
+  display: none;
+}
+
+.runners-panel.minimized .runners-icon {
+  font-size: 0.95rem;
+}
+
+.runners-panel.minimized .runners-toggle-btn {
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+.runners-panel.minimized:hover {
+  transform: none;
+  border-color: rgba(212, 175, 55, 0.45);
 }
 
 .runners-header-clickable {
@@ -35,11 +57,11 @@
 .runners-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.05rem;
+  gap: 8px;
+  font-size: 0.85rem;
   font-weight: 800;
-  color: #ffab00;
-  letter-spacing: 0.5px;
+  color: var(--kdt-gold-light, #e5c453);
+  letter-spacing: 0.4px;
   transition: color 0.2s ease;
 }
 

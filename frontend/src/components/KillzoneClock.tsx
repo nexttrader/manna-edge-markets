@@ -308,14 +308,14 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
   const showRescanTimer = isLowSignals && isBeforeMidpoint && activeMidpoint;
 
   return (
-    <div className="killzone-clock glass-card">
+    <div className="killzone-clock">
       {/* ── 1. ACTIVE SESSION & MASTER ET CLOCK ── */}
       <div className="clock-section clock-session-section" title={`Active Trading Session: ${activeSessionName} (${sessionRangeET})`}>
         <div className="session-status-cluster">
           <div className={`kz-indicator ${isAnyMarketOpen ? 'active' : 'closed'} ${isPeakKillzone ? 'peak-glow' : ''}`} />
           <div className="session-badge-wrapper">
             <span className="kz-name">{activeSessionName}</span>
-            <span className="session-range-tag">{sessionRangeET}</span>
+            <span className="session-range-tag">({sessionRangeET})</span>
           </div>
         </div>
         <span className="clock-time font-mono">{etTimeString} ET</span>
@@ -325,14 +325,11 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
 
       {/* ── 2. LAST SCAN DONE SHOWCASE ── */}
       <div className="clock-section clock-last-scan font-mono" title={`Last execution: ${lastScanLabel} at ${lastScanTimeET} (${lastScanElapsedStr})`}>
-        <span className="scan-pill-badge last-scan-badge">⏱️ LAST SCAN</span>
-        <div className="scan-info-block">
-          <span className="scan-primary-title">{lastScanLabel}</span>
-          <span className="scan-secondary-detail">{lastScanTimeET}</span>
-        </div>
+        <span className="scan-pill-badge last-scan-badge">LAST</span>
+        <span className="scan-primary-title">{lastScanLabel}</span>
         <span className="scan-elapsed-pill">{lastScanElapsedStr}</span>
         {lastScanSetupsCount > 0 && (
-          <span className="scan-count-tag">+{lastScanSetupsCount} sig</span>
+          <span className="scan-count-tag">+{lastScanSetupsCount}</span>
         )}
       </div>
 
@@ -340,11 +337,8 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
 
       {/* ── 3. NEXT SCAN UPCOMING SHOWCASE ── */}
       <div className="clock-section clock-next-scan font-mono" title={`Upcoming Scan: ${nextScanTitle} (${nextScanTimesDisplay}) in ${countdownStr}`}>
-        <span className="scan-pill-badge next-scan-badge">📡 NEXT SCAN</span>
-        <div className="scan-info-block">
-          <span className="scan-primary-title scan-target-gold">{nextScanTitle}</span>
-          <span className="scan-secondary-detail text-gold-muted">({nextScanTimesDisplay})</span>
-        </div>
+        <span className="scan-pill-badge next-scan-badge">NEXT</span>
+        <span className="scan-primary-title scan-target-gold">{nextScanTitle}</span>
         <span className="scan-countdown">in {countdownStr}</span>
       </div>
 
@@ -353,21 +347,21 @@ export const KillzoneClock: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] 
         <>
           <div className="clock-divider" />
           <div className="clock-section clock-midpoint-scan font-mono" title={`Session Midpoint Booster Scan: Triggering due to low active setups`}>
-            <span className="scan-pill-badge midpoint-badge">⚡ MIDPOINT</span>
-            <span className="scan-primary-title text-warning-amber">{activeMidpoint.label} ({activeMidpoint.et})</span>
+            <span className="scan-pill-badge midpoint-badge">MIDPOINT</span>
             <span className="rescan-countdown-amber animate-rescan-flash">in {midpointCountdownStr}</span>
           </div>
         </>
       )}
 
       {/* ── 5. SCHEDULE INFO MODAL TOGGLE ── */}
-      <button 
-        type="button" 
+      <button
+        type="button"
         className="clock-schedule-toggle-btn"
         onClick={() => setShowScheduleInfo(!showScheduleInfo)}
         title="View Institutional Trading & Scan Schedule"
+        aria-label="View Institutional Trading and Scan Schedule"
       >
-        ℹ️
+        ⓘ
       </button>
 
       {/* ── MODAL: INSTITUTIONAL SCAN SCHEDULE BREAKDOWN ── */}

@@ -1,23 +1,23 @@
 /* Collapsed Mode Container */
 .asset-decision-matrix-collapsed {
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--kdt-purple-card, rgba(17, 10, 30, 0.94));
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 12px;
-  padding: 10px 16px;
-  margin-bottom: 24px;
+  border: 1px solid var(--kdt-purple-border, rgba(180, 130, 255, 0.14));
+  border-radius: 10px;
+  min-height: 44px;
+  padding: 7px 14px;
+  margin-bottom: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .asset-decision-matrix-collapsed:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(212, 175, 55, 0.45);
+  background: rgba(22, 14, 38, 0.96);
 }
 
 .collapsed-left {
@@ -67,21 +67,21 @@
 }
 
 .maximize-matrix-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: #ffffff;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 0.75rem;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--kdt-gold-light, #e5c453);
+  border: 1px solid rgba(212, 175, 55, 0.38);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
-  transition: all 0.2s ease;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 .maximize-matrix-btn:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+  background: rgba(212, 175, 55, 0.25);
+  border-color: var(--kdt-gold, #d4af37);
+  color: #ffffff;
 }
 
 .minimize-matrix-btn {

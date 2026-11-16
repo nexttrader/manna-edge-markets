@@ -20,7 +20,9 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
   const navigate = useNavigate();
   const { user, logout, originalAdmin, elevateToSuperAdmin, isImpersonating } = useAuth();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin';
+  const isAdmin = isImpersonating
+    ? (user?.role === 'admin' || user?.role === 'super_admin')
+    : (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin');
   const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
   const { activityLogs, setShowActivityFeed } = useSignalNotifications();
@@ -128,10 +130,10 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
 
   return (
     <>
-      <header className="dashboard-header glass-card">
+      <header className="dashboard-header">
         <div className="container header-container">
           <div className="header-left">
-            <button 
+            <button
               className="mobile-menu-toggle-btn"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle navigation menu"
@@ -146,77 +148,67 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             </button>
 
             <Link to="/" className="header-logo font-mono" title="Manna Edge Markets — Click for Home">
-              <span className="logo-emblem">⚡</span>
+              <span className="logo-emblem">M</span>
               <span className="logo-title-text">MANNA EDGE</span>
             </Link>
-            
-            <nav className="header-nav font-mono desktop-only-nav">
+
+            <nav className="header-nav font-mono desktop-only-nav" aria-label="Primary Navigation">
               <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
-                📊 Dashboard
+                Dashboard
               </Link>
-              <button 
-                className="nav-link font-mono support-nav-btn"
-                style={{
-                  background: inboxUnread > 0 ? 'rgba(0,229,255,0.2)' : 'rgba(0,229,255,0.08)',
-                  border: '1px solid rgba(0,229,255,0.3)',
-                  cursor: 'pointer',
-                  color: '#00e5ff',
-                  fontWeight: 800,
-                  position: 'relative',
-                  borderRadius: '6px'
-                }}
+              <button
+                type="button"
+                className="nav-link"
                 onClick={() => setShowInbox(true)}
                 title="Open Support Desk & Submit Tickets"
               >
-                📬 Support
+                Support
                 {inboxUnread > 0 && (
                   <span className="support-badge-count">{inboxUnread}</span>
                 )}
               </button>
-              <button 
-                className="nav-link font-mono" 
-                style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', color: '#00e5ff' }}
+              <button
+                type="button"
+                className="nav-link"
                 onClick={() => setShowActivityFeed(true)}
                 title="Open Live Signal Activity Log & Timeline Feed"
               >
-                📡 Live Feed
+                Live Feed
                 {activityLogs.length > 0 && (
-                  <span className="support-badge-count" style={{ background: '#00e5ff', color: '#090314' }}>
-                    {activityLogs.length}
-                  </span>
+                  <span className="nav-count-pill">{activityLogs.length}</span>
                 )}
               </button>
-              <button 
-                className="nav-link font-mono" 
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              <button
+                type="button"
+                className="nav-link"
                 onClick={() => setShowCalendar(true)}
                 title="View Economic News Calendar"
               >
-                📅 Calendar
+                Calendar
               </button>
-              <button 
-                className="nav-link font-mono" 
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e056fd' }}
+              <button
+                type="button"
+                className="nav-link"
                 onClick={() => setShowFaq(true)}
                 title="View Platform Guides & Knowledge Base"
               >
-                ❓ FAQ
+                FAQ
               </button>
 
               {canAccessEdgeFinder && (
-                <Link to="/edge-finder" className={`nav-link ${location.pathname === '/edge-finder' ? 'active' : ''}`} style={{ color: '#DFC46B' }}>
-                  🧭 EdgeFinder
+                <Link to="/edge-finder" className={`nav-link nav-link-gold ${location.pathname === '/edge-finder' ? 'active' : ''}`}>
+                  EdgeFinder
                 </Link>
               )}
 
               {isAdmin && (
                 <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
-                  ⚙️ Admin
+                  Admin
                 </Link>
               )}
               {isSuperAdmin && (
-                <Link to="/vault-5287" className={`nav-link ${location.pathname === '/vault-5287' ? 'active' : ''}`} style={{ color: '#b388ff' }}>
-                  👁️ Master Desk
+                <Link to="/vault-5287" className={`nav-link nav-link-vault ${location.pathname === '/vault-5287' ? 'active' : ''}`}>
+                  Master Desk
                 </Link>
               )}
             </nav>

@@ -8,37 +8,36 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 6px 18px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(20, 9, 38, 0.88) 0%, rgba(14, 6, 28, 0.94) 100%);
-  border: 1px solid rgba(201, 168, 76, 0.32);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.38), 0 0 14px rgba(180, 130, 255, 0.08);
-  backdrop-filter: blur(12px);
+  gap: 12px;
+  padding: 2px 8px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   position: relative;
   max-width: 100%;
+  flex-wrap: wrap;
 }
 
 /* Individual Sections */
 .clock-section {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
+  gap: 7px;
+  font-size: 0.76rem;
   white-space: nowrap;
 }
 
 /* ── 1. ACTIVE SESSION & MASTER ET CLOCK ── */
 .clock-session-section {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .session-status-cluster {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .kz-indicator {
@@ -78,45 +77,44 @@
 }
 
 .session-badge-wrapper {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
 }
 
 .kz-name {
-  font-family: var(--font-headline);
-  font-size: 0.95rem;
+  font-family: var(--font-label);
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--kdt-gold);
+  letter-spacing: 0.05em;
+  color: var(--kdt-gold-light);
   text-transform: uppercase;
 }
 
 .session-range-tag {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--kdt-white-muted);
-  opacity: 0.85;
+  font-size: 0.67rem;
+  color: var(--text-muted);
 }
 
 .clock-time {
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 0.78rem;
   font-weight: 800;
   color: #ffffff;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.03em;
   padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
 }
 
 /* ── DIVIDER ── */
 .clock-divider {
   width: 1px;
-  height: 22px;
-  background: linear-gradient(180deg, rgba(180, 130, 255, 0.08), rgba(201, 168, 76, 0.38), rgba(180, 130, 255, 0.08));
-  margin: 0 2px;
+  height: 14px;
+  background: rgba(180, 130, 255, 0.22);
+  margin: 0;
   flex-shrink: 0;
 }
 
@@ -158,10 +156,10 @@
 }
 
 .scan-primary-title {
-  font-family: var(--font-headline);
-  font-size: 0.82rem;
+  font-family: var(--font-label);
+  font-size: 0.74rem;
   font-weight: 700;
-  color: #f1edfa;
+  color: #e2dcf3;
 }
 
 .scan-target-gold {
@@ -171,7 +169,7 @@
 
 .scan-secondary-detail {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   color: var(--kdt-white-muted);
 }
 
@@ -182,38 +180,37 @@
 /* ── 2. LAST SCAN PILLS ── */
 .scan-elapsed-pill {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #a5b4fc;
   background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.28);
-  padding: 2px 7px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  padding: 1px 6px;
   border-radius: 4px;
 }
 
 .scan-count-tag {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 700;
-  color: #00e676;
-  background: rgba(0, 230, 118, 0.12);
-  border: 1px solid rgba(0, 230, 118, 0.3);
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   padding: 1px 5px;
   border-radius: 4px;
 }
 
-/* ── 3. NEXT SCAN COUNTDOWN (PROMINENT GLOW) ── */
+/* ── 3. NEXT SCAN COUNTDOWN ── */
 .scan-countdown {
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: 0.74rem;
   font-weight: 800;
   color: var(--kdt-gold-light);
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.08) 100%);
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(201, 168, 76, 0.55);
-  box-shadow: 0 0 12px rgba(201, 168, 76, 0.22), inset 0 0 6px rgba(201, 168, 76, 0.1);
-  letter-spacing: 0.03em;
+  background: rgba(212, 175, 55, 0.14);
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(212, 175, 55, 0.38);
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 

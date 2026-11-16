@@ -1,6 +1,19 @@
 .dashboard-main {
-  padding-top: 24px;
+  padding-top: 16px;
   padding-bottom: 100px;
+}
+
+.dashboard-top-widgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: start;
+}
+
+.dashboard-top-widgets > .asset-decision-matrix-container,
+.dashboard-top-widgets > .runners-panel:not(.minimized) {
+  grid-column: 1 / -1;
 }
 
 .filter-bar {

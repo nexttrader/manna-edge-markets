@@ -191,21 +191,19 @@ export const Dashboard: React.FC = () => {
 
         {showMaintenanceLock && <ClientMaintenanceBanner />}
 
-        {/* Real-Time Asset Decision Matrix */}
+        {/* Combined 2-Column Compact Widgets Strip (Side-by-Side when Collapsed, Full Width on Expand) */}
         {!showMaintenanceLock && (
-          <AssetDecisionMatrix 
-            rawSetups={safeSetups}
-            onOpenCalculator={(s) => setCalcSetup(s)}
-          />
-        )}
-
-        {/* Active Runners Desk */}
-        {!showMaintenanceLock && (
-          <RunnersPanel 
-            runnerSetups={runnerSetups} 
-            loading={loading} 
-            autoExpand={stateFilter === 'runner'} 
-          />
+          <div className="dashboard-top-widgets">
+            <AssetDecisionMatrix
+              rawSetups={safeSetups}
+              onOpenCalculator={(s) => setCalcSetup(s)}
+            />
+            <RunnersPanel
+              runnerSetups={runnerSetups}
+              loading={loading}
+              autoExpand={stateFilter === 'runner'}
+            />
+          </div>
         )}
 
         {/* Streamlined Obsidian Command Filter Bar */}

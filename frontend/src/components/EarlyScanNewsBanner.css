@@ -1,27 +1,25 @@
 .early-scan-news-banner {
   width: 100%;
-  padding: 14px 18px;
+  padding: 10px 18px;
   position: relative;
   z-index: 1000;
-  transition: all 0.25s ease;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
 }
 
 .early-scan-news-banner.is-minimized {
-  padding: 8px 18px;
+  padding: 5px 16px;
+  box-shadow: none;
+  animation: none !important;
 }
 
 .early-scan-news-banner.pending {
-  background: linear-gradient(135deg, rgba(255, 170, 0, 0.16) 0%, rgba(18, 20, 28, 0.98) 35%, rgba(255, 153, 0, 0.12) 100%);
-  border-top: 2px solid #ffaa00;
-  border-bottom: 2px solid #ffaa00;
-  animation: pulse-amber-glow 3s infinite ease-in-out;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, rgba(14, 8, 26, 0.96) 35%, rgba(245, 158, 11, 0.08) 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .early-scan-news-banner.completed {
-  background: linear-gradient(135deg, rgba(0, 230, 118, 0.15) 0%, rgba(18, 20, 28, 0.98) 35%, rgba(0, 230, 118, 0.1) 100%);
-  border-top: 2px solid #00e676;
-  border-bottom: 2px solid #00e676;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, rgba(14, 8, 26, 0.96) 35%, rgba(16, 185, 129, 0.08) 100%);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 @keyframes pulse-amber-glow {
