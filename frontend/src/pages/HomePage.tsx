@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KillzoneClock } from '../components/KillzoneClock';
+import { type DashboardStyleTab, useMtfPreview } from '../hooks/useMtfSignals';
 import './HomePage.css';
 
 const LiveTickerWidget: React.FC = () => {
@@ -47,6 +48,70 @@ const LiveTickerWidget: React.FC = () => {
 
 export const HomePage: React.FC = () => {
   const { user, logout } = useAuth();
+  const [previewTab, setPreviewTab] = useState<DashboardStyleTab>('intraday');
+  const mtfPreview = useMtfPreview();
+
+  const activePreviewData = (() => {
+    if (previewTab === 'scalp') {
+      const s = mtfPreview.scalp;
+      const isLong = (s?.bias || 'long').toLowerCase() === 'long';
+      return {
+        kicker: 'SCALPING DESK · 15M / 5M',
+        symbol: s?.instrument || 'NQ',
+        market: (s?.market || 'futures').toUpperCase(),
+        strategy: 'SCALPING (15M · 5M)',
+        biasText: isLong ? '▲ LONG' : '▼ SHORT',
+        isLong,
+        orderType: isLong ? 'BUY LIMIT' : 'SELL LIMIT',
+        tfs: '15M · 5M',
+        conviction: Math.round(s?.conviction_score || 89),
+        stop: s?.stop ?? '20,485.00',
+        entry: s ? `${s.entry_zone_low} – ${s.entry_zone_high}` : '20,520 – 20,535',
+        tp1: s?.tp1 ?? '20,610.00',
+        tp2: s?.tp2 ?? '20,655.00',
+        livePrice: s?.current_price ?? '20,528.50',
+        statusPill: s?.signal_state === 'active' ? '● IN ENTRY ZONE' : '● SCALP SETUP'
+      };
+    }
+    if (previewTab === 'swing') {
+      const s = mtfPreview.swing;
+      const isLong = (s?.bias || 'long').toLowerCase() === 'long';
+      return {
+        kicker: 'SWING DESK · D1 / 4H · 4H / 1H',
+        symbol: s?.instrument || 'GC',
+        market: (s?.market || 'futures').toUpperCase(),
+        strategy: 'SWING (D1 · 4H)',
+        biasText: isLong ? '▲ LONG' : '▼ SHORT',
+        isLong,
+        orderType: isLong ? 'BUY LIMIT' : 'SELL LIMIT',
+        tfs: '1D · 4H',
+        conviction: Math.round(s?.conviction_score || 91),
+        stop: s?.stop ?? '2,618.00',
+        entry: s ? `${s.entry_zone_low} – ${s.entry_zone_high}` : '2,652 – 2,664',
+        tp1: s?.tp1 ?? '2,732.00',
+        tp2: s?.tp2 ?? '2,772.00',
+        livePrice: s?.current_price ?? '2,659.40',
+        statusPill: s?.signal_state === 'active' ? '● IN ENTRY ZONE' : '● SWING SETUP'
+      };
+    }
+    return {
+      kicker: 'INTRADAY DESK · 1H / 15M',
+      symbol: 'EUR/USD',
+      market: 'FOREX',
+      strategy: 'MANNA ELITE V1.2',
+      biasText: '▼ SHORT',
+      isLong: false,
+      orderType: 'SELL LIMIT',
+      tfs: '1H · 15M',
+      conviction: 92,
+      stop: '1.08950',
+      entry: '1.0840 – 1.0855',
+      tp1: '1.07600',
+      tp2: '1.07150',
+      livePrice: '1.08480',
+      statusPill: '● IN ENTRY ZONE'
+    };
+  })();
 
   return (
     <div className="home-page-container">
@@ -150,28 +215,60 @@ export const HomePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Column: Live Terminal Preview Bento Card */}
-            <aside className="hero-preview-col" aria-label="Sample Signal Card Preview">
+            {/* Right Column: Interactive 3-Tab Terminal Preview Bento Card */}
+            <aside className="hero-preview-col" aria-label="Multi-Timeframe Signal Card Preview">
               <div className="hero-preview-card">
+                <div className="hp-style-tabs font-mono" role="tablist" aria-label="Home Trading Style Tabs">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={previewTab === 'scalp'}
+                    className={`hp-style-tab ${previewTab === 'scalp' ? 'is-active' : ''}`}
+                    onClick={() => setPreviewTab('scalp')}
+                  >
+                    ⚡ Scalping (15M/5M)
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={previewTab === 'intraday'}
+                    className={`hp-style-tab ${previewTab === 'intraday' ? 'is-active' : ''}`}
+                    onClick={() => setPreviewTab('intraday')}
+                  >
+                    ⏱️ Intraday (1H/15M)
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={previewTab === 'swing'}
+                    className={`hp-style-tab ${previewTab === 'swing' ? 'is-active' : ''}`}
+                    onClick={() => setPreviewTab('swing')}
+                  >
+                    🏛️ Swing (D1/4H)
+                  </button>
+                </div>
+
                 <div className="hp-top-bar font-mono">
-                  <span className="hp-preview-kicker">SAMPLE TERMINAL PREVIEW</span>
-                  <span className="hp-live-pill">● IN ENTRY ZONE</span>
+                  <span className="hp-preview-kicker">{activePreviewData.kicker}</span>
+                  <span className="hp-live-pill">{activePreviewData.statusPill}</span>
                 </div>
 
                 <div className="hp-header-row">
                   <div>
                     <div className="hp-symbol-line">
-                      <span className="hp-symbol">EUR/USD</span>
-                      <span className="hp-market font-mono">FOREX</span>
-                      <span className="hp-strat font-mono">MANNA ELITE V1.2</span>
+                      <span className="hp-symbol">{activePreviewData.symbol}</span>
+                      <span className="hp-market font-mono">{activePreviewData.market}</span>
+                      <span className="hp-strat font-mono">{activePreviewData.strategy}</span>
                     </div>
                     <div className="hp-sub-badges font-mono">
-                      <span className="hp-dir-short">▼ SHORT</span>
-                      <span className="hp-order">SELL LIMIT</span>
-                      <span className="hp-tf">1H · 15M</span>
+                      <span className={activePreviewData.isLong ? 'hp-dir-long' : 'hp-dir-short'}>
+                        {activePreviewData.biasText}
+                      </span>
+                      <span className="hp-order">{activePreviewData.orderType}</span>
+                      <span className="hp-tf">{activePreviewData.tfs}</span>
                     </div>
                   </div>
-                  <div className="hp-conv-badge font-mono">92% Conviction</div>
+                  <div className="hp-conv-badge font-mono">{activePreviewData.conviction}% Conviction</div>
                 </div>
 
                 {/* Visual Progress Ladder Preview */}
@@ -188,19 +285,19 @@ export const HomePage: React.FC = () => {
                   <div className="hp-ladder-cols">
                     <div>
                       <span className="hp-ll-k">STOP LOSS</span>
-                      <span className="hp-ll-v is-red">1.08950</span>
+                      <span className="hp-ll-v is-red">{activePreviewData.stop}</span>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <span className="hp-ll-k">ENTRY ZONE</span>
-                      <span className="hp-ll-v is-gold">1.0840 – 1.0855</span>
+                      <span className="hp-ll-v is-gold">{activePreviewData.entry}</span>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <span className="hp-ll-k">TP1 (+2R)</span>
-                      <span className="hp-ll-v is-green">1.07600</span>
+                      <span className="hp-ll-v is-green">{activePreviewData.tp1}</span>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <span className="hp-ll-k">TP2 (+3R)</span>
-                      <span className="hp-ll-v is-green">1.07150</span>
+                      <span className="hp-ll-v is-green">{activePreviewData.tp2}</span>
                     </div>
                   </div>
                 </div>
@@ -208,11 +305,11 @@ export const HomePage: React.FC = () => {
                 <div className="hp-tel-grid font-mono">
                   <div className="hp-tel-item">
                     <span className="hp-tel-k">LIVE FEED</span>
-                    <span className="hp-tel-v">1.08480 ▲</span>
+                    <span className="hp-tel-v">{activePreviewData.livePrice} ▲</span>
                   </div>
                   <div className="hp-tel-item">
-                    <span className="hp-tel-k">PROXIMITY</span>
-                    <span className="hp-tel-v is-green">In Zone (Ready)</span>
+                    <span className="hp-tel-k">TIMEFRAMES</span>
+                    <span className="hp-tel-v is-green">{activePreviewData.tfs} Isolated Desk</span>
                   </div>
                 </div>
               </div>

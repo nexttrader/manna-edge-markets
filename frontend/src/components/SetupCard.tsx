@@ -252,11 +252,20 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   );
 
   const strategyId = setup.strategy_id || 'sentinel_v2';
-  const displayStrategyName = strategyId === 'manna_snd' ? 'MANNA SND' : 'MANNA ELITE V1.2';
-
+  const isMtfIsolated = Boolean(setup.id?.startsWith('mtf-'));
   const meta = (() => {
     try { return typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata; } catch { return null; }
   })();
+  const cardHtfLabel = meta?.htf || meta?.context_tf || '1H';
+  const cardLtfLabel = meta?.ltf || meta?.entry_tf || '15M';
+  const displayStrategyName =
+    strategyId === 'manna_snd'
+      ? 'MANNA SND'
+      : strategyId === 'manna_scalper'
+        ? 'SCALPING (15M · 5M)'
+        : strategyId === 'manna_swing'
+          ? `SWING (${cardHtfLabel} · ${cardLtfLabel})`
+          : 'MANNA ELITE V1.2';
 
   // Visual Trade Progress Ladder Calculation (0% Stop -> 33% Entry -> 70% TP1 -> 98% TP2)
   const entryMid = setup.entry_zone_mid ?? ((entryLow + entryHigh) / 2);
@@ -342,8 +351,8 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               </>
             ) : (
               <>
-                <span className="tf-badge htf">1H Context</span>
-                <span className="tf-badge ltf">15M Entry</span>
+                <span className="tf-badge htf">{cardHtfLabel} Context</span>
+                <span className="tf-badge ltf">{cardLtfLabel} Entry</span>
               </>
             )}
             {isStillInZone && (
@@ -659,7 +668,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         <button type="button" className="btn-action btn-expand" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide Details' : 'Details'}
         </button>
-        {isAdmin && stateStr === 'awaiting_entry' && (
+        {!isMtfIsolated && isAdmin && stateStr === 'awaiting_entry' && (
           <button
             type="button"
             className="btn-action btn-rescan"
@@ -670,7 +679,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             {rescanning ? 'Scanning...' : 'Rescan'}
           </button>
         )}
-        {isSuperAdmin && (
+        {!isMtfIsolated && isSuperAdmin && (
           <button
             type="button"
             className="btn-action btn-resend-tg"
@@ -680,7 +689,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             Resend TG
           </button>
         )}
-        {isSuperAdmin && stateStr !== 'resolved' && stateStr !== 'invalidated' && (
+        {!isMtfIsolated && isSuperAdmin && stateStr !== 'resolved' && stateStr !== 'invalidated' && (
           <button
             type="button"
             className="btn-action btn-invalidate"
@@ -780,7 +789,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
           <div className="detail-row">
             <span>Timeframes Used:</span>
-            <span className="font-mono text-gold">1H (Structure) + 15M (Entry)</span>
+            <span className="font-mono text-gold">{cardHtfLabel} (Structure) + {cardLtfLabel} (Entry)</span>
           </div>
 
           <div className="sc-rationale-box">

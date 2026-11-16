@@ -29,6 +29,11 @@ import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCa
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
+import {
+  type DashboardStyleTab,
+  type SwingPairMode,
+  useMtfStyleSetups
+} from '../hooks/useMtfSignals';
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = 'manna_dashboard_filters';
 
@@ -62,6 +67,10 @@ export const Dashboard: React.FC = () => {
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
 
+  const [styleTab, setStyleTab] = useState<DashboardStyleTab>('intraday');
+  const [swingMode, setSwingMode] = useState<SwingPairMode>('d1_h4');
+  const mtfDesk = useMtfStyleSetups(styleTab, swingMode);
+
 
   // ── Load persisted filter preferences from localStorage ──────────────────
   const saved = loadFilters();
@@ -85,9 +94,14 @@ export const Dashboard: React.FC = () => {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeRunners = Array.isArray(runnerSetups) ? runnerSetups : [];
-  const allAvailableSetups = stateFilter === 'runner'
-    ? [...safeSetups, ...safeRunners.filter(r => !safeSetups.some(s => s.id === r.id))]
-    : safeSetups;
+  const baseDeskSetups =
+    styleTab === 'intraday'
+      ? (stateFilter === 'runner'
+          ? [...safeSetups, ...safeRunners.filter(r => !safeSetups.some(s => s.id === r.id))]
+          : safeSetups)
+      : mtfDesk.setups;
+  const activeLoading = styleTab === 'intraday' ? loading : mtfDesk.loading;
+  const allAvailableSetups = baseDeskSetups;
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
 
   // Filter Logic
@@ -124,8 +138,8 @@ export const Dashboard: React.FC = () => {
     const orderTypeStr = isLimit ? 'limit' : 'market';
     if (orderTypeFilter !== 'all' && orderTypeStr !== orderTypeFilter) return false;
 
-    // 5. Strategy Tier Filter
-    if (strategyFilter !== 'all') {
+    // 5. Strategy Tier Filter (applies to Intraday production models)
+    if (styleTab === 'intraday' && strategyFilter !== 'all') {
       if (strategyFilter === 'sentinel_v2') {
         const isEliteSetup = stratId === 'sentinel_v2' || stratId === 'manna_elite' || stratId === 'manna_elite_v1_2' || stratId === 'manna_basic';
         if (!isEliteSetup) return false;
@@ -162,9 +176,9 @@ export const Dashboard: React.FC = () => {
     return 0;
   });
 
-  const watchlistCount = setups.filter(s => watchlistIds.includes(s.id)).length;
-  const futuresCount = setups.filter(s => (s.market || '').toLowerCase() === 'futures').length;
-  const forexCount = setups.filter(s => (s.market || '').toLowerCase() === 'forex').length;
+  const watchlistCount = allAvailableSetups.filter(s => watchlistIds.includes(s.id)).length;
+  const futuresCount = allAvailableSetups.filter(s => (s.market || '').toLowerCase() === 'futures').length;
+  const forexCount = allAvailableSetups.filter(s => (s.market || '').toLowerCase() === 'forex').length;
 
   const resetFilters = () => {
     setMarketFilter('all');
@@ -206,6 +220,83 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
+        {/* Separate Multi-Timeframe Trading Style Tabs (Scalping / Intraday / Swing) */}
+        <section className="style-desk-bar glass-card font-mono" aria-label="Trading Style Desks">
+          <div className="style-desk-tabs" role="tablist" aria-label="Trading Style Timeframe Desks">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={styleTab === 'scalp'}
+              className={`style-desk-tab ${styleTab === 'scalp' ? 'is-active' : ''}`}
+              onClick={() => setStyleTab('scalp')}
+            >
+              <span>⚡ Scalping</span>
+              <span className="style-tf-chip">15M · 5M</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={styleTab === 'intraday'}
+              className={`style-desk-tab ${styleTab === 'intraday' ? 'is-active' : ''}`}
+              onClick={() => setStyleTab('intraday')}
+            >
+              <span>⏱️ Intraday</span>
+              <span className="style-tf-chip">1H · 15M</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={styleTab === 'swing'}
+              className={`style-desk-tab ${styleTab === 'swing' ? 'is-active' : ''}`}
+              onClick={() => setStyleTab('swing')}
+            >
+              <span>🏛️ Swing</span>
+              <span className="style-tf-chip">{swingMode === 'd1_h4' ? 'D1 · 4H' : '4H · 1H'}</span>
+            </button>
+          </div>
+
+          <div className="style-desk-meta">
+            {styleTab === 'swing' && (
+              <div className="swing-pair-toggle" role="group" aria-label="Swing Timeframe Pair">
+                <button
+                  type="button"
+                  className={`swing-pair-btn ${swingMode === 'd1_h4' ? 'is-active' : ''}`}
+                  onClick={() => setSwingMode('d1_h4')}
+                >
+                  Daily + 4H
+                </button>
+                <button
+                  type="button"
+                  className={`swing-pair-btn ${swingMode === 'h4_h1' ? 'is-active' : ''}`}
+                  onClick={() => setSwingMode('h4_h1')}
+                >
+                  4H + 1H
+                </button>
+              </div>
+            )}
+
+            {styleTab !== 'intraday' ? (
+              <>
+                <span className="style-isolated-pill">
+                  Isolated {styleTab === 'scalp' ? '15M/5M' : `${mtfDesk.contextTf}/${mtfDesk.entryTf}`} Desk · Intraday Engine Untouched
+                </span>
+                <button
+                  type="button"
+                  className="advanced-filters-toggle font-mono"
+                  onClick={mtfDesk.refreshDesk}
+                  disabled={mtfDesk.loading}
+                >
+                  {mtfDesk.loading ? 'Syncing...' : '⟳ Refresh'}
+                </button>
+              </>
+            ) : (
+              <span className="style-isolated-pill is-live">
+                Primary Production Desk · H1 Structure + 15M Entry
+              </span>
+            )}
+          </div>
+        </section>
+
         {/* Streamlined Obsidian Command Filter Bar */}
         <section className="filter-bar glass-card font-mono" aria-label="Signal Filters">
           <div className="filter-top-row">
@@ -217,7 +308,7 @@ export const Dashboard: React.FC = () => {
                 onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'all')}
               >
                 <span>All Markets</span>
-                <span className="tab-count">{setups.length}</span>
+                <span className="tab-count">{allAvailableSetups.length}</span>
               </button>
               <button
                 type="button"
@@ -349,9 +440,12 @@ export const Dashboard: React.FC = () => {
         {/* Setups Display */}
         {showMaintenanceLock ? (
           <MockMaintenanceSignalCard />
-        ) : loading && setups.length === 0 ? (
+        ) : activeLoading && allAvailableSetups.length === 0 ? (
           <div className="dashboard-loading glass-card font-mono">
-            <span className="radar-icon animate-pulse">📡</span> Scanning killzone models & active setups...
+            <span className="radar-icon animate-pulse">📡</span>{' '}
+            {styleTab === 'intraday'
+              ? 'Scanning killzone models & active setups...'
+              : `Building ${styleTab === 'scalp' ? '15M + 5M Scalping' : `${mtfDesk.contextTf} + ${mtfDesk.entryTf} Swing`} setups...`}
           </div>
         ) : sortedSetups.length === 0 ? (
           <div className="empty-state glass-card font-mono">

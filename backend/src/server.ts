@@ -29,6 +29,7 @@ import newsRoutes from './api/news-routes';
 import supportRoutes from './api/support-routes';
 import userManagementRoutes from './api/user-management-routes';
 import edgeFinderRoutes from './api/edge-finder-routes';
+import mtfSignalsRoutes from './api/mtf-signals-routes';
 import { startSubscriptionScheduler } from './scheduler/subscription-cron';
 import { telegramBotService } from './notifications/telegram-bot';
 import { earlyScanService } from './scheduler/early-scan-service';
@@ -57,6 +58,7 @@ app.use('/api/news', newsRoutes);
 app.use('/api', eventsRouter);
 app.use('/api/support', supportRoutes);
 app.use('/api/edge-finder', edgeFinderRoutes);
+app.use('/api/mtf-signals', mtfSignalsRoutes);
 
 // Health check with DB status check for UptimeRobot keep-alive
 app.get('/api/health', async (_req: Request, res: Response) => {

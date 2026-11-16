@@ -1,0 +1,131 @@
+import { useCallback, useEffect, useState } from 'react';
+import { API_BASE } from '../config';
+import type { EdgeSetup } from '../types';
+
+export type DashboardStyleTab = 'scalp' | 'intraday' | 'swing';
+export type SwingPairMode = 'd1_h4' | 'h4_h1';
+
+interface MtfApiResponse {
+  success: boolean;
+  style: 'scalp' | 'swing';
+  swingMode?: SwingPairMode;
+  contextTf: string;
+  entryTf: string;
+  setups: EdgeSetup[];
+  generatedAt: string;
+  cached?: boolean;
+  error?: string;
+}
+
+const mtfClientCache = new Map<string, { setups: EdgeSetup[]; contextTf: string; entryTf: string; generatedAt: string; ts: number }>();
+
+export function useMtfStyleSetups(
+  styleTab: DashboardStyleTab,
+  swingMode: SwingPairMode
+) {
+  const isMtf = styleTab === 'scalp' || styleTab === 'swing';
+  const cacheKey = styleTab === 'scalp' ? 'scalp' : `swing:${swingMode}`;
+
+  const [setups, setSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.setups || []);
+  const [contextTf, setContextTf] = useState<string>(() =>
+    styleTab === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H'
+  );
+  const [entryTf, setEntryTf] = useState<string>(() =>
+    styleTab === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H'
+  );
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+
+  const fetchDesk = useCallback(async (force = false) => {
+    if (!isMtf) return;
+    const cached = mtfClientCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.ts < 45_000) {
+      setSetups(cached.setups);
+      setContextTf(cached.contextTf);
+      setEntryTf(cached.entryTf);
+      setGeneratedAt(cached.generatedAt);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const qs = new URLSearchParams({
+        style: styleTab,
+        ...(styleTab === 'swing' ? { swingMode } : {}),
+        ...(force ? { refresh: '1' } : {})
+      });
+      const res = await fetch(`${API_BASE}/api/mtf-signals?${qs.toString()}`);
+      const data: MtfApiResponse = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      const nextSetups = Array.isArray(data.setups) ? data.setups : [];
+      mtfClientCache.set(cacheKey, {
+        setups: nextSetups,
+        contextTf: data.contextTf,
+        entryTf: data.entryTf,
+        generatedAt: data.generatedAt,
+        ts: Date.now()
+      });
+      setSetups(nextSetups);
+      setContextTf(data.contextTf);
+      setEntryTf(data.entryTf);
+      setGeneratedAt(data.generatedAt);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to load multi-timeframe setups');
+    } finally {
+      setLoading(false);
+    }
+  }, [isMtf, styleTab, swingMode, cacheKey]);
+
+  useEffect(() => {
+    if (!isMtf) return;
+    void fetchDesk(false);
+    const interval = window.setInterval(() => void fetchDesk(false), 60_000);
+    return () => window.clearInterval(interval);
+  }, [isMtf, fetchDesk]);
+
+  return {
+    setups,
+    contextTf,
+    entryTf,
+    loading,
+    error,
+    generatedAt,
+    refreshDesk: () => fetchDesk(true)
+  };
+}
+
+export function useMtfPreview() {
+  const [preview, setPreview] = useState<{ scalp: EdgeSetup | null; swing: EdgeSetup | null }>({
+    scalp: null,
+    swing: null
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/mtf-signals/preview`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted && data?.success) {
+          setPreview({
+            scalp: data.scalp || null,
+            swing: data.swing || null
+          });
+        }
+      } catch {
+        // Fallback sample preview renders cleanly
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return preview;
+}
