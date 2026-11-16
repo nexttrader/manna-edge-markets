@@ -1,10 +1,10 @@
 import { computeATR } from './atr';
 import { FOREX_INSTRUMENTS, FUTURES_INSTRUMENTS } from './mock-data';
 import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from './scoring';
-import { getLogicalStopDistance } from './stop-loss-rules';
+import { getInstrumentDecimals, getTimeframeStopDistance } from './stop-loss-rules';
 import { Bias, Candle } from './types';
-import { getLiveCandles, getLiveCurrentPrice } from './yahoo-provider';
-import { recordAndSyncMtfSetups } from './mtf-style-tracker';
+import { aggregateToFourHourCandles, getLiveCandles, getLiveCurrentPrice, getLiveQuoteDetails } from './yahoo-provider';
+import { syncMtfSetupsAndGetLiveBoard } from './mtf-style-tracker';
 
 export type TradingStyleMode = 'scalp' | 'swing';
 export type SwingPairMode = 'd1_h4' | 'h4_h1';
@@ -18,12 +18,13 @@ export interface MtfStyleSetup {
   context_tf: string;
   entry_tf: string;
   bias: Bias;
-  signal_state: 'active' | 'awaiting_entry';
-  state: 'active' | 'awaiting_entry';
+  signal_state: 'active' | 'awaiting_entry' | 'runner' | 'resolved' | 'invalidated' | 'superseded';
+  state: 'active' | 'awaiting_entry' | 'runner' | 'resolved' | 'invalidated' | 'superseded';
   entry_zone_low: number;
   entry_zone_high: number;
   entry_zone_mid: number;
   stop: number;
+  initial_stop?: number;
   tp1: number;
   tp2: number;
   r_multiple_1: number;
@@ -33,6 +34,15 @@ export interface MtfStyleSetup {
   current_price: number;
   distance_to_entry_r: number;
   unrealizedR?: number;
+  is_breakeven?: number;
+  entry_price_recorded?: number;
+  entry_triggered_at?: string;
+  resolved_at?: string;
+  execution_price?: number;
+  outcome_type?: string;
+  invalidation_reason?: string;
+  invalidation_detail?: string;
+  realized_r?: number;
   created_at: string;
   killzone_origin: string;
   metadata: string;
@@ -44,6 +54,8 @@ export interface MtfStyleSnapshot {
   contextTf: string;
   entryTf: string;
   setups: MtfStyleSetup[];
+  runnerSetups: MtfStyleSetup[];
+  pastSetups: MtfStyleSetup[];
   generatedAt: string;
   cached: boolean;
 }
@@ -51,7 +63,7 @@ export interface MtfStyleSnapshot {
 const SCALP_TTL_MS = 60_000;
 const SWING_TTL_MS = 120_000;
 
-const snapshotCache = new Map<string, { data: MtfStyleSnapshot; ts: number }>();
+const discoveryCache = new Map<string, { ts: number }>();
 const inflightRequests = new Map<string, Promise<MtfStyleSnapshot>>();
 
 function computeEma(values: number[], period: number): number {
@@ -62,34 +74,6 @@ function computeEma(values: number[], period: number): number {
     ema = values[i] * k + ema * (1 - k);
   }
   return ema;
-}
-
-/**
- * Aggregates hourly (or smaller) bars into true 4-hour OHLC candles
- * when an upstream provider (like Yahoo fallback) returns 1h bars for '4h'.
- */
-function ensureFourHourCandles(candles: Candle[]): Candle[] {
-  if (candles.length < 8) return candles;
-  const t0 = new Date(candles[0].timestamp).getTime();
-  const t1 = new Date(candles[1].timestamp).getTime();
-  const deltaHours = Math.abs(t1 - t0) / (1000 * 60 * 60);
-  if (deltaHours >= 3.5) {
-    return candles;
-  }
-
-  const grouped: Candle[] = [];
-  for (let i = 0; i + 3 < candles.length; i += 4) {
-    const slice = candles.slice(i, i + 4);
-    grouped.push({
-      open: slice[0].open,
-      high: Math.max(...slice.map((c) => c.high)),
-      low: Math.min(...slice.map((c) => c.low)),
-      close: slice[slice.length - 1].close,
-      volume: slice.reduce((acc, c) => acc + (c.volume || 0), 0),
-      timestamp: slice[slice.length - 1].timestamp
-    });
-  }
-  return grouped;
 }
 
 function getActiveSessionNameUTC(): string {
@@ -144,20 +128,28 @@ async function buildSetupForInstrument(
   const entryLabel =
     style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';
 
-  const [rawContext, rawEntry, livePrice] = await Promise.all([
-    getLiveCandles(instrument, contextTfCode, contextTfCode === '4h' ? 160 : 60),
-    getLiveCandles(instrument, entryTfCode, entryTfCode === '4h' ? 160 : 60),
-    getLiveCurrentPrice(instrument)
+  const [rawContext, rawEntry, quote, fallbackPrice] = await Promise.all([
+    getLiveCandles(instrument, contextTfCode, contextTfCode === '4h' ? 120 : 60),
+    getLiveCandles(instrument, entryTfCode, entryTfCode === '4h' ? 120 : 60),
+    getLiveQuoteDetails(instrument).catch(() => null),
+    getLiveCurrentPrice(instrument).catch(() => 0)
   ]);
 
-  const contextCandles = contextTfCode === '4h' ? ensureFourHourCandles(rawContext) : rawContext;
-  const entryCandles = entryTfCode === '4h' ? ensureFourHourCandles(rawEntry) : rawEntry;
+  const contextCandles = contextTfCode === '4h' ? aggregateToFourHourCandles(rawContext) : rawContext;
+  const entryCandles = entryTfCode === '4h' ? aggregateToFourHourCandles(rawEntry) : rawEntry;
 
   if (contextCandles.length < 15 || entryCandles.length < 15) {
     return null;
   }
 
-  const currentPrice = livePrice > 0 ? livePrice : entryCandles[entryCandles.length - 1].close;
+  const currentPrice = (quote?.price && quote.price > 0)
+    ? quote.price
+    : (fallbackPrice > 0 ? fallbackPrice : entryCandles[entryCandles.length - 1].close);
+  if (!currentPrice || currentPrice <= 0) return null;
+
+  const currentBid = quote?.bid && quote.bid > 0 ? quote.bid : currentPrice;
+  const currentAsk = quote?.ask && quote.ask > 0 ? quote.ask : currentPrice;
+
   const atr14 = computeATR(entryCandles, 14);
   if (!atr14 || atr14 <= 0) return null;
 
@@ -167,65 +159,128 @@ async function buildSetupForInstrument(
     style === 'scalp' ? 21 : 26
   );
 
-  const recentLookback = style === 'scalp' ? 12 : 10;
-  const recentBars = entryCandles.slice(-recentLookback);
-  const swingLow = Math.min(...recentBars.map((c) => c.low));
-  const swingHigh = Math.max(...recentBars.map((c) => c.high));
+  const decimals = getInstrumentDecimals(instrument, market);
+  const round = (v: number) => Number(v.toFixed(decimals));
 
   const zoneOffsetMult = style === 'scalp' ? 0.35 : 0.45;
   const stopPadMult = style === 'scalp' ? 0.12 : 0.20;
   const zoneHalfWidthMult = style === 'scalp' ? 0.14 : 0.18;
 
-  let entryMid = currentPrice;
-  let rawStop = currentPrice;
+  // Search freshest valid structural lookbacks so we never emit an already-hit TP1/TP2 or stopped setup
+  const candidateLookbacks = style === 'scalp' ? [6, 10, 14] : [5, 8, 12];
+  let selectedZone: {
+    entryLow: number;
+    entryHigh: number;
+    entryMid: number;
+    stop: number;
+    tp1: number;
+    tp2: number;
+    r1: number;
+    r2: number;
+    risk: number;
+    anchorTime: string;
+  } | null = null;
 
-  if (bias === 'long') {
-    entryMid = swingLow + atr14 * zoneOffsetMult;
-    rawStop = swingLow - atr14 * stopPadMult;
-  } else {
-    entryMid = swingHigh - atr14 * zoneOffsetMult;
-    rawStop = swingHigh + atr14 * stopPadMult;
+  for (const lookback of candidateLookbacks) {
+    const recentBars = entryCandles.slice(-lookback);
+    if (recentBars.length === 0) continue;
+
+    let anchorBar = recentBars[0];
+    if (bias === 'long') {
+      for (const b of recentBars) {
+        if (b.low < anchorBar.low) anchorBar = b;
+      }
+    } else {
+      for (const b of recentBars) {
+        if (b.high > anchorBar.high) anchorBar = b;
+      }
+    }
+
+    const swingLow = Math.min(...recentBars.map((c) => c.low));
+    const swingHigh = Math.max(...recentBars.map((c) => c.high));
+
+    const rawEntryMid = bias === 'long'
+      ? swingLow + atr14 * zoneOffsetMult
+      : swingHigh - atr14 * zoneOffsetMult;
+    const rawStop = bias === 'long'
+      ? swingLow - atr14 * stopPadMult
+      : swingHigh + atr14 * stopPadMult;
+
+    const rawRisk = Math.abs(rawEntryMid - rawStop);
+    const risk = getTimeframeStopDistance(instrument, atr14, rawRisk, market, entryTfCode);
+
+    const entryMid = round(rawEntryMid);
+    const entryLow = round(rawEntryMid - atr14 * zoneHalfWidthMult);
+    const entryHigh = round(rawEntryMid + atr14 * zoneHalfWidthMult);
+    const stop = round(bias === 'long' ? entryMid - risk : entryMid + risk);
+    const publishedRisk = Math.abs(entryMid - stop);
+    if (publishedRisk <= 0) continue;
+
+    const tp1 = round(bias === 'long' ? entryMid + publishedRisk * 2.0 : entryMid - publishedRisk * 2.0);
+    const tp2 = round(bias === 'long' ? entryMid + publishedRisk * 3.0 : entryMid - publishedRisk * 3.0);
+
+    // Pre-publish gate: discard setups whose TP1 was already reached or Stop was already breached
+    const isValidPrice = bias === 'long'
+      ? (currentBid > stop && currentBid < tp1 && (currentPrice - entryHigh) <= atr14 * 4.5)
+      : (currentAsk < stop && currentAsk > tp1 && (entryLow - currentPrice) <= atr14 * 4.5);
+
+    if (!isValidPrice) continue;
+
+    const r1 = computeRMultiple(entryMid, tp1, stop, bias);
+    const r2 = computeRMultiple(entryMid, tp2, stop, bias);
+    if (r1 < 1.95) continue;
+
+    selectedZone = {
+      entryLow,
+      entryHigh,
+      entryMid,
+      stop,
+      tp1,
+      tp2,
+      r1,
+      r2,
+      risk: publishedRisk,
+      anchorTime: anchorBar.timestamp
+    };
+    break;
   }
 
-  const entryLow = entryMid - atr14 * zoneHalfWidthMult;
-  const entryHigh = entryMid + atr14 * zoneHalfWidthMult;
+  if (!selectedZone) {
+    return null;
+  }
 
-  const rawRisk = Math.abs(entryMid - rawStop);
-  const risk =
-    market === 'forex'
-      ? getLogicalStopDistance(instrument, atr14, rawRisk, 'forex', false)
-      : Math.max(rawRisk, atr14 * 0.45);
+  const { entryLow, entryHigh, entryMid, stop, tp1, tp2, r1, r2, risk, anchorTime } = selectedZone;
+  const nowIso = new Date().toISOString();
 
-  const stop = bias === 'long' ? entryMid - risk : entryMid + risk;
-  const tp1 = bias === 'long' ? entryMid + risk * 2 : entryMid - risk * 2;
-  const tp2 = bias === 'long' ? entryMid + risk * 3 : entryMid - risk * 3;
+  // Limit fill check at creation: Long buys at Ask <= entryHigh; Short sells at Bid >= entryLow
+  const filledAtCreation = bias === 'long'
+    ? (currentAsk <= entryHigh && currentBid > stop)
+    : (currentBid >= entryLow && currentAsk < stop);
 
-  const r1 = computeRMultiple(entryMid, tp1, stop, bias);
-  const r2 = computeRMultiple(entryMid, tp2, stop, bias);
-
-  const decimals = market === 'forex' ? (instrument.includes('JPY') ? 3 : 5) : 2;
-  const round = (v: number) => Number(v.toFixed(decimals));
+  const signalState: 'active' | 'awaiting_entry' = filledAtCreation ? 'active' : 'awaiting_entry';
+  const entryPriceRecorded = filledAtCreation
+    ? round(bias === 'long' ? Math.min(currentAsk, entryHigh) : Math.max(currentBid, entryLow))
+    : undefined;
+  const entryTriggeredAt = filledAtCreation ? nowIso : undefined;
 
   const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
-  const distanceRaw =
-    inZone
-      ? 0
-      : bias === 'long'
-        ? Math.max(0, (currentPrice - entryHigh) / Math.max(risk, 1e-6))
-        : Math.max(0, (entryLow - currentPrice) / Math.max(risk, 1e-6));
-
+  const distanceRaw = inZone
+    ? 0
+    : Math.abs(currentPrice - entryMid) / Math.max(risk, 1e-6);
   const distanceR = Number(Math.min(9.99, distanceRaw).toFixed(2));
-  const signalState: 'active' | 'awaiting_entry' = inZone ? 'active' : 'awaiting_entry';
-  const unrealizedR = inZone
+
+  const unrealizedR = filledAtCreation
     ? Number(
-        ((bias === 'long' ? currentPrice - entryMid : entryMid - currentPrice) / Math.max(risk, 1e-6)).toFixed(2)
+        ((bias === 'long' ? currentPrice - (entryPriceRecorded || entryMid) : (entryPriceRecorded || entryMid) - currentPrice) / Math.max(risk, 1e-6)).toFixed(2)
       )
     : undefined;
 
   const lastVol = entryCandles[entryCandles.length - 1].volume || 10000;
   const avgVol =
     entryCandles.reduce((acc, c) => acc + (c.volume || 10000), 0) / entryCandles.length;
-  const spread = currentPrice * (market === 'forex' ? 0.0002 : 0.0001);
+  const spread = quote?.spread && quote.spread > 0
+    ? quote.spread
+    : currentPrice * (market === 'forex' ? 0.0002 : 0.0001);
   const liquidityScore = computeLiquidityScore(lastVol, avgVol, spread);
 
   const convictionScore = computeConvictionScore({
@@ -242,12 +297,12 @@ async function buildSetupForInstrument(
 
   const killzone = getActiveSessionNameUTC();
   const styleLabel = style === 'scalp' ? 'Scalping' : 'Swing';
-  const selectionRationale = `${styleLabel} desk (${contextLabel} Context + ${entryLabel} Entry). ${bias.toUpperCase()} structural alignment detected on ${contextLabel} with ${entryLabel} liquidity retrace zone at ${round(entryMid)}. Risk floor calibrated with ${r1.toFixed(2)}R TP1 / ${r2.toFixed(2)}R TP2.`;
+  const selectionRationale = `${styleLabel} desk (${contextLabel} Context + ${entryLabel} Entry). ${bias.toUpperCase()} structural alignment detected on ${contextLabel} with ${entryLabel} liquidity retrace zone at ${entryMid}. Risk floor calibrated to ${entryLabel} ATR with ${r1.toFixed(2)}R TP1 / ${r2.toFixed(2)}R TP2.`;
 
-  const nowIso = new Date().toISOString();
+  const uniqueId = `mtf-${style}-${style === 'swing' ? swingMode + '-' : ''}${instrument.replace('/', '')}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
   return {
-    id: `mtf-${style}-${style === 'swing' ? swingMode + '-' : ''}${instrument.replace('/', '')}`,
+    id: uniqueId,
     instrument,
     market,
     strategy_id: style === 'scalp' ? 'manna_scalper' : 'manna_swing',
@@ -257,12 +312,13 @@ async function buildSetupForInstrument(
     bias,
     signal_state: signalState,
     state: signalState,
-    entry_zone_low: round(entryLow),
-    entry_zone_high: round(entryHigh),
-    entry_zone_mid: round(entryMid),
-    stop: round(stop),
-    tp1: round(tp1),
-    tp2: round(tp2),
+    entry_zone_low: entryLow,
+    entry_zone_high: entryHigh,
+    entry_zone_mid: entryMid,
+    stop,
+    initial_stop: stop,
+    tp1,
+    tp2,
     r_multiple_1: r1,
     r_multiple_2: r2,
     conviction_score: convictionScore,
@@ -270,6 +326,9 @@ async function buildSetupForInstrument(
     current_price: round(currentPrice),
     distance_to_entry_r: distanceR,
     unrealizedR,
+    is_breakeven: 0,
+    entry_price_recorded: entryPriceRecorded,
+    entry_triggered_at: entryTriggeredAt,
     created_at: nowIso,
     killzone_origin: killzone,
     metadata: JSON.stringify({
@@ -279,7 +338,8 @@ async function buildSetupForInstrument(
       ltf: entryLabel,
       context_tf: contextLabel,
       entry_tf: entryLabel,
-      order_type: bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT',
+      entry_zone_base_time: anchorTime,
+      order_type: filledAtCreation ? 'MARKET ORDER' : (bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT'),
       selection_rationale: selectionRationale
     })
   };
@@ -293,47 +353,51 @@ export async function getMtfStyleSignals(
   const cacheKey = style === 'scalp' ? 'scalp' : `swing:${swingMode}`;
   const ttl = style === 'scalp' ? SCALP_TTL_MS : SWING_TTL_MS;
 
-  const existing = snapshotCache.get(cacheKey);
-  if (!forceRefresh && existing && Date.now() - existing.ts < ttl) {
-    return { ...existing.data, cached: true };
-  }
-
   const inflight = inflightRequests.get(cacheKey);
   if (!forceRefresh && inflight) {
     return inflight;
   }
 
   const promise = (async (): Promise<MtfStyleSnapshot> => {
-    const targets: Array<{ instrument: string; market: 'futures' | 'forex' }> = [
-      ...FUTURES_INSTRUMENTS.map((instrument) => ({ instrument, market: 'futures' as const })),
-      ...FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const }))
-    ];
+    const existingScan = discoveryCache.get(cacheKey);
+    const shouldDiscover = forceRefresh || !existingScan || Date.now() - existingScan.ts >= ttl;
 
-    const settled = await Promise.allSettled(
-      targets.map((t) => buildSetupForInstrument(t.instrument, t.market, style, swingMode))
-    );
+    let discoveredCandidates: MtfStyleSetup[] = [];
+    if (shouldDiscover) {
+      const targets: Array<{ instrument: string; market: 'futures' | 'forex' }> = [
+        ...FUTURES_INSTRUMENTS.map((instrument) => ({ instrument, market: 'futures' as const })),
+        ...FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const }))
+      ];
 
-    const setups: MtfStyleSetup[] = settled
-      .filter((r): r is PromiseFulfilledResult<MtfStyleSetup | null> => r.status === 'fulfilled' && r.value !== null)
-      .map((r) => r.value!)
-      .sort((a, b) => b.conviction_score - a.conviction_score);
+      const settled = await Promise.allSettled(
+        targets.map((t) => buildSetupForInstrument(t.instrument, t.market, style, swingMode))
+      );
+
+      discoveredCandidates = settled
+        .filter((r): r is PromiseFulfilledResult<MtfStyleSetup | null> => r.status === 'fulfilled' && r.value !== null)
+        .map((r) => r.value!)
+        .sort((a, b) => b.conviction_score - a.conviction_score);
+
+      discoveryCache.set(cacheKey, { ts: Date.now() });
+    }
+
+    // Always evaluate open tracked setups against live prices & intra-bar candles and return persisted state
+    const board = await syncMtfSetupsAndGetLiveBoard(style, swingMode, discoveredCandidates);
 
     const contextTf = style === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H';
     const entryTf = style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';
 
-    const snapshot: MtfStyleSnapshot = {
+    return {
       style,
       swingMode: style === 'swing' ? swingMode : undefined,
       contextTf,
       entryTf,
-      setups,
+      setups: board.setups,
+      runnerSetups: board.runnerSetups,
+      pastSetups: board.pastSetups,
       generatedAt: new Date().toISOString(),
-      cached: false
+      cached: !shouldDiscover
     };
-
-    await recordAndSyncMtfSetups(setups);
-    snapshotCache.set(cacheKey, { data: snapshot, ts: Date.now() });
-    return snapshot;
   })().finally(() => {
     inflightRequests.delete(cacheKey);
   });

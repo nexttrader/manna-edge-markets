@@ -12,12 +12,25 @@ interface MtfApiResponse {
   contextTf: string;
   entryTf: string;
   setups: EdgeSetup[];
+  runnerSetups?: EdgeSetup[];
+  pastSetups?: EdgeSetup[];
   generatedAt: string;
   cached?: boolean;
   error?: string;
 }
 
-const mtfClientCache = new Map<string, { setups: EdgeSetup[]; contextTf: string; entryTf: string; generatedAt: string; ts: number }>();
+const mtfClientCache = new Map<
+  string,
+  {
+    setups: EdgeSetup[];
+    runnerSetups: EdgeSetup[];
+    pastSetups: EdgeSetup[];
+    contextTf: string;
+    entryTf: string;
+    generatedAt: string;
+    ts: number;
+  }
+>();
 
 export function useMtfStyleSetups(
   styleTab: DashboardStyleTab,
@@ -27,6 +40,8 @@ export function useMtfStyleSetups(
   const cacheKey = styleTab === 'scalp' ? 'scalp' : `swing:${swingMode}`;
 
   const [setups, setSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.setups || []);
+  const [runnerSetups, setRunnerSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.runnerSetups || []);
+  const [pastSetups, setPastSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.pastSetups || []);
   const [contextTf, setContextTf] = useState<string>(() =>
     styleTab === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H'
   );
@@ -37,11 +52,33 @@ export function useMtfStyleSetups(
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
+  // Immediately reflect cached tab data (or reset while loading) when switching styleTab / swingMode
+  useEffect(() => {
+    if (!isMtf) return;
+    const cached = mtfClientCache.get(cacheKey);
+    if (cached) {
+      setSetups(cached.setups);
+      setRunnerSetups(cached.runnerSetups);
+      setPastSetups(cached.pastSetups);
+      setContextTf(cached.contextTf);
+      setEntryTf(cached.entryTf);
+      setGeneratedAt(cached.generatedAt);
+    } else {
+      setSetups([]);
+      setRunnerSetups([]);
+      setPastSetups([]);
+      setContextTf(styleTab === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H');
+      setEntryTf(styleTab === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H');
+    }
+  }, [isMtf, styleTab, swingMode, cacheKey]);
+
   const fetchDesk = useCallback(async (force = false) => {
     if (!isMtf) return;
     const cached = mtfClientCache.get(cacheKey);
-    if (!force && cached && Date.now() - cached.ts < 45_000) {
+    if (!force && cached && Date.now() - cached.ts < 10_000) {
       setSetups(cached.setups);
+      setRunnerSetups(cached.runnerSetups);
+      setPastSetups(cached.pastSetups);
       setContextTf(cached.contextTf);
       setEntryTf(cached.entryTf);
       setGeneratedAt(cached.generatedAt);
@@ -49,7 +86,9 @@ export function useMtfStyleSetups(
       return;
     }
 
-    setLoading(true);
+    if (!cached) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const qs = new URLSearchParams({
@@ -63,14 +102,20 @@ export function useMtfStyleSetups(
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
       const nextSetups = Array.isArray(data.setups) ? data.setups : [];
+      const nextRunners = Array.isArray(data.runnerSetups) ? data.runnerSetups : [];
+      const nextPast = Array.isArray(data.pastSetups) ? data.pastSetups : [];
       mtfClientCache.set(cacheKey, {
         setups: nextSetups,
+        runnerSetups: nextRunners,
+        pastSetups: nextPast,
         contextTf: data.contextTf,
         entryTf: data.entryTf,
         generatedAt: data.generatedAt,
         ts: Date.now()
       });
       setSetups(nextSetups);
+      setRunnerSetups(nextRunners);
+      setPastSetups(nextPast);
       setContextTf(data.contextTf);
       setEntryTf(data.entryTf);
       setGeneratedAt(data.generatedAt);
@@ -84,12 +129,14 @@ export function useMtfStyleSetups(
   useEffect(() => {
     if (!isMtf) return;
     void fetchDesk(false);
-    const interval = window.setInterval(() => void fetchDesk(false), 60_000);
+    const interval = window.setInterval(() => void fetchDesk(false), 15_000);
     return () => window.clearInterval(interval);
   }, [isMtf, fetchDesk]);
 
   return {
     setups,
+    runnerSetups,
+    pastSetups,
     contextTf,
     entryTf,
     loading,

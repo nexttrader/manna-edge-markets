@@ -86,20 +86,114 @@ interface SndMetadata {
   curveLocation?: string;
   trend15m?: string;
   formation?: string;
+  htf?: string;
+  ltf?: string;
+  context_tf?: string;
+  entry_tf?: string;
+  trading_style?: string;
 }
 
 type RoundRectCanvasCtx = CanvasRenderingContext2D & {
   roundRect?: (x: number, y: number, w: number, h: number, r: number) => void;
 };
 
-const TIMEFRAMES: { id: ChartTimeframe; label: string; title: string; featured?: boolean }[] = [
-  { id: '1m', label: '1M', title: '1 Minute Scalp' },
-  { id: '5m', label: '5M', title: '5 Minute Precision' },
-  { id: '15m', label: '15M', title: '15 Minute Execution Standard (Entry Logic)', featured: true },
-  { id: '1h', label: '1H', title: '1 Hour Market Structure' },
-  { id: '4h', label: '4H', title: '4 Hour Trend Context' },
+const TIMEFRAMES: { id: ChartTimeframe; label: string; title: string }[] = [
+  { id: '1m', label: '1M', title: '1 Minute Precision' },
+  { id: '5m', label: '5M', title: '5 Minute Scalp Entry' },
+  { id: '15m', label: '15M', title: '15 Minute Intraday Entry / Scalp Context' },
+  { id: '1h', label: '1H', title: '1 Hour Market Structure / Swing Entry' },
+  { id: '4h', label: '4H', title: '4 Hour Trend / Swing Entry' },
   { id: '1d', label: '1D', title: 'Daily Macro View' },
 ];
+
+function normalizeTfCode(raw: string | undefined, fallback: ChartTimeframe): ChartTimeframe {
+  const s = (raw || '').trim().toLowerCase();
+  if (s === '1m' || s === '5m' || s === '15m' || s === '1h' || s === '4h' || s === '1d') {
+    return s;
+  }
+  if (s === 'd1' || s === 'd') return '1d';
+  if (s === 'h4') return '4h';
+  if (s === 'h1') return '1h';
+  if (s === 'm15') return '15m';
+  if (s === 'm5') return '5m';
+  if (s === 'm1') return '1m';
+  return fallback;
+}
+
+function getSetupTimeframeConfig(
+  setup: EdgeSetup,
+  metadata: SndMetadata
+): { defaultEntryTf: ChartTimeframe; entryTfLabel: string; contextTfLabel: string } {
+  const ext = setup as EdgeSetup & { entry_tf?: string; context_tf?: string; trading_style?: string };
+  const strat = (setup.strategy_id || '').toLowerCase();
+  const rawEntry = ext.entry_tf || metadata.entry_tf || metadata.ltf;
+  const rawContext = ext.context_tf || metadata.context_tf || metadata.htf;
+
+  if (strat === 'manna_scalper' || (ext.trading_style || metadata.trading_style) === 'SCALP') {
+    const tf = normalizeTfCode(rawEntry, '5m');
+    return {
+      defaultEntryTf: tf,
+      entryTfLabel: tf.toUpperCase(),
+      contextTfLabel: (rawContext || '15M').toUpperCase(),
+    };
+  }
+  if (strat === 'manna_swing' || (ext.trading_style || metadata.trading_style) === 'SWING') {
+    const tf = normalizeTfCode(rawEntry, '4h');
+    return {
+      defaultEntryTf: tf,
+      entryTfLabel: tf.toUpperCase(),
+      contextTfLabel: (rawContext || (tf === '4h' ? '1D' : '4H')).toUpperCase(),
+    };
+  }
+  const tf = normalizeTfCode(rawEntry, '15m');
+  return {
+    defaultEntryTf: tf,
+    entryTfLabel: tf.toUpperCase(),
+    contextTfLabel: (rawContext || '1H').toUpperCase(),
+  };
+}
+
+function getTimeframeSeconds(timeframe: ChartTimeframe): number {
+  switch (timeframe) {
+    case '1m': return 60;
+    case '5m': return 300;
+    case '15m': return 900;
+    case '1h': return 3600;
+    case '4h': return 14400;
+    case '1d': return 86400;
+  }
+}
+
+/**
+ * Finds the candle bar that contains `targetUnix` (i.e. the latest candle with time <= targetUnix).
+ * If targetUnix is before the oldest candle by more than one bar, returns null so we never
+ * snap an off-screen timestamp onto candle 0.
+ */
+function findContainingCandle<T extends { time: Time }>(
+  candles: T[],
+  targetUnix: number,
+  timeframe: ChartTimeframe
+): T | null {
+  if (!candles || candles.length === 0 || !Number.isFinite(targetUnix)) return null;
+  const tfSec = getTimeframeSeconds(timeframe);
+  const firstTime = candles[0].time as number;
+  if (targetUnix < firstTime - tfSec) {
+    return null;
+  }
+  if (targetUnix < firstTime) {
+    return candles[0];
+  }
+  let chosen = candles[0];
+  for (let i = 0; i < candles.length; i++) {
+    const t = candles[i].time as number;
+    if (t <= targetUnix) {
+      chosen = candles[i];
+    } else {
+      break;
+    }
+  }
+  return chosen;
+}
 
 export const TIMEZONE_OPTIONS = [
   { value: 'America/New_York', label: 'New York (ET · Killzones)' },
@@ -155,20 +249,20 @@ function getTimezoneBadge(tz: string): string {
 
 function getCurrentCandleTime(timeframe: ChartTimeframe): UTCTimestamp {
   const date = new Date(Date.now());
-  const minutes = date.getMinutes();
+  const minutes = date.getUTCMinutes();
 
   if (timeframe === '1m') {
-    date.setSeconds(0, 0);
+    date.setUTCSeconds(0, 0);
   } else if (timeframe === '5m') {
-    date.setMinutes(Math.floor(minutes / 5) * 5, 0, 0);
+    date.setUTCMinutes(Math.floor(minutes / 5) * 5, 0, 0);
   } else if (timeframe === '15m') {
-    date.setMinutes(Math.floor(minutes / 15) * 15, 0, 0);
+    date.setUTCMinutes(Math.floor(minutes / 15) * 15, 0, 0);
   } else if (timeframe === '1h') {
-    date.setMinutes(0, 0, 0);
+    date.setUTCMinutes(0, 0, 0);
   } else if (timeframe === '4h') {
-    date.setHours(Math.floor(date.getHours() / 4) * 4, 0, 0, 0);
+    date.setUTCHours(Math.floor(date.getUTCHours() / 4) * 4, 0, 0, 0);
   } else if (timeframe === '1d') {
-    date.setHours(0, 0, 0, 0);
+    date.setUTCHours(0, 0, 0, 0);
   }
 
   return Math.floor(date.getTime() / 1000) as UTCTimestamp;
@@ -426,7 +520,31 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const drawZonesRef = useRef<() => void>(() => {});
   const showBidAskRef = useRef<boolean>(false);
 
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
+  const metadata: SndMetadata = useMemo(() => {
+    try {
+      if (typeof setup.metadata === 'string') {
+        return JSON.parse(setup.metadata) as SndMetadata;
+      }
+      if (setup.metadata) {
+        return setup.metadata as SndMetadata;
+      }
+    } catch {
+      // Malformed metadata JSON falls back to defaults
+    }
+    return {};
+  }, [setup.metadata]);
+
+  const { defaultEntryTf, entryTfLabel } = useMemo(
+    () => getSetupTimeframeConfig(setup, metadata),
+    [setup, metadata]
+  );
+
+  const [tfOverride, setTfOverride] = useState<{ setupId: string; tf: ChartTimeframe } | null>(null);
+  const timeframe: ChartTimeframe = tfOverride?.setupId === setup.id ? tfOverride.tf : defaultEntryTf;
+  const setTimeframe = useCallback(
+    (nextTf: ChartTimeframe) => setTfOverride({ setupId: setup.id, tf: nextTf }),
+    [setup.id]
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [liveStatusMsg, setLiveStatusMsg] = useState('');
@@ -486,22 +604,46 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const isPending = setup.signal_state === 'awaiting_entry';
   const isActive = setup.signal_state === 'active';
   const isRunner = setup.signal_state === 'runner';
-  const isResolved = setup.signal_state === 'resolved' || setup.signal_state === 'invalidated';
+  const isResolved =
+    setup.signal_state === 'resolved' ||
+    setup.signal_state === 'invalidated' ||
+    setup.signal_state === 'superseded';
 
-  const entryTimestamp =
+  const actualEntryTimestamp =
     setup.entry_triggered_at ||
     setup.entryAt ||
     extSetup.time_entered ||
-    extSetup.time_signaled ||
-    setup.validatedAt ||
+    null;
+
+  const signalCreatedTimestamp =
     setup.created_at ||
-    setup.createdAt;
+    setup.createdAt ||
+    setup.validatedAt ||
+    extSetup.time_signaled ||
+    null;
+
+  const entryTimestamp = actualEntryTimestamp;
 
   const resolvedTimestamp =
     setup.resolved_at ||
     extSetup.time_exited ||
     extSetup.execution_time ||
     extSetup.closed_at;
+
+  const computedFillMinutes = (() => {
+    if (setup.time_to_fill_min !== undefined) return setup.time_to_fill_min;
+    if (!signalCreatedTimestamp || !actualEntryTimestamp) return undefined;
+    const diff = Math.round((new Date(actualEntryTimestamp).getTime() - new Date(signalCreatedTimestamp).getTime()) / 60000);
+    return Number.isFinite(diff) && diff >= 0 ? diff : undefined;
+  })();
+
+  const computedHeldMinutes = (() => {
+    if (setup.holding_duration_min !== undefined) return setup.holding_duration_min;
+    if (setup.duration_min !== undefined) return setup.duration_min;
+    if (!actualEntryTimestamp || !resolvedTimestamp) return undefined;
+    const diff = Math.max(0.1, (new Date(resolvedTimestamp).getTime() - new Date(actualEntryTimestamp).getTime()) / 60000);
+    return Number.isFinite(diff) ? Number(diff.toFixed(1)) : undefined;
+  })();
 
   const execPrice = parseNum(setup.entry_price_recorded ?? setup.entry_price_executed ?? entryMid);
 
@@ -524,20 +666,6 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
   const tradeTelegramId = formatTelegramTradeId(setup);
   const isMannaSnd = setup.strategy_id === 'manna_snd';
-
-  const metadata: SndMetadata = useMemo(() => {
-    try {
-      if (typeof setup.metadata === 'string') {
-        return JSON.parse(setup.metadata) as SndMetadata;
-      }
-      if (setup.metadata) {
-        return setup.metadata as SndMetadata;
-      }
-    } catch {
-      // Malformed metadata JSON falls back to defaults
-    }
-    return {};
-  }, [setup.metadata]);
 
   const htfProximal = parseNum(metadata.htf_curve_proximal);
   const htfDistal = parseNum(metadata.htf_curve_distal);
@@ -663,22 +791,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           return exactX;
         }
       } catch {
-        // Fallback to closest candle below
+        // Fallback to containing candle below
       }
 
-      let closestCandle = candles[0];
-      let minDiff = Infinity;
-      for (let i = 0; i < candles.length; i++) {
-        const diff = Math.abs((candles[i].time as number) - targetUnix);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestCandle = candles[i];
-        }
-      }
-
-      if (closestCandle) {
+      const containingCandle = findContainingCandle(candles, targetUnix, timeframe);
+      if (containingCandle) {
         try {
-          const cX = timeScale.timeToCoordinate(closestCandle.time);
+          const cX = timeScale.timeToCoordinate(containingCandle.time);
           if (cX !== null && !isNaN(cX)) {
             return cX;
           }
@@ -893,7 +1012,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         ctx.restore();
 
         drawZonePill(
-          `15M ZONE ${formatPrice(entryLow, decimals)}–${formatPrice(entryHigh, decimals)}`,
+          `${entryTfLabel} ZONE ${formatPrice(entryLow, decimals)}–${formatPrice(entryHigh, decimals)}`,
           startX + 8,
           topY - 20 > 8 ? topY - 20 : topY + 4,
           isLong ? (isLight ? '#92400e' : '#fbbf24') : (isLight ? '#991b1b' : '#fca5a5'),
@@ -904,12 +1023,13 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     }
 
-    // 3. Draw Exact Entry Point Marker & Smart Non-Colliding Pill Badge
-    const targetEntryTime = entryTimestamp
-      ? new Date(entryTimestamp).getTime()
-      : (displayCandlesRef.current.length > 0 ? (displayCandlesRef.current[displayCandlesRef.current.length - 1].time as number) * 1000 : null);
+    // 3. Draw Exact Entry Point Marker (or Signal Sent Reference for Unfilled Setups)
+    const markerTimestampStr = actualEntryTimestamp || (isPending ? signalCreatedTimestamp : null);
+    const targetEntryTime = markerTimestampStr
+      ? new Date(markerTimestampStr).getTime()
+      : null;
 
-    if (targetEntryTime) {
+    if (targetEntryTime && Number.isFinite(targetEntryTime)) {
       try {
         const entryUnix = Math.floor(targetEntryTime / 1000);
         const entryX = getCandleX(entryUnix);
@@ -919,20 +1039,26 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         if (entryX !== null && entryX > 0 && entryX < plotRightEdge) {
           let line1Text: string;
           let line2Text: string | null = null;
-          if (showBidAsk && entryPriceVal > 0) {
+          const timeSuffix = formatTzTime(entryUnix, selectedTz, false);
+          if (!actualEntryTimestamp) {
+            const formatted = entryPriceVal > 0 ? formatPrice(entryPriceVal, decimals) : 'Zone';
+            line1Text = `SENT · TARGET ${formatted}`;
+            line2Text = `${timeSuffix} ${getTimezoneBadge(selectedTz)}`;
+          } else if (showBidAsk && entryPriceVal > 0) {
             const { bid: entryBid, ask: entryAsk, filledSide } = getDirectionalBidAsk(
               setup.instrument, entryPriceVal, isLong, true, serverQuote
             );
             if (filledSide === 'ask') {
               line1Text = `${isLong ? '▲' : '▼'} ENTRY · ASK ${entryAsk.toFixed(decimals)}`;
-              line2Text = `BID AT FILL ${entryBid.toFixed(decimals)}`;
+              line2Text = `${timeSuffix} ${getTimezoneBadge(selectedTz)} · BID ${entryBid.toFixed(decimals)}`;
             } else {
               line1Text = `${isLong ? '▲' : '▼'} ENTRY · BID ${entryBid.toFixed(decimals)}`;
-              line2Text = `ASK AT FILL ${entryAsk.toFixed(decimals)}`;
+              line2Text = `${timeSuffix} ${getTimezoneBadge(selectedTz)} · ASK ${entryAsk.toFixed(decimals)}`;
             }
           } else {
             const formatted = entryPriceVal > 0 ? formatPrice(entryPriceVal, decimals) : 'Zone';
-            line1Text = `${isPending ? 'TARGET' : (isLong ? '▲ ENTRY' : '▼ ENTRY')} ${formatted}`;
+            line1Text = `${isLong ? '▲ ENTRY' : '▼ ENTRY'} ${formatted}`;
+            line2Text = `${timeSuffix} ${getTimezoneBadge(selectedTz)}`;
           }
 
           ctx.save();
@@ -1036,40 +1162,57 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     }
 
-    // 4. Subtle Vertical Resolved Timestamp Line (Review Charts Only)
+    // 4. Vertical Resolved / Exit Timestamp Line & Badge (Review Charts Only)
     if (resolvedTimestamp && isResolved) {
       try {
         const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
         const resX = getCandleX(resUnix);
 
         if (resX !== null && resX > 0 && resX < plotRightEdge) {
-          const reason = (setup.invalidation_reason || 'resolved').toUpperCase();
+          const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
           const isWin = reason.includes('TP');
           const flagColor = isWin
-            ? (isLight ? 'rgba(5, 150, 105, 0.25)' : 'rgba(16, 185, 129, 0.25)')
-            : (isLight ? 'rgba(220, 38, 38, 0.25)' : 'rgba(239, 68, 68, 0.25)');
+            ? (isLight ? 'rgba(5, 150, 105, 0.35)' : 'rgba(16, 185, 129, 0.38)')
+            : (isLight ? 'rgba(220, 38, 38, 0.35)' : 'rgba(239, 68, 68, 0.38)');
+          const pillFg = isWin
+            ? (isLight ? '#047857' : '#34d399')
+            : (isLight ? '#b91c1c' : '#f87171');
 
           ctx.save();
           ctx.strokeStyle = flagColor;
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 1.25;
           ctx.setLineDash([3, 4]);
           ctx.beginPath();
           ctx.moveTo(resX, 0);
           ctx.lineTo(resX, height);
           ctx.stroke();
           ctx.restore();
+
+          const exitY = exitPriceVal > 0 ? getY(exitPriceVal) : 28;
+          const cleanReason = reason.replace('_HIT', '').replace('_PRE_ENTRY', '');
+          const exitTimeLabel = `${formatTzTime(resUnix, selectedTz, false)} ${getTimezoneBadge(selectedTz)}`;
+          const exitText = exitPriceVal > 0
+            ? `EXIT ${cleanReason} ${formatPrice(exitPriceVal, decimals)} · ${exitTimeLabel}`
+            : `${cleanReason} · ${exitTimeLabel}`;
+          drawZonePill(
+            exitText,
+            resX - 90,
+            exitY !== null ? exitY - 26 : 16,
+            pillFg,
+            flagColor
+          );
         }
       } catch {
         // Ignore unparseable resolved timestamp
       }
     }
   }, [
-    isMannaSnd, entryLow, entryHigh, entryMid,
-    isLong, isResolved, isPending, metadata, entryTimestamp,
-    resolvedTimestamp, execPrice, theme, showBidAsk, serverQuote,
+    isMannaSnd, entryLow, entryHigh, entryMid, entryTfLabel, timeframe,
+    isLong, isResolved, isPending, metadata, actualEntryTimestamp, signalCreatedTimestamp,
+    resolvedTimestamp, execPrice, exitPriceVal, theme, showBidAsk, serverQuote, selectedTz,
     decimals, activeDemandProx, activeDemandDist, activeDemandTime,
     activeSupplyProx, activeSupplyDist, activeSupplyTime, setup.created_at,
-    setup.createdAt, setup.invalidation_reason, setup.instrument,
+    setup.createdAt, setup.invalidation_reason, setup.outcome_type, setup.instrument,
   ]);
 
   useEffect(() => {
@@ -1589,20 +1732,14 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
         priceLinesRef.current = lines;
 
-        // Candlestick Markers for Exit Point
+        // Candlestick Markers for Exit Point (and Entry Point if available)
         const markers: SeriesMarker<Time>[] = [];
         if (resolvedTimestamp && isResolved) {
           try {
             const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-            let closestRes = displayCandles[displayCandles.length - 1];
-            let minDiff = Infinity;
-            for (const c of displayCandles) {
-              const diff = Math.abs((c.time as number) - resUnix);
-              if (diff < minDiff) {
-                minDiff = diff;
-                closestRes = c;
-              }
-            }
+            const closestRes =
+              findContainingCandle(displayCandles, resUnix, timeframe) ||
+              displayCandles[displayCandles.length - 1];
             if (closestRes) {
               const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
               const isWin = reason.includes('TP');
@@ -1720,16 +1857,22 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   useEffect(() => {
     if (isResolved) return;
     if (!candleSeriesRef.current || !setup.current_price) return;
+    const histCandles = displayCandlesRef.current;
+    if (!histCandles || histCandles.length === 0) return;
 
     const curPrice = Number(setup.current_price);
-    const candleTime = getCurrentCandleTime(timeframe);
+    const lastHistTime = histCandles[histCandles.length - 1].time as number;
+    const computedTime = getCurrentCandleTime(timeframe) as number;
+    const candleTime = Math.max(computedTime, lastHistTime) as UTCTimestamp;
 
-    if (!liveCandleRef.current || liveCandleRef.current.time !== candleTime) {
+    if (!liveCandleRef.current || (liveCandleRef.current.time as number) !== (candleTime as number)) {
+      const lastHist = histCandles[histCandles.length - 1];
+      const useHistOpen = (candleTime as number) === lastHistTime;
       liveCandleRef.current = {
         time: candleTime,
-        open: curPrice,
-        high: curPrice,
-        low: curPrice,
+        open: useHistOpen ? lastHist.open : curPrice,
+        high: useHistOpen ? Math.max(lastHist.high, curPrice) : curPrice,
+        low: useHistOpen ? Math.min(lastHist.low, curPrice) : curPrice,
         close: curPrice,
       };
     } else {
@@ -1811,12 +1954,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
     try {
       const resUnix = Math.floor(new Date(resolvedTimestamp).getTime() / 1000);
-      let closestRes = displayCandles[displayCandles.length - 1];
-      let minDiff = Infinity;
-      for (const c of displayCandles) {
-        const diff = Math.abs((c.time as number) - resUnix);
-        if (diff < minDiff) { minDiff = diff; closestRes = c; }
-      }
+      const closestRes =
+        findContainingCandle(displayCandles, resUnix, timeframe) ||
+        displayCandles[displayCandles.length - 1];
       if (!closestRes) return;
 
       const reason = (setup.outcome_type || setup.invalidation_reason || 'resolved').toUpperCase();
@@ -1849,7 +1989,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     } catch {
       // Ignore marker refresh errors
     }
-  }, [showBidAsk, serverQuote, isResolved, resolvedTimestamp, exitPriceVal, isLong, decimals, setup.instrument, setup.outcome_type, setup.invalidation_reason]);
+  }, [showBidAsk, serverQuote, isResolved, resolvedTimestamp, exitPriceVal, isLong, decimals, timeframe, setup.instrument, setup.outcome_type, setup.invalidation_reason]);
 
   // Sync canvas zone overlay on scroll & resize
   useEffect(() => {
@@ -1998,18 +2138,21 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
             className="toolbar-left"
           >
             <div role="group" aria-label="Timeframe" className="tf-selector">
-              {TIMEFRAMES.map((tf) => (
-                <button
-                  key={tf.id}
-                  type="button"
-                  aria-pressed={timeframe === tf.id}
-                  onClick={() => setTimeframe(tf.id)}
-                  title={tf.title}
-                >
-                  <span>{tf.label}</span>
-                  {tf.featured && <span className="tf-star" aria-label="Entry standard">★</span>}
-                </button>
-              ))}
+              {TIMEFRAMES.map((tf) => {
+                const isEntryStandard = tf.id === defaultEntryTf;
+                return (
+                  <button
+                    key={tf.id}
+                    type="button"
+                    aria-pressed={timeframe === tf.id}
+                    onClick={() => setTimeframe(tf.id)}
+                    title={isEntryStandard ? `${tf.title} (Setup Entry Timeframe)` : tf.title}
+                  >
+                    <span>{tf.label}</span>
+                    {isEntryStandard && <span className="tf-star" aria-label="Entry standard">★</span>}
+                  </button>
+                );
+              })}
             </div>
 
             <span role="separator" aria-orientation="vertical" className="toolbar-sep" />
@@ -2091,17 +2234,25 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               <div className="audit-card-title">
                 <span>ENTRY</span>
                 <span className="audit-card-badge">
-                  {setup.time_to_fill_min !== undefined ? `${setup.time_to_fill_min}m fill` : 'FILLED'}
+                  {!actualEntryTimestamp
+                    ? 'NOT ENTERED'
+                    : computedFillMinutes !== undefined
+                      ? `${computedFillMinutes}m fill`
+                      : 'FILLED'}
                 </span>
               </div>
               <div className="audit-card-main">
-                {formatPrice(execPrice > 0 ? execPrice : entryMid, decimals)}
+                {actualEntryTimestamp
+                  ? formatPrice(execPrice > 0 ? execPrice : entryMid, decimals)
+                  : '--'}
               </div>
               <div className="audit-card-sub">
                 Zone {formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)}
               </div>
               <div className="audit-card-time">
-                {entryTimestamp ? `${formatTzTime(Math.floor(new Date(entryTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}` : '--'}
+                {actualEntryTimestamp
+                  ? `${formatTzTime(Math.floor(new Date(actualEntryTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}`
+                  : 'Cancelled before entry'}
               </div>
             </div>
 
@@ -2155,7 +2306,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
                 Exit {formatPrice(exitPriceVal, decimals)}
               </div>
               <div className="audit-card-time">
-                Held {setup.holding_duration_min !== undefined ? `${setup.holding_duration_min}m` : setup.duration_min !== undefined ? `${setup.duration_min}m` : '--'} · {resolvedTimestamp ? `${formatTzTime(Math.floor(new Date(resolvedTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}` : '--'}
+                Held {computedHeldMinutes !== undefined ? `${computedHeldMinutes}m` : '--'} · {resolvedTimestamp ? `${formatTzTime(Math.floor(new Date(resolvedTimestamp).getTime() / 1000), selectedTz, true)} ${getTimezoneBadge(selectedTz)}` : '--'}
               </div>
             </div>
           </div>
@@ -2168,7 +2319,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               <span className="metric-label">VIEW</span>
               <span className="metric-value">
                 {timeframe.toUpperCase()}
-                {timeframe === '15m' && <span className="metric-tag">EXEC STD</span>}
+                {timeframe === defaultEntryTf && <span className="metric-tag">EXEC STD</span>}
               </span>
             </div>
 
@@ -2177,6 +2328,19 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               <span className="metric-label">{isPending ? 'PENDING ZONE' : 'ENTRY ZONE'}</span>
               <span className="metric-value">{formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)}</span>
             </div>
+
+            {(actualEntryTimestamp || signalCreatedTimestamp) && (
+              <div className="level-metric">
+                <span className="metric-label">{actualEntryTimestamp ? 'ENTERED' : 'SENT'}</span>
+                <span className="metric-value">
+                  {formatTzTime(
+                    Math.floor(new Date((actualEntryTimestamp || signalCreatedTimestamp)!).getTime() / 1000),
+                    selectedTz,
+                    false
+                  )} {getTimezoneBadge(selectedTz)}
+                </span>
+              </div>
+            )}
 
             <div className={`level-metric ${isBeStop ? 'be' : 'stop'}`}>
               <span className="metric-dot" aria-hidden="true" />

@@ -30,6 +30,7 @@ import supportRoutes from './api/support-routes';
 import userManagementRoutes from './api/user-management-routes';
 import edgeFinderRoutes from './api/edge-finder-routes';
 import mtfSignalsRoutes from './api/mtf-signals-routes';
+import { startMtfLifecycleLoop, stopMtfLifecycleLoop } from './discovery/mtf-style-tracker';
 import { startSubscriptionScheduler } from './scheduler/subscription-cron';
 import { telegramBotService } from './notifications/telegram-bot';
 import { earlyScanService } from './scheduler/early-scan-service';
@@ -130,6 +131,9 @@ async function startServer() {
 
         logger.info('Starting outcome detector...');
         outcomeDetector.start(15000);
+
+        logger.info('Starting MTF Scalping & Swing lifecycle loop...');
+        startMtfLifecycleLoop(15000);
 
         logger.info('Starting automated 15-minute system health diagnostic checker...');
         startAutomatedHealthDiagnostics();
@@ -314,6 +318,7 @@ async function startServer() {
             }
             lifecycleSync.stop();
             outcomeDetector.stop();
+            stopMtfLifecycleLoop();
             stopEliteFractalContinuousScanner();
             stopScheduler();
             process.exit(0);

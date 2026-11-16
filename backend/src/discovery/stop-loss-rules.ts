@@ -103,3 +103,47 @@ export function getLogicalStopDistance(
   return Math.max(rounded, minNonZero);
 }
 
+/**
+ * Timeframe-calibrated stop loss distance for Scalping (5M), Intraday (15M), and Swing (1H / 4H).
+ * Scales institutional minimum noise floors proportionally to the entry timeframe while
+ * enforcing at least 1.25x (1.4x for JPY) of the entry timeframe's ATR14.
+ */
+export function getTimeframeStopDistance(
+  instrument: string,
+  atr14: number,
+  rawCalculatedRisk: number,
+  market: 'futures' | 'forex',
+  entryTimeframe: '5m' | '15m' | '1h' | '4h'
+): number {
+  if (entryTimeframe === '15m') {
+    return getLogicalStopDistance(instrument, atr14, rawCalculatedRisk, market, false);
+  }
+
+  const isJpy = instrument.includes('JPY');
+  const tfFloorScale =
+    entryTimeframe === '5m' ? 0.45 :
+    entryTimeframe === '1h' ? 1.80 :
+    3.50; // 4h
+
+  const fallbackAtr = market === 'futures'
+    ? 2.0 * tfFloorScale
+    : (isJpy ? 0.20 : 0.0010) * tfFloorScale;
+  const safeAtr = (isNaN(atr14) || atr14 <= 0) ? fallbackAtr : atr14;
+  const atrMultiplier = isJpy ? 1.4 : 1.25;
+  const safeRaw = (isNaN(rawCalculatedRisk) || rawCalculatedRisk <= 0) ? safeAtr * atrMultiplier : rawCalculatedRisk;
+  const atrRiskDistance = Math.max(safeRaw, safeAtr * atrMultiplier);
+
+  const baseFloor = MIN_STOP_FLOORS[instrument] !== undefined
+    ? MIN_STOP_FLOORS[instrument]
+    : (market === 'futures' ? 1.0 : (isJpy ? 0.20 : 0.00050));
+  const scaledFloor = baseFloor * tfFloorScale;
+
+  const distance = Math.max(atrRiskDistance, scaledFloor);
+  const decimals = getInstrumentDecimals(instrument, market);
+  const rounded = Number(distance.toFixed(decimals));
+
+  const baseMinNonZero = market === 'futures' ? 0.10 : (isJpy ? 0.03 : 0.00010);
+  const minNonZero = Number((baseMinNonZero * Math.min(1.0, tfFloorScale)).toFixed(decimals));
+  return Math.max(rounded, minNonZero);
+}
+

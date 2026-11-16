@@ -57,6 +57,49 @@ async function acquireYahooRateLimit() {
     lastYahooRequestTime = Date.now();
 }
 
+/**
+ * Aggregates hourly (or smaller) bars into UTC-aligned 4-hour OHLC candles
+ * when an upstream provider (such as Yahoo) returns 1h bars for '4h'.
+ */
+export function aggregateToFourHourCandles(candles: Candle[]): Candle[] {
+    if (candles.length < 2) return candles;
+    const t0 = new Date(candles[0].timestamp).getTime();
+    const t1 = new Date(candles[1].timestamp).getTime();
+    const deltaHours = Math.abs(t1 - t0) / (1000 * 60 * 60);
+    if (deltaHours >= 3.5) {
+        return candles;
+    }
+
+    const FOUR_HOURS_SEC = 4 * 60 * 60;
+    const buckets = new Map<number, Candle>();
+
+    for (const c of candles) {
+        const unixSec = Math.floor(new Date(c.timestamp).getTime() / 1000);
+        if (!Number.isFinite(unixSec) || unixSec <= 0) continue;
+        const bucketSec = Math.floor(unixSec / FOUR_HOURS_SEC) * FOUR_HOURS_SEC;
+        const existing = buckets.get(bucketSec);
+        if (!existing) {
+            buckets.set(bucketSec, {
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                volume: c.volume || 0,
+                timestamp: new Date(bucketSec * 1000).toISOString()
+            });
+        } else {
+            existing.high = Math.max(existing.high, c.high);
+            existing.low = Math.min(existing.low, c.low);
+            existing.close = c.close;
+            existing.volume = (existing.volume || 0) + (c.volume || 0);
+        }
+    }
+
+    return Array.from(buckets.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([, bar]) => bar);
+}
+
 export async function getLiveCandles(
     instrument: string,
     timeframe: '1m' | '5m' | '15m' | '1h' | '4h' | '1d',
@@ -138,26 +181,32 @@ export async function getLiveCandles(
                 const candles: Candle[] = [];
                 for (let i = 0; i < timestamps.length; i++) {
                     if (quoteObj.open[i] !== null && quoteObj.close[i] !== null) {
+                        const openVal = Number(quoteObj.open[i].toFixed(5));
+                        const closeVal = Number(quoteObj.close[i].toFixed(5));
+                        const highRaw = quoteObj.high?.[i] ?? Math.max(openVal, closeVal);
+                        const lowRaw = quoteObj.low?.[i] ?? Math.min(openVal, closeVal);
                         candles.push({
-                            open: Number(quoteObj.open[i].toFixed(5)),
-                            high: Number(quoteObj.high[i].toFixed(5)),
-                            low: Number(quoteObj.low[i].toFixed(5)),
-                            close: Number(quoteObj.close[i].toFixed(5)),
+                            open: openVal,
+                            high: Number(Number(highRaw).toFixed(5)),
+                            low: Number(Number(lowRaw).toFixed(5)),
+                            close: closeVal,
                             volume: Number(quoteObj.volume?.[i] || 10000),
                             timestamp: new Date(timestamps[i] * 1000).toISOString()
                         });
                     }
                 }
 
-                if (candles.length > 0) {
-                    candleCache.set(cacheKey, { data: candles, timestamp: Date.now() });
+                const normalizedCandles = timeframe === '4h' ? aggregateToFourHourCandles(candles) : candles;
+
+                if (normalizedCandles.length > 0) {
+                    candleCache.set(cacheKey, { data: normalizedCandles, timestamp: Date.now() });
                     
-                    const lastCandle = candles[candles.length - 1];
+                    const lastCandle = normalizedCandles[normalizedCandles.length - 1];
                     if (lastCandle && lastCandle.close > 0) {
                         priceCache.set(instrument, { data: lastCandle.close, timestamp: Date.now() });
                     }
 
-                    return candles;
+                    return normalizedCandles;
                 }
             }
 

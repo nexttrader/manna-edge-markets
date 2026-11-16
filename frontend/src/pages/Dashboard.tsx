@@ -97,12 +97,21 @@ export const Dashboard: React.FC = () => {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeRunners = Array.isArray(runnerSetups) ? runnerSetups : [];
+  const safeMtfSetups = Array.isArray(mtfDesk.setups) ? mtfDesk.setups : [];
+  const safeMtfRunners = Array.isArray(mtfDesk.runnerSetups) ? mtfDesk.runnerSetups : [];
+  const safeMtfPast = Array.isArray(mtfDesk.pastSetups) ? mtfDesk.pastSetups : [];
+
+  const activeRunnerSetups = styleTab === 'intraday' ? safeRunners : safeMtfRunners;
   const baseDeskSetups =
     styleTab === 'intraday'
       ? (stateFilter === 'runner'
           ? [...safeSetups, ...safeRunners.filter(r => !safeSetups.some(s => s.id === r.id))]
           : safeSetups)
-      : mtfDesk.setups;
+      : (stateFilter === 'runner'
+          ? [...safeMtfSetups, ...safeMtfRunners.filter(r => !safeMtfSetups.some(s => s.id === r.id))]
+          : (stateFilter === 'resolved' || stateFilter === 'invalidated')
+            ? safeMtfPast
+            : safeMtfSetups);
   const activeLoading = styleTab === 'intraday' ? loading : mtfDesk.loading;
   const allAvailableSetups = baseDeskSetups;
   const safeWatchlist = Array.isArray(watchlistIds) ? watchlistIds : [];
@@ -129,6 +138,8 @@ export const Dashboard: React.FC = () => {
     // 2. State Filter
     if (stateFilter === 'in_zone') {
       if (!isInZone || (stateStr !== 'active' && stateStr !== 'awaiting_entry')) return false;
+    } else if (stateFilter === 'invalidated') {
+      if (stateStr !== 'invalidated' && stateStr !== 'superseded') return false;
     } else if (stateFilter !== 'all' && stateStr !== stateFilter) {
       return false;
     }
@@ -216,8 +227,8 @@ export const Dashboard: React.FC = () => {
               onOpenCalculator={(s) => setCalcSetup(s)}
             />
             <RunnersPanel
-              runnerSetups={runnerSetups}
-              loading={loading}
+              runnerSetups={activeRunnerSetups}
+              loading={activeLoading}
               autoExpand={stateFilter === 'runner'}
             />
             {canAccessEdgeFinder && (
@@ -543,25 +554,25 @@ export const Dashboard: React.FC = () => {
             <h3>
               {marketFilter === 'watchlist' 
                 ? 'Your Watchlist is Empty' 
-                : safeSetups.length === 0
+                : allAvailableSetups.length === 0
                 ? 'NO ACTIVE SIGNALS FOR THIS SESSION'
                 : 'No setups match your selected filters'}
             </h3>
             <p>
               {marketFilter === 'watchlist'
                 ? 'Click the ☆ Watch button on any setup card to pin it to your personal watchlist.'
-                : safeSetups.length === 0
+                : allAvailableSetups.length === 0
                 ? 'Institutional models are currently in Stand By. High-conviction entry criteria have not been met for the current session. Please wait until the next session scan.'
                 : 'Try adjusting your state, market, or direction filters above.'}
             </p>
 
-            {safeSetups.length === 0 && marketFilter !== 'watchlist' && (
+            {allAvailableSetups.length === 0 && marketFilter !== 'watchlist' && (
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <SessionScanCountdown />
               </div>
             )}
 
-            {hasActiveFilter && (marketFilter === 'watchlist' || safeSetups.length > 0) && (
+            {hasActiveFilter && (marketFilter === 'watchlist' || allAvailableSetups.length > 0) && (
               <button className="btn-hero-secondary btn-reset-empty" onClick={resetFilters}>
                 Clear All Filters
               </button>
@@ -579,7 +590,7 @@ export const Dashboard: React.FC = () => {
                   onToggleWatchlist={toggleWatchlist}
                   isTagged={isTagged(setup.id)}
                   onToggleTag={toggleTag}
-                  onInvalidate={refetch}
+                  onInvalidate={styleTab === 'intraday' ? refetch : mtfDesk.refreshDesk}
                 />
               ))}
             </div>

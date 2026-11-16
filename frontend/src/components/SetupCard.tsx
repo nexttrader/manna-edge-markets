@@ -216,7 +216,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     // Check if triggered immediately as a Market Order (within 60s of discovery)
     if (setup.created_at && setup.entry_triggered_at) {
       const diffMs = new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime();
-      if (diffMs <= 60000) {
+      if (diffMs >= 0 && diffMs <= 60000) {
         return 'MARKET ORDER';
       }
     }
@@ -233,15 +233,15 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   const orderTypeStr = getOrderType();
 
   // Only show "Exact Fill" if the signal has genuinely been filled:
-  // signal_state must be 'active' AND entry_triggered_at must exist.
+  // signal_state must be 'active', 'runner', or 'resolved' AND entry_triggered_at must exist.
   // Awaiting-entry signals must never show a fill price even if entry_price_recorded
   // somehow has a value (e.g. from a stale snapshot restore).
   const exactFill =
-    setup.signal_state === 'active' && setup.entry_triggered_at
+    (setup.signal_state === 'active' || setup.signal_state === 'runner' || setup.signal_state === 'resolved') && setup.entry_triggered_at
       ? setup.entry_price_recorded || setup.entry_price_executed
       : null;
 
-  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (stateStr === 'active' || stateStr === 'resolved' || stateStr === 'runner' ? (setup.created_at || setup.createdAt) : null);
+  const entryTimestamp = setup.entry_triggered_at || setup.entryAt || (stateStr === 'active' || stateStr === 'runner' ? (setup.created_at || setup.createdAt) : null);
 
   const currentPrice = setup.current_price;
   const isStillInZone = Boolean(
@@ -533,7 +533,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         )}
 
         <div className="sc-tel-cell">
-          {stateStr === 'active' && setup.unrealizedR !== undefined ? (
+          {(stateStr === 'active' || stateStr === 'runner') && setup.unrealizedR !== undefined ? (
             <>
               <span className="sc-tel-k">
                 {exactFill ? `Fill ${exactFill} · Live RR` : 'Live RR'}
@@ -550,10 +550,21 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                 {setup.distance_to_entry_r === 0 ? 'In Zone (Ready)' : `${setup.distance_to_entry_r.toFixed(2)}R away`}
               </span>
             </>
+          ) : stateStr === 'resolved' && setup.realized_r !== undefined ? (
+            <>
+              <span className="sc-tel-k">
+                Final Outcome{setup.outcome_type ? ` (${setup.outcome_type.replace('_', ' ').toUpperCase()})` : ''}
+              </span>
+              <span className={`sc-tel-v ${setup.realized_r > 0 ? 'text-green' : setup.realized_r < 0 ? 'text-red' : 'text-gold'}`}>
+                {setup.realized_r > 0 ? '+' : ''}{Number(setup.realized_r).toFixed(2)}R
+              </span>
+            </>
           ) : (
             <>
               <span className="sc-tel-k">Trade State</span>
-              <span className="sc-tel-v">{stateStr.replace('_', ' ').toUpperCase()}</span>
+              <span className="sc-tel-v">
+                {setup.invalidation_reason ? setup.invalidation_reason.replace(/_/g, ' ').toUpperCase() : stateStr.replace('_', ' ').toUpperCase()}
+              </span>
             </>
           )}
         </div>
