@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { DashboardHeader } from '../components/DashboardHeader';
 import {
   CotHistoryChartSvg,
   CountryHistoryTrendSvg,
@@ -480,6 +481,7 @@ export const EdgeFinderPage: React.FC = () => {
 
   return (
     <div className="ef-page">
+      <DashboardHeader />
       <div className="ef-container">
         {/* Top Utility Navigation */}
         <header className="ef-topbar">
