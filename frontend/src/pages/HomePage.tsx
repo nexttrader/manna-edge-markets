@@ -9,7 +9,6 @@ const LiveTickerWidget: React.FC = () => {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    // Clear any previously injected widget
     containerRef.current.innerHTML = '';
 
     const script = document.createElement('script');
@@ -19,28 +18,30 @@ const LiveTickerWidget: React.FC = () => {
       symbols: [
         { proName: 'CME_MINI:NQ1!', title: 'NQ Futures' },
         { proName: 'CME_MINI:ES1!', title: 'ES Futures' },
-        { proName: 'COMEX:GC1!',    title: 'Gold' },
-        { proName: 'COMEX:SI1!',    title: 'Silver' },
-        { proName: 'FX:EURUSD',     title: 'EUR/USD' },
-        { proName: 'FX:GBPUSD',     title: 'GBP/USD' },
-        { proName: 'NYMEX:CL1!',    title: 'Crude Oil' },
+        { proName: 'COMEX:GC1!', title: 'Gold' },
+        { proName: 'COMEX:SI1!', title: 'Silver' },
+        { proName: 'FX:EURUSD', title: 'EUR/USD' },
+        { proName: 'FX:GBPUSD', title: 'GBP/USD' },
+        { proName: 'NYMEX:CL1!', title: 'Crude Oil' }
       ],
       showSymbolLogo: false,
       colorTheme: 'dark',
       isTransparent: true,
       displayMode: 'adaptive',
-      locale: 'en',
+      locale: 'en'
     });
 
     containerRef.current.appendChild(script);
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="tradingview-widget-container animate-slide-up"
-      style={{ width: '100%', marginBottom: '44px' }}
-    />
+    <div className="home-ticker-shell">
+      <div
+        ref={containerRef}
+        className="tradingview-widget-container"
+        style={{ width: '100%' }}
+      />
+    </div>
   );
 };
 
@@ -49,13 +50,13 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="home-page-container">
-      <div className="home-backdrop-glow" />
+      <div className="home-backdrop-glow" aria-hidden="true" />
 
-      {/* Top Navigation Header */}
-      <header className="home-nav glass-card">
+      {/* Sleek Sticky Obsidian Navigation Header */}
+      <header className="home-nav">
         <div className="container nav-container">
           <Link to="/" className="nav-logo">
-            <span className="logo-emblem">⚡</span>
+            <span className="logo-emblem" aria-hidden="true">M</span>
             <span className="logo-text">MANNA EDGE MARKETS</span>
           </Link>
 
@@ -69,19 +70,25 @@ export const HomePage: React.FC = () => {
                 <span className="user-role-tag">{user.role.toUpperCase()}</span>
                 <span className="user-email">{user.email}</span>
                 <Link to="/dashboard" className="btn-nav-primary">
-                  📊 Live Signals
+                  Live Signals
                 </Link>
-                <button onClick={() => { if (window.confirm('Sign out of Manna Edge Markets?')) logout(); }} className="btn-nav-logout">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Sign out of Manna Edge Markets?')) logout();
+                  }}
+                  className="btn-nav-logout"
+                >
                   Logout
                 </button>
               </div>
             ) : (
-              <div className="guest-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <Link to="/signup" className="btn-nav-primary" style={{ background: 'linear-gradient(135deg, #ffd700, #ff9100)', color: '#090314', fontWeight: 900, textDecoration: 'none' }}>
-                  🎁 14-Day Free Trial
+              <div className="guest-actions">
+                <Link to="/login" className="btn-nav-outline">
+                  Sign In
                 </Link>
-                <Link to="/login" className="btn-nav-outline" style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', color: '#e2e8f0', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 700 }}>
-                  🔑 Sign In
+                <Link to="/signup" className="btn-nav-primary">
+                  14-Day Free Trial
                 </Link>
               </div>
             )}
@@ -89,73 +96,177 @@ export const HomePage: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="hero-section container">
-        <div className="hero-badge animate-fade-in" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span>✨ AUTOMATED MARKET SIGNAL PLATFORM</span>
-          <span style={{ background: 'rgba(255, 215, 0, 0.2)', border: '1px solid #ffd700', color: '#ffd700', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800 }}>
-            🎁 14-DAY VIP PASS (NO CREDIT CARD NEEDED)
-          </span>
-        </div>
+      {/* Asymmetric Bento Hero Section */}
+      <main>
+        <section className="hero-section container">
+          <div className="hero-bento-grid">
+            <div className="hero-copy-col">
+              <div className="hero-badge">
+                <span className="hero-badge-dot" aria-hidden="true" />
+                <span>AUTOMATED INSTITUTIONAL SIGNAL ENGINE</span>
+                <span className="hero-vip-pill">14-DAY VIP TRIAL · NO CARD</span>
+              </div>
 
-        <h1 className="hero-title animate-slide-up">
-          MANNA EDGE MARKETS
-        </h1>
-        <p className="hero-subtitle animate-slide-up">
-          Smart, automated trade signals for Futures & Forex. Spot high-probability setups, clear profit targets, and live market updates — all in one simple dashboard.
-        </p>
+              <h1 className="hero-title">
+                Precision Futures &amp; Forex Signals. Built for Active Killzones.
+              </h1>
 
-        {/* Live Market Quote Ticker — TradingView real-time feed */}
-        <LiveTickerWidget />
+              <p className="hero-subtitle">
+                Automated trade setups across Asia, London, and New York sessions. Inspect exact entry zones, visual Stop-to-Target ladders, and live risk-to-reward updates in one calm institutional workspace.
+              </p>
 
-        <div className="hero-cta-group animate-slide-up">
-          {!user ? (
-            <>
-              <Link to="/signup" className="btn-hero-main" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ff8c00 100%)', color: '#090314', fontWeight: 900, boxShadow: '0 0 25px rgba(255, 215, 0, 0.4)' }}>
-                🔥 START 14-DAY FREE TRIAL
-              </Link>
-              <Link to="/login" className="btn-hero-outline">
-                🔑 MEMBER SIGN IN
-              </Link>
-            </>
-          ) : (
-            <Link to="/dashboard" className="btn-hero-main">
-              🚀 VIEW LIVE SIGNALS
-            </Link>
-          )}
-        </div>
-      </section>
+              <div className="hero-cta-group">
+                {!user ? (
+                  <>
+                    <Link to="/signup" className="btn-hero-main">
+                      Start 14-Day Free Trial →
+                    </Link>
+                    <Link to="/login" className="btn-hero-outline">
+                      Member Sign In
+                    </Link>
+                  </>
+                ) : (
+                  <Link to="/dashboard" className="btn-hero-main">
+                    Open Live Terminal →
+                  </Link>
+                )}
+              </div>
 
-      {/* Feature Showcase Grid */}
-      <section className="features-section container">
-        <h2 className="section-title">WHY TRADERS USE MANNA EDGE</h2>
+              <div className="hero-kpi-strip font-mono">
+                <div className="hero-kpi-item">
+                  <span className="hero-kpi-val">4 Sessions</span>
+                  <span className="hero-kpi-lbl">Asia · London · NY AM/PM</span>
+                </div>
+                <div className="hero-kpi-divider" aria-hidden="true" />
+                <div className="hero-kpi-item">
+                  <span className="hero-kpi-val">Futures &amp; FX</span>
+                  <span className="hero-kpi-lbl">Indices, Metals &amp; Majors</span>
+                </div>
+                <div className="hero-kpi-divider" aria-hidden="true" />
+                <div className="hero-kpi-item">
+                  <span className="hero-kpi-val">Live R:R</span>
+                  <span className="hero-kpi-lbl">Auto-Breakeven &amp; TP1/TP2</span>
+                </div>
+              </div>
+            </div>
 
-        <div className="features-grid">
-          <div className="feature-card glass-card">
-            <div className="feature-icon">⏰</div>
-            <h3>Peak Session Scans</h3>
-            <p>Scans high-volume trading hours (Asian, London, and New York sessions) to spot high-probability market opportunities automatically.</p>
+            {/* Right Column: Live Terminal Preview Bento Card */}
+            <aside className="hero-preview-col" aria-label="Sample Signal Card Preview">
+              <div className="hero-preview-card">
+                <div className="hp-top-bar font-mono">
+                  <span className="hp-preview-kicker">SAMPLE TERMINAL PREVIEW</span>
+                  <span className="hp-live-pill">● IN ENTRY ZONE</span>
+                </div>
+
+                <div className="hp-header-row">
+                  <div>
+                    <div className="hp-symbol-line">
+                      <span className="hp-symbol">EUR/USD</span>
+                      <span className="hp-market font-mono">FOREX</span>
+                      <span className="hp-strat font-mono">MANNA ELITE V1.2</span>
+                    </div>
+                    <div className="hp-sub-badges font-mono">
+                      <span className="hp-dir-short">▼ SHORT</span>
+                      <span className="hp-order">SELL LIMIT</span>
+                      <span className="hp-tf">1H · 15M</span>
+                    </div>
+                  </div>
+                  <div className="hp-conv-badge font-mono">92% Conviction</div>
+                </div>
+
+                {/* Visual Progress Ladder Preview */}
+                <div className="hp-ladder-box font-mono">
+                  <div className="hp-ladder-track">
+                    <div className="hp-ladder-risk" />
+                    <div className="hp-ladder-profit" />
+                    <span className="hp-node is-stop" style={{ left: '4%' }} />
+                    <span className="hp-entry-band" style={{ left: '34%' }} />
+                    <span className="hp-live-dot" style={{ left: '36%' }} />
+                    <span className="hp-node is-tp1" style={{ left: '72%' }} />
+                    <span className="hp-node is-tp2" style={{ left: '96%' }} />
+                  </div>
+                  <div className="hp-ladder-cols">
+                    <div>
+                      <span className="hp-ll-k">STOP LOSS</span>
+                      <span className="hp-ll-v is-red">1.08950</span>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <span className="hp-ll-k">ENTRY ZONE</span>
+                      <span className="hp-ll-v is-gold">1.0840 – 1.0855</span>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <span className="hp-ll-k">TP1 (+2R)</span>
+                      <span className="hp-ll-v is-green">1.07600</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span className="hp-ll-k">TP2 (+3R)</span>
+                      <span className="hp-ll-v is-green">1.07150</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hp-tel-grid font-mono">
+                  <div className="hp-tel-item">
+                    <span className="hp-tel-k">LIVE FEED</span>
+                    <span className="hp-tel-v">1.08480 ▲</span>
+                  </div>
+                  <div className="hp-tel-item">
+                    <span className="hp-tel-k">PROXIMITY</span>
+                    <span className="hp-tel-v is-green">In Zone (Ready)</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
           </div>
 
-          <div className="feature-card glass-card">
-            <div className="feature-icon">📈</div>
-            <h3>Clear Interactive Charts</h3>
-            <p>Click any signal to see clear Entry Zones, Stop Loss safety levels, and Take Profit targets drawn directly on live charts.</p>
+          {/* Live Quote Ticker Strip */}
+          <div className="hero-ticker-wrap">
+            <LiveTickerWidget />
+          </div>
+        </section>
+
+        {/* Bento Feature Showcase Grid */}
+        <section className="features-section container">
+          <div className="section-header-block">
+            <span className="section-kicker font-mono">PLATFORM ARCHITECTURE</span>
+            <h2 className="section-title">Why Traders Execute With Manna Edge</h2>
           </div>
 
-          <div className="feature-card glass-card">
-            <div className="feature-icon">🎯</div>
-            <h3>Profit & Risk Tracking</h3>
-            <p>Know your exact Risk-to-Reward ratio before entering. Automatically track profit targets and breakeven milestones in real time.</p>
-          </div>
+          <div className="features-grid">
+            <article className="feature-card">
+              <div className="feature-icon-box" aria-hidden="true">01</div>
+              <h3>Peak Killzone Scans</h3>
+              <p>
+                Scans high-volume institutional windows across Asia, London, NY AM, and NY PM sessions to surface high-probability opportunities automatically.
+              </p>
+            </article>
 
-          <div className="feature-card glass-card">
-            <div className="feature-icon">🛡️</div>
-            <h3>Smart Signal Protection</h3>
-            <p>Automated safety filters cancel outdated signals so you only focus on active, high-quality trading opportunities.</p>
+            <article className="feature-card">
+              <div className="feature-icon-box" aria-hidden="true">02</div>
+              <h3>Visual Trade Ladders</h3>
+              <p>
+                Read Stop Loss, Entry Zone, live price position, and TP1/TP2 profit milestones in under a second on every signal card.
+              </p>
+            </article>
+
+            <article className="feature-card">
+              <div className="feature-icon-box" aria-hidden="true">03</div>
+              <h3>Live R:R &amp; Breakeven</h3>
+              <p>
+                Know your exact risk-to-reward ratio before entering. Track active runners, TP1 hits, and automated breakeven protection in real time.
+              </p>
+            </article>
+
+            <article className="feature-card">
+              <div className="feature-icon-box" aria-hidden="true">04</div>
+              <h3>Smart Signal Protection</h3>
+              <p>
+                Automated invalidation and high-impact news scheduling filter out stale setups so you focus strictly on valid market structure.
+              </p>
+            </article>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Footer */}
       <footer className="home-footer container">
