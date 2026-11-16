@@ -193,7 +193,7 @@ export const Dashboard: React.FC = () => {
   const hasActiveFilter = marketFilter !== 'all' || stateFilter !== 'all' || biasFilter !== 'all' || orderTypeFilter !== 'all' || strategyFilter !== 'all' || sortBy !== 'conviction';
 
   return (
-    <div className="dashboard">
+    <div className={`dashboard style-theme-${styleTab}`}>
       <EarlyScanNewsBanner />
       <NewsWarningBanner />
       <DashboardHeader setups={setups} />
@@ -276,22 +276,17 @@ export const Dashboard: React.FC = () => {
             )}
 
             {styleTab !== 'intraday' ? (
-              <>
-                <span className="style-isolated-pill">
-                  Isolated {styleTab === 'scalp' ? '15M/5M' : `${mtfDesk.contextTf}/${mtfDesk.entryTf}`} Desk · Intraday Engine Untouched
-                </span>
-                <button
-                  type="button"
-                  className="advanced-filters-toggle font-mono"
-                  onClick={mtfDesk.refreshDesk}
-                  disabled={mtfDesk.loading}
-                >
-                  {mtfDesk.loading ? 'Syncing...' : '⟳ Refresh'}
-                </button>
-              </>
+              <button
+                type="button"
+                className="advanced-filters-toggle font-mono"
+                onClick={mtfDesk.refreshDesk}
+                disabled={mtfDesk.loading}
+              >
+                {mtfDesk.loading ? 'Syncing...' : '⟳ Refresh'}
+              </button>
             ) : (
               <span className="style-isolated-pill is-live">
-                Primary Production Desk · H1 Structure + 15M Entry
+                H1 Structure + 15M Entry
               </span>
             )}
           </div>

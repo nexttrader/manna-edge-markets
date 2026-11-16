@@ -329,6 +329,17 @@
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 32px rgba(212, 175, 55, 0.08);
   position: relative;
   overflow: hidden;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.hero-preview-card.style-theme-scalp {
+  background: linear-gradient(160deg, rgba(7, 29, 25, 0.96), rgba(5, 17, 16, 0.98));
+  border-color: rgba(16, 185, 129, 0.42);
+}
+
+.hero-preview-card.style-theme-swing {
+  background: linear-gradient(160deg, rgba(10, 20, 44, 0.96), rgba(6, 11, 25, 0.98));
+  border-color: rgba(59, 130, 246, 0.42);
 }
 
 .hero-preview-card::before {

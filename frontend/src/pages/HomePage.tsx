@@ -217,7 +217,7 @@ export const HomePage: React.FC = () => {
 
             {/* Right Column: Interactive 3-Tab Terminal Preview Bento Card */}
             <aside className="hero-preview-col" aria-label="Multi-Timeframe Signal Card Preview">
-              <div className="hero-preview-card">
+              <div className={`hero-preview-card style-theme-${previewTab}`}>
                 <div className="hp-style-tabs font-mono" role="tablist" aria-label="Home Trading Style Tabs">
                   <button
                     type="button"
@@ -319,7 +319,7 @@ export const HomePage: React.FC = () => {
                   </div>
                   <div className="hp-tel-item">
                     <span className="hp-tel-k">TIMEFRAMES</span>
-                    <span className="hp-tel-v is-green">{activePreviewData.tfs} Isolated Desk</span>
+                    <span className="hp-tel-v is-green">{activePreviewData.tfs}</span>
                   </div>
                 </div>
               </div>
