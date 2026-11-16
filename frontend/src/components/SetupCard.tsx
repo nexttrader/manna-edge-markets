@@ -427,10 +427,28 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
               }}
             />
           )}
-          <span className="sc-ladder-node is-stop" style={{ left: `${stopPct}%` }} />
-          <span className={`sc-ladder-entry-band ${isStillInZone ? 'is-in-zone' : ''}`} style={{ left: `${entryPct}%` }} />
-          <span className={`sc-ladder-node is-tp1 ${isTp1Won ? 'is-hit' : ''}`} style={{ left: `${tp1Pct}%` }} />
-          {hasTp2 && <span className="sc-ladder-node is-tp2" style={{ left: `${tp2Pct}%` }} />}
+          <span
+            className="sc-ladder-node is-stop"
+            style={{ left: `${stopPct}%` }}
+            title={`Stop Loss: ${stopVal}`}
+          />
+          <span
+            className={`sc-ladder-entry-band ${isStillInZone ? 'is-in-zone' : ''}`}
+            style={{ left: `${entryPct}%` }}
+            title={`Entry Zone: ${entryLow} – ${entryHigh}`}
+          />
+          <span
+            className={`sc-ladder-node is-tp1 ${isTp1Won ? 'is-hit' : ''}`}
+            style={{ left: `${tp1Pct}%` }}
+            title={`TP1 (+${r1}R): ${tp1Val}`}
+          />
+          {hasTp2 && (
+            <span
+              className="sc-ladder-node is-tp2"
+              style={{ left: `${tp2Pct}%` }}
+              title={`TP2 (+${r2}R): ${tp2Val}`}
+            />
+          )}
 
           {liveLadderPct !== null && (
             <div
@@ -442,20 +460,29 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
         </div>
 
         <div className={`sc-ladder-labels ${hasTp2 ? 'cols-4' : 'cols-3'}`}>
-          <div className="sc-ll-col align-left">
+          <div className="sc-ll-col align-left" title={`Stop Loss: ${stopVal}`}>
             <span className="sc-ll-k">STOP LOSS {isBreakeven ? '(BE)' : ''}</span>
             <span className="sc-ll-v text-red">{stopVal}</span>
           </div>
-          <div className="sc-ll-col align-center">
+          <div
+            className="sc-ll-col align-center sc-ll-col-entry"
+            tabIndex={0}
+            title={`Entry Zone: ${entryLow} – ${entryHigh}`}
+            aria-label={`Entry Zone: ${entryLow} to ${entryHigh}`}
+          >
             <span className="sc-ll-k">ENTRY ZONE</span>
             <span className="sc-ll-v text-gold">{entryLow} – {entryHigh}</span>
+            <div className="sc-ll-tooltip font-mono" role="tooltip" aria-hidden="true">
+              <span className="sc-ll-tooltip-label">ENTRY ZONE</span>
+              <span className="sc-ll-tooltip-value">{entryLow} – {entryHigh}</span>
+            </div>
           </div>
-          <div className={`sc-ll-col ${hasTp2 ? 'align-center' : 'align-right'}`}>
+          <div className={`sc-ll-col ${hasTp2 ? 'align-center' : 'align-right'}`} title={`TP1 (+${r1}R): ${tp1Val}`}>
             <span className="sc-ll-k">TP1 (+{r1}R)</span>
             <span className="sc-ll-v text-green">{tp1Val}</span>
           </div>
           {hasTp2 && (
-            <div className="sc-ll-col align-right">
+            <div className="sc-ll-col align-right" title={`TP2 (+${r2}R): ${tp2Val}`}>
               <span className="sc-ll-k">TP2 (+{r2}R)</span>
               <span className="sc-ll-v text-green">{tp2Val}</span>
             </div>

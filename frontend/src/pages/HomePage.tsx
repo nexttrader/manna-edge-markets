@@ -276,26 +276,36 @@ export const HomePage: React.FC = () => {
                   <div className="hp-ladder-track">
                     <div className="hp-ladder-risk" />
                     <div className="hp-ladder-profit" />
-                    <span className="hp-node is-stop" style={{ left: '4%' }} />
-                    <span className="hp-entry-band" style={{ left: '34%' }} />
-                    <span className="hp-live-dot" style={{ left: '36%' }} />
-                    <span className="hp-node is-tp1" style={{ left: '72%' }} />
-                    <span className="hp-node is-tp2" style={{ left: '96%' }} />
+                    <span className="hp-node is-stop" style={{ left: '4%' }} title={`Stop Loss: ${activePreviewData.stop}`} />
+                    <span className="hp-entry-band" style={{ left: '34%' }} title={`Entry Zone: ${activePreviewData.entry}`} />
+                    <span className="hp-live-dot" style={{ left: '36%' }} title={`Live Price: ${activePreviewData.livePrice}`} />
+                    <span className="hp-node is-tp1" style={{ left: '72%' }} title={`TP1 (+2R): ${activePreviewData.tp1}`} />
+                    <span className="hp-node is-tp2" style={{ left: '96%' }} title={`TP2 (+3R): ${activePreviewData.tp2}`} />
                   </div>
                   <div className="hp-ladder-cols">
-                    <div>
+                    <div title={`Stop Loss: ${activePreviewData.stop}`}>
                       <span className="hp-ll-k">STOP LOSS</span>
                       <span className="hp-ll-v is-red">{activePreviewData.stop}</span>
                     </div>
-                    <div style={{ textAlign: 'center' }}>
+                    <div
+                      className="hp-ll-col-entry"
+                      style={{ textAlign: 'center' }}
+                      tabIndex={0}
+                      title={`Entry Zone: ${activePreviewData.entry}`}
+                      aria-label={`Entry Zone: ${activePreviewData.entry}`}
+                    >
                       <span className="hp-ll-k">ENTRY ZONE</span>
                       <span className="hp-ll-v is-gold">{activePreviewData.entry}</span>
+                      <div className="hp-ll-tooltip font-mono" role="tooltip" aria-hidden="true">
+                        <span className="hp-ll-tooltip-label">ENTRY ZONE</span>
+                        <span className="hp-ll-tooltip-value">{activePreviewData.entry}</span>
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'center' }}>
+                    <div style={{ textAlign: 'center' }} title={`TP1 (+2R): ${activePreviewData.tp1}`}>
                       <span className="hp-ll-k">TP1 (+2R)</span>
                       <span className="hp-ll-v is-green">{activePreviewData.tp1}</span>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right' }} title={`TP2 (+3R): ${activePreviewData.tp2}`}>
                       <span className="hp-ll-k">TP2 (+3R)</span>
                       <span className="hp-ll-v is-green">{activePreviewData.tp2}</span>
                     </div>

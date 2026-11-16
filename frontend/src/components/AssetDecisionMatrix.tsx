@@ -252,7 +252,7 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
               </div>
 
               <div className="spotlight-metrics-row">
-                <div className="spotlight-metric">
+                <div className="spotlight-metric" title={`Entry Zone: ${activeTopFocus.entry_zone_low} - ${activeTopFocus.entry_zone_high}`}>
                   <span className="metric-label">ENTRY ZONE</span>
                   <span className="metric-val">{activeTopFocus.entry_zone_low} - {activeTopFocus.entry_zone_high}</span>
                 </div>
@@ -401,7 +401,7 @@ export const AssetDecisionMatrix: React.FC<AssetDecisionMatrixProps> = ({
 
                   {isExpanded && (
                     <div className="matrix-card-details">
-                      <div className="detail-row">
+                      <div className="detail-row" title={`Entry Zone: ${item.entry_zone_low} - ${item.entry_zone_high}`}>
                         <span>Entry Zone:</span>
                         <span>{item.entry_zone_low} - {item.entry_zone_high}</span>
                       </div>

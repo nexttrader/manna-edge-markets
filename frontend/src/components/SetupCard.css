@@ -461,6 +461,15 @@
   transform: translate(-50%, -50%);
   background: rgba(212, 175, 55, 0.35);
   border: 1px solid var(--kdt-gold, #d4af37);
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.sc-ladder-entry-band:hover {
+  background: rgba(212, 175, 55, 0.6);
+  border-color: #fde68a;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.85);
 }
 
 .sc-ladder-entry-band.is-in-zone {
@@ -527,6 +536,94 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.15s ease, text-shadow 0.15s ease;
+}
+
+/* Entry Zone Hover Interaction & Floating Tooltip */
+.sc-ll-col-entry {
+  position: relative;
+  cursor: pointer;
+  outline: none;
+}
+
+.sc-ll-col-entry:hover .sc-ll-v,
+.sc-ll-col-entry:focus-visible .sc-ll-v {
+  color: #fde68a;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+}
+
+.sc-ll-tooltip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f0a1d;
+  background: linear-gradient(180deg, #1a1233 0%, #0c0818 100%);
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.88), 0 0 14px rgba(245, 158, 11, 0.28);
+  border-radius: 6px;
+  padding: 5px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.18s;
+  z-index: 60;
+}
+
+.sc-ll-col-entry:hover .sc-ll-tooltip,
+.sc-ll-col-entry:focus-visible .sc-ll-tooltip,
+.sc-ll-col-entry:focus-within .sc-ll-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.sc-ll-tooltip-label {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #a79cb8;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.sc-ll-tooltip-value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+/* Tooltip caret / arrow */
+.sc-ll-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px 5px 0 5px;
+  border-style: solid;
+  border-color: rgba(245, 158, 11, 0.65) transparent transparent transparent;
+}
+
+.sc-ll-tooltip::before {
+  content: '';
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px 4px 0 4px;
+  border-style: solid;
+  border-color: #0c0818 transparent transparent transparent;
+  z-index: 1;
 }
 
 /* Tier 3: Compact 2-Column Telemetry Grid */
@@ -628,6 +725,20 @@
   }
   .sc-telemetry-grid {
     grid-template-columns: 1fr;
+  }
+  .sc-ll-tooltip {
+    left: 0;
+    transform: translateY(4px);
+  }
+  .sc-ll-col-entry:hover .sc-ll-tooltip,
+  .sc-ll-col-entry:focus-visible .sc-ll-tooltip,
+  .sc-ll-col-entry:focus-within .sc-ll-tooltip {
+    transform: translateY(0);
+  }
+  .sc-ll-tooltip::after,
+  .sc-ll-tooltip::before {
+    left: 20px;
+    transform: none;
   }
 }
 
