@@ -65,7 +65,7 @@ const TopicDetailsContent: React.FC<TopicBodyProps> = ({ topic, onSelectTopic })
 
       {isSuperAdmin && (
         <div className="ef-kb-section ef-kb-section-superadmin">
-          <div className="ef-kb-section-label" style={{ color: '#f3c6ff' }}>
+          <div className="ef-kb-section-label" style={{ color: 'var(--ef-purple-soft, #f3c6ff)' }}>
             👑 Super Admin Only — Proprietary Calculation &amp; Weights
           </div>
           <ul className="ef-kb-list">
@@ -105,7 +105,7 @@ const TopicDetailsContent: React.FC<TopicBodyProps> = ({ topic, onSelectTopic })
 
       {topic.relatedIds.length > 0 && onSelectTopic && (
         <div className="ef-kb-related">
-          <span style={{ fontSize: '0.73rem', color: '#a99bc9', fontWeight: 600 }}>Related Topics:</span>
+          <span style={{ fontSize: '0.73rem', color: 'var(--ef-text-muted, #a99bc9)', fontWeight: 600 }}>Related Topics:</span>
           {topic.relatedIds.map((relId) => {
             const rel = getEdgeFinderKbTopic(relId);
             return (
@@ -354,8 +354,8 @@ export const EdgeFinderKbExplorer: React.FC = () => {
 
       {filteredTopics.length === 0 ? (
         <div className="ef-pillar-card" style={{ padding: 24, textAlign: 'center' }}>
-          <strong style={{ color: '#DFC46B' }}>No matching EdgeFinder guides found.</strong>
-          <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#b7a8d6' }}>
+          <strong style={{ color: 'var(--ef-gold, #DFC46B)' }}>No matching EdgeFinder guides found.</strong>
+          <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: 'var(--ef-text-secondary, #b7a8d6)' }}>
             Try clearing the filter or searching for terms like &ldquo;Scalper&rdquo;, &ldquo;COT&rdquo;, &ldquo;Real Yield&rdquo;, or &ldquo;Carry&rdquo;.
           </p>
         </div>

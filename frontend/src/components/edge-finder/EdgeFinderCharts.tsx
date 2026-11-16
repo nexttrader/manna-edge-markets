@@ -13,10 +13,10 @@ export const ScoreGaugeSvg: React.FC<{ score: number; biasLabel: string }> = ({ 
   const needleY = cy + (radius - 12) * Math.sin(rad);
 
   const strokeColor =
-    clamped >= 5 ? '#00E676' :
-    clamped >= 2 ? '#69F0AE' :
-    clamped <= -5 ? '#FF5252' :
-    clamped <= -2 ? '#FF8A80' : '#FFC107';
+    clamped >= 5 ? 'var(--ef-green-solid, #00E676)' :
+    clamped >= 2 ? 'var(--ef-green, #69F0AE)' :
+    clamped <= -5 ? 'var(--ef-red-solid, #FF5252)' :
+    clamped <= -2 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-amber, #FFC107)';
 
   return (
     <svg viewBox="0 0 260 150" width="100%" style={{ maxWidth: 280, display: 'block', margin: '0 auto' }} role="img" aria-label={`Edge Score ${clamped} out of 10: ${biasLabel}`}>
@@ -33,7 +33,7 @@ export const ScoreGaugeSvg: React.FC<{ score: number; biasLabel: string }> = ({ 
       <path
         d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
         fill="none"
-        stroke="rgba(255,255,255,0.1)"
+        stroke="var(--ef-chart-track, rgba(255,255,255,0.1))"
         strokeWidth="16"
         strokeLinecap="round"
       />
@@ -47,9 +47,9 @@ export const ScoreGaugeSvg: React.FC<{ score: number; biasLabel: string }> = ({ 
         opacity="0.9"
       />
       {/* Scale ticks */}
-      <text x="26" y="132" fill="#ff8a80" fontSize="10" fontFamily="monospace">-10</text>
-      <text x="126" y="20" fill="#ffe082" fontSize="10" fontFamily="monospace" textAnchor="middle">0</text>
-      <text x="234" y="132" fill="#69f0ae" fontSize="10" fontFamily="monospace" textAnchor="end">+10</text>
+      <text x="26" y="132" fill="var(--ef-red, #ff8a80)" fontSize="10" fontFamily="monospace">-10</text>
+      <text x="126" y="20" fill="var(--ef-amber, #ffe082)" fontSize="10" fontFamily="monospace" textAnchor="middle">0</text>
+      <text x="234" y="132" fill="var(--ef-green, #69f0ae)" fontSize="10" fontFamily="monospace" textAnchor="end">+10</text>
       {/* Needle */}
       <line
         x1={cx}
@@ -60,8 +60,8 @@ export const ScoreGaugeSvg: React.FC<{ score: number; biasLabel: string }> = ({ 
         strokeWidth="3.5"
         strokeLinecap="round"
       />
-      <circle cx={cx} cy={cy} r="6.5" fill="#DFC46B" stroke="#140926" strokeWidth="2" />
-      <text x={cx} y="96" fill="#ffffff" fontSize="26" fontWeight="700" fontFamily="monospace" textAnchor="middle">
+      <circle cx={cx} cy={cy} r="6.5" fill="var(--ef-gold, #DFC46B)" stroke="var(--ef-chart-dot-bg, #140926)" strokeWidth="2" />
+      <text x={cx} y="96" fill="var(--ef-text-primary, #ffffff)" fontSize="26" fontWeight="700" fontFamily="monospace" textAnchor="middle">
         {clamped >= 0 ? `+${clamped.toFixed(1)}` : clamped.toFixed(1)}
       </text>
       <text x={cx} y="142" fill={strokeColor} fontSize="12" fontWeight="700" letterSpacing="1" textAnchor="middle">
@@ -76,7 +76,7 @@ export const HistoricalScorePriceSvg: React.FC<{
   instrument: string;
 }> = ({ series, instrument }) => {
   if (!series || series.length < 2) {
-    return <div style={{ padding: 24, color: '#9f91c2', fontSize: '0.84rem' }}>Insufficient history for {instrument}.</div>;
+    return <div style={{ padding: 24, color: 'var(--ef-text-muted, #9f91c2)', fontSize: '0.84rem' }}>Insufficient history for {instrument}.</div>;
   }
 
   const width = 680;
@@ -109,27 +109,27 @@ export const HistoricalScorePriceSvg: React.FC<{
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label={`30-day Price vs EdgeScore chart for ${instrument}`}>
       {/* Horizontal Score Zero Line */}
-      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeDasharray="4 4" />
-      <text x={padL - 8} y={padT + 8} fill="#7dd3fc" fontSize="10" fontFamily="monospace" textAnchor="end">+10</text>
-      <text x={padL - 8} y={zeroY + 3} fill="#a99bc9" fontSize="10" fontFamily="monospace" textAnchor="end">0</text>
-      <text x={padL - 8} y={padT + plotH} fill="#ff8a80" fontSize="10" fontFamily="monospace" textAnchor="end">-10</text>
+      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="var(--ef-chart-grid, rgba(255,255,255,0.14))" strokeDasharray="4 4" />
+      <text x={padL - 8} y={padT + 8} fill="var(--ef-blue, #7dd3fc)" fontSize="10" fontFamily="monospace" textAnchor="end">+10</text>
+      <text x={padL - 8} y={zeroY + 3} fill="var(--ef-text-muted, #a99bc9)" fontSize="10" fontFamily="monospace" textAnchor="end">0</text>
+      <text x={padL - 8} y={padT + plotH} fill="var(--ef-red, #ff8a80)" fontSize="10" fontFamily="monospace" textAnchor="end">-10</text>
 
       {/* Right axis Price labels */}
-      <text x={width - padR + 8} y={padT + 8} fill="#DFC46B" fontSize="10" fontFamily="monospace">{maxP.toPrecision(5)}</text>
-      <text x={width - padR + 8} y={padT + plotH} fill="#DFC46B" fontSize="10" fontFamily="monospace">{minP.toPrecision(5)}</text>
+      <text x={width - padR + 8} y={padT + 8} fill="var(--ef-gold, #DFC46B)" fontSize="10" fontFamily="monospace">{maxP.toPrecision(5)}</text>
+      <text x={width - padR + 8} y={padT + plotH} fill="var(--ef-gold, #DFC46B)" fontSize="10" fontFamily="monospace">{minP.toPrecision(5)}</text>
 
       {/* Edge Score Line */}
-      <path d={scorePath} fill="none" stroke="#38bdf8" strokeWidth="2" opacity="0.9" />
+      <path d={scorePath} fill="none" stroke="var(--ef-blue, #38bdf8)" strokeWidth="2" opacity="0.9" />
 
       {/* Asset Price Line */}
-      <path d={pricePath} fill="none" stroke="#DFC46B" strokeWidth="2.5" />
+      <path d={pricePath} fill="none" stroke="var(--ef-gold, #DFC46B)" strokeWidth="2.5" />
 
       {/* X axis dates */}
-      <text x={padL} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace">{series[0].date}</text>
-      <text x={padL + plotW / 2} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace" textAnchor="middle">
+      <text x={padL} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace">{series[0].date}</text>
+      <text x={padL + plotW / 2} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace" textAnchor="middle">
         {series[Math.floor(series.length / 2)].date}
       </text>
-      <text x={width - padR} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace" textAnchor="end">
+      <text x={width - padR} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace" textAnchor="end">
         {series[series.length - 1].date}
       </text>
     </svg>
@@ -160,12 +160,12 @@ export const CotHistoryChartSvg: React.FC<{
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label={`12-week COT Net Non-Commercial positioning for ${instrument}`}>
-      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="rgba(255,255,255,0.28)" />
-      <text x={padL - 8} y={padT + 8} fill="#b7a8d6" fontSize="10" fontFamily="monospace" textAnchor="end">
+      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="var(--ef-chart-grid, rgba(255,255,255,0.28))" />
+      <text x={padL - 8} y={padT + 8} fill="var(--ef-text-secondary, #b7a8d6)" fontSize="10" fontFamily="monospace" textAnchor="end">
         {Math.round(maxNet / 1000)}k
       </text>
-      <text x={padL - 8} y={zeroY + 3} fill="#b7a8d6" fontSize="10" fontFamily="monospace" textAnchor="end">0</text>
-      <text x={padL - 8} y={padT + plotH} fill="#b7a8d6" fontSize="10" fontFamily="monospace" textAnchor="end">
+      <text x={padL - 8} y={zeroY + 3} fill="var(--ef-text-secondary, #b7a8d6)" fontSize="10" fontFamily="monospace" textAnchor="end">0</text>
+      <text x={padL - 8} y={padT + plotH} fill="var(--ef-text-secondary, #b7a8d6)" fontSize="10" fontFamily="monospace" textAnchor="end">
         {Math.round(minNet / 1000)}k
       </text>
 
@@ -187,7 +187,7 @@ export const CotHistoryChartSvg: React.FC<{
               opacity="0.85"
             />
             {i % 2 === 0 && (
-              <text x={cx} y={height - 6} fill="#9f91c2" fontSize="9.5" fontFamily="monospace" textAnchor="middle">
+              <text x={cx} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="9.5" fontFamily="monospace" textAnchor="middle">
                 {pt.date.slice(5)}
               </text>
             )}
@@ -220,10 +220,10 @@ export const SeasonalityBarChartSvg: React.FC<{
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label={`10-year monthly seasonality returns for ${instrument}`}>
-      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="rgba(255,255,255,0.28)" />
-      <text x={padL - 6} y={padT + 8} fill="#69f0ae" fontSize="10" fontFamily="monospace" textAnchor="end">+{maxAbs.toFixed(1)}%</text>
-      <text x={padL - 6} y={zeroY + 3} fill="#b7a8d6" fontSize="10" fontFamily="monospace" textAnchor="end">0%</text>
-      <text x={padL - 6} y={padT + plotH} fill="#ff8a80" fontSize="10" fontFamily="monospace" textAnchor="end">-{maxAbs.toFixed(1)}%</text>
+      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="var(--ef-chart-grid, rgba(255,255,255,0.28))" />
+      <text x={padL - 6} y={padT + 8} fill="var(--ef-green, #69f0ae)" fontSize="10" fontFamily="monospace" textAnchor="end">+{maxAbs.toFixed(1)}%</text>
+      <text x={padL - 6} y={zeroY + 3} fill="var(--ef-text-secondary, #b7a8d6)" fontSize="10" fontFamily="monospace" textAnchor="end">0%</text>
+      <text x={padL - 6} y={padT + plotH} fill="var(--ef-red, #ff8a80)" fontSize="10" fontFamily="monospace" textAnchor="end">-{maxAbs.toFixed(1)}%</text>
 
       {monthlyReturns.map((ret, i) => {
         const cx = padL + ((i + 0.5) / 12) * plotW;
@@ -239,14 +239,14 @@ export const SeasonalityBarChartSvg: React.FC<{
               height={barH}
               rx={3}
               fill={ret >= 0 ? '#00E676' : '#FF5252'}
-              stroke={isCurrent ? '#DFC46B' : 'none'}
+              stroke={isCurrent ? 'var(--ef-gold, #DFC46B)' : 'none'}
               strokeWidth={isCurrent ? 2 : 0}
               opacity={isCurrent ? 1 : 0.78}
             />
             <text
               x={cx}
               y={height - 6}
-              fill={isCurrent ? '#DFC46B' : '#a99bc9'}
+              fill={isCurrent ? 'var(--ef-gold, #DFC46B)' : 'var(--ef-text-muted, #a99bc9)'}
               fontWeight={isCurrent ? '700' : '400'}
               fontSize="10"
               fontFamily="monospace"
@@ -279,7 +279,7 @@ export const YieldCurveSvg: React.FC<{
   ];
   const validVals = points.map((p) => p.val).filter((v) => v > 0);
   if (validVals.length < 3) {
-    return <div style={{ padding: 24, color: '#9f91c2', fontSize: '0.84rem' }}>Treasury curve yields unavailable.</div>;
+    return <div style={{ padding: 24, color: 'var(--ef-text-muted, #9f91c2)', fontSize: '0.84rem' }}>Treasury curve yields unavailable.</div>;
   }
 
   const width = 580;
@@ -301,20 +301,20 @@ export const YieldCurveSvg: React.FC<{
   const linePath = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(pt.val).toFixed(1)}`).join(' ');
   const areaPath = `${linePath} L ${xAt(points.length - 1).toFixed(1)} ${padT + plotH} L ${xAt(0).toFixed(1)} ${padT + plotH} Z`;
   const isInverted = curveRegime.includes('Inverted');
-  const strokeColor = isInverted ? '#FF5252' : '#DFC46B';
+  const strokeColor = isInverted ? 'var(--ef-red-solid, #FF5252)' : 'var(--ef-gold, #DFC46B)';
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label={`US Treasury Yield Curve: ${curveRegime}`}>
       <defs>
         <linearGradient id="ef-yc-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={strokeColor} stopOpacity="0.01" />
+          <stop offset="0%" stopColor={isInverted ? '#FF5252' : '#DFC46B'} stopOpacity="0.24" />
+          <stop offset="100%" stopColor={isInverted ? '#FF5252' : '#DFC46B'} stopOpacity="0.01" />
         </linearGradient>
       </defs>
       {/* Grid */}
-      <line x1={padL} y1={padT} x2={width - padR} y2={padT} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
-      <line x1={padL} y1={padT + plotH / 2} x2={width - padR} y2={padT + plotH / 2} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
-      <line x1={padL} y1={padT + plotH} x2={width - padR} y2={padT + plotH} stroke="rgba(255,255,255,0.16)" />
+      <line x1={padL} y1={padT} x2={width - padR} y2={padT} stroke="var(--ef-chart-grid, rgba(255,255,255,0.08))" strokeDasharray="3 4" />
+      <line x1={padL} y1={padT + plotH / 2} x2={width - padR} y2={padT + plotH / 2} stroke="var(--ef-chart-grid, rgba(255,255,255,0.08))" strokeDasharray="3 4" />
+      <line x1={padL} y1={padT + plotH} x2={width - padR} y2={padT + plotH} stroke="var(--ef-chart-grid, rgba(255,255,255,0.16))" />
 
       {realYield10y > 0 && (
         <>
@@ -323,19 +323,19 @@ export const YieldCurveSvg: React.FC<{
             y1={yAt(realYield10y)}
             x2={width - padR}
             y2={yAt(realYield10y)}
-            stroke="#38bdf8"
+            stroke="var(--ef-blue, #38bdf8)"
             strokeWidth="1.5"
             strokeDasharray="5 4"
             opacity="0.75"
           />
-          <text x={width - padR - 4} y={yAt(realYield10y) - 5} fill="#38bdf8" fontSize="9.5" fontFamily="monospace" textAnchor="end">
+          <text x={width - padR - 4} y={yAt(realYield10y) - 5} fill="var(--ef-blue, #38bdf8)" fontSize="9.5" fontFamily="monospace" textAnchor="end">
             10Y TIPS Real: {realYield10y.toFixed(2)}%
           </text>
         </>
       )}
 
-      <text x={padL - 8} y={padT + 8} fill="#a99bc9" fontSize="10" fontFamily="monospace" textAnchor="end">{maxY.toFixed(1)}%</text>
-      <text x={padL - 8} y={padT + plotH} fill="#a99bc9" fontSize="10" fontFamily="monospace" textAnchor="end">{minY.toFixed(1)}%</text>
+      <text x={padL - 8} y={padT + 8} fill="var(--ef-text-muted, #a99bc9)" fontSize="10" fontFamily="monospace" textAnchor="end">{maxY.toFixed(1)}%</text>
+      <text x={padL - 8} y={padT + plotH} fill="var(--ef-text-muted, #a99bc9)" fontSize="10" fontFamily="monospace" textAnchor="end">{minY.toFixed(1)}%</text>
 
       <path d={areaPath} fill="url(#ef-yc-fill)" />
       <path d={linePath} fill="none" stroke={strokeColor} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -345,11 +345,11 @@ export const YieldCurveSvg: React.FC<{
         const cy = yAt(pt.val);
         return (
           <g key={pt.label}>
-            <circle cx={cx} cy={cy} r="5" fill="#140926" stroke={strokeColor} strokeWidth="2.5" />
-            <text x={cx} y={cy - 10} fill="#ffffff" fontSize="10.5" fontWeight="700" fontFamily="monospace" textAnchor="middle">
+            <circle cx={cx} cy={cy} r="5" fill="var(--ef-chart-dot-bg, #140926)" stroke={strokeColor} strokeWidth="2.5" />
+            <text x={cx} y={cy - 10} fill="var(--ef-text-primary, #ffffff)" fontSize="10.5" fontWeight="700" fontFamily="monospace" textAnchor="middle">
               {pt.val.toFixed(2)}%
             </text>
-            <text x={cx} y={height - 10} fill="#DFC46B" fontSize="10.5" fontWeight="700" fontFamily="monospace" textAnchor="middle">
+            <text x={cx} y={height - 10} fill="var(--ef-gold, #DFC46B)" fontSize="10.5" fontWeight="700" fontFamily="monospace" textAnchor="middle">
               {pt.label}
             </text>
           </g>
@@ -363,7 +363,7 @@ export const GoldVsDxyChartSvg: React.FC<{
   series: Array<{ date: string; goldPrice: number; dxyPrice: number }>;
 }> = ({ series }) => {
   if (!series || series.length < 2) {
-    return <div style={{ padding: 24, color: '#9f91c2', fontSize: '0.84rem' }}>Insufficient 30D Gold vs DXY overlay data.</div>;
+    return <div style={{ padding: 24, color: 'var(--ef-text-muted, #9f91c2)', fontSize: '0.84rem' }}>Insufficient 30D Gold vs DXY overlay data.</div>;
   }
 
   const width = 660;
@@ -394,22 +394,22 @@ export const GoldVsDxyChartSvg: React.FC<{
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label="30-day Gold Futures versus US Dollar Index overlay">
-      <line x1={padL} y1={padT + plotH} x2={width - padR} y2={padT + plotH} stroke="rgba(255,255,255,0.16)" />
+      <line x1={padL} y1={padT + plotH} x2={width - padR} y2={padT + plotH} stroke="var(--ef-chart-grid, rgba(255,255,255,0.16))" />
       {/* Left axis DXY */}
-      <text x={padL - 6} y={padT + 8} fill="#38bdf8" fontSize="10" fontFamily="monospace" textAnchor="end">{maxD.toFixed(1)}</text>
-      <text x={padL - 6} y={padT + plotH} fill="#38bdf8" fontSize="10" fontFamily="monospace" textAnchor="end">{minD.toFixed(1)}</text>
+      <text x={padL - 6} y={padT + 8} fill="var(--ef-blue, #38bdf8)" fontSize="10" fontFamily="monospace" textAnchor="end">{maxD.toFixed(1)}</text>
+      <text x={padL - 6} y={padT + plotH} fill="var(--ef-blue, #38bdf8)" fontSize="10" fontFamily="monospace" textAnchor="end">{minD.toFixed(1)}</text>
       {/* Right axis Gold */}
-      <text x={width - padR + 6} y={padT + 8} fill="#DFC46B" fontSize="10" fontFamily="monospace">${maxG.toFixed(0)}</text>
-      <text x={width - padR + 6} y={padT + plotH} fill="#DFC46B" fontSize="10" fontFamily="monospace">${minG.toFixed(0)}</text>
+      <text x={width - padR + 6} y={padT + 8} fill="var(--ef-gold, #DFC46B)" fontSize="10" fontFamily="monospace">${maxG.toFixed(0)}</text>
+      <text x={width - padR + 6} y={padT + plotH} fill="var(--ef-gold, #DFC46B)" fontSize="10" fontFamily="monospace">${minG.toFixed(0)}</text>
 
-      <path d={dxyPath} fill="none" stroke="#38bdf8" strokeWidth="2" opacity="0.88" />
-      <path d={goldPath} fill="none" stroke="#DFC46B" strokeWidth="2.6" />
+      <path d={dxyPath} fill="none" stroke="var(--ef-blue, #38bdf8)" strokeWidth="2" opacity="0.88" />
+      <path d={goldPath} fill="none" stroke="var(--ef-gold, #DFC46B)" strokeWidth="2.6" />
 
-      <text x={padL} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace">{series[0].date}</text>
-      <text x={padL + plotW / 2} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace" textAnchor="middle">
+      <text x={padL} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace">{series[0].date}</text>
+      <text x={padL + plotW / 2} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace" textAnchor="middle">
         {series[Math.floor(series.length / 2)].date}
       </text>
-      <text x={width - padR} y={height - 6} fill="#9f91c2" fontSize="10" fontFamily="monospace" textAnchor="end">
+      <text x={width - padR} y={height - 6} fill="var(--ef-text-muted, #9f91c2)" fontSize="10" fontFamily="monospace" textAnchor="end">
         {series[series.length - 1].date}
       </text>
     </svg>
@@ -423,7 +423,7 @@ export const CountryHistoryTrendSvg: React.FC<{
   ariaLabel: string;
 }> = ({ points, color, unit = '%', ariaLabel }) => {
   if (!points || points.length === 0) {
-    return <div style={{ padding: 14, color: '#9f91c2', fontSize: '0.8rem' }}>No historical observations available.</div>;
+    return <div style={{ padding: 14, color: 'var(--ef-text-muted, #9f91c2)', fontSize: '0.8rem' }}>No historical observations available.</div>;
   }
   const width = 320;
   const height = 128;
@@ -442,9 +442,9 @@ export const CountryHistoryTrendSvg: React.FC<{
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }} role="img" aria-label={ariaLabel}>
-      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="rgba(255,255,255,0.22)" />
-      <text x={padL - 5} y={padT + 6} fill="#a99bc9" fontSize="9" fontFamily="monospace" textAnchor="end">{maxV.toFixed(1)}{unit}</text>
-      <text x={padL - 5} y={padT + plotH} fill="#a99bc9" fontSize="9" fontFamily="monospace" textAnchor="end">{minV.toFixed(1)}{unit}</text>
+      <line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke="var(--ef-chart-grid, rgba(255,255,255,0.22))" />
+      <text x={padL - 5} y={padT + 6} fill="var(--ef-text-muted, #a99bc9)" fontSize="9" fontFamily="monospace" textAnchor="end">{maxV.toFixed(1)}{unit}</text>
+      <text x={padL - 5} y={padT + plotH} fill="var(--ef-text-muted, #a99bc9)" fontSize="9" fontFamily="monospace" textAnchor="end">{minV.toFixed(1)}{unit}</text>
       {points.map((pt, i) => {
         const cx = padL + ((i + 0.5) / points.length) * plotW;
         const valY = padT + plotH - ((pt.value - minV) / span) * plotH;
@@ -455,7 +455,7 @@ export const CountryHistoryTrendSvg: React.FC<{
           <g key={`${pt.label}-${i}`}>
             <rect x={cx - barW / 2} y={top} width={barW} height={h} rx={2} fill={pt.value < 0 ? '#FF5252' : color} opacity="0.88" />
             {showLabel && (
-              <text x={cx} y={height - 6} fill="#a99bc9" fontSize="8.5" fontFamily="monospace" textAnchor="middle">
+              <text x={cx} y={height - 6} fill="var(--ef-text-muted, #a99bc9)" fontSize="8.5" fontFamily="monospace" textAnchor="middle">
                 {pt.label.length > 5 ? pt.label.slice(2) : pt.label}
               </text>
             )}

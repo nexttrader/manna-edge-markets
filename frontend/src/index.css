@@ -410,6 +410,17 @@ html[data-theme="light"] {
   --border-subtle: rgba(15, 23, 42, 0.1);
   --border-glass: rgba(184, 134, 11, 0.25);
 
+  --green: #047857;
+  --green-bright: #059669;
+  --green-dim: rgba(5, 150, 105, 0.12);
+  --red: #b91c1c;
+  --red-bright: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.12);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.12);
+  --blue: #0369a1;
+  --blue-dim: rgba(3, 105, 161, 0.12);
+
   --shadow-card: 0 8px 24px rgba(15, 23, 42, 0.07);
 }
 
@@ -744,5 +755,66 @@ html[data-theme="light"] textarea {
   background-color: #ffffff;
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.18);
+}
+
+/* Light Mode Overrides for RunnersPanel & AssetDecisionMatrix */
+html[data-theme="light"] .runners-panel,
+html[data-theme="light"] .asset-decision-matrix-collapsed,
+html[data-theme="light"] .asset-decision-matrix-container {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .runners-title {
+  color: #7a5500;
+}
+
+html[data-theme="light"] .runners-header-clickable:hover .runners-title {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .runners-badge,
+html[data-theme="light"] .runners-toggle-btn {
+  background: rgba(180, 83, 9, 0.1);
+  border-color: rgba(180, 83, 9, 0.32);
+  color: #92400e;
+}
+
+html[data-theme="light"] .runners-subtitle {
+  color: #475569;
+}
+
+html[data-theme="light"] .collapsed-top-ticker {
+  background: #f1f5f9;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .ticker-label {
+  color: #8a6100;
+}
+
+html[data-theme="light"] .ticker-symbol {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .ticker-score {
+  color: #047857;
+}
+
+html[data-theme="light"] .ticker-status {
+  color: #475569;
+}
+
+html[data-theme="light"] .maximize-matrix-btn {
+  background: rgba(212, 175, 55, 0.16);
+  color: #7a5500;
+  border-color: rgba(184, 134, 11, 0.42);
+}
+
+html[data-theme="light"] .maximize-matrix-btn:hover {
+  background: rgba(212, 175, 55, 0.28);
+  color: #0f172a;
 }
 

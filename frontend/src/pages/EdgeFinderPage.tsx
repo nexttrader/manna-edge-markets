@@ -164,18 +164,18 @@ function formatSigned(val: number, decimals = 2): string {
 
 function scoreCellStyle(score: number): React.CSSProperties {
   if (score >= 4 || score >= 1.2) {
-    return { background: 'rgba(0, 230, 118, 0.22)', color: '#69F0AE', border: '1px solid rgba(0, 230, 118, 0.45)' };
+    return { background: 'var(--ef-bull-strong-bg, rgba(0, 230, 118, 0.22))', color: 'var(--ef-green, #69F0AE)', border: '1px solid var(--ef-bull-strong-border, rgba(0, 230, 118, 0.45))' };
   }
   if (score > 0.2) {
-    return { background: 'rgba(0, 230, 118, 0.11)', color: '#B9F6CA', border: '1px solid rgba(0, 230, 118, 0.26)' };
+    return { background: 'var(--ef-bull-soft-bg, rgba(0, 230, 118, 0.11))', color: 'var(--ef-green-soft, #B9F6CA)', border: '1px solid var(--ef-bull-soft-border, rgba(0, 230, 118, 0.26))' };
   }
   if (score <= -4 || score <= -1.2) {
-    return { background: 'rgba(255, 82, 82, 0.22)', color: '#FF8A80', border: '1px solid rgba(255, 82, 82, 0.48)' };
+    return { background: 'var(--ef-bear-strong-bg, rgba(255, 82, 82, 0.22))', color: 'var(--ef-red, #FF8A80)', border: '1px solid var(--ef-bear-strong-border, rgba(255, 82, 82, 0.48))' };
   }
   if (score < -0.2) {
-    return { background: 'rgba(255, 82, 82, 0.11)', color: '#FFCDD2', border: '1px solid rgba(255, 82, 82, 0.26)' };
+    return { background: 'var(--ef-bear-soft-bg, rgba(255, 82, 82, 0.11))', color: 'var(--ef-red-soft, #FFCDD2)', border: '1px solid var(--ef-bear-soft-border, rgba(255, 82, 82, 0.26))' };
   }
-  return { background: 'rgba(255, 193, 7, 0.11)', color: '#FFE082', border: '1px solid rgba(255, 193, 7, 0.26)' };
+  return { background: 'var(--ef-neutral-bg, rgba(255, 193, 7, 0.11))', color: 'var(--ef-amber, #FFE082)', border: '1px solid var(--ef-neutral-border, rgba(255, 193, 7, 0.26))' };
 }
 
 function biasBadgeClass(bias: AssetEdgeScorecard['biasLabel']): string {
@@ -190,17 +190,17 @@ function biasBadgeClass(bias: AssetEdgeScorecard['biasLabel']): string {
 
 function seasonalityCellStyle(val: number, isWinRate: boolean): React.CSSProperties {
   if (isWinRate) {
-    if (val >= 70) return { background: 'rgba(0, 230, 118, 0.25)', color: '#69F0AE' };
-    if (val >= 55) return { background: 'rgba(0, 230, 118, 0.1)', color: '#B9F6CA' };
-    if (val <= 35) return { background: 'rgba(255, 82, 82, 0.24)', color: '#FF8A80' };
-    if (val <= 45) return { background: 'rgba(255, 82, 82, 0.1)', color: '#FFCDD2' };
-    return { background: 'rgba(255, 255, 255, 0.04)', color: '#cfc5e8' };
+    if (val >= 70) return { background: 'var(--ef-bull-strong-bg, rgba(0, 230, 118, 0.25))', color: 'var(--ef-green, #69F0AE)' };
+    if (val >= 55) return { background: 'var(--ef-bull-soft-bg, rgba(0, 230, 118, 0.1))', color: 'var(--ef-green-soft, #B9F6CA)' };
+    if (val <= 35) return { background: 'var(--ef-bear-strong-bg, rgba(255, 82, 82, 0.24))', color: 'var(--ef-red, #FF8A80)' };
+    if (val <= 45) return { background: 'var(--ef-bear-soft-bg, rgba(255, 82, 82, 0.1))', color: 'var(--ef-red-soft, #FFCDD2)' };
+    return { background: 'var(--ef-surface-chip, rgba(255, 255, 255, 0.04))', color: 'var(--ef-text-secondary, #cfc5e8)' };
   }
-  if (val >= 1.2) return { background: 'rgba(0, 230, 118, 0.26)', color: '#69F0AE' };
-  if (val > 0.2) return { background: 'rgba(0, 230, 118, 0.12)', color: '#B9F6CA' };
-  if (val <= -1.2) return { background: 'rgba(255, 82, 82, 0.26)', color: '#FF8A80' };
-  if (val < -0.2) return { background: 'rgba(255, 82, 82, 0.12)', color: '#FFCDD2' };
-  return { background: 'rgba(255, 255, 255, 0.04)', color: '#cfc5e8' };
+  if (val >= 1.2) return { background: 'var(--ef-bull-strong-bg, rgba(0, 230, 118, 0.26))', color: 'var(--ef-green, #69F0AE)' };
+  if (val > 0.2) return { background: 'var(--ef-bull-soft-bg, rgba(0, 230, 118, 0.12))', color: 'var(--ef-green-soft, #B9F6CA)' };
+  if (val <= -1.2) return { background: 'var(--ef-bear-strong-bg, rgba(255, 82, 82, 0.26))', color: 'var(--ef-red, #FF8A80)' };
+  if (val < -0.2) return { background: 'var(--ef-bear-soft-bg, rgba(255, 82, 82, 0.12))', color: 'var(--ef-red-soft, #FFCDD2)' };
+  return { background: 'var(--ef-surface-chip, rgba(255, 255, 255, 0.04))', color: 'var(--ef-text-secondary, #cfc5e8)' };
 }
 
 function loadWatchlist(): string[] {
@@ -591,9 +591,9 @@ export const EdgeFinderPage: React.FC = () => {
             style={{
               padding: '10px 16px',
               borderRadius: 10,
-              background: 'rgba(0, 230, 118, 0.14)',
-              border: '1px solid rgba(0, 230, 118, 0.45)',
-              color: '#86efac',
+              background: 'var(--ef-notice-bg, rgba(0, 230, 118, 0.14))',
+              border: '1px solid var(--ef-notice-border, rgba(0, 230, 118, 0.45))',
+              color: 'var(--ef-notice-fg, #86efac)',
               fontSize: '0.84rem',
               fontWeight: 600
             }}
@@ -608,9 +608,9 @@ export const EdgeFinderPage: React.FC = () => {
             style={{
               padding: '12px 16px',
               borderRadius: 10,
-              background: 'rgba(255, 82, 82, 0.16)',
-              border: '1px solid rgba(255, 82, 82, 0.45)',
-              color: '#ff8a80',
+              background: 'var(--ef-error-bg, rgba(255, 82, 82, 0.16))',
+              border: '1px solid var(--ef-error-border, rgba(255, 82, 82, 0.45))',
+              color: 'var(--ef-error-fg, #ff8a80)',
               fontSize: '0.86rem'
             }}
           >
@@ -620,10 +620,10 @@ export const EdgeFinderPage: React.FC = () => {
 
         {loading && !snapshot ? (
           <div className="ef-card" style={{ padding: 48, textAlign: 'center' }}>
-            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#DFC46B' }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--ef-gold, #DFC46B)' }}>
               Initializing Manna EdgeFinder Pro Quantitative Matrix...
             </div>
-            <p style={{ color: '#a99bc9', marginTop: 8, fontSize: '0.86rem' }}>
+            <p style={{ color: 'var(--ef-text-muted, #a99bc9)', marginTop: 8, fontSize: '0.86rem' }}>
               Aggregating CFTC COT contracts, G8 Central Bank matrices, 10-year seasonal windows, and Manna Killzone order-flow.
             </p>
           </div>
@@ -645,15 +645,15 @@ export const EdgeFinderPage: React.FC = () => {
                   {snapshot.syncStatus.feedCadences.map((feed) => (
                     <div key={feed.key} className="ef-pillar-card">
                       <div className="ef-pillar-top">
-                        <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.84rem' }}>{feed.name}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)', fontSize: '0.84rem' }}>{feed.name}</span>
                         <span className={`ef-kz-pill ${feed.status === 'LIVE' ? 'ef-bias-buy' : 'ef-kz-standby'}`}>
                           {feed.status}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.76rem', color: '#DFC46B', fontWeight: 600 }} className="ef-num">
+                      <div style={{ fontSize: '0.76rem', color: 'var(--ef-gold, #DFC46B)', fontWeight: 600 }} className="ef-num">
                         Poll: {feed.pollCadence} · Source: {feed.upstreamFrequency}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#b7a8d6' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--ef-text-secondary, #b7a8d6)' }}>
                         {feed.provider}
                       </div>
                     </div>
@@ -740,7 +740,7 @@ export const EdgeFinderPage: React.FC = () => {
                       const pct = Math.max(8, Math.min(100, ((item.strengthScore + 10) / 20) * 100));
                       const isBull = item.strengthScore >= 0.8;
                       const isBear = item.strengthScore <= -0.8;
-                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      const barColor = isBull ? 'var(--ef-green-solid, #00E676)' : isBear ? 'var(--ef-red-solid, #FF5252)' : 'var(--ef-amber-solid, #FFC107)';
                       return (
                         <div key={item.currency} className="ef-strength-tile">
                           <div className="ef-strength-head">
@@ -750,7 +750,7 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-strength-bar-bg">
                             <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#9f91c2' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>
                             <span>{item.policyRate.toFixed(2)}%</span>
                             <span>{item.stance}</span>
                           </div>
@@ -766,7 +766,7 @@ export const EdgeFinderPage: React.FC = () => {
                       const pct = Math.max(8, Math.min(100, ((sec.strengthScore + 10) / 20) * 100));
                       const isBull = sec.strengthScore >= 0.8;
                       const isBear = sec.strengthScore <= -0.8;
-                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      const barColor = isBull ? 'var(--ef-green-solid, #00E676)' : isBear ? 'var(--ef-red-solid, #FF5252)' : 'var(--ef-amber-solid, #FFC107)';
                       return (
                         <div
                           key={sec.sector}
@@ -782,8 +782,8 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-strength-bar-bg">
                             <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9f91c2' }}>
-                            <span>Top: <strong style={{ color: '#DFC46B' }}>{sec.topContract}</strong></span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>
+                            <span>Top: <strong style={{ color: 'var(--ef-gold, #DFC46B)' }}>{sec.topContract}</strong></span>
                             <span>COT {sec.cotNetLongPct.toFixed(0)}%L</span>
                           </div>
                         </div>
@@ -798,7 +798,7 @@ export const EdgeFinderPage: React.FC = () => {
                       const pct = Math.max(8, Math.min(100, ((cr.strengthScore + 10) / 20) * 100));
                       const isBull = cr.strengthScore >= 0.8;
                       const isBear = cr.strengthScore <= -0.8;
-                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      const barColor = isBull ? 'var(--ef-green-solid, #00E676)' : isBear ? 'var(--ef-red-solid, #FF5252)' : 'var(--ef-amber-solid, #FFC107)';
                       return (
                         <div
                           key={cr.instrument}
@@ -814,9 +814,9 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-strength-bar-bg">
                             <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9f91c2' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>
                             <span className="ef-num">${cr.currentPrice >= 10 ? cr.currentPrice.toFixed(0) : cr.currentPrice.toFixed(3)}</span>
-                            <span style={{ color: cr.dailyMomentumPct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                            <span style={{ color: cr.dailyMomentumPct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                               {formatSigned(cr.dailyMomentumPct, 1)}%
                             </span>
                           </div>
@@ -841,19 +841,19 @@ export const EdgeFinderPage: React.FC = () => {
                 <div className="ef-sync-stats">
                   <div className="ef-stat-box">
                     <div className="ef-stat-label">Live Quotes (60s)</div>
-                    <div className="ef-stat-val" style={{ color: snapshot.syncStatus.livePriceCount > 0 ? '#69F0AE' : '#FFE082' }}>
+                    <div className="ef-stat-val" style={{ color: snapshot.syncStatus.livePriceCount > 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-amber, #FFE082)' }}>
                       {snapshot.syncStatus.livePriceCount} / {snapshot.syncStatus.totalAssets}
                     </div>
                   </div>
                   <div className="ef-stat-box">
                     <div className="ef-stat-label">15m/H1/H4 Intraday</div>
-                    <div className="ef-stat-val" style={{ fontSize: '0.8rem', color: '#69F0AE' }}>
+                    <div className="ef-stat-val" style={{ fontSize: '0.8rem', color: 'var(--ef-green, #69F0AE)' }}>
                       {snapshot.syncStatus.intradaySource === 'LIVE_15M_H1_H4' ? 'LIVE 15M (60s)' : 'PARTIAL'}
                     </div>
                   </div>
                   <div className="ef-stat-box">
                     <div className="ef-stat-label">3/3 TF Aligned</div>
-                    <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                    <div className="ef-stat-val" style={{ color: 'var(--ef-gold, #DFC46B)' }}>
                       {tfAlignedCount} Assets · {alignedCount} KZ
                     </div>
                   </div>
@@ -872,7 +872,7 @@ export const EdgeFinderPage: React.FC = () => {
               <div className="ef-horizon-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div className="ef-title-help-wrap">
-                    <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#DFC46B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--ef-gold, #DFC46B)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       🎯 Active Execution Horizon
                     </span>
                     <EdgeFinderHelpButton topicId="horizon_engine" onOpenTopic={openKbTopic} />
@@ -903,7 +903,7 @@ export const EdgeFinderPage: React.FC = () => {
                         <span>{opt.icon} {opt.label}</span>
                         <span className="ef-horizon-tf">{opt.executionTimeframes}</span>
                       </div>
-                      <div className="ef-horizon-meta" style={{ color: '#e9e2fb', fontWeight: 600 }}>
+                      <div className="ef-horizon-meta" style={{ color: 'var(--ef-text-strong, #e9e2fb)', fontWeight: 600 }}>
                         {opt.holdDuration} · {activeSignals} Directional Setups
                       </div>
                       <div className="ef-horizon-meta">
@@ -988,7 +988,7 @@ export const EdgeFinderPage: React.FC = () => {
                             onClick={() => setSelectedSymbol(sc.instrument)}
                             title={`${hp.label}: ${hp.actionNote}`}
                           >
-                            <span className="ef-num" style={{ fontWeight: 700, color: '#ffffff' }}>
+                            <span className="ef-num" style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>
                               {sc.instrument}
                             </span>
                             <div className="ef-diverging-track">
@@ -1007,7 +1007,7 @@ export const EdgeFinderPage: React.FC = () => {
                               style={{
                                 textAlign: 'right',
                                 fontWeight: 700,
-                                color: isPos ? '#69F0AE' : '#FF8A80'
+                                color: isPos ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)'
                               }}
                             >
                               {formatSigned(hp.score, 1)}
@@ -1188,7 +1188,7 @@ export const EdgeFinderPage: React.FC = () => {
                                         background: 'transparent',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        color: isStarred ? '#D4AF37' : '#6b5b95',
+                                        color: isStarred ? 'var(--ef-gold, #D4AF37)' : 'var(--ef-text-subtle, #6b5b95)',
                                         fontSize: '0.95rem',
                                         padding: 0
                                       }}
@@ -1196,20 +1196,20 @@ export const EdgeFinderPage: React.FC = () => {
                                       {isStarred ? '★' : '☆'}
                                     </button>
                                     <div>
-                                      <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
-                                      <div style={{ fontSize: '0.68rem', color: '#9f91c2', fontWeight: 400 }}>
+                                      <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{sc.instrument}</div>
+                                      <div style={{ fontSize: '0.68rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>
                                         {sc.category}
                                       </div>
                                     </div>
                                   </div>
                                 </th>
                                 <td>
-                                  <div className="ef-num" style={{ color: '#ffffff', fontWeight: 600 }}>{sc.currentPrice}</div>
+                                  <div className="ef-num" style={{ color: 'var(--ef-text-primary, #ffffff)', fontWeight: 600 }}>{sc.currentPrice}</div>
                                   <div
                                     className="ef-num"
                                     style={{
                                       fontSize: '0.71rem',
-                                      color: sc.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80'
+                                      color: sc.dailyChangePct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)'
                                     }}
                                   >
                                     {formatSigned(sc.dailyChangePct, 2)}%
@@ -1232,7 +1232,7 @@ export const EdgeFinderPage: React.FC = () => {
                                       SW {formatSigned(swing.score, 1)}
                                     </span>
                                   </div>
-                                  <div style={{ fontSize: '0.65rem', color: sc.timeframeConfluence?.allAligned ? '#DFC46B' : '#9f91c2', marginTop: 2 }}>
+                                  <div style={{ fontSize: '0.65rem', color: sc.timeframeConfluence?.allAligned ? 'var(--ef-gold, #DFC46B)' : 'var(--ef-text-subtle, #9f91c2)', marginTop: 2 }}>
                                     {sc.timeframeConfluence?.allAligned ? '★ 3/3 ALIGNED' : `${sc.timeframeConfluence?.alignedCount ?? 0}/3 TF`}
                                   </div>
                                 </td>
@@ -1252,10 +1252,10 @@ export const EdgeFinderPage: React.FC = () => {
                                   </span>
                                 </td>
                                 <td>
-                                  <div className="ef-num" style={{ fontSize: '0.72rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
+                                  <div className="ef-num" style={{ fontSize: '0.72rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-gold, #DFC46B)' }}>
                                     {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR
                                   </div>
-                                  <div style={{ fontSize: '0.66rem', color: '#a99bc9' }}>
+                                  <div style={{ fontSize: '0.66rem', color: 'var(--ef-text-muted, #a99bc9)' }}>
                                     MTF {sc.technical.mtfAlignment.alignedCount}/7
                                   </div>
                                 </td>
@@ -1304,8 +1304,8 @@ export const EdgeFinderPage: React.FC = () => {
                               <EdgeFinderHelpButton topicId="scorecard_gauge" onOpenTopic={openKbTopic} />
                             </div>
                             <div className="ef-card-meta" style={{ marginTop: 2 }}>
-                              <strong style={{ color: '#ffffff' }}>{activeScorecard.currentPrice}</strong>{' '}
-                              <span style={{ color: activeScorecard.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                              <strong style={{ color: 'var(--ef-text-primary, #ffffff)' }}>{activeScorecard.currentPrice}</strong>{' '}
+                              <span style={{ color: activeScorecard.dailyChangePct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                                 ({formatSigned(activeScorecard.dailyChangePct, 2)}% 1D)
                               </span>{' '}
                               · {inspHp.label}
@@ -1327,19 +1327,19 @@ export const EdgeFinderPage: React.FC = () => {
                           style={{
                             padding: '8px 10px',
                             borderRadius: 8,
-                            background: 'rgba(9, 5, 18, 0.72)',
+                            background: 'var(--ef-surface-elevated, rgba(9, 5, 18, 0.72))',
                             border: '1px solid rgba(212, 175, 55, 0.24)',
                             fontSize: '0.74rem',
-                            color: '#e9e2fb',
+                            color: 'var(--ef-text-strong, #e9e2fb)',
                             lineHeight: 1.4
                           }}
                         >
-                          <strong style={{ color: '#D4AF37' }}>{inspHp.executionTimeframes}:</strong> {inspHp.actionNote}
+                          <strong style={{ color: 'var(--ef-gold, #D4AF37)' }}>{inspHp.executionTimeframes}:</strong> {inspHp.actionNote}
                         </div>
 
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ef-text-muted, #a99bc9)', textTransform: 'uppercase' }}>
                               7-TF Structure ({activeScorecard.technical.mtfAlignment.alignedCount}/7 Aligned)
                             </span>
                             <span className="ef-card-meta">ADR {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}%</span>
@@ -1366,7 +1366,7 @@ export const EdgeFinderPage: React.FC = () => {
                                       : dir === 'Bearish'
                                         ? 'rgba(239, 68, 68, 0.16)'
                                         : 'rgba(255, 255, 255, 0.05)',
-                                  color: dir === 'Bullish' ? '#6ee7b7' : dir === 'Bearish' ? '#fca5a5' : '#cfc5e8'
+                                  color: dir === 'Bullish' ? 'var(--ef-green, #6ee7b7)' : dir === 'Bearish' ? 'var(--ef-red, #fca5a5)' : 'var(--ef-text-secondary, #cfc5e8)'
                                 }}
                               >
                                 {tf}
@@ -1377,7 +1377,7 @@ export const EdgeFinderPage: React.FC = () => {
 
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ef-text-muted, #a99bc9)', textTransform: 'uppercase' }}>
                               30D Price vs Edge Score
                             </span>
                             <EdgeFinderHelpButton topicId="historical_score_chart" onOpenTopic={openKbTopic} />
@@ -1390,7 +1390,7 @@ export const EdgeFinderPage: React.FC = () => {
 
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a99bc9', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--ef-text-muted, #a99bc9)', textTransform: 'uppercase' }}>
                               Key Edge Drivers
                             </span>
                             <EdgeFinderHelpButton topicId="eleven_pillars" onOpenTopic={openKbTopic} />
@@ -1398,7 +1398,7 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-inspector-drivers">
                             {activeScorecard.factors.slice(0, 6).map((f) => (
                               <div key={f.key} className="ef-inspector-driver-chip">
-                                <span style={{ color: '#dcd3f2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: 'var(--ef-text-body, #dcd3f2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {f.label}
                                 </span>
                                 <span
@@ -1408,10 +1408,10 @@ export const EdgeFinderPage: React.FC = () => {
                                     whiteSpace: 'nowrap',
                                     color:
                                       f.signal > 0
-                                        ? '#6ee7b7'
+                                        ? 'var(--ef-green, #6ee7b7)'
                                         : f.signal < 0
-                                          ? '#fca5a5'
-                                          : '#fcd34d'
+                                          ? 'var(--ef-red, #fca5a5)'
+                                          : 'var(--ef-amber, #fcd34d)'
                                   }}
                                 >
                                   {isSuperAdmin
@@ -1547,10 +1547,10 @@ export const EdgeFinderPage: React.FC = () => {
                           </span>
                         </div>
                         <ScoreGaugeSvg score={activeHp.score} biasLabel={activeHp.biasLabel} />
-                        <div style={{ textAlign: 'center', marginTop: 6, color: '#cfc5e8', fontSize: '0.84rem' }}>
+                        <div style={{ textAlign: 'center', marginTop: 6, color: 'var(--ef-text-secondary, #cfc5e8)', fontSize: '0.84rem' }}>
                           {activeScorecard.displayName} ·{' '}
-                          <strong className="ef-num" style={{ color: '#ffffff' }}>{activeScorecard.currentPrice}</strong>{' '}
-                          <span className="ef-num" style={{ color: activeScorecard.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                          <strong className="ef-num" style={{ color: 'var(--ef-text-primary, #ffffff)' }}>{activeScorecard.currentPrice}</strong>{' '}
+                          <span className="ef-num" style={{ color: activeScorecard.dailyChangePct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                             ({formatSigned(activeScorecard.dailyChangePct, 2)}% 1D)
                           </span>
                         </div>
@@ -1559,14 +1559,14 @@ export const EdgeFinderPage: React.FC = () => {
                             marginTop: 8,
                             padding: '8px 10px',
                             borderRadius: 8,
-                            background: 'rgba(20, 9, 38, 0.72)',
+                            background: 'var(--ef-surface-elevated, rgba(20, 9, 38, 0.72))',
                             border: '1px solid rgba(201, 168, 76, 0.28)',
                             fontSize: '0.76rem',
-                            color: '#e9e2fb',
+                            color: 'var(--ef-text-strong, #e9e2fb)',
                             lineHeight: 1.4
                           }}
                         >
-                          <strong style={{ color: '#DFC46B' }}>{activeHp.executionTimeframes}:</strong> {activeHp.actionNote}
+                          <strong style={{ color: 'var(--ef-gold, #DFC46B)' }}>{activeHp.executionTimeframes}:</strong> {activeHp.actionNote}
                         </div>
                       </section>
 
@@ -1588,7 +1588,7 @@ export const EdgeFinderPage: React.FC = () => {
                             {activeScorecard.killzoneAlignment.alignmentStatus}
                           </span>
                         </div>
-                        <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#dcd3f2' }}>
+                        <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: 'var(--ef-text-body, #dcd3f2)' }}>
                           {activeScorecard.seasonality.killzoneAffinityNotes}
                         </p>
                         <div className="ef-sync-stats">
@@ -1596,14 +1596,14 @@ export const EdgeFinderPage: React.FC = () => {
                             <div className="ef-stat-label">1H / 4H Impulse</div>
                             <div
                               className="ef-stat-val"
-                              style={{ color: (activeScorecard.technical.return1hPct ?? 0) >= 0 ? '#69F0AE' : '#FF8A80' }}
+                              style={{ color: (activeScorecard.technical.return1hPct ?? 0) >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}
                             >
                               {formatSigned(activeScorecard.technical.return1hPct ?? 0, 2)}% / {formatSigned(activeScorecard.technical.return4hPct ?? 0, 2)}%
                             </div>
                           </div>
                           <div className="ef-stat-box">
                             <div className="ef-stat-label">Optimal Session</div>
-                            <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                            <div className="ef-stat-val" style={{ color: 'var(--ef-gold, #DFC46B)' }}>
                               {activeScorecard.seasonality.bestKillzone}
                             </div>
                           </div>
@@ -1617,7 +1617,7 @@ export const EdgeFinderPage: React.FC = () => {
                             <div className="ef-stat-label">Daily ADR Used</div>
                             <div
                               className="ef-stat-val"
-                              style={{ color: activeScorecard.technical.dayRangePctOfAtr >= 95 ? '#FF8A80' : '#69F0AE' }}
+                              style={{ color: activeScorecard.technical.dayRangePctOfAtr >= 95 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-green, #69F0AE)' }}
                             >
                               {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}% ({activeScorecard.technical.volatilityPercentile30d}%ile)
                             </div>
@@ -1626,14 +1626,14 @@ export const EdgeFinderPage: React.FC = () => {
                             <div className="ef-stat-label">5D / 20D Mom</div>
                             <div
                               className="ef-stat-val"
-                              style={{ color: activeScorecard.technical.return5dPct >= 0 ? '#69F0AE' : '#FF8A80' }}
+                              style={{ color: activeScorecard.technical.return5dPct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}
                             >
                               {formatSigned(activeScorecard.technical.return5dPct, 1)}% / {formatSigned(activeScorecard.technical.return20dPct, 1)}%
                             </div>
                           </div>
                           <div className="ef-stat-box">
                             <div className="ef-stat-label">52W COT Index</div>
-                            <div className="ef-stat-val" style={{ color: '#38bdf8' }}>
+                            <div className="ef-stat-val" style={{ color: 'var(--ef-blue, #38bdf8)' }}>
                               {activeScorecard.cot.cotIndex52w.toFixed(1)}% (Z {activeScorecard.cot.cotZScore52w.toFixed(2)})
                             </div>
                           </div>
@@ -1664,7 +1664,7 @@ export const EdgeFinderPage: React.FC = () => {
                                     : dir === 'Bearish'
                                       ? 'rgba(255,82,82,0.14)'
                                       : 'rgba(255,255,255,0.05)',
-                                color: dir === 'Bullish' ? '#69F0AE' : dir === 'Bearish' ? '#FF8A80' : '#cfc5e8'
+                                color: dir === 'Bullish' ? 'var(--ef-green, #69F0AE)' : dir === 'Bearish' ? 'var(--ef-red, #FF8A80)' : 'var(--ef-text-secondary, #cfc5e8)'
                               }}
                             >
                               {tf}: {dir}
@@ -1691,12 +1691,12 @@ export const EdgeFinderPage: React.FC = () => {
                                 className="ef-num"
                                 style={{
                                   fontWeight: row.advantage === 'BASE' ? 700 : 400,
-                                  color: row.advantage === 'BASE' ? '#69F0AE' : '#b7a8d6'
+                                  color: row.advantage === 'BASE' ? 'var(--ef-green, #69F0AE)' : 'var(--ef-text-secondary, #b7a8d6)'
                                 }}
                               >
                                 {row.baseValue}
                               </span>
-                              <span style={{ textAlign: 'center', color: '#DFC46B', fontSize: '0.73rem', fontWeight: 600 }}>
+                              <span style={{ textAlign: 'center', color: 'var(--ef-gold, #DFC46B)', fontSize: '0.73rem', fontWeight: 600 }}>
                                 {row.metric}
                               </span>
                               <span
@@ -1704,7 +1704,7 @@ export const EdgeFinderPage: React.FC = () => {
                                 style={{
                                   textAlign: 'right',
                                   fontWeight: row.advantage === 'QUOTE' ? 700 : 400,
-                                  color: row.advantage === 'QUOTE' ? '#FF8A80' : '#b7a8d6'
+                                  color: row.advantage === 'QUOTE' ? 'var(--ef-red, #FF8A80)' : 'var(--ef-text-secondary, #b7a8d6)'
                                 }}
                               >
                                 {row.quoteValue}
@@ -1739,27 +1739,27 @@ export const EdgeFinderPage: React.FC = () => {
                                 title="Click to make this horizon active across Scanner & Radar"
                               >
                                 <div className="ef-pillar-top">
-                                  <strong style={{ color: '#DFC46B', fontSize: '0.84rem' }}>
+                                  <strong style={{ color: 'var(--ef-gold, #DFC46B)', fontSize: '0.84rem' }}>
                                     {hp.horizon === 'SCALP' ? '⚡ SCALPER' : hp.horizon === 'INTRADAY' ? '⏱️ INTRADAY' : '🏛️ SWING'}
                                   </strong>
                                   <span className="ef-heatmap-cell" style={scoreCellStyle(hp.score)}>
                                     {formatSigned(hp.score, 2)}
                                   </span>
                                 </div>
-                                <div style={{ fontSize: '0.73rem', color: '#ffffff', fontWeight: 600 }} className="ef-num">
+                                <div style={{ fontSize: '0.73rem', color: 'var(--ef-text-primary, #ffffff)', fontWeight: 600 }} className="ef-num">
                                   {hp.executionTimeframes} · {hp.holdDuration}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                                   <span className={biasBadgeClass(hp.biasLabel)}>{hp.biasLabel}</span>
                                   <span className="ef-mini-chip">{hp.confidencePct}% Conf</span>
                                 </div>
-                                <div style={{ fontSize: '0.72rem', color: '#cfc5e8' }} className="ef-num">
+                                <div style={{ fontSize: '0.72rem', color: 'var(--ef-text-secondary, #cfc5e8)' }} className="ef-num">
                                   Structure: <strong>{hp.trendPrimary}</strong> / {hp.trendConfirm} · RSI {hp.rsi.toFixed(0)}
                                 </div>
-                                <div style={{ fontSize: '0.71rem', color: hp.adrWarning ? '#FF8A80' : hp.htfConfluence === 'COUNTER_TREND' ? '#ffe082' : '#69F0AE' }}>
+                                <div style={{ fontSize: '0.71rem', color: hp.adrWarning ? 'var(--ef-red, #FF8A80)' : hp.htfConfluence === 'COUNTER_TREND' ? 'var(--ef-amber, #ffe082)' : 'var(--ef-green, #69F0AE)' }}>
                                   {hp.adrWarning ? '⚠ ADR/RSI Exhaustion Guard Active' : `HTF Swing Alignment: ${hp.htfConfluence}`}
                                 </div>
-                                <div style={{ fontSize: '0.74rem', color: '#b7a8d6', lineHeight: 1.4 }}>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--ef-text-secondary, #b7a8d6)', lineHeight: 1.4 }}>
                                   {hp.actionNote}
                                 </div>
                               </div>
@@ -1802,7 +1802,7 @@ export const EdgeFinderPage: React.FC = () => {
                           {activeScorecard.factors.map((f) => (
                             <div key={f.key} className="ef-pillar-card">
                               <div className="ef-pillar-top">
-                                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9', letterSpacing: '0.04em' }}>
+                                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--ef-text-muted, #a99bc9)', letterSpacing: '0.04em' }}>
                                   {f.category}
                                 </span>
                                 <span
@@ -1818,8 +1818,8 @@ export const EdgeFinderPage: React.FC = () => {
                                         : '• Neutral'}
                                 </span>
                               </div>
-                              <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{f.label}</div>
-                              <div style={{ fontSize: '0.77rem', color: '#b7a8d6', lineHeight: 1.4 }}>{f.detail}</div>
+                              <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)', fontSize: '0.88rem' }}>{f.label}</div>
+                              <div style={{ fontSize: '0.77rem', color: 'var(--ef-text-secondary, #b7a8d6)', lineHeight: 1.4 }}>{f.detail}</div>
                             </div>
                           ))}
                         </div>
@@ -1852,9 +1852,9 @@ export const EdgeFinderPage: React.FC = () => {
                         score={snapshot.goldScorecard.totalScore}
                         biasLabel={snapshot.goldScorecard.biasLabel}
                       />
-                      <div style={{ textAlign: 'center', marginTop: 6, color: '#cfc5e8', fontSize: '0.86rem' }}>
-                        GCSpot/Fut <strong className="ef-num" style={{ color: '#ffffff' }}>${snapshot.goldScorecard.gcPrice.toFixed(2)}</strong>{' '}
-                        <span className="ef-num" style={{ color: snapshot.goldScorecard.gcChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                      <div style={{ textAlign: 'center', marginTop: 6, color: 'var(--ef-text-secondary, #cfc5e8)', fontSize: '0.86rem' }}>
+                        GCSpot/Fut <strong className="ef-num" style={{ color: 'var(--ef-text-primary, #ffffff)' }}>${snapshot.goldScorecard.gcPrice.toFixed(2)}</strong>{' '}
+                        <span className="ef-num" style={{ color: snapshot.goldScorecard.gcChangePct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                           ({formatSigned(snapshot.goldScorecard.gcChangePct, 2)}%)
                         </span>
                       </div>
@@ -1871,7 +1871,7 @@ export const EdgeFinderPage: React.FC = () => {
                       <div className="ef-sync-stats">
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">10Y TIPS Real Yield</div>
-                          <div className="ef-stat-val" style={{ color: snapshot.goldScorecard.realYield10y >= 2.2 ? '#FF8A80' : '#69F0AE' }}>
+                          <div className="ef-stat-val" style={{ color: snapshot.goldScorecard.realYield10y >= 2.2 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-green, #69F0AE)' }}>
                             {snapshot.goldScorecard.realYield10y.toFixed(2)}%
                           </div>
                         </div>
@@ -1881,7 +1881,7 @@ export const EdgeFinderPage: React.FC = () => {
                         </div>
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">Gold / Silver Ratio</div>
-                          <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                          <div className="ef-stat-val" style={{ color: 'var(--ef-gold, #DFC46B)' }}>
                             {snapshot.goldScorecard.goldSilverRatio.toFixed(1)}x
                           </div>
                         </div>
@@ -1921,7 +1921,7 @@ export const EdgeFinderPage: React.FC = () => {
                         {snapshot.goldScorecard.drivers.map((d) => (
                           <div key={d.key} className="ef-pillar-card">
                             <div className="ef-pillar-top">
-                              <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9' }}>{d.category}</span>
+                              <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--ef-text-muted, #a99bc9)' }}>{d.category}</span>
                               <span
                                 className="ef-heatmap-cell"
                                 style={scoreCellStyle(isSuperAdmin ? d.contribution : d.signal * 2)}
@@ -1935,8 +1935,8 @@ export const EdgeFinderPage: React.FC = () => {
                                       : '• Neutral'}
                               </span>
                             </div>
-                            <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{d.label}</div>
-                            <div style={{ fontSize: '0.77rem', color: '#b7a8d6', lineHeight: 1.4 }}>{d.detail}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)', fontSize: '0.88rem' }}>{d.label}</div>
+                            <div style={{ fontSize: '0.77rem', color: 'var(--ef-text-secondary, #b7a8d6)', lineHeight: 1.4 }}>{d.detail}</div>
                           </div>
                         ))}
                       </div>
@@ -2031,14 +2031,14 @@ export const EdgeFinderPage: React.FC = () => {
                         return (
                           <tr key={ct.instrument} onClick={() => handleSelectAssetForDeepDive(ct.instrument)}>
                             <th scope="row">
-                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{ct.instrument}</div>
-                              <div style={{ fontSize: '0.69rem', color: '#DFC46B', fontWeight: 500 }}>
+                              <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{ct.instrument}</div>
+                              <div style={{ fontSize: '0.69rem', color: 'var(--ef-gold, #DFC46B)', fontWeight: 500 }}>
                                 {ct.category} · {ct.regimeLabel}
                               </div>
                             </th>
                             <td className="ef-num">
                               <div>{ct.baseRate.toFixed(2)}% / {ct.quoteRate.toFixed(2)}%</div>
-                              <div style={{ fontSize: '0.68rem', color: '#9f91c2' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>
                                 {ct.carryType === 'FX_RATE_DIFF' ? 'CB Policy Diff' : ct.carryType === 'FUTURES_ROLL_YIELD' ? 'Implied vs 3M T-Bill' : 'Basis vs USD Rate'}
                               </div>
                             </td>
@@ -2060,14 +2060,14 @@ export const EdgeFinderPage: React.FC = () => {
                                 {ct.carryDirection === 'NEUTRAL' ? 'FLAT SPREAD' : `POSITIVE ${ct.carryDirection}`}
                               </span>
                             </td>
-                            <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>
+                            <td className="ef-num" style={{ fontWeight: 700, color: 'var(--ef-gold, #DFC46B)' }}>
                               {ct.carryAtrRatio.toFixed(2)}x
                             </td>
                             <td>
                               <span className="ef-heatmap-cell" style={scoreCellStyle(activeCarryScore)}>
                                 {formatSigned(activeCarryScore, 1)}
                               </span>
-                              <div className="ef-num" style={{ fontSize: '0.67rem', color: '#a99bc9', marginTop: 2 }}>
+                              <div className="ef-num" style={{ fontSize: '0.67rem', color: 'var(--ef-text-muted, #a99bc9)', marginTop: 2 }}>
                                 S {formatSigned(ct.scalpScore, 1)} · I {formatSigned(ct.intradayScore, 1)} · SW {formatSigned(ct.swingScore, 1)}
                               </div>
                             </td>
@@ -2172,35 +2172,35 @@ export const EdgeFinderPage: React.FC = () => {
                       {pickerScorecards.map((sc) => (
                         <tr key={sc.instrument} onClick={() => setSelectedSymbol(sc.instrument)}>
                           <th scope="row">
-                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{sc.category} · {sc.cot.reportDate}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{sc.instrument}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>{sc.category} · {sc.cot.reportDate}</div>
                           </th>
                           <td className="ef-num">{sc.cot.cftcCode}</td>
                           <td className="ef-num">
-                            <span style={{ color: '#69F0AE' }}>{sc.cot.nonCommercialLong.toLocaleString()}</span> /{' '}
-                            <span style={{ color: '#FF8A80' }}>{sc.cot.nonCommercialShort.toLocaleString()}</span>
+                            <span style={{ color: 'var(--ef-green, #69F0AE)' }}>{sc.cot.nonCommercialLong.toLocaleString()}</span> /{' '}
+                            <span style={{ color: 'var(--ef-red, #FF8A80)' }}>{sc.cot.nonCommercialShort.toLocaleString()}</span>
                           </td>
                           <td className="ef-num">
-                            <div style={{ fontWeight: 700, color: sc.cot.nonCommercialNet >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                            <div style={{ fontWeight: 700, color: sc.cot.nonCommercialNet >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                               {sc.cot.nonCommercialNet >= 0 ? '+' : ''}{sc.cot.nonCommercialNet.toLocaleString()}
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: sc.cot.netChangeWoW >= 0 ? '#B9F6CA' : '#FFCDD2' }}>
+                            <div style={{ fontSize: '0.7rem', color: sc.cot.netChangeWoW >= 0 ? 'var(--ef-green-soft, #B9F6CA)' : 'var(--ef-red-soft, #FFCDD2)' }}>
                               WoW {sc.cot.netChangeWoW >= 0 ? '+' : ''}{sc.cot.netChangeWoW.toLocaleString()}
                             </div>
                           </td>
                           <td className="ef-num">
-                            <div style={{ fontWeight: 600, color: sc.cot.commercialNet >= 0 ? '#38bdf8' : '#ffb74d' }}>
+                            <div style={{ fontWeight: 600, color: sc.cot.commercialNet >= 0 ? 'var(--ef-blue, #38bdf8)' : 'var(--ef-amber, #ffb74d)' }}>
                               {sc.cot.commercialNet >= 0 ? '+' : ''}{sc.cot.commercialNet.toLocaleString()}
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-muted, #a99bc9)' }}>
                               {sc.cot.commercialLongPct.toFixed(1)}% Comm Long
                             </div>
                           </td>
                           <td className="ef-num">
-                            <div style={{ fontWeight: 700, color: sc.cot.cotIndex52w >= 80 ? '#69F0AE' : sc.cot.cotIndex52w <= 20 ? '#FF8A80' : '#DFC46B' }}>
+                            <div style={{ fontWeight: 700, color: sc.cot.cotIndex52w >= 80 ? 'var(--ef-green, #69F0AE)' : sc.cot.cotIndex52w <= 20 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-gold, #DFC46B)' }}>
                               {sc.cot.cotIndex52w.toFixed(1)}%
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-muted, #a99bc9)' }}>
                               Z {sc.cot.cotZScore52w >= 0 ? '+' : ''}{sc.cot.cotZScore52w.toFixed(2)}
                             </div>
                           </td>
@@ -2270,13 +2270,13 @@ export const EdgeFinderPage: React.FC = () => {
                       {snapshot.smartMoney.bankAndStreetTargets.map((item) => (
                         <tr key={item.ticker}>
                           <th scope="row">
-                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{item.ticker}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{item.name}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{item.ticker}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>{item.name}</div>
                           </th>
                           <td className="ef-num">${item.currentPrice.toFixed(2)}</td>
-                          <td className="ef-num" style={{ color: '#b7a8d6' }}>${item.targetLow.toFixed(2)}</td>
-                          <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>${item.targetMean.toFixed(2)}</td>
-                          <td className="ef-num" style={{ color: '#69F0AE' }}>${item.targetHigh.toFixed(2)}</td>
+                          <td className="ef-num" style={{ color: 'var(--ef-text-secondary, #b7a8d6)' }}>${item.targetLow.toFixed(2)}</td>
+                          <td className="ef-num" style={{ fontWeight: 700, color: 'var(--ef-gold, #DFC46B)' }}>${item.targetMean.toFixed(2)}</td>
+                          <td className="ef-num" style={{ color: 'var(--ef-green, #69F0AE)' }}>${item.targetHigh.toFixed(2)}</td>
                           <td>
                             <span className="ef-heatmap-cell" style={scoreCellStyle(item.upsidePct / 5)}>
                               {formatSigned(item.upsidePct, 1)}%
@@ -2314,12 +2314,12 @@ export const EdgeFinderPage: React.FC = () => {
                         {snapshot.smartMoney.insiders.map((ins, i) => (
                           <tr key={`${ins.ticker}-${ins.filerName}-${i}`}>
                             <th scope="row">
-                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{ins.ticker}</div>
-                              <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{ins.date}</div>
+                              <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{ins.ticker}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>{ins.date}</div>
                             </th>
                             <td>
-                              <div style={{ fontWeight: 600, color: '#e9e2fb', fontSize: '0.8rem' }}>{ins.filerName}</div>
-                              <div style={{ fontSize: '0.7rem', color: '#9f91c2' }}>{ins.relation}</div>
+                              <div style={{ fontWeight: 600, color: 'var(--ef-text-strong, #e9e2fb)', fontSize: '0.8rem' }}>{ins.filerName}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>{ins.relation}</div>
                             </td>
                             <td>
                               <span
@@ -2336,7 +2336,7 @@ export const EdgeFinderPage: React.FC = () => {
                             </td>
                             <td className="ef-num">
                               <div>{ins.shares.toLocaleString()} sh</div>
-                              <div style={{ fontSize: '0.72rem', color: '#DFC46B' }}>{formatUsdCompact(ins.valueUsd)}</div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--ef-gold, #DFC46B)' }}>{formatUsdCompact(ins.valueUsd)}</div>
                             </td>
                           </tr>
                         ))}
@@ -2364,19 +2364,19 @@ export const EdgeFinderPage: React.FC = () => {
                         {snapshot.smartMoney.whales.map((w, i) => (
                           <tr key={`${w.ticker}-${w.holder}-${i}`}>
                             <th scope="row">
-                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{w.ticker}</div>
-                              <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{w.reportDate}</div>
+                              <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{w.ticker}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>{w.reportDate}</div>
                             </th>
-                            <td style={{ fontWeight: 600, color: '#e9e2fb', fontSize: '0.8rem' }}>{w.holder}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--ef-text-strong, #e9e2fb)', fontSize: '0.8rem' }}>{w.holder}</td>
                             <td className="ef-num">
                               <div>{w.pctHeld.toFixed(2)}%</div>
-                              <div style={{ fontSize: '0.7rem', color: w.pctChange >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                              <div style={{ fontSize: '0.7rem', color: w.pctChange >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                                 {formatSigned(w.pctChange, 2)}% QoQ
                               </div>
                             </td>
                             <td className="ef-num">
-                              <div style={{ fontWeight: 700, color: '#DFC46B' }}>{formatUsdCompact(w.valueUsd)}</div>
-                              <div style={{ fontSize: '0.7rem', color: '#9f91c2' }}>{w.position.toLocaleString()} sh</div>
+                              <div style={{ fontWeight: 700, color: 'var(--ef-gold, #DFC46B)' }}>{formatUsdCompact(w.valueUsd)}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>{w.position.toLocaleString()} sh</div>
                             </td>
                           </tr>
                         ))}
@@ -2419,8 +2419,8 @@ export const EdgeFinderPage: React.FC = () => {
                           onClick={() => handleSelectAssetForDeepDive(sc.instrument)}
                         >
                           <div className="ef-pillar-top">
-                            <strong style={{ color: '#ffffff', fontSize: '0.96rem' }}>
-                              {sc.instrument} <span style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>({sc.category})</span>
+                            <strong style={{ color: 'var(--ef-text-primary, #ffffff)', fontSize: '0.96rem' }}>
+                              {sc.instrument} <span style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>({sc.category})</span>
                             </strong>
                             {rs.crowdedWarning && (
                               <span className="ef-kz-pill ef-kz-aligned">CROWD EXTREME</span>
@@ -2431,11 +2431,11 @@ export const EdgeFinderPage: React.FC = () => {
                             <div className="ef-split-short" style={{ width: `${rs.shortPct}%` }} />
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }} className="ef-num">
-                            <span style={{ color: '#69F0AE' }}>{rs.longPct.toFixed(1)}% Crowd Long</span>
-                            <span style={{ color: '#FF8A80' }}>{rs.shortPct.toFixed(1)}% Crowd Short</span>
+                            <span style={{ color: 'var(--ef-green, #69F0AE)' }}>{rs.longPct.toFixed(1)}% Crowd Long</span>
+                            <span style={{ color: 'var(--ef-red, #FF8A80)' }}>{rs.shortPct.toFixed(1)}% Crowd Short</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontSize: '0.74rem', color: '#9f91c2' }}>Contrarian Signal</span>
+                            <span style={{ fontSize: '0.74rem', color: 'var(--ef-text-subtle, #9f91c2)' }}>Contrarian Signal</span>
                             <span className="ef-heatmap-cell" style={scoreCellStyle(sc.retailScore)}>
                               {rs.contrarianBias.toUpperCase()} ({formatSigned(sc.retailScore, 0)})
                             </span>
@@ -2495,7 +2495,7 @@ export const EdgeFinderPage: React.FC = () => {
                       10Y Positive Win Rate (%)
                     </button>
                   </div>
-                  <span style={{ fontSize: '0.78rem', color: '#DFC46B' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--ef-gold, #DFC46B)' }}>
                     Gold outline marks current calendar month ({MONTHS[new Date().getUTCMonth()]})
                   </span>
                 </div>
@@ -2524,7 +2524,7 @@ export const EdgeFinderPage: React.FC = () => {
                           >
                             <td>
                               <div>{sc.instrument}</div>
-                              <div style={{ fontSize: '0.68rem', color: '#DFC46B', fontWeight: 400 }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--ef-gold, #DFC46B)', fontWeight: 400 }}>
                                 KZ: {sc.seasonality.bestKillzone}
                               </div>
                             </td>
@@ -2578,16 +2578,16 @@ export const EdgeFinderPage: React.FC = () => {
                           onClick={() => handleSelectAssetForDeepDive(sec.topContract)}
                         >
                           <div className="ef-pillar-top">
-                            <span style={{ fontWeight: 700, color: '#ffffff' }}>#{sec.rank} {sec.sector}</span>
+                            <span style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>#{sec.rank} {sec.sector}</span>
                             <span className="ef-heatmap-cell" style={scoreCellStyle(sec.strengthScore)}>
                               {formatSigned(sec.strengthScore, 1)}
                             </span>
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: '#DFC46B', fontWeight: 600 }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--ef-gold, #DFC46B)', fontWeight: 600 }}>
                             {sec.regime} ({sec.contractCount} contracts)
                           </div>
-                          <div style={{ fontSize: '0.73rem', color: '#b7a8d6' }} className="ef-num">
-                            Leader: <strong style={{ color: '#69F0AE' }}>{sec.topContract}</strong> · Lag: <strong style={{ color: '#FF8A80' }}>{sec.weakestContract}</strong> · COT {sec.cotNetLongPct.toFixed(0)}% Long
+                          <div style={{ fontSize: '0.73rem', color: 'var(--ef-text-secondary, #b7a8d6)' }} className="ef-num">
+                            Leader: <strong style={{ color: 'var(--ef-green, #69F0AE)' }}>{sec.topContract}</strong> · Lag: <strong style={{ color: 'var(--ef-red, #FF8A80)' }}>{sec.weakestContract}</strong> · COT {sec.cotNetLongPct.toFixed(0)}% Long
                           </div>
                         </div>
                       ))}
@@ -2616,15 +2616,15 @@ export const EdgeFinderPage: React.FC = () => {
                           {(snapshot.cryptoStrength || []).map((cr) => (
                             <tr key={cr.instrument} onClick={() => handleSelectAssetForDeepDive(cr.instrument)}>
                               <th scope="row" style={{ padding: '7px 10px' }}>
-                                <span style={{ fontWeight: 700, color: '#ffffff' }}>#{cr.rank} {cr.instrument}</span>
+                                <span style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>#{cr.rank} {cr.instrument}</span>
                               </th>
                               <td className="ef-num" style={{ padding: '7px 10px' }}>
                                 ${cr.currentPrice >= 10 ? cr.currentPrice.toLocaleString() : cr.currentPrice.toFixed(4)}{' '}
-                                <span style={{ color: cr.dailyMomentumPct >= 0 ? '#69F0AE' : '#FF8A80', fontSize: '0.72rem' }}>
+                                <span style={{ color: cr.dailyMomentumPct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)', fontSize: '0.72rem' }}>
                                   ({formatSigned(cr.dailyMomentumPct, 1)}%)
                                 </span>
                               </td>
-                              <td className="ef-num" style={{ padding: '7px 10px', color: '#38bdf8' }}>
+                              <td className="ef-num" style={{ padding: '7px 10px', color: 'var(--ef-blue, #38bdf8)' }}>
                                 {cr.cotLongPct.toFixed(1)}%
                               </td>
                               <td style={{ padding: '7px 10px' }}>
@@ -2675,7 +2675,7 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-stat-label">10Y - 2Y Spread</div>
                           <div
                             className="ef-stat-val"
-                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y2y < 0 ? '#FF8A80' : '#69F0AE' }}
+                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y2y < 0 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-green, #69F0AE)' }}
                           >
                             {formatSigned(snapshot.macroInternals.yieldCurve.spread10y2y, 2)}%
                           </div>
@@ -2684,7 +2684,7 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-stat-label">10Y - 3M Spread</div>
                           <div
                             className="ef-stat-val"
-                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y3m < 0 ? '#FF8A80' : '#69F0AE' }}
+                            style={{ color: snapshot.macroInternals.yieldCurve.spread10y3m < 0 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-green, #69F0AE)' }}
                           >
                             {formatSigned(snapshot.macroInternals.yieldCurve.spread10y3m, 2)}%
                           </div>
@@ -2693,7 +2693,7 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-stat-label">US Dollar Index (DXY)</div>
                           <div className="ef-stat-val">
                             {snapshot.macroInternals.dxy.toFixed(2)}{' '}
-                            <span style={{ fontSize: '0.72rem', color: snapshot.macroInternals.dxyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                            <span style={{ fontSize: '0.72rem', color: snapshot.macroInternals.dxyChangePct >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                               ({formatSigned(snapshot.macroInternals.dxyChangePct, 2)}%)
                             </span>
                           </div>
@@ -2719,7 +2719,7 @@ export const EdgeFinderPage: React.FC = () => {
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">Nonfarm Payrolls (PAYEMS)</div>
                           <div className="ef-stat-val">{snapshot.macroInternals.fredUsMacro.nfpTotalK.toLocaleString()}K</div>
-                          <div style={{ fontSize: '0.7rem', color: snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                          <div style={{ fontSize: '0.7rem', color: snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK >= 0 ? 'var(--ef-green, #69F0AE)' : 'var(--ef-red, #FF8A80)' }}>
                             MoM {snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK >= 0 ? '+' : ''}{snapshot.macroInternals.fredUsMacro.nfpMonthlyChangeK}K Jobs
                           </div>
                         </div>
@@ -2727,25 +2727,25 @@ export const EdgeFinderPage: React.FC = () => {
                           <div className="ef-stat-label">Buffett Indicator (W5K/GDP)</div>
                           <div
                             className="ef-stat-val"
-                            style={{ color: snapshot.macroInternals.fredUsMacro.buffettIndicatorPct >= 160 ? '#FF8A80' : '#69F0AE' }}
+                            style={{ color: snapshot.macroInternals.fredUsMacro.buffettIndicatorPct >= 160 ? 'var(--ef-red, #FF8A80)' : 'var(--ef-green, #69F0AE)' }}
                           >
                             {snapshot.macroInternals.fredUsMacro.buffettIndicatorPct.toFixed(1)}%
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-muted, #a99bc9)' }}>
                             {snapshot.macroInternals.fredUsMacro.buffettIndicatorPct >= 160 ? 'Stretched Valuation' : 'Fair Value Zone'}
                           </div>
                         </div>
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">M2 Money Supply</div>
-                          <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                          <div className="ef-stat-val" style={{ color: 'var(--ef-gold, #DFC46B)' }}>
                             ${(snapshot.macroInternals.fredUsMacro.m2Billions / 1000).toFixed(2)}T
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>FRED M2SL Liquidity</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-muted, #a99bc9)' }}>FRED M2SL Liquidity</div>
                         </div>
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">US Housing Starts</div>
                           <div className="ef-stat-val">{snapshot.macroInternals.fredUsMacro.housingStartsK.toLocaleString()}K</div>
-                          <div style={{ fontSize: '0.7rem', color: '#a99bc9' }}>SAAR Units (HOUST)</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-muted, #a99bc9)' }}>SAAR Units (HOUST)</div>
                         </div>
                         <div className="ef-stat-box">
                           <div className="ef-stat-label">US Nominal GDP</div>
@@ -2788,10 +2788,10 @@ export const EdgeFinderPage: React.FC = () => {
                       {snapshot.economies.map((econ) => (
                         <tr key={econ.currency}>
                           <th scope="row">
-                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{econ.currency} — {econ.country}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{econ.centralBank}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)' }}>{econ.currency} — {econ.country}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', fontWeight: 400 }}>{econ.centralBank}</div>
                           </th>
-                          <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>{econ.rate.toFixed(2)}%</td>
+                          <td className="ef-num" style={{ fontWeight: 700, color: 'var(--ef-gold, #DFC46B)' }}>{econ.rate.toFixed(2)}%</td>
                           <td>
                             <span
                               className={
@@ -2804,17 +2804,17 @@ export const EdgeFinderPage: React.FC = () => {
                             >
                               {econ.stance} · {econ.rateExpectation}
                             </span>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', marginTop: 2 }}>{econ.nextMeeting}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--ef-text-subtle, #9f91c2)', marginTop: 2 }}>{econ.nextMeeting}</div>
                           </td>
                           <td>
                             {econ.rateProbabilities ? (
                               <div className="ef-num" style={{ fontSize: '0.73rem', lineHeight: 1.35 }}>
-                                <span style={{ color: '#69F0AE' }}>Hike {econ.rateProbabilities.hikePct}%</span> ·{' '}
-                                <span style={{ color: '#ffe082' }}>Hold {econ.rateProbabilities.holdPct}%</span> ·{' '}
-                                <span style={{ color: '#FF8A80' }}>Cut {econ.rateProbabilities.cutPct}%</span>
+                                <span style={{ color: 'var(--ef-green, #69F0AE)' }}>Hike {econ.rateProbabilities.hikePct}%</span> ·{' '}
+                                <span style={{ color: 'var(--ef-amber, #ffe082)' }}>Hold {econ.rateProbabilities.holdPct}%</span> ·{' '}
+                                <span style={{ color: 'var(--ef-red, #FF8A80)' }}>Cut {econ.rateProbabilities.cutPct}%</span>
                               </div>
                             ) : (
-                              <span style={{ color: '#9f91c2' }}>—</span>
+                              <span style={{ color: 'var(--ef-text-subtle, #9f91c2)' }}>—</span>
                             )}
                           </td>
                           <td className="ef-num">{econ.gdpQoQ.toFixed(1)}%</td>
@@ -2875,7 +2875,7 @@ export const EdgeFinderPage: React.FC = () => {
                       <div className="ef-pill-grid">
                         <div className="ef-pillar-card">
                           <div className="ef-pillar-top">
-                            <span style={{ fontWeight: 700, color: '#DFC46B', fontSize: '0.82rem' }}>12M Central Bank Policy Rate</span>
+                            <span style={{ fontWeight: 700, color: 'var(--ef-gold, #DFC46B)', fontSize: '0.82rem' }}>12M Central Bank Policy Rate</span>
                             <span className="ef-num">{activeEcon.rate.toFixed(2)}%</span>
                           </div>
                           <CountryHistoryTrendSvg
@@ -2886,7 +2886,7 @@ export const EdgeFinderPage: React.FC = () => {
                         </div>
                         <div className="ef-pillar-card">
                           <div className="ef-pillar-top">
-                            <span style={{ fontWeight: 700, color: '#69F0AE', fontSize: '0.82rem' }}>Multi-Year Real GDP Growth</span>
+                            <span style={{ fontWeight: 700, color: 'var(--ef-green, #69F0AE)', fontSize: '0.82rem' }}>Multi-Year Real GDP Growth</span>
                             <span className="ef-num">{activeEcon.gdpQoQ.toFixed(1)}%</span>
                           </div>
                           <CountryHistoryTrendSvg
@@ -2897,7 +2897,7 @@ export const EdgeFinderPage: React.FC = () => {
                         </div>
                         <div className="ef-pillar-card">
                           <div className="ef-pillar-top">
-                            <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.82rem' }}>Multi-Year Headline CPI YoY</span>
+                            <span style={{ fontWeight: 700, color: 'var(--ef-blue, #38bdf8)', fontSize: '0.82rem' }}>Multi-Year Headline CPI YoY</span>
                             <span className="ef-num">{activeEcon.cpiYoY.toFixed(1)}%</span>
                           </div>
                           <CountryHistoryTrendSvg
@@ -2908,7 +2908,7 @@ export const EdgeFinderPage: React.FC = () => {
                         </div>
                         <div className="ef-pillar-card">
                           <div className="ef-pillar-top">
-                            <span style={{ fontWeight: 700, color: '#ffb74d', fontSize: '0.82rem' }}>Multi-Year Unemployment Rate</span>
+                            <span style={{ fontWeight: 700, color: 'var(--ef-amber, #ffb74d)', fontSize: '0.82rem' }}>Multi-Year Unemployment Rate</span>
                             <span className="ef-num">{activeEcon.unemploymentRate.toFixed(1)}%</span>
                           </div>
                           <CountryHistoryTrendSvg
@@ -2934,7 +2934,7 @@ export const EdgeFinderPage: React.FC = () => {
                     </span>
                   </div>
                   {snapshot.calendar.upcomingHighImpact.length === 0 ? (
-                    <p style={{ color: '#a99bc9', fontSize: '0.84rem', margin: 0 }}>
+                    <p style={{ color: 'var(--ef-text-muted, #a99bc9)', fontSize: '0.84rem', margin: 0 }}>
                       No imminent high-impact releases in the active lookahead window.
                     </p>
                   ) : (
@@ -2945,8 +2945,8 @@ export const EdgeFinderPage: React.FC = () => {
                             <span className="ef-kz-pill ef-kz-conflict">{evt.currency} · HIGH IMPACT</span>
                             <span className="ef-card-meta">{new Date(evt.eventTime).toLocaleString()}</span>
                           </div>
-                          <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{evt.title}</div>
-                          <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#cfc5e8' }} className="ef-num">
+                          <div style={{ fontWeight: 700, color: 'var(--ef-text-primary, #ffffff)', fontSize: '0.88rem' }}>{evt.title}</div>
+                          <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: 'var(--ef-text-secondary, #cfc5e8)' }} className="ef-num">
                             <span>Prev: {evt.previous || '—'}</span>
                             <span>Fcst: {evt.forecast || '—'}</span>
                             <span>Act: {evt.actual || 'Pending'}</span>
