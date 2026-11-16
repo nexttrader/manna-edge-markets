@@ -42,21 +42,28 @@ export interface StyleComparisonReport {
 export const TradingStyleComparisonCard: React.FC = () => {
   const [styleReport, setStyleReport] = useState<StyleComparisonReport | null>(null);
   const [syncingStyles, setSyncingStyles] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(false);
 
   const fetchStyleComparison = async (refresh = false) => {
     if (refresh) setSyncingStyles(true);
+    setErrorMsg(null);
     try {
       const res = await fetch(
         `${API_BASE}/api/super-admin/strategy-analytics/style-comparison${refresh ? '?refresh=1' : ''}`
       );
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) setStyleReport(json);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setStyleReport(json);
+      } else {
+        setErrorMsg(json?.details || json?.error || `HTTP ${res.status}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch trading style comparison', err);
+      setErrorMsg(err?.message || 'Network error loading trading style comparison');
     } finally {
+      setLoading(false);
       if (refresh) setSyncingStyles(false);
     }
   };
@@ -64,8 +71,6 @@ export const TradingStyleComparisonCard: React.FC = () => {
   useEffect(() => {
     fetchStyleComparison(false);
   }, []);
-
-  if (!styleReport) return null;
 
   return (
     <section
@@ -135,157 +140,180 @@ export const TradingStyleComparisonCard: React.FC = () => {
 
       {!collapsed && (
         <>
-          <div className="table-responsive">
-            <table className="runs-table" style={{ width: '100%', fontSize: '0.8rem' }}>
-              <thead>
-                <tr>
-                  <th>Trading Style</th>
-                  <th>Timeframes</th>
-                  <th>Total Tracked</th>
-                  <th>Awaiting</th>
-                  <th>Active</th>
-                  <th>Resolved</th>
-                  <th>W / L / BE</th>
-                  <th>Win Rate</th>
-                  <th>Total R</th>
-                  <th>Expectancy</th>
-                  <th>Avg Conv.</th>
-                  <th>Futures / FX</th>
-                </tr>
-              </thead>
-              <tbody>
-                {styleReport.styles.map((row) => (
-                  <tr key={row.style}>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          row.style === 'SCALP'
-                            ? '#34d399'
-                            : row.style === 'SWING'
-                            ? '#60a5fa'
-                            : '#fbbf24'
-                      }}
-                    >
-                      {row.label}
-                    </td>
-                    <td>{row.timeframes}</td>
-                    <td style={{ fontWeight: 700 }}>{row.totalSetups}</td>
-                    <td>{row.awaitingEntry}</td>
-                    <td style={{ color: '#38bdf8', fontWeight: 700 }}>{row.activeSetups}</td>
-                    <td>{row.resolvedSetups}</td>
-                    <td>
-                      {row.wins}W / {row.losses}L / {row.breakevens}BE
-                    </td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color: row.winRate >= 50 ? '#34d399' : '#f87171'
-                      }}
-                    >
-                      {row.winRate}%
-                    </td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color: row.totalRealizedR >= 0 ? '#34d399' : '#f87171'
-                      }}
-                    >
-                      {row.totalRealizedR >= 0 ? '+' : ''}
-                      {row.totalRealizedR}R
-                    </td>
-                    <td>
-                      {row.expectancyR >= 0 ? '+' : ''}
-                      {row.expectancyR}R
-                    </td>
-                    <td>{row.avgConviction}%</td>
-                    <td>
-                      {row.futuresCount} / {row.forexCount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {loading && !styleReport && (
+            <div style={{ padding: '14px', color: '#94a3b8', fontSize: '0.82rem' }}>
+              ⏳ Loading Scalping, Intraday &amp; Swing comparison metrics...
+            </div>
+          )}
 
-          {styleReport.recentMtfSetups.length > 0 && (
-            <details style={{ marginTop: '12px' }}>
-              <summary
-                style={{
-                  cursor: 'pointer',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  color: '#cbd5e1'
-                }}
+          {errorMsg && !styleReport && (
+            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#fca5a5', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              <span>⚠️ {errorMsg}</span>
+              <button
+                type="button"
+                onClick={() => fetchStyleComparison(true)}
+                style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#ffffff', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.74rem' }}
               >
-                View Recent Tracked Scalping &amp; Swing Setups ({styleReport.recentMtfSetups.length})
-              </summary>
-              <div
-                className="table-responsive"
-                style={{ marginTop: '10px', maxHeight: '260px', overflowY: 'auto' }}
-              >
-                <table className="runs-table" style={{ width: '100%', fontSize: '0.75rem' }}>
+                Retry Sync
+              </button>
+            </div>
+          )}
+
+          {styleReport && (
+            <>
+              <div className="table-responsive">
+                <table className="runs-table" style={{ width: '100%', fontSize: '0.8rem' }}>
                   <thead>
                     <tr>
-                      <th>Style</th>
-                      <th>Asset</th>
-                      <th>TFs</th>
-                      <th>Bias</th>
-                      <th>State</th>
-                      <th>Last Price</th>
-                      <th>Realized R</th>
-                      <th>Conv.</th>
-                      <th>Tracked At</th>
+                      <th>Trading Style</th>
+                      <th>Timeframes</th>
+                      <th>Total Tracked</th>
+                      <th>Awaiting</th>
+                      <th>Active</th>
+                      <th>Resolved</th>
+                      <th>W / L / BE</th>
+                      <th>Win Rate</th>
+                      <th>Total R</th>
+                      <th>Expectancy</th>
+                      <th>Avg Conv.</th>
+                      <th>Futures / FX</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {styleReport.recentMtfSetups.map((s) => (
-                      <tr key={s.id}>
+                    {styleReport.styles.map((row) => (
+                      <tr key={row.style}>
                         <td
                           style={{
                             fontWeight: 800,
-                            color: s.trading_style === 'SCALP' ? '#34d399' : '#60a5fa'
-                          }}
-                        >
-                          {s.trading_style}
-                        </td>
-                        <td style={{ fontWeight: 700 }}>{s.instrument}</td>
-                        <td>
-                          {s.context_tf} · {s.entry_tf}
-                        </td>
-                        <td
-                          style={{
-                            color: s.bias === 'long' ? '#34d399' : '#f87171',
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          {s.bias}
-                        </td>
-                        <td>{s.signal_state}</td>
-                        <td>{s.last_price}</td>
-                        <td
-                          style={{
-                            fontWeight: 700,
                             color:
-                              s.realized_r > 0
+                              row.style === 'SCALP'
                                 ? '#34d399'
-                                : s.realized_r < 0
-                                ? '#f87171'
-                                : '#94a3b8'
+                                : row.style === 'SWING'
+                                ? '#60a5fa'
+                                : '#fbbf24'
                           }}
                         >
-                          {s.realized_r > 0 ? `+${s.realized_r}R` : `${s.realized_r}R`}
+                          {row.label}
                         </td>
-                        <td>{Math.round(s.conviction_score)}%</td>
-                        <td style={{ color: '#94a3b8' }}>
-                          {new Date(s.created_at).toLocaleString()}
+                        <td>{row.timeframes}</td>
+                        <td style={{ fontWeight: 700 }}>{row.totalSetups}</td>
+                        <td>{row.awaitingEntry}</td>
+                        <td style={{ color: '#38bdf8', fontWeight: 700 }}>{row.activeSetups}</td>
+                        <td>{row.resolvedSetups}</td>
+                        <td>
+                          {row.wins}W / {row.losses}L / {row.breakevens}BE
+                        </td>
+                        <td
+                          style={{
+                            fontWeight: 800,
+                            color: row.winRate >= 50 ? '#34d399' : '#f87171'
+                          }}
+                        >
+                          {row.winRate}%
+                        </td>
+                        <td
+                          style={{
+                            fontWeight: 800,
+                            color: row.totalRealizedR >= 0 ? '#34d399' : '#f87171'
+                          }}
+                        >
+                          {row.totalRealizedR >= 0 ? '+' : ''}
+                          {row.totalRealizedR}R
+                        </td>
+                        <td>
+                          {row.expectancyR >= 0 ? '+' : ''}
+                          {row.expectancyR}R
+                        </td>
+                        <td>{row.avgConviction}%</td>
+                        <td>
+                          {row.futuresCount} / {row.forexCount}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </details>
+
+              {styleReport.recentMtfSetups.length > 0 && (
+                <details style={{ marginTop: '12px' }}>
+                  <summary
+                    style={{
+                      cursor: 'pointer',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: '#cbd5e1'
+                    }}
+                  >
+                    View Recent Tracked Scalping &amp; Swing Setups ({styleReport.recentMtfSetups.length})
+                  </summary>
+                  <div
+                    className="table-responsive"
+                    style={{ marginTop: '10px', maxHeight: '260px', overflowY: 'auto' }}
+                  >
+                    <table className="runs-table" style={{ width: '100%', fontSize: '0.75rem' }}>
+                      <thead>
+                        <tr>
+                          <th>Style</th>
+                          <th>Asset</th>
+                          <th>TFs</th>
+                          <th>Bias</th>
+                          <th>State</th>
+                          <th>Last Price</th>
+                          <th>Realized R</th>
+                          <th>Conv.</th>
+                          <th>Tracked At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {styleReport.recentMtfSetups.map((s) => (
+                          <tr key={s.id}>
+                            <td
+                              style={{
+                                fontWeight: 800,
+                                color: s.trading_style === 'SCALP' ? '#34d399' : '#60a5fa'
+                              }}
+                            >
+                              {s.trading_style}
+                            </td>
+                            <td style={{ fontWeight: 700 }}>{s.instrument}</td>
+                            <td>
+                              {s.context_tf} · {s.entry_tf}
+                            </td>
+                            <td
+                              style={{
+                                color: s.bias === 'long' ? '#34d399' : '#f87171',
+                                textTransform: 'uppercase'
+                              }}
+                            >
+                              {s.bias}
+                            </td>
+                            <td>{s.signal_state}</td>
+                            <td>{s.last_price}</td>
+                            <td
+                              style={{
+                                fontWeight: 700,
+                                color:
+                                  s.realized_r > 0
+                                    ? '#34d399'
+                                    : s.realized_r < 0
+                                    ? '#f87171'
+                                    : '#94a3b8'
+                              }}
+                            >
+                              {s.realized_r > 0 ? `+${s.realized_r}R` : `${s.realized_r}R`}
+                            </td>
+                            <td>{Math.round(s.conviction_score)}%</td>
+                            <td style={{ color: '#94a3b8' }}>
+                              {new Date(s.created_at).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+            </>
           )}
         </>
       )}

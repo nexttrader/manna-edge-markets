@@ -333,7 +333,7 @@ export async function getTradingStyleComparisonReport(): Promise<{
   const [futuresSetups, forexSetups, outcomes] = await Promise.all([
     queryDb<any>(`SELECT id, signal_state, conviction_score FROM edge_setups WHERE superseded = 0`),
     queryDb<any>(`SELECT id, signal_state, conviction_score FROM forex_edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT outcome_type, r_achieved FROM outcomes`)
+    queryDb<any>(`SELECT outcome_type, realized_pl FROM outcomes`)
   ]);
 
   const allIntraday = [...futuresSetups, ...forexSetups];
@@ -342,7 +342,7 @@ export async function getTradingStyleComparisonReport(): Promise<{
   const intraBe = outcomes.filter((o: any) => o.outcome_type === 'breakeven_hit').length;
   const intraResolved = intraWins + intraLosses + intraBe;
   const intraWinRate = intraWins + intraLosses > 0 ? Number(((intraWins / (intraWins + intraLosses)) * 100).toFixed(1)) : 0;
-  const intraTotalR = Number(outcomes.reduce((sum: number, o: any) => sum + (Number(o.r_achieved) || 0), 0).toFixed(2));
+  const intraTotalR = Number(outcomes.reduce((sum: number, o: any) => sum + (Number(o.realized_pl ?? 0) || 0), 0).toFixed(2));
   const intraExpectancy = intraResolved > 0 ? Number((intraTotalR / intraResolved).toFixed(2)) : 0;
   const intraAvgConv = allIntraday.length > 0
     ? Number((allIntraday.reduce((sum: number, s: any) => sum + (Number(s.conviction_score) || 0), 0) / allIntraday.length).toFixed(1))
