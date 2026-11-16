@@ -81,6 +81,7 @@ export const Dashboard: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>(saved?.strategyFilter ?? 'all');
   const [sortBy, setSortBy] = useState<SortOption>(saved?.sortBy ?? 'conviction');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
   const [calcSetup, setCalcSetup] = useState<EdgeSetup | null>(null);
 
@@ -227,31 +228,65 @@ export const Dashboard: React.FC = () => {
               type="button"
               role="tab"
               aria-selected={styleTab === 'scalp'}
-              className={`style-desk-tab ${styleTab === 'scalp' ? 'is-active' : ''}`}
+              className={`style-desk-tab style-tab-scalp ${styleTab === 'scalp' ? 'is-active' : ''}`}
               onClick={() => setStyleTab('scalp')}
             >
-              <span>⚡ Scalping</span>
-              <span className="style-tf-chip">15M · 5M</span>
+              <span className="style-desk-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L4.5 13.5H11.5L10.5 22L19.5 10.5H12.5L13 2Z" />
+                </svg>
+              </span>
+              <span className="style-desk-text">
+                <span className="style-desk-heading">
+                  <span className="style-desk-name">Scalping</span>
+                  <span className="style-tf-chip">15M · 5M</span>
+                </span>
+                <span className="style-desk-sub">Fast Momentum</span>
+              </span>
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={styleTab === 'intraday'}
-              className={`style-desk-tab ${styleTab === 'intraday' ? 'is-active' : ''}`}
+              className={`style-desk-tab style-tab-intraday ${styleTab === 'intraday' ? 'is-active' : ''}`}
               onClick={() => setStyleTab('intraday')}
             >
-              <span>⏱️ Intraday</span>
-              <span className="style-tf-chip">1H · 15M</span>
+              <span className="style-desk-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M12 7.5V12L15.2 13.8" />
+                  <path d="M12 2V3.8M12 20.2V22M2 12H3.8M20.2 12H22" />
+                </svg>
+              </span>
+              <span className="style-desk-text">
+                <span className="style-desk-heading">
+                  <span className="style-desk-name">Intraday</span>
+                  <span className="style-tf-chip">1H · 15M</span>
+                </span>
+                <span className="style-desk-sub">Session Structure</span>
+              </span>
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={styleTab === 'swing'}
-              className={`style-desk-tab ${styleTab === 'swing' ? 'is-active' : ''}`}
+              className={`style-desk-tab style-tab-swing ${styleTab === 'swing' ? 'is-active' : ''}`}
               onClick={() => setStyleTab('swing')}
             >
-              <span>🏛️ Swing</span>
-              <span className="style-tf-chip">{swingMode === 'd1_h4' ? 'D1 · 4H' : '4H · 1H'}</span>
+              <span className="style-desk-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 17L8.5 11.5L12.5 15L21 6.5" />
+                  <path d="M16 6.5H21V11.5" />
+                  <path d="M3 20.5H21" />
+                </svg>
+              </span>
+              <span className="style-desk-text">
+                <span className="style-desk-heading">
+                  <span className="style-desk-name">Swing</span>
+                  <span className="style-tf-chip">{swingMode === 'd1_h4' ? 'D1 · 4H' : '4H · 1H'}</span>
+                </span>
+                <span className="style-desk-sub">Multi-Day Macro</span>
+              </span>
             </button>
           </div>
 
@@ -292,44 +327,24 @@ export const Dashboard: React.FC = () => {
           </div>
         </section>
 
-        {/* Streamlined Obsidian Command Filter Bar */}
-        <section className="filter-bar glass-card font-mono" aria-label="Signal Filters">
-          <div className="filter-top-row">
-            {/* Primary Market & Watchlist Segmented Tabs */}
-            <div className="tabs" role="tablist" aria-label="Market Categories">
-              <button
-                type="button"
-                className={`tab ${marketFilter === 'all' ? 'active' : ''}`}
-                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'all')}
-              >
-                <span>All Markets</span>
-                <span className="tab-count">{allAvailableSetups.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`tab ${marketFilter === 'futures' ? 'active' : ''}`}
-                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'futures')}
-              >
-                <span>Futures</span>
-                <span className="tab-count">{futuresCount}</span>
-              </button>
-              <button
-                type="button"
-                className={`tab ${marketFilter === 'forex' ? 'active' : ''}`}
-                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'forex')}
-              >
-                <span>Forex</span>
-                <span className="tab-count">{forexCount}</span>
-              </button>
-              <button
-                type="button"
-                className={`tab tab-watchlist ${marketFilter === 'watchlist' ? 'active' : ''}`}
-                onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'watchlist')}
-              >
-                <span>★ Watchlist</span>
-                <span className="tab-count">{watchlistCount}</span>
-              </button>
-            </div>
+        {/* Collapsible Obsidian Command Filter Bar (Collapsed by Default) */}
+        <section className={`filter-bar glass-card font-mono ${filtersExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label="Signal Filters">
+          <div className="filter-collapse-header">
+            <button
+              type="button"
+              className="filter-collapse-trigger font-mono"
+              aria-expanded={filtersExpanded}
+              onClick={() => setFiltersExpanded((prev) => !prev)}
+            >
+              <span className="filter-collapse-title">SIGNAL FILTERS</span>
+              <span className="filter-summary-pill">
+                {marketFilter === 'all' ? `All (${allAvailableSetups.length})` : marketFilter.toUpperCase()}
+                {stateFilter !== 'all' ? ` · ${stateFilter.replace('_', ' ')}` : ''}
+                {biasFilter !== 'all' ? ` · ${biasFilter.toUpperCase()}` : ''}
+                {strategyFilter !== 'all' ? ` · ${strategyFilter === 'manna_snd' ? 'Manna SnD' : 'Manna Elite'}` : ''}
+                {` · ${sortedSetups.length} shown`}
+              </span>
+            </button>
 
             <div className="filter-top-meta">
               <div className="auto-refresh" title="Auto-refreshing live signals every 5 seconds">
@@ -341,94 +356,148 @@ export const Dashboard: React.FC = () => {
                   Reset
                 </button>
               )}
+              <button
+                type="button"
+                className="advanced-filters-toggle font-mono"
+                aria-expanded={filtersExpanded}
+                onClick={() => setFiltersExpanded((prev) => !prev)}
+              >
+                {filtersExpanded ? 'Hide Filters ▲' : 'Filters ▾'}
+              </button>
             </div>
           </div>
 
-          {/* Inline Core Filter Selects */}
-          <div className="filter-controls-row">
-            <div className="filter-group">
-              <label htmlFor="dash-state-filter">State</label>
-              <select
-                id="dash-state-filter"
-                value={stateFilter}
-                onChange={(e) => updateFilter(setStateFilter, 'stateFilter', e.target.value as StateFilter)}
-              >
-                <option value="all">All States</option>
-                <option value="active">Active Positions</option>
-                <option value="runner">Active Runners (TP1 Hit)</option>
-                <option value="in_zone">In Entry Zone</option>
-                <option value="awaiting_entry">Awaiting Entry</option>
-                <option value="resolved">Resolved (History)</option>
-                <option value="invalidated">Invalidated</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label htmlFor="dash-bias-filter">Direction</label>
-              <select
-                id="dash-bias-filter"
-                value={biasFilter}
-                onChange={(e) => updateFilter(setBiasFilter, 'biasFilter', e.target.value as BiasFilter)}
-              >
-                <option value="all">All Directions</option>
-                <option value="long">Long Only</option>
-                <option value="short">Short Only</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label htmlFor="dash-strategy-filter">Strategy</label>
-              <select
-                id="dash-strategy-filter"
-                value={strategyFilter}
-                onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}
-              >
-                <option value="all">All Strategies</option>
-                <option value="sentinel_v2">{isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
-                <option value="manna_snd">Manna SnD</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label htmlFor="dash-sort-filter">Sort</label>
-              <select
-                id="dash-sort-filter"
-                value={sortBy}
-                onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}
-              >
-                <option value="conviction">Highest Conviction</option>
-                <option value="newest">Newest Discovered</option>
-                <option value="live_rr">Highest Live RR</option>
-                <option value="closest_entry">Closest to Entry Zone</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              className="advanced-filters-toggle font-mono"
-              aria-expanded={showAdvancedFilters}
-              onClick={() => setShowAdvancedFilters(prev => !prev)}
-              title="Toggle advanced filter options"
-            >
-              Order Type {showAdvancedFilters ? '▲' : '▾'}
-            </button>
-          </div>
-
-          {showAdvancedFilters && (
-            <div className="filter-controls-row filter-advanced-row">
-              <div className="filter-group">
-                <label htmlFor="dash-order-filter">Order Type</label>
-                <select
-                  id="dash-order-filter"
-                  value={orderTypeFilter}
-                  onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}
-                >
-                  <option value="all">All Orders</option>
-                  <option value="market">Market Orders</option>
-                  <option value="limit">Limit Orders</option>
-                </select>
+          {filtersExpanded && (
+            <>
+              <div className="filter-top-row filter-expanded-divider">
+                {/* Primary Market & Watchlist Segmented Tabs */}
+                <div className="tabs" role="tablist" aria-label="Market Categories">
+                  <button
+                    type="button"
+                    className={`tab ${marketFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'all')}
+                  >
+                    <span>All Markets</span>
+                    <span className="tab-count">{allAvailableSetups.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${marketFilter === 'futures' ? 'active' : ''}`}
+                    onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'futures')}
+                  >
+                    <span>Futures</span>
+                    <span className="tab-count">{futuresCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${marketFilter === 'forex' ? 'active' : ''}`}
+                    onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'forex')}
+                  >
+                    <span>Forex</span>
+                    <span className="tab-count">{forexCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab tab-watchlist ${marketFilter === 'watchlist' ? 'active' : ''}`}
+                    onClick={() => updateFilter(setMarketFilter, 'marketFilter', 'watchlist')}
+                  >
+                    <span>★ Watchlist</span>
+                    <span className="tab-count">{watchlistCount}</span>
+                  </button>
+                </div>
               </div>
-            </div>
+
+          {filtersExpanded && (
+            <>
+              {/* Inline Core Filter Selects */}
+              <div className="filter-controls-row">
+                <div className="filter-group">
+                  <label htmlFor="dash-state-filter">State</label>
+                  <select
+                    id="dash-state-filter"
+                    value={stateFilter}
+                    onChange={(e) => updateFilter(setStateFilter, 'stateFilter', e.target.value as StateFilter)}
+                  >
+                    <option value="all">All States</option>
+                    <option value="active">Active Positions</option>
+                    <option value="runner">Active Runners (TP1 Hit)</option>
+                    <option value="in_zone">In Entry Zone</option>
+                    <option value="awaiting_entry">Awaiting Entry</option>
+                    <option value="resolved">Resolved (History)</option>
+                    <option value="invalidated">Invalidated</option>
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label htmlFor="dash-bias-filter">Direction</label>
+                  <select
+                    id="dash-bias-filter"
+                    value={biasFilter}
+                    onChange={(e) => updateFilter(setBiasFilter, 'biasFilter', e.target.value as BiasFilter)}
+                  >
+                    <option value="all">All Directions</option>
+                    <option value="long">Long Only</option>
+                    <option value="short">Short Only</option>
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label htmlFor="dash-strategy-filter">Strategy</label>
+                  <select
+                    id="dash-strategy-filter"
+                    value={strategyFilter}
+                    onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}
+                  >
+                    <option value="all">All Strategies</option>
+                    <option value="sentinel_v2">{isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
+                    <option value="manna_snd">Manna SnD</option>
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label htmlFor="dash-sort-filter">Sort</label>
+                  <select
+                    id="dash-sort-filter"
+                    value={sortBy}
+                    onChange={(e) => updateFilter(setSortBy, 'sortBy', e.target.value as SortOption)}
+                  >
+                    <option value="conviction">Highest Conviction</option>
+                    <option value="newest">Newest Discovered</option>
+                    <option value="live_rr">Highest Live RR</option>
+                    <option value="closest_entry">Closest to Entry Zone</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="advanced-filters-toggle font-mono"
+                  aria-expanded={showAdvancedFilters}
+                  onClick={() => setShowAdvancedFilters(prev => !prev)}
+                  title="Toggle advanced filter options"
+                >
+                  Order Type {showAdvancedFilters ? '▲' : '▾'}
+                </button>
+              </div>
+
+              {showAdvancedFilters && (
+                <div className="filter-controls-row filter-advanced-row">
+                  <div className="filter-group">
+                    <label htmlFor="dash-order-filter">Order Type</label>
+                    <select
+                      id="dash-order-filter"
+                      value={orderTypeFilter}
+                      onChange={(e) => updateFilter(setOrderTypeFilter, 'orderTypeFilter', e.target.value as OrderTypeFilter)}
+                    >
+                      <option value="all">All Orders</option>
+                      <option value="market">Market Orders</option>
+                      <option value="limit">Limit Orders</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+            </>
           )}
         </section>
 
