@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import './Dashboard.css';
 import { DashboardHeader } from '../components/DashboardHeader';
 import { SetupCard } from '../components/SetupCard';
@@ -29,6 +29,7 @@ import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCa
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
+import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
 import {
   type DashboardStyleTab,
   type SwingPairMode,
@@ -66,6 +67,7 @@ export const Dashboard: React.FC = () => {
   const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
+  const { canAccessEdgeFinder } = useEdgeFinderAccess();
 
   const [styleTab, setStyleTab] = useState<DashboardStyleTab>('intraday');
   const [swingMode, setSwingMode] = useState<SwingPairMode>('d1_h4');
@@ -218,6 +220,28 @@ export const Dashboard: React.FC = () => {
               loading={loading}
               autoExpand={stateFilter === 'runner'}
             />
+            {canAccessEdgeFinder && (
+              <Link
+                to="/edge-finder"
+                className="dashboard-edgefinder-cta"
+              >
+                <span className="dashboard-ef-cta-left">
+                  <span className="dashboard-ef-cta-icon" aria-hidden="true">🧭</span>
+                  <span className="dashboard-ef-cta-copy">
+                    <span className="dashboard-ef-cta-title-row">
+                      <span className="dashboard-ef-cta-title font-mono">MANNA EDGEFINDER PRO</span>
+                      <span className="dashboard-ef-cta-pill font-mono">INSTITUTIONAL MATRIX</span>
+                    </span>
+                    <span className="dashboard-ef-cta-sub">
+                      Macro Fundamentals, COT Smart Money, Retail Contrarian &amp; Multi-Timeframe Confluence Scorecards
+                    </span>
+                  </span>
+                </span>
+                <span className="dashboard-ef-cta-action font-mono">
+                  LAUNCH EDGEFINDER <span className="dashboard-ef-cta-arrow" aria-hidden="true">→</span>
+                </span>
+              </Link>
+            )}
           </div>
         )}
 
