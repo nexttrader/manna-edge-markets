@@ -333,16 +333,39 @@ export async function getTradingStyleComparisonReport(): Promise<{
   const [futuresSetups, forexSetups, outcomes] = await Promise.all([
     queryDb<any>(`SELECT id, signal_state, conviction_score FROM edge_setups WHERE superseded = 0`),
     queryDb<any>(`SELECT id, signal_state, conviction_score FROM forex_edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT outcome_type, realized_pl FROM outcomes`)
+    queryDb<any>(`SELECT outcome_type, was_runner, realized_pl FROM outcomes`)
   ]);
 
   const allIntraday = [...futuresSetups, ...forexSetups];
-  const intraWins = outcomes.filter((o: any) => o.outcome_type === 'tp1_hit' || o.outcome_type === 'tp2_hit').length;
-  const intraLosses = outcomes.filter((o: any) => o.outcome_type === 'stop_hit').length;
-  const intraBe = outcomes.filter((o: any) => o.outcome_type === 'breakeven_hit').length;
+  let intraWins = 0;
+  let intraLosses = 0;
+  let intraBe = 0;
+  let intraTotalR = 0;
+
+  for (const o of outcomes) {
+    const typeStr = String(o.outcome_type || '').toLowerCase();
+    if (typeStr.includes('tp2')) {
+      intraWins++;
+      intraTotalR += 3.0;
+    } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
+      intraWins++;
+      intraTotalR += 2.0;
+    } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
+      intraLosses++;
+      intraTotalR -= 1.0;
+    } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
+      if (o.was_runner) {
+        intraWins++;
+        intraTotalR += 2.0;
+      } else {
+        intraBe++;
+      }
+    }
+  }
+
+  intraTotalR = Number(intraTotalR.toFixed(2));
   const intraResolved = intraWins + intraLosses + intraBe;
   const intraWinRate = intraWins + intraLosses > 0 ? Number(((intraWins / (intraWins + intraLosses)) * 100).toFixed(1)) : 0;
-  const intraTotalR = Number(outcomes.reduce((sum: number, o: any) => sum + (Number(o.realized_pl ?? 0) || 0), 0).toFixed(2));
   const intraExpectancy = intraResolved > 0 ? Number((intraTotalR / intraResolved).toFixed(2)) : 0;
   const intraAvgConv = allIntraday.length > 0
     ? Number((allIntraday.reduce((sum: number, s: any) => sum + (Number(s.conviction_score) || 0), 0) / allIntraday.length).toFixed(1))
