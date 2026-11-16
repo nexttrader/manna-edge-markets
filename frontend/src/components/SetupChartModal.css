@@ -658,28 +658,29 @@
   font-family: var(--font-mono, monospace);
 }
 
-.level-metric {
+.chart-modal-dialog .level-metric {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   white-space: nowrap;
 }
 
-.metric-dot {
-  width: 7px;
-  height: 7px;
+.chart-modal-dialog .metric-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.metric-label {
+.chart-modal-dialog .metric-label {
   font-size: 0.67rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--cm-text-muted);
+  text-transform: uppercase;
 }
 
-.metric-value {
+.chart-modal-dialog .metric-value {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -688,7 +689,7 @@
   color: var(--cm-text-primary);
 }
 
-.metric-tag {
+.chart-modal-dialog .metric-tag {
   font-size: 0.62rem;
   font-weight: 700;
   padding: 1px 5px;
@@ -698,20 +699,20 @@
   border: 1px solid var(--cm-accent-gold-border);
 }
 
-.level-metric.entry .metric-dot { background: var(--cm-accent-gold); }
-.level-metric.entry .metric-value { color: var(--cm-accent-gold); }
+.chart-modal-dialog .level-metric.entry .metric-dot { background: var(--cm-accent-gold); }
+.chart-modal-dialog .level-metric.entry .metric-value { color: var(--cm-accent-gold); }
 
-.level-metric.stop .metric-dot { background: var(--cm-accent-red); }
-.level-metric.stop .metric-value { color: var(--cm-accent-red); }
+.chart-modal-dialog .level-metric.stop .metric-dot { background: var(--cm-accent-red); }
+.chart-modal-dialog .level-metric.stop .metric-value { color: var(--cm-accent-red); }
 
-.level-metric.be .metric-dot { background: var(--cm-accent-gold); }
-.level-metric.be .metric-value { color: var(--cm-accent-gold); }
+.chart-modal-dialog .level-metric.be .metric-dot { background: var(--cm-accent-gold); }
+.chart-modal-dialog .level-metric.be .metric-value { color: var(--cm-accent-gold); }
 
-.level-metric.tp .metric-dot { background: var(--cm-accent-green); }
-.level-metric.tp .metric-value { color: var(--cm-accent-green); }
+.chart-modal-dialog .level-metric.tp .metric-dot { background: var(--cm-accent-green); }
+.chart-modal-dialog .level-metric.tp .metric-value { color: var(--cm-accent-green); }
 
-.level-metric.live .metric-dot { background: var(--cm-accent-cyan); }
-.level-metric.live .metric-value { color: var(--cm-accent-cyan); }
+.chart-modal-dialog .level-metric.live .metric-dot { background: var(--cm-accent-cyan); }
+.chart-modal-dialog .level-metric.live .metric-value { color: var(--cm-accent-cyan); }
 
 /* ── Tier 4: Compact Manna SnD Structural Context Bar ───────────────────── */
 .manna-snd-legend-bar {
@@ -1031,7 +1032,7 @@
 }
 
 /* ── Responsive Breakpoints ─────────────────────────────────────────────── */
-@media (max-width: 1200px) {
+@media (max-width: 1420px) {
   .full-label { display: none; }
   .short-label { display: inline; }
   .chart-shortcuts-hint { display: none; }

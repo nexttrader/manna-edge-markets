@@ -423,6 +423,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const liveCandleRef = useRef<CandlestickData<Time> | null>(null);
   const onCloseRef = useRef(onClose);
   const levelsRef = useRef<number[]>([]);
+  const drawZonesRef = useRef<() => void>(() => {});
+  const showBidAskRef = useRef<boolean>(false);
 
   const [timeframe, setTimeframe] = useState<ChartTimeframe>('15m');
   const [loading, setLoading] = useState(true);
@@ -558,13 +560,17 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
 
   useEffect(() => {
     levelsRef.current = [
-      entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+      entryLow, entryHigh, entryMid, stopVal, initialStopVal, tp1Val, tp2Val, exitPriceVal,
       activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist,
     ].filter((p): p is number => typeof p === 'number' && p > 0);
   }, [
-    entryLow, entryHigh, entryMid, stopVal, tp1Val, tp2Val,
+    entryLow, entryHigh, entryMid, stopVal, initialStopVal, tp1Val, tp2Val, exitPriceVal,
     activeDemandProx, activeDemandDist, activeSupplyProx, activeSupplyDist,
   ]);
+
+  useEffect(() => {
+    showBidAskRef.current = showBidAsk;
+  }, [showBidAsk]);
 
   const handleZoom = (zoomIn: boolean) => {
     if (!chartRef.current) return;
@@ -1066,6 +1072,10 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     setup.createdAt, setup.invalidation_reason, setup.instrument,
   ]);
 
+  useEffect(() => {
+    drawZonesRef.current = drawZones;
+  }, [drawZones]);
+
   // 0. Open native <dialog> in the top layer on mount and wire native close/Esc
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -1541,8 +1551,8 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           lines.push(candleSeries.createPriceLine({
             price: tp1Val,
             color: '#10b981',
-            lineWidth: isRunner ? 1 : 2,
-            lineStyle: isRunner ? LineStyle.Dotted : LineStyle.Dashed,
+            lineWidth: 2,
+            lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
             title: exitMatchesTp1
               ? `EXIT TP1 +${setup.r_multiple_1 || 2.0}R`
@@ -1599,7 +1609,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
               const cleanReason = reason.replace('_HIT', '').replace('_STOP', '');
               let exitPriceLabel = '';
               if (exitPriceVal > 0) {
-                if (showBidAsk) {
+                if (showBidAskRef.current) {
                   const { bid: exitBid, ask: exitAsk, filledSide: exitSide } = getDirectionalBidAsk(
                     setup.instrument, exitPriceVal, isLong, false, data.quote || null
                   );
@@ -1684,9 +1694,9 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         }
 
         setLoading(false);
-        requestAnimationFrame(() => drawZones());
-        setTimeout(() => drawZones(), 60);
-        setTimeout(() => drawZones(), 250);
+        requestAnimationFrame(() => drawZonesRef.current());
+        setTimeout(() => drawZonesRef.current(), 60);
+        setTimeout(() => drawZonesRef.current(), 250);
       })
       .catch(err => {
         if (!isMounted) return;
@@ -1703,7 +1713,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     entryLow, entryHigh, entryMid, execPrice, stopVal, initialStopVal,
     exitPriceVal, tp1Val, tp2Val, timeframe, isLong, isPending, isActive,
     isRunner, isResolved, resolvedTimestamp, entryTimestamp, selectedTz,
-    decimals, priceEps, showBidAsk, drawZones,
+    decimals, priceEps,
   ]);
 
   // 3. Dynamic Real-Time Candle Drawing (Live Signals ONLY)
