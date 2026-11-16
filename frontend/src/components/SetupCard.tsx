@@ -55,6 +55,7 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
   } = useEdgeFinderSignalConfluence(setup?.instrument || '', setup?.bias || 'long');
 
   const [expanded, setExpanded] = useState(false);
+  const [edgeFinderExpanded, setEdgeFinderExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [showChart, setShowChart] = useState(false);
@@ -367,11 +368,19 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
 
       {canAccessEdgeFinder && (
         <div
-          className={`sc-edgefinder-panel font-mono state-${(edgeFinderConfluence?.state || 'LOADING').toLowerCase()}`}
+          className={`sc-edgefinder-panel font-mono state-${(edgeFinderConfluence?.state || 'LOADING').toLowerCase()} ${edgeFinderExpanded ? 'is-expanded' : 'is-collapsed'}`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="sc-ef-top-row">
-            <div className="sc-ef-status-group">
+          <button
+            type="button"
+            className="sc-ef-toggle-btn font-mono"
+            aria-expanded={edgeFinderExpanded}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEdgeFinderExpanded((prev) => !prev);
+            }}
+          >
+            <span className="sc-ef-status-group">
               <span className="sc-ef-kicker">🧭 EDGEFINDER CONFLUENCE</span>
               {edgeFinderConfluence ? (
                 <span className={`sc-ef-badge is-${edgeFinderConfluence.state.toLowerCase()}`}>
@@ -385,44 +394,52 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
                   {edgeFinderConfluence.badgeText}
                 </span>
               ) : edgeFinderLoading ? (
-                <span className="sc-ef-loading">Syncing EdgeFinder bias...</span>
+                <span className="sc-ef-loading">Syncing bias...</span>
               ) : (
-                <span className="sc-ef-badge is-neutral">ASSET SCORECARD AVAILABLE</span>
+                <span className="sc-ef-badge is-neutral">SCORECARD READY</span>
               )}
-            </div>
+            </span>
 
-            <Link
-              to={`/edge-finder?asset=${encodeURIComponent(resolvedSymbol)}&tab=scorecard`}
-              className="sc-ef-link-btn"
-              title={`Open ${resolvedSymbol} EdgeFinder Pro Scorecard`}
-            >
-              Open {resolvedSymbol} EdgeFinder →
-            </Link>
-          </div>
+            <span className="sc-ef-chevron">
+              {edgeFinderExpanded ? '▲ Hide' : '▼ Expand'}
+            </span>
+          </button>
 
-          {edgeFinderConfluence && edgeFinderScorecard && (
-            <>
-              <div className="sc-ef-horizons-row">
-                {edgeFinderConfluence.horizons.map((h) => (
-                  <span
-                    key={h.key}
-                    className={`sc-ef-h-chip status-${h.status.toLowerCase()}`}
-                    title={`${h.label} EdgeFinder view: ${h.biasLabel} (${h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})`}
-                  >
-                    <span className="sc-ef-h-name">{h.label}:</span>{' '}
-                    <strong>{h.biasLabel}</strong>
-                    <span className="sc-ef-h-score">
-                      {' '}
-                      ({h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})
-                    </span>
-                  </span>
-                ))}
-              </div>
+          {edgeFinderExpanded && (
+            <div className="sc-ef-expanded-body">
+              {edgeFinderConfluence && edgeFinderScorecard && (
+                <>
+                  <div className="sc-ef-horizons-row">
+                    {edgeFinderConfluence.horizons.map((h) => (
+                      <span
+                        key={h.key}
+                        className={`sc-ef-h-chip status-${h.status.toLowerCase()}`}
+                        title={`${h.label} EdgeFinder view: ${h.biasLabel} (${h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})`}
+                      >
+                        <span className="sc-ef-h-name">{h.label}:</span>{' '}
+                        <strong>{h.biasLabel}</strong>
+                        <span className="sc-ef-h-score">
+                          {' '}
+                          ({h.score >= 0 ? `+${h.score.toFixed(1)}` : h.score.toFixed(1)})
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="sc-ef-summary">{edgeFinderConfluence.summaryText}</div>
+                </>
+              )}
+
               <div className="sc-ef-note-row">
-                <span className="sc-ef-summary">{edgeFinderConfluence.summaryText}</span>
+                <Link
+                  to={`/edge-finder?asset=${encodeURIComponent(resolvedSymbol)}&tab=scorecard`}
+                  className="sc-ef-link-btn"
+                  title={`Open ${resolvedSymbol} EdgeFinder Pro Scorecard`}
+                >
+                  Open {resolvedSymbol} EdgeFinder →
+                </Link>
                 <span className="sc-ef-readonly-tag">Read-only context · Signal unchanged</span>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
