@@ -444,13 +444,62 @@ html[data-theme="light"] .home-nav {
 }
 
 html[data-theme="light"] .logo-text,
-html[data-theme="light"] .hero-title,
 html[data-theme="light"] .section-title,
 html[data-theme="light"] .feature-card h3,
 html[data-theme="light"] .hp-symbol,
 html[data-theme="light"] .hp-ll-v,
-html[data-theme="light"] .hp-tel-v {
-  color: #0f172a;
+html[data-theme="light"] .hp-tel-v,
+html[data-theme="light"] .hero-kpi-val {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .hero-title {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 58%, #9a6d04 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+html[data-theme="light"] .hero-kpi-lbl,
+html[data-theme="light"] .hp-preview-kicker,
+html[data-theme="light"] .hp-ll-k,
+html[data-theme="light"] .hp-tel-k {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .hp-live-pill {
+  color: #047857 !important;
+  background: rgba(16, 185, 129, 0.14) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html[data-theme="light"] .hp-strat {
+  color: #6d28d9 !important;
+  background: rgba(139, 92, 246, 0.12) !important;
+  border-color: rgba(139, 92, 246, 0.28) !important;
+}
+
+html[data-theme="light"] .hp-tf {
+  color: #0369a1 !important;
+  background: rgba(14, 165, 233, 0.12) !important;
+  border-color: rgba(14, 165, 233, 0.28) !important;
+}
+
+html[data-theme="light"] .hp-conv-badge,
+html[data-theme="light"] .hp-ll-v.is-gold {
+  color: #92400e !important;
+}
+
+html[data-theme="light"] .hp-ll-v.is-green,
+html[data-theme="light"] .hp-tel-v.is-green {
+  color: #047857 !important;
+}
+
+html[data-theme="light"] .hp-ll-v.is-red {
+  color: #b91c1c !important;
+}
+
+html[data-theme="light"] .hero-kpi-divider {
+  background: rgba(15, 23, 42, 0.12);
 }
 
 html[data-theme="light"] .hero-subtitle,
@@ -555,24 +604,112 @@ html[data-theme="light"] .filter-collapse-summary {
 }
 
 html[data-theme="light"] .style-desk-tab.is-active {
-  color: #7a5500;
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(255, 255, 255, 0.95));
+  color: #7a5500 !important;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.18), rgba(255, 255, 255, 0.98)) !important;
+  border-color: rgba(184, 134, 11, 0.55) !important;
+}
+
+html[data-theme="light"] .style-desk-tab.is-active .style-desk-name {
+  color: #7a5500 !important;
+}
+
+html[data-theme="light"] .style-desk-tab.is-active .style-desk-sub {
+  color: #334155 !important;
+}
+
+html[data-theme="light"] .style-desk-tab.is-active .style-desk-logo {
+  background: rgba(184, 134, 11, 0.16) !important;
+  border-color: rgba(184, 134, 11, 0.55) !important;
+  color: #7a5500 !important;
 }
 
 html[data-theme="light"] .dashboard.style-theme-scalp .style-desk-tab.is-active {
-  color: #047857;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(255, 255, 255, 0.95));
+  color: #047857 !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(255, 255, 255, 0.98)) !important;
+  border-color: rgba(16, 185, 129, 0.55) !important;
+}
+
+html[data-theme="light"] .dashboard.style-theme-scalp .style-desk-tab.is-active .style-desk-name,
+html[data-theme="light"] .dashboard.style-theme-scalp .style-desk-tab.is-active .style-desk-logo {
+  color: #047857 !important;
 }
 
 html[data-theme="light"] .dashboard.style-theme-swing .style-desk-tab.is-active {
-  color: #1d4ed8;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(255, 255, 255, 0.95));
+  color: #1d4ed8 !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(255, 255, 255, 0.98)) !important;
+  border-color: rgba(59, 130, 246, 0.55) !important;
 }
 
-html[data-theme="light"] .style-tf-chip {
-  background: rgba(15, 23, 42, 0.07);
-  color: #1e293b;
-  border-color: rgba(15, 23, 42, 0.1);
+html[data-theme="light"] .dashboard.style-theme-swing .style-desk-tab.is-active .style-desk-name,
+html[data-theme="light"] .dashboard.style-theme-swing .style-desk-tab.is-active .style-desk-logo {
+  color: #1d4ed8 !important;
+}
+
+html[data-theme="light"] .style-tf-chip,
+html[data-theme="light"] .style-desk-tab.is-active .style-tf-chip {
+  background: rgba(15, 23, 42, 0.09) !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+html[data-theme="light"] .style-desk-meta,
+html[data-theme="light"] .style-desk-meta * {
+  color: #047857 !important;
+}
+
+html[data-theme="light"] .collapsed-title,
+html[data-theme="light"] .matrix-heading,
+html[data-theme="light"] .filter-collapse-title,
+html[data-theme="light"] .filter-collapse-btn,
+html[data-theme="light"] .runners-collapsed-title {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .filter-collapse-btn {
+  background: #f1f5f9 !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+/* Light Mode SetupCard Telemetry, Ladder & Pills */
+html[data-theme="light"] .sc-tel-cell {
+  background: #f8fafc !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+
+html[data-theme="light"] .sc-tel-k {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .sc-tel-v {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .sc-ladder-box {
+  background: #f1f5f9 !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .sc-ladder-labels span {
+  color: #334155;
+}
+
+html[data-theme="light"] .sc-meta-tag {
+  color: #334155 !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .sc-live-price-chip {
+  color: #0f172a !important;
+  background: #f1f5f9 !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+html[data-theme="light"] .sc-tf-badge,
+html[data-theme="light"] .sc-conv-badge {
+  color: #7a5500 !important;
+  background: rgba(212, 175, 55, 0.16) !important;
+  border-color: rgba(184, 134, 11, 0.32) !important;
 }
 
 html[data-theme="light"] .login-page-container {
