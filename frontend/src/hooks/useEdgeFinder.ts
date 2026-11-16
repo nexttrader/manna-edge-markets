@@ -1,9 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config';
 import { useAuth } from '../context/AuthContext';
 
 export type EconomyCode = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'AUD' | 'CAD' | 'CHF' | 'NZD';
 export type EdgeBiasLabel = 'Strong Buy' | 'Buy' | 'Neutral' | 'Sell' | 'Strong Sell';
+export type TraderHorizon = 'SCALP' | 'INTRADAY' | 'SWING';
+
+export interface TimeframeEdgeProfile {
+  horizon: TraderHorizon;
+  label: string;
+  executionTimeframes: string;
+  holdDuration: string;
+  score: number;
+  biasLabel: EdgeBiasLabel;
+  confidencePct: number;
+  trendPrimary: 'Bullish' | 'Bearish' | 'Flat';
+  trendConfirm: 'Bullish' | 'Bearish' | 'Flat';
+  rsi: number;
+  adrUsedPct: number;
+  adrWarning: boolean;
+  htfConfluence: 'ALIGNED' | 'COUNTER_TREND' | 'NEUTRAL';
+  weightsSummary: string;
+  actionNote: string;
+}
+
+export interface FeedCadenceItem {
+  key: string;
+  name: string;
+  provider: string;
+  pollCadence: string;
+  upstreamFrequency: string;
+  status: 'LIVE' | 'PARTIAL' | 'BASELINE';
+  lastUpdated: string;
+}
 
 export interface EdgeFinderRollout {
   visibleToAdmins: boolean;
@@ -129,8 +158,8 @@ export interface KillzoneAlignment {
 export interface AssetEdgeScorecard {
   instrument: string;
   displayName: string;
-  assetClass: 'forex' | 'futures';
-  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Crypto';
+  assetClass: 'forex' | 'futures' | 'crypto';
+  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Agriculture' | 'Crypto';
   baseCurrency: string;
   quoteCurrency: string;
   currentPrice: number;
@@ -138,6 +167,17 @@ export interface AssetEdgeScorecard {
   priceSource: 'LIVE' | 'REFERENCE';
   totalScore: number;
   biasLabel: EdgeBiasLabel;
+  timeframes: {
+    SCALP: TimeframeEdgeProfile;
+    INTRADAY: TimeframeEdgeProfile;
+    SWING: TimeframeEdgeProfile;
+  };
+  timeframeConfluence: {
+    allAligned: boolean;
+    alignedCount: number;
+    summary: string;
+    dominantBias: EdgeBiasLabel;
+  };
   cotScore: number;
   retailScore: number;
   seasonalityScore: number;
@@ -155,6 +195,9 @@ export interface AssetEdgeScorecard {
     ema20: number;
     ema50: number;
     rsi14: number;
+    rsi14M15: number;
+    rsi14H1: number;
+    rsi14H4: number;
     atr14: number;
     atrPct: number;
     high30d: number;
@@ -163,9 +206,15 @@ export interface AssetEdgeScorecard {
     distanceFromEma20Pct: number;
     dayRangePctOfAtr: number;
     volatilityPercentile30d: number;
+    return1hPct: number;
+    return4hPct: number;
     return5dPct: number;
     return20dPct: number;
+    intradaySource: 'LIVE_15M_H1_H4' | 'DAILY_DERIVED';
     mtfAlignment: {
+      m15: 'Bullish' | 'Bearish' | 'Flat';
+      h1: 'Bullish' | 'Bearish' | 'Flat';
+      h4: 'Bullish' | 'Bearish' | 'Flat';
       d5: 'Bullish' | 'Bearish' | 'Flat';
       d20: 'Bullish' | 'Bearish' | 'Flat';
       d50: 'Bullish' | 'Bearish' | 'Flat';
@@ -182,8 +231,11 @@ export interface AssetEdgeScorecard {
 
 export interface CarryTradeItem {
   instrument: string;
-  baseCurrency: EconomyCode;
-  quoteCurrency: EconomyCode;
+  assetClass: 'forex' | 'futures' | 'crypto';
+  category: AssetEdgeScorecard['category'];
+  carryType: 'FX_RATE_DIFF' | 'FUTURES_ROLL_YIELD' | 'CRYPTO_FUNDING_BASIS';
+  baseCurrency: string;
+  quoteCurrency: string;
   baseRate: number;
   quoteRate: number;
   rateSpreadPct: number;
@@ -191,9 +243,13 @@ export interface CarryTradeItem {
   carryDirection: 'LONG' | 'SHORT' | 'NEUTRAL';
   carryAtrRatio: number;
   assetTotalScore: number;
+  scalpScore: number;
+  intradayScore: number;
+  swingScore: number;
   biasLabel: EdgeBiasLabel;
   alignedWithEdge: boolean;
   technicalTrend: 'Bullish' | 'Bearish' | 'Ranging';
+  regimeLabel: string;
 }
 
 export interface MacroInternalsData {
@@ -281,6 +337,32 @@ export interface SmartMoneyData {
   updatedAt: string;
 }
 
+export interface FuturesStrengthItem {
+  sector: 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Agriculture';
+  strengthScore: number;
+  dailyMomentumPct: number;
+  rank: number;
+  topContract: string;
+  weakestContract: string;
+  cotNetLongPct: number;
+  contractCount: number;
+  regime: string;
+}
+
+export interface CryptoStrengthItem {
+  symbol: string;
+  instrument: string;
+  displayName: string;
+  strengthScore: number;
+  dailyMomentumPct: number;
+  rank: number;
+  currentPrice: number;
+  cotLongPct: number;
+  scalpBias: EdgeBiasLabel;
+  intradayBias: EdgeBiasLabel;
+  swingBias: EdgeBiasLabel;
+}
+
 export interface CurrencyStrengthItem {
   currency: EconomyCode;
   strengthScore: number;
@@ -317,6 +399,8 @@ export interface EdgeFinderSnapshot {
   scorecards: AssetEdgeScorecard[];
   economies: MacroEconomyData[];
   currencyStrength: CurrencyStrengthItem[];
+  futuresStrength: FuturesStrengthItem[];
+  cryptoStrength: CryptoStrengthItem[];
   riskGauge: RiskGauge;
   carryTrades: CarryTradeItem[];
   goldScorecard: GoldScorecardData;
@@ -339,10 +423,13 @@ export interface EdgeFinderSnapshot {
     cftcSource: 'CFTC_LIVE' | 'INSTITUTIONAL_MODEL';
     macroSource?: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
     yieldsSource: 'LIVE_FRED_YAHOO' | 'PARTIAL';
+    intradaySource: 'LIVE_15M_H1_H4' | 'PARTIAL';
     smartMoneyCount: number;
     livePriceCount: number;
     totalAssets: number;
     cacheAgeSeconds: number;
+    refreshIntervalSeconds: number;
+    feedCadences: FeedCadenceItem[];
   };
 }
 
@@ -474,6 +561,10 @@ export function useEdgeFinderData(enabled = true) {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState<number>(60);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const hasSnapshotRef = useRef<boolean>(false);
 
   const buildHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -486,8 +577,8 @@ export function useEdgeFinderData(enabled = true) {
       setLoading(false);
       return;
     }
-    if (force) setRefreshing(true);
-    else setLoading((prev) => (snapshot ? prev : true));
+    if (force || hasSnapshotRef.current) setRefreshing(true);
+    else setLoading(true);
 
     try {
       const res = await fetch(
@@ -498,7 +589,10 @@ export function useEdgeFinderData(enabled = true) {
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
+      hasSnapshotRef.current = true;
       setSnapshot(data as EdgeFinderSnapshot);
+      setLastSyncedAt(new Date().toISOString());
+      setSecondsUntilRefresh((data as EdgeFinderSnapshot)?.syncStatus?.refreshIntervalSeconds || 60);
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'Unable to load Manna EdgeFinder Pro terminal');
@@ -506,11 +600,25 @@ export function useEdgeFinderData(enabled = true) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [enabled, buildHeaders, snapshot]);
+  }, [enabled, buildHeaders]);
 
   useEffect(() => {
     fetchSnapshot(false);
-  }, [enabled, effectiveRole]);
+  }, [enabled, effectiveRole, fetchSnapshot]);
+
+  useEffect(() => {
+    if (!enabled || !autoRefresh) return;
+    const timer = window.setInterval(() => {
+      setSecondsUntilRefresh((prev) => {
+        if (prev <= 1) {
+          void fetchSnapshot(false);
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [enabled, autoRefresh, fetchSnapshot]);
 
   const refreshData = useCallback(async () => {
     setRefreshing(true);
@@ -523,7 +631,10 @@ export function useEdgeFinderData(enabled = true) {
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || 'Live sync failed');
       }
+      hasSnapshotRef.current = true;
       setSnapshot(data as EdgeFinderSnapshot);
+      setLastSyncedAt(new Date().toISOString());
+      setSecondsUntilRefresh((data as EdgeFinderSnapshot)?.syncStatus?.refreshIntervalSeconds || 60);
       setError(null);
       return data as EdgeFinderSnapshot;
     } catch (err: any) {
@@ -547,7 +658,9 @@ export function useEdgeFinderData(enabled = true) {
         if (!res.ok || !data?.success) {
           throw new Error(data?.error || 'Failed to save macro economy override');
         }
+        hasSnapshotRef.current = true;
         setSnapshot(data as EdgeFinderSnapshot);
+        setLastSyncedAt(new Date().toISOString());
         setError(null);
         return true;
       } catch (err: any) {
@@ -565,6 +678,10 @@ export function useEdgeFinderData(enabled = true) {
     loading,
     refreshing,
     error,
+    autoRefresh,
+    setAutoRefresh,
+    secondsUntilRefresh,
+    lastSyncedAt,
     refreshData,
     refetch: () => fetchSnapshot(false),
     updateMacroEconomy

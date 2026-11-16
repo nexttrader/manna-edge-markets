@@ -841,9 +841,133 @@
   gap: 16px;
 }
 
+/* Global Trader Style Horizon Selector (Scalper / Intraday / Swing) */
+.ef-horizon-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(35, 16, 64, 0.94), rgba(24, 11, 46, 0.94));
+  border: 1px solid rgba(201, 168, 76, 0.34);
+}
+
+.ef-horizon-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ef-horizon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ef-horizon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(167, 139, 250, 0.24);
+  background: rgba(20, 9, 38, 0.72);
+  color: #dcd3f2;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.12s ease;
+}
+
+.ef-horizon-btn:hover {
+  border-color: rgba(201, 168, 76, 0.55);
+  background: rgba(45, 22, 82, 0.65);
+}
+
+.ef-horizon-btn.is-active {
+  border-color: var(--kdt-gold, #C9A84C);
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.22), rgba(139, 92, 246, 0.18));
+  box-shadow: 0 0 16px rgba(201, 168, 76, 0.14);
+}
+
+.ef-horizon-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+
+.ef-horizon-tf {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: var(--kdt-gold-light, #DFC46B);
+  font-weight: 600;
+}
+
+.ef-horizon-meta {
+  font-size: 0.73rem;
+  color: #b7a8d6;
+  line-height: 1.35;
+}
+
+/* 3-Timeframe Confluence Strip (Scanner Rows) */
+.ef-tf-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ef-tf-chip {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Asset Scorecard 3-Horizon Side-by-Side Cards */
+.ef-tf-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ef-tf-card {
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: rgba(20, 9, 38, 0.64);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.ef-tf-card.is-selected {
+  border-color: var(--kdt-gold, #C9A84C);
+  background: rgba(201, 168, 76, 0.08);
+}
+
+/* Feed Cadence Matrix */
+.ef-cadence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
 @media (max-width: 1180px) {
   .ef-pulse-grid,
-  .ef-two-col-grid {
+  .ef-two-col-grid,
+  .ef-horizon-grid,
+  .ef-tf-cards-grid {
     grid-template-columns: 1fr;
   }
   .ef-deepdive-grid {

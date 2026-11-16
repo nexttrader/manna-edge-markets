@@ -13,6 +13,8 @@ import {
   type AssetEdgeScorecard,
   type EconomyCode,
   type MacroEconomyData,
+  type TimeframeEdgeProfile,
+  type TraderHorizon,
   useEdgeFinderAccess,
   useEdgeFinderData
 } from '../hooks/useEdgeFinder';
@@ -29,7 +31,17 @@ type WorkspaceTab =
   | 'seasonality'
   | 'macro';
 
-type AssetFilterMode = 'ALL' | 'FOREX' | 'FUTURES' | 'CRYPTO' | 'EXTREME_COT' | 'ALIGNED' | 'STRONG' | 'WATCHLIST';
+type AssetFilterMode =
+  | 'ALL'
+  | 'FOREX'
+  | 'FUTURES'
+  | 'CRYPTO'
+  | 'TF_ALIGNED'
+  | 'EXTREME_COT'
+  | 'ALIGNED'
+  | 'STRONG'
+  | 'WATCHLIST';
+type CarryFilterMode = 'ALL' | 'FOREX' | 'FUTURES' | 'CRYPTO';
 type SortKey =
   | 'instrument'
   | 'currentPrice'
@@ -47,22 +59,78 @@ type CarrySortKey = 'instrument' | 'rateSpreadPct' | 'carryAtrRatio' | 'assetTot
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WATCHLIST_STORAGE_KEY = 'manna_edge_finder_watchlist_v1';
 
+const HORIZON_OPTIONS: Array<{
+  id: TraderHorizon;
+  icon: string;
+  label: string;
+  executionTimeframes: string;
+  holdDuration: string;
+  description: string;
+}> = [
+  {
+    id: 'SCALP',
+    icon: '⚡',
+    label: 'Scalper Mode',
+    executionTimeframes: 'M1 / M5 / M15 (H1 Filter)',
+    holdDuration: 'Hold: 15m – 2h',
+    description: '70% M15/H1 Flow, 1H Velocity, Manna Killzone & ADR Guard · 30% Retail Fade & Macro Guard'
+  },
+  {
+    id: 'INTRADAY',
+    icon: '⏱️',
+    label: 'Intraday / Day Trade',
+    executionTimeframes: 'M15 / H1 / H4 (D1 Bias)',
+    holdDuration: 'Hold: 2h – 24h',
+    description: '55% H1/H4/D1 Structure & Killzones · 25% COT/Retail Flow · 20% Macro Diff'
+  },
+  {
+    id: 'SWING',
+    icon: '🏛️',
+    label: 'Swing / Position',
+    executionTimeframes: 'H4 / D1 / W1 (10Y Macro)',
+    holdDuration: 'Hold: 3d – 4w',
+    description: '47.5% Macro & Rates · 25% COT & Retail Fade · 20% D1/W1 Trend & 10Y Seasonal · 7.5% Killzone'
+  }
+];
+
 const TAB_ITEMS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
   { id: 'scanner', label: 'Top Setups & Matrix', icon: '📊' },
   { id: 'scorecard', label: 'Asset Scorecard', icon: '🎯' },
   { id: 'gold', label: 'Gold Scorecard', icon: '🥇' },
-  { id: 'carry', label: 'Carry Scanner', icon: '💱' },
+  { id: 'carry', label: 'Carry / Roll / Funding', icon: '💱' },
   { id: 'cot', label: 'COT Smart Money', icon: '🏦' },
   { id: 'smart_money', label: 'Smart Money & Targets', icon: '🏛️' },
   { id: 'sentiment', label: 'Retail Contrarian', icon: '🧭' },
   { id: 'seasonality', label: 'Seasonality & Killzones', icon: '🗓️' },
-  { id: 'macro', label: 'Global Macro & Yields', icon: '🌐' }
+  { id: 'macro', label: 'Macro, Futures & Crypto', icon: '🌐' }
 ];
 
 const KEY_CORR_ASSETS = [
-  'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD', 'GBP/JPY',
-  'ES', 'NQ', 'ZN', 'GC', 'SI', 'CL', 'BTC/USD', 'ETH/USD'
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'GBP/JPY',
+  'ES', 'NQ', 'NKD', 'ZN', 'GC', 'CL', 'ZC', 'BTC/USD', 'ETH/USD', 'SOL/USD'
 ];
+
+function getHorizonProfile(sc: AssetEdgeScorecard, horizon: TraderHorizon): TimeframeEdgeProfile {
+  return (
+    sc.timeframes?.[horizon] || {
+      horizon,
+      label: horizon,
+      executionTimeframes: 'H4 / D1 / W1',
+      holdDuration: '3d – 4w',
+      score: sc.totalScore,
+      biasLabel: sc.biasLabel,
+      confidencePct: 60,
+      trendPrimary: sc.technical.trendDirection === 'Ranging' ? 'Flat' : sc.technical.trendDirection,
+      trendConfirm: 'Flat',
+      rsi: sc.technical.rsi14,
+      adrUsedPct: sc.technical.dayRangePctOfAtr,
+      adrWarning: false,
+      htfConfluence: 'NEUTRAL',
+      weightsSummary: '',
+      actionNote: ''
+    }
+  );
+}
 
 function formatUsdCompact(val: number): string {
   if (!val || !Number.isFinite(val)) return '—';
@@ -147,11 +215,20 @@ export const EdgeFinderPage: React.FC = () => {
     loading,
     refreshing,
     error,
+    autoRefresh,
+    setAutoRefresh,
+    secondsUntilRefresh,
+    lastSyncedAt,
     refreshData,
     updateMacroEconomy
   } = useEdgeFinderData(true);
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('scanner');
+  const [selectedHorizon, setSelectedHorizon] = useState<TraderHorizon>('INTRADAY');
+  const [strengthTab, setStrengthTab] = useState<'FX' | 'FUTURES' | 'CRYPTO'>('FX');
+  const [carryFilter, setCarryFilter] = useState<CarryFilterMode>('ALL');
+  const [pickerClassFilter, setPickerClassFilter] = useState<CarryFilterMode>('ALL');
+  const [showCadencePanel, setShowCadencePanel] = useState<boolean>(false);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('EUR/USD');
   const [filterMode, setFilterMode] = useState<AssetFilterMode>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -232,19 +309,22 @@ export const EdgeFinderPage: React.FC = () => {
   };
 
   const scorecards = snapshot?.scorecards || [];
+  const activeHorizonMeta = HORIZON_OPTIONS.find((h) => h.id === selectedHorizon) || HORIZON_OPTIONS[1];
 
   const filteredScorecards = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const list = scorecards.filter((sc) => {
+      const hScore = getHorizonProfile(sc, selectedHorizon).score;
       if (filterMode === 'FOREX' && sc.assetClass !== 'forex') return false;
       if (filterMode === 'FUTURES' && sc.assetClass !== 'futures') return false;
-      if (filterMode === 'CRYPTO' && sc.category !== 'Crypto') return false;
+      if (filterMode === 'CRYPTO' && sc.assetClass !== 'crypto' && sc.category !== 'Crypto') return false;
+      if (filterMode === 'TF_ALIGNED' && !sc.timeframeConfluence?.allAligned) return false;
       if (filterMode === 'EXTREME_COT' && sc.cot.extremeFlag === 'NONE') return false;
       if (filterMode === 'ALIGNED' && sc.killzoneAlignment.alignmentStatus !== 'ALIGNED') return false;
-      if (filterMode === 'STRONG' && Math.abs(sc.totalScore) < 5) return false;
+      if (filterMode === 'STRONG' && Math.abs(hScore) < 5) return false;
       if (filterMode === 'WATCHLIST' && !watchlist.includes(sc.instrument)) return false;
       if (q) {
-        const hay = `${sc.instrument} ${sc.displayName} ${sc.category}`.toLowerCase();
+        const hay = `${sc.instrument} ${sc.displayName} ${sc.category} ${sc.assetClass}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -256,25 +336,45 @@ export const EdgeFinderPage: React.FC = () => {
         cmp = COLLATOR.compare(a.instrument, b.instrument);
       } else if (sortKey === 'volatilityPct') {
         cmp = a.technical.dayRangePctOfAtr - b.technical.dayRangePctOfAtr;
+      } else if (sortKey === 'totalScore') {
+        cmp = getHorizonProfile(a, selectedHorizon).score - getHorizonProfile(b, selectedHorizon).score;
       } else {
         cmp = (a[sortKey] as number) - (b[sortKey] as number);
       }
       return sortDir === 'ascending' ? cmp : -cmp;
     });
-  }, [scorecards, filterMode, searchQuery, sortKey, sortDir, watchlist]);
+  }, [scorecards, filterMode, searchQuery, sortKey, sortDir, watchlist, selectedHorizon]);
 
   const sortedCarryTrades = useMemo(() => {
-    const list = snapshot?.carryTrades || [];
+    const list = (snapshot?.carryTrades || []).filter((ct) => {
+      if (carryFilter === 'FOREX') return ct.assetClass === 'forex';
+      if (carryFilter === 'FUTURES') return ct.assetClass === 'futures';
+      if (carryFilter === 'CRYPTO') return ct.assetClass === 'crypto';
+      return true;
+    });
     return [...list].sort((a, b) => {
       let cmp = 0;
       if (carrySortKey === 'instrument') {
         cmp = COLLATOR.compare(a.instrument, b.instrument);
+      } else if (carrySortKey === 'assetTotalScore') {
+        const sa = selectedHorizon === 'SCALP' ? a.scalpScore : selectedHorizon === 'INTRADAY' ? a.intradayScore : a.swingScore;
+        const sb = selectedHorizon === 'SCALP' ? b.scalpScore : selectedHorizon === 'INTRADAY' ? b.intradayScore : b.swingScore;
+        cmp = sa - sb;
       } else {
         cmp = a[carrySortKey] - b[carrySortKey];
       }
       return carrySortDir === 'ascending' ? cmp : -cmp;
     });
-  }, [snapshot?.carryTrades, carrySortKey, carrySortDir]);
+  }, [snapshot?.carryTrades, carryFilter, carrySortKey, carrySortDir, selectedHorizon]);
+
+  const pickerScorecards = useMemo(() => {
+    return scorecards.filter((sc) => {
+      if (pickerClassFilter === 'FOREX') return sc.assetClass === 'forex';
+      if (pickerClassFilter === 'FUTURES') return sc.assetClass === 'futures';
+      if (pickerClassFilter === 'CRYPTO') return sc.assetClass === 'crypto';
+      return true;
+    });
+  }, [scorecards, pickerClassFilter]);
 
   const corrAssets = useMemo(() => {
     const all = snapshot?.correlations.assets || [];
@@ -283,13 +383,25 @@ export const EdgeFinderPage: React.FC = () => {
   }, [snapshot?.correlations.assets]);
 
   const topSetupsPreview = useMemo(
-    () => [...scorecards].sort((a, b) => Math.abs(b.totalScore) - Math.abs(a.totalScore)).slice(0, 8),
-    [scorecards]
+    () =>
+      [...scorecards]
+        .sort(
+          (a, b) =>
+            Math.abs(getHorizonProfile(b, selectedHorizon).score) -
+            Math.abs(getHorizonProfile(a, selectedHorizon).score)
+        )
+        .slice(0, 8),
+    [scorecards, selectedHorizon]
   );
 
   const activeScorecard = useMemo(() => {
     return scorecards.find((s) => s.instrument === selectedSymbol) || scorecards[0] || null;
   }, [scorecards, selectedSymbol]);
+
+  const forexCount = useMemo(() => scorecards.filter((s) => s.assetClass === 'forex').length, [scorecards]);
+  const futuresCount = useMemo(() => scorecards.filter((s) => s.assetClass === 'futures').length, [scorecards]);
+  const cryptoCount = useMemo(() => scorecards.filter((s) => s.assetClass === 'crypto').length, [scorecards]);
+  const tfAlignedCount = useMemo(() => scorecards.filter((s) => s.timeframeConfluence?.allAligned).length, [scorecards]);
 
   const alignedCount = useMemo(
     () => scorecards.filter((s) => s.killzoneAlignment.alignmentStatus === 'ALIGNED').length,
@@ -340,10 +452,10 @@ export const EdgeFinderPage: React.FC = () => {
             <div>
               <h1 className="ef-title">
                 MANNA EDGEFINDER
-                <span className="ef-pro-pill">PRO MATRIX</span>
+                <span className="ef-pro-pill">PRO · 56 ASSETS</span>
               </h1>
               <p className="ef-subtitle">
-                COT Institutional Flow · Contrarian Sentiment · 10Y Seasonality · G8 Macro · Manna Killzone Alignment
+                28 Forex · 18 Futures · 10 Crypto · M5–M15 Scalper / H1–H4 Intraday / D1–W1 Swing · 60s Live Auto-Sync
               </p>
             </div>
           </div>
@@ -354,11 +466,26 @@ export const EdgeFinderPage: React.FC = () => {
             </span>
             <button
               type="button"
+              className={`ef-btn ${autoRefresh ? 'ef-btn-gold' : ''}`}
+              onClick={() => setAutoRefresh((v) => !v)}
+              title="Toggle automatic 60-second background feed refresh"
+            >
+              {autoRefresh ? `🟢 Auto-Sync: ON (${secondsUntilRefresh}s)` : '⏸ Auto-Sync: PAUSED'}
+            </button>
+            <button
+              type="button"
+              className="ef-btn"
+              onClick={() => setShowCadencePanel((v) => !v)}
+            >
+              ⏱️ {showCadencePanel ? 'Hide Cadences' : 'Feed Cadences'}
+            </button>
+            <button
+              type="button"
               className="ef-btn ef-btn-gold"
               onClick={refreshData}
               disabled={refreshing || loading}
             >
-              {refreshing ? '⟳ Syncing Feeds...' : '⟳ Live Sync'}
+              {refreshing ? '⟳ Syncing Feeds...' : '⟳ Sync Now'}
             </button>
             <Link to="/dashboard" className="ef-btn">
               ← Terminal
@@ -457,8 +584,38 @@ export const EdgeFinderPage: React.FC = () => {
           </div>
         ) : snapshot && (
           <>
+            {/* Collapsible Live Feed Refresh Cadence Matrix */}
+            {showCadencePanel && snapshot.syncStatus.feedCadences && (
+              <section className="ef-card ef-perf-section" aria-label="Live Data Feed Refresh Cadences">
+                <div className="ef-card-header">
+                  <h2 className="ef-card-title">Live Data Architecture &amp; Update Cadences (No Simulated Data)</h2>
+                  <span className="ef-card-meta">
+                    Last Sync: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : new Date(snapshot.generatedAt).toLocaleTimeString()} · Cache Age: {snapshot.syncStatus.cacheAgeSeconds}s
+                  </span>
+                </div>
+                <div className="ef-cadence-grid">
+                  {snapshot.syncStatus.feedCadences.map((feed) => (
+                    <div key={feed.key} className="ef-pillar-card">
+                      <div className="ef-pillar-top">
+                        <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.84rem' }}>{feed.name}</span>
+                        <span className={`ef-kz-pill ${feed.status === 'LIVE' ? 'ef-bias-buy' : 'ef-kz-standby'}`}>
+                          {feed.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: '#DFC46B', fontWeight: 600 }} className="ef-num">
+                        Poll: {feed.pollCadence} · Source: {feed.upstreamFrequency}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#b7a8d6' }}>
+                        {feed.provider}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Executive Pulse Telemetry Ribbon */}
-            <section className="ef-pulse-grid ef-perf-section" aria-label="Global Macro and Currency Strength Pulse">
+            <section className="ef-pulse-grid ef-perf-section" aria-label="Global Macro and Multi-Asset Strength Pulse">
               {/* Risk On / Off Gauge */}
               <div className="ef-card">
                 <div className="ef-card-header">
@@ -491,69 +648,208 @@ export const EdgeFinderPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* G8 Currency Strength Meter */}
+              {/* Multi-Asset Strength Meter (FX + Futures + Crypto) */}
               <div className="ef-card">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">G8 Currency Strength Meter</h2>
-                  <span className="ef-card-meta">Macro + FX Flow Composite</span>
+                  <h2 className="ef-card-title">Multi-Asset Strength Meter</h2>
+                  <div className="ef-filter-pills">
+                    <button
+                      type="button"
+                      className={`ef-filter-btn ${strengthTab === 'FX' ? 'is-active' : ''}`}
+                      style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                      onClick={() => setStrengthTab('FX')}
+                    >
+                      FX (8)
+                    </button>
+                    <button
+                      type="button"
+                      className={`ef-filter-btn ${strengthTab === 'FUTURES' ? 'is-active' : ''}`}
+                      style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                      onClick={() => setStrengthTab('FUTURES')}
+                    >
+                      Futures ({snapshot.futuresStrength?.length || 5})
+                    </button>
+                    <button
+                      type="button"
+                      className={`ef-filter-btn ${strengthTab === 'CRYPTO' ? 'is-active' : ''}`}
+                      style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                      onClick={() => setStrengthTab('CRYPTO')}
+                    >
+                      Crypto ({snapshot.cryptoStrength?.length || 10})
+                    </button>
+                  </div>
                 </div>
-                <div className="ef-strength-list">
-                  {snapshot.currencyStrength.map((item) => {
-                    const pct = Math.max(8, Math.min(100, ((item.strengthScore + 10) / 20) * 100));
-                    const isBull = item.strengthScore >= 0.8;
-                    const isBear = item.strengthScore <= -0.8;
-                    const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
-                    return (
-                      <div key={item.currency} className="ef-strength-tile">
-                        <div className="ef-strength-head">
-                          <span>#{item.macroRank} {item.currency}</span>
-                          <span style={{ color: barColor }}>{formatSigned(item.strengthScore, 1)}</span>
+
+                {strengthTab === 'FX' && (
+                  <div className="ef-strength-list">
+                    {snapshot.currencyStrength.map((item) => {
+                      const pct = Math.max(8, Math.min(100, ((item.strengthScore + 10) / 20) * 100));
+                      const isBull = item.strengthScore >= 0.8;
+                      const isBear = item.strengthScore <= -0.8;
+                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      return (
+                        <div key={item.currency} className="ef-strength-tile">
+                          <div className="ef-strength-head">
+                            <span>#{item.macroRank} {item.currency}</span>
+                            <span style={{ color: barColor }}>{formatSigned(item.strengthScore, 1)}</span>
+                          </div>
+                          <div className="ef-strength-bar-bg">
+                            <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#9f91c2' }}>
+                            <span>{item.policyRate.toFixed(2)}%</span>
+                            <span>{item.stance}</span>
+                          </div>
                         </div>
-                        <div className="ef-strength-bar-bg">
-                          <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {strengthTab === 'FUTURES' && (
+                  <div className="ef-strength-list" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))' }}>
+                    {(snapshot.futuresStrength || []).map((sec) => {
+                      const pct = Math.max(8, Math.min(100, ((sec.strengthScore + 10) / 20) * 100));
+                      const isBull = sec.strengthScore >= 0.8;
+                      const isBear = sec.strengthScore <= -0.8;
+                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      return (
+                        <div
+                          key={sec.sector}
+                          className="ef-strength-tile"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleSelectAssetForDeepDive(sec.topContract)}
+                          title={`Inspect top contract ${sec.topContract}`}
+                        >
+                          <div className="ef-strength-head">
+                            <span style={{ fontSize: '0.76rem' }}>#{sec.rank} {sec.sector}</span>
+                            <span style={{ color: barColor }}>{formatSigned(sec.strengthScore, 1)}</span>
+                          </div>
+                          <div className="ef-strength-bar-bg">
+                            <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9f91c2' }}>
+                            <span>Top: <strong style={{ color: '#DFC46B' }}>{sec.topContract}</strong></span>
+                            <span>COT {sec.cotNetLongPct.toFixed(0)}%L</span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#9f91c2' }}>
-                          <span>{item.policyRate.toFixed(2)}%</span>
-                          <span>{item.stance}</span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {strengthTab === 'CRYPTO' && (
+                  <div className="ef-strength-list" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))' }}>
+                    {(snapshot.cryptoStrength || []).slice(0, 8).map((cr) => {
+                      const pct = Math.max(8, Math.min(100, ((cr.strengthScore + 10) / 20) * 100));
+                      const isBull = cr.strengthScore >= 0.8;
+                      const isBear = cr.strengthScore <= -0.8;
+                      const barColor = isBull ? '#00E676' : isBear ? '#FF5252' : '#FFC107';
+                      return (
+                        <div
+                          key={cr.instrument}
+                          className="ef-strength-tile"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleSelectAssetForDeepDive(cr.instrument)}
+                          title={`Inspect ${cr.displayName}`}
+                        >
+                          <div className="ef-strength-head">
+                            <span>#{cr.rank} {cr.symbol}</span>
+                            <span style={{ color: barColor }}>{formatSigned(cr.strengthScore, 1)}</span>
+                          </div>
+                          <div className="ef-strength-bar-bg">
+                            <div className="ef-strength-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9f91c2' }}>
+                            <span className="ef-num">${cr.currentPrice >= 10 ? cr.currentPrice.toFixed(0) : cr.currentPrice.toFixed(3)}</span>
+                            <span style={{ color: cr.dailyMomentumPct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                              {formatSigned(cr.dailyMomentumPct, 1)}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Manna Synergy & Data Health */}
               <div className="ef-card">
                 <div className="ef-card-header">
-                  <h2 className="ef-card-title">Manna Synergy Telemetry</h2>
-                  <span className="ef-card-meta">{new Date(snapshot.generatedAt).toLocaleTimeString()}</span>
+                  <h2 className="ef-card-title">Manna Feed Health</h2>
+                  <span className="ef-card-meta">
+                    {autoRefresh ? `60s Poll · Next ${secondsUntilRefresh}s` : 'Auto-Poll Paused'} · {new Date(snapshot.generatedAt).toLocaleTimeString()}
+                  </span>
                 </div>
                 <div className="ef-sync-stats">
                   <div className="ef-stat-box">
-                    <div className="ef-stat-label">Killzone Aligned</div>
-                    <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
-                      {alignedCount} / {snapshot.scorecards.length}
-                    </div>
-                  </div>
-                  <div className="ef-stat-box">
-                    <div className="ef-stat-label">Live Market Feeds</div>
+                    <div className="ef-stat-label">Live Quotes (60s)</div>
                     <div className="ef-stat-val" style={{ color: snapshot.syncStatus.livePriceCount > 0 ? '#69F0AE' : '#FFE082' }}>
                       {snapshot.syncStatus.livePriceCount} / {snapshot.syncStatus.totalAssets}
                     </div>
                   </div>
                   <div className="ef-stat-box">
-                    <div className="ef-stat-label">CFTC COT Source</div>
-                    <div className="ef-stat-val" style={{ fontSize: '0.8rem' }}>
-                      {snapshot.syncStatus.cftcSource === 'CFTC_LIVE' ? 'LIVE SOCRATA' : 'INSTITUTIONAL'}
+                    <div className="ef-stat-label">15m/H1/H4 Intraday</div>
+                    <div className="ef-stat-val" style={{ fontSize: '0.8rem', color: '#69F0AE' }}>
+                      {snapshot.syncStatus.intradaySource === 'LIVE_15M_H1_H4' ? 'LIVE 15M (60s)' : 'PARTIAL'}
                     </div>
                   </div>
                   <div className="ef-stat-box">
-                    <div className="ef-stat-label">Crowded Retail</div>
-                    <div className="ef-stat-val" style={{ color: '#FF8A80' }}>
-                      {crowdedRetailCount} Alerts
+                    <div className="ef-stat-label">3/3 TF Aligned</div>
+                    <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                      {tfAlignedCount} Assets · {alignedCount} KZ
+                    </div>
+                  </div>
+                  <div className="ef-stat-box">
+                    <div className="ef-stat-label">CFTC / Macro Sync</div>
+                    <div className="ef-stat-val" style={{ fontSize: '0.76rem' }}>
+                      COT 30m · Macro 5–60m
                     </div>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* Global Trading Style Horizon Switcher */}
+            <section className="ef-horizon-bar ef-perf-section" aria-label="Trading Timeframe and Holding Horizon Selector">
+              <div className="ef-horizon-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#DFC46B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    🎯 Active Execution Horizon
+                  </span>
+                  <span className="ef-mini-chip">
+                    Signals &amp; Bias adapt to {activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes}) — or compare all 3 horizons per asset
+                  </span>
+                </div>
+                <span className="ef-card-meta">
+                  Universe: {forexCount} Forex · {futuresCount} Futures · {cryptoCount} Crypto
+                </span>
+              </div>
+              <div className="ef-horizon-grid" role="group" aria-label="Select Trading Horizon">
+                {HORIZON_OPTIONS.map((opt) => {
+                  const isActive = selectedHorizon === opt.id;
+                  const activeSignals = scorecards.filter(
+                    (sc) => Math.abs(getHorizonProfile(sc, opt.id).score) >= 2.0
+                  ).length;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`ef-horizon-btn ${isActive ? 'is-active' : ''}`}
+                      onClick={() => setSelectedHorizon(opt.id)}
+                      aria-pressed={isActive}
+                    >
+                      <div className="ef-horizon-title">
+                        <span>{opt.icon} {opt.label}</span>
+                        <span className="ef-horizon-tf">{opt.executionTimeframes}</span>
+                      </div>
+                      <div className="ef-horizon-meta" style={{ color: '#e9e2fb', fontWeight: 600 }}>
+                        {opt.holdDuration} · {activeSignals} Directional Setups
+                      </div>
+                      <div className="ef-horizon-meta">{opt.description}</div>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
@@ -595,7 +891,9 @@ export const EdgeFinderPage: React.FC = () => {
                 {/* Diverging Conviction Leaders */}
                 <section className="ef-card ef-perf-section" aria-label="Top Conviction Leaders">
                   <div className="ef-card-header">
-                    <h2 className="ef-card-title">Top Conviction Diverging Radar (-10 to +10)</h2>
+                    <h2 className="ef-card-title">
+                      Top {activeHorizonMeta.label} Conviction Radar ({activeHorizonMeta.executionTimeframes})
+                    </h2>
                     <button
                       type="button"
                       className="ef-btn"
@@ -606,14 +904,15 @@ export const EdgeFinderPage: React.FC = () => {
                   </div>
                   <div className="ef-diverging-list">
                     {topSetupsPreview.map((sc) => {
-                      const pctHalf = Math.min(50, (Math.abs(sc.totalScore) / 10) * 50);
-                      const isPos = sc.totalScore >= 0;
+                      const hp = getHorizonProfile(sc, selectedHorizon);
+                      const pctHalf = Math.min(50, (Math.abs(hp.score) / 10) * 50);
+                      const isPos = hp.score >= 0;
                       return (
                         <div
                           key={sc.instrument}
                           className="ef-diverging-row"
                           onClick={() => handleSelectAssetForDeepDive(sc.instrument)}
-                          title="Inspect 11-pillar Scorecard"
+                          title={`${hp.label}: ${hp.actionNote}`}
                         >
                           <span className="ef-num" style={{ fontWeight: 700, color: '#ffffff' }}>
                             {sc.instrument}
@@ -637,7 +936,7 @@ export const EdgeFinderPage: React.FC = () => {
                               color: isPos ? '#69F0AE' : '#FF8A80'
                             }}
                           >
-                            {formatSigned(sc.totalScore, 1)}
+                            {formatSigned(hp.score, 1)}
                           </span>
                         </div>
                       );
@@ -651,9 +950,10 @@ export const EdgeFinderPage: React.FC = () => {
                     {(
                       [
                         ['ALL', `All Assets (${scorecards.length})`],
-                        ['FOREX', '28 FX Pairs'],
-                        ['FUTURES', 'Futures & Commodities'],
-                        ['CRYPTO', 'Crypto (BTC/ETH)'],
+                        ['FOREX', `Forex (${forexCount})`],
+                        ['FUTURES', `Futures (${futuresCount})`],
+                        ['CRYPTO', `Crypto (${cryptoCount})`],
+                        ['TF_ALIGNED', `3/3 TF Aligned (${tfAlignedCount})`],
                         ['EXTREME_COT', `52W COT Extremes (${cotExtremeCount})`],
                         ['ALIGNED', `Killzone Aligned (${alignedCount})`],
                         ['STRONG', 'Strong Bias (|Score| >= 5)'],
@@ -690,7 +990,7 @@ export const EdgeFinderPage: React.FC = () => {
                 >
                   <table className="ef-table">
                     <caption id="ef-scanner-caption">
-                      Manna EdgeFinder Institutional Matrix ({scorecards.length} Assets) — Click any column header to sort or click a row to inspect the 11-pillar Asset Scorecard.
+                      Manna EdgeFinder Institutional Matrix ({filteredScorecards.length} / {scorecards.length} Assets) — Active View: <strong>{activeHorizonMeta.label} ({activeHorizonMeta.executionTimeframes})</strong> · 60s Live Auto-Sync.
                     </caption>
                     <thead>
                       <tr>
@@ -708,9 +1008,12 @@ export const EdgeFinderPage: React.FC = () => {
                         </th>
                         <th scope="col" aria-sort={sortKey === 'totalScore' ? sortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('totalScore')}>
-                            <span>Edge Score</span>
+                            <span>{selectedHorizon === 'SCALP' ? 'Scalp (M5-15)' : selectedHorizon === 'INTRADAY' ? 'Intra (H1-4)' : 'Swing (D1-W1)'}</span>
                             <span>{sortKey === 'totalScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
+                        </th>
+                        <th scope="col">
+                          <span style={{ display: 'block', padding: '11px 12px' }}>3-TF Matrix (S · I · SW)</span>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'cotScore' ? sortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('cotScore')}>
@@ -724,21 +1027,15 @@ export const EdgeFinderPage: React.FC = () => {
                             <span>{sortKey === 'retailScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
-                        <th scope="col" aria-sort={sortKey === 'seasonalityScore' ? sortDir : undefined}>
-                          <button type="button" className="ef-sort-btn" onClick={() => handleSort('seasonalityScore')}>
-                            <span>Seasonal</span>
-                            <span>{sortKey === 'seasonalityScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
-                          </button>
-                        </th>
                         <th scope="col" aria-sort={sortKey === 'trendScore' ? sortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('trendScore')}>
-                            <span>Trend</span>
+                            <span>D1 Trend</span>
                             <span>{sortKey === 'trendScore' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
                         <th scope="col" aria-sort={sortKey === 'volatilityPct' ? sortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleSort('volatilityPct')}>
-                            <span>Vol / MTF</span>
+                            <span>ADR / 7-TF MTF</span>
                             <span>{sortKey === 'volatilityPct' ? (sortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
@@ -755,7 +1052,7 @@ export const EdgeFinderPage: React.FC = () => {
                           </button>
                         </th>
                         <th scope="col">
-                          <span style={{ display: 'block', padding: '11px 12px' }}>Confluence Bias</span>
+                          <span style={{ display: 'block', padding: '11px 12px' }}>{selectedHorizon} Signal &amp; Guard</span>
                         </th>
                       </tr>
                     </thead>
@@ -763,6 +1060,10 @@ export const EdgeFinderPage: React.FC = () => {
                       {filteredScorecards.map((sc) => {
                         const isStarred = watchlist.includes(sc.instrument);
                         const isSelected = activeScorecard?.instrument === sc.instrument;
+                        const hp = getHorizonProfile(sc, selectedHorizon);
+                        const scalp = getHorizonProfile(sc, 'SCALP');
+                        const intra = getHorizonProfile(sc, 'INTRADAY');
+                        const swing = getHorizonProfile(sc, 'SWING');
                         return (
                           <tr
                             key={sc.instrument}
@@ -788,7 +1089,9 @@ export const EdgeFinderPage: React.FC = () => {
                                 </button>
                                 <div>
                                   <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
-                                  <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{sc.category}</div>
+                                  <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>
+                                    {sc.category} · {sc.assetClass.toUpperCase()}
+                                  </div>
                                 </div>
                               </div>
                             </th>
@@ -801,13 +1104,29 @@ export const EdgeFinderPage: React.FC = () => {
                                   color: sc.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80'
                                 }}
                               >
-                                {formatSigned(sc.dailyChangePct, 2)}%
+                                {formatSigned(sc.dailyChangePct, 2)}% (1D)
                               </div>
                             </td>
                             <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.totalScore)}>
-                                {formatSigned(sc.totalScore, 1)}
+                              <span className="ef-heatmap-cell" style={scoreCellStyle(hp.score)}>
+                                {formatSigned(hp.score, 1)}
                               </span>
+                            </td>
+                            <td>
+                              <div className="ef-tf-strip" title={sc.timeframeConfluence?.summary || ''}>
+                                <span className="ef-tf-chip" style={scoreCellStyle(scalp.score)}>
+                                  S {formatSigned(scalp.score, 1)}
+                                </span>
+                                <span className="ef-tf-chip" style={scoreCellStyle(intra.score)}>
+                                  I {formatSigned(intra.score, 1)}
+                                </span>
+                                <span className="ef-tf-chip" style={scoreCellStyle(swing.score)}>
+                                  SW {formatSigned(swing.score, 1)}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.67rem', color: sc.timeframeConfluence?.allAligned ? '#DFC46B' : '#9f91c2', marginTop: 3 }}>
+                                {sc.timeframeConfluence?.allAligned ? '★ 3/3 TF ALIGNED' : `${sc.timeframeConfluence?.alignedCount ?? 0}/3 TF Agree`}
+                              </div>
                             </td>
                             <td>
                               <span className="ef-heatmap-cell" style={scoreCellStyle(sc.cotScore)}>
@@ -820,21 +1139,16 @@ export const EdgeFinderPage: React.FC = () => {
                               </span>
                             </td>
                             <td>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(sc.seasonalityScore)}>
-                                {formatSigned(sc.seasonalityScore, 2)}
-                              </span>
-                            </td>
-                            <td>
                               <span className="ef-heatmap-cell" style={scoreCellStyle(sc.trendScore)}>
                                 {formatSigned(sc.trendScore, 2)}
                               </span>
                             </td>
                             <td>
-                              <div className="ef-num" style={{ fontSize: '0.76rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
-                                {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR · {formatSigned(sc.technical.return5dPct, 1)}% 5D
+                              <div className="ef-num" style={{ fontSize: '0.74rem', fontWeight: 700, color: sc.technical.dayRangePctOfAtr >= 100 ? '#FF8A80' : '#DFC46B' }}>
+                                {sc.technical.dayRangePctOfAtr.toFixed(0)}% ADR · {formatSigned(sc.technical.return1hPct ?? 0, 2)}% 1H
                               </div>
                               <div style={{ fontSize: '0.68rem', color: '#a99bc9' }}>
-                                MTF {sc.technical.mtfAlignment.alignedCount}/4 · {sc.technical.volatilityPercentile30d}%ile Vol
+                                MTF {sc.technical.mtfAlignment.alignedCount}/7 · RSI M15 {sc.technical.rsi14M15?.toFixed(0) ?? sc.technical.rsi14.toFixed(0)}
                               </div>
                             </td>
                             <td>
@@ -858,7 +1172,16 @@ export const EdgeFinderPage: React.FC = () => {
                               </span>
                             </td>
                             <td>
-                              <span className={biasBadgeClass(sc.biasLabel)}>{sc.biasLabel}</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span className={biasBadgeClass(hp.biasLabel)}>{hp.biasLabel}</span>
+                                <div style={{ fontSize: '0.67rem', color: hp.adrWarning ? '#FF8A80' : hp.htfConfluence === 'COUNTER_TREND' ? '#ffe082' : '#9f91c2' }}>
+                                  {hp.adrWarning
+                                    ? '⚠ ADR STRETCHED'
+                                    : hp.htfConfluence === 'COUNTER_TREND'
+                                      ? 'COUNTER-HTF'
+                                      : `${hp.executionTimeframes.split(' ')[0]} · ${hp.confidencePct}%`}
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -915,213 +1238,320 @@ export const EdgeFinderPage: React.FC = () => {
             )}
 
             {/* TAB 2: ASSET SCORECARD DEEP-DIVE */}
-            {activeTab === 'scorecard' && activeScorecard && (
-              <div
-                role="tabpanel"
-                id="panel-scorecard"
-                aria-labelledby="tab-scorecard"
-                className="ef-tabpanel"
-              >
-                <div className="ef-toolbar">
-                  <div className="ef-filter-pills" role="group" aria-label="Select Asset Scorecard">
-                    {scorecards.map((sc) => (
-                      <button
-                        key={sc.instrument}
-                        type="button"
-                        className={`ef-filter-btn ${activeScorecard.instrument === sc.instrument ? 'is-active' : ''}`}
-                        onClick={() => setSelectedSymbol(sc.instrument)}
-                      >
-                        {sc.instrument}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="ef-deepdive-grid">
-                  {/* Left: Score Gauge + Key Technicals + Manna Killzone Confluence */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <section className="ef-card ef-perf-section">
-                      <div className="ef-card-header">
-                        <h2 className="ef-card-title">{activeScorecard.instrument} Edge Gauge</h2>
-                        <span className="ef-card-meta">{activeScorecard.priceSource} FEED</span>
-                      </div>
-                      <ScoreGaugeSvg score={activeScorecard.totalScore} biasLabel={activeScorecard.biasLabel} />
-                      <div style={{ textAlign: 'center', marginTop: 6, color: '#cfc5e8', fontSize: '0.84rem' }}>
-                        {activeScorecard.displayName} ·{' '}
-                        <strong className="ef-num" style={{ color: '#ffffff' }}>{activeScorecard.currentPrice}</strong>{' '}
-                        <span className="ef-num" style={{ color: activeScorecard.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
-                          ({formatSigned(activeScorecard.dailyChangePct, 2)}%)
-                        </span>
-                      </div>
-                    </section>
-
-                    <section className="ef-card ef-perf-section">
-                      <div className="ef-card-header">
-                        <h2 className="ef-card-title">Manna Killzone Synergy</h2>
-                        <span
-                          className={`ef-kz-pill ${
-                            activeScorecard.killzoneAlignment.alignmentStatus === 'ALIGNED'
-                              ? 'ef-kz-aligned'
-                              : activeScorecard.killzoneAlignment.alignmentStatus === 'CONFLICT'
-                                ? 'ef-kz-conflict'
-                                : 'ef-kz-standby'
-                          }`}
+            {activeTab === 'scorecard' && activeScorecard && (() => {
+              const activeHp = getHorizonProfile(activeScorecard, selectedHorizon);
+              const scalpHp = getHorizonProfile(activeScorecard, 'SCALP');
+              const intraHp = getHorizonProfile(activeScorecard, 'INTRADAY');
+              const swingHp = getHorizonProfile(activeScorecard, 'SWING');
+              return (
+                <div
+                  role="tabpanel"
+                  id="panel-scorecard"
+                  aria-labelledby="tab-scorecard"
+                  className="ef-tabpanel"
+                >
+                  <div className="ef-toolbar">
+                    <div className="ef-filter-pills" role="group" aria-label="Filter Scorecard Class">
+                      {(
+                        [
+                          ['ALL', `All (${scorecards.length})`],
+                          ['FOREX', `Forex (${forexCount})`],
+                          ['FUTURES', `Futures (${futuresCount})`],
+                          ['CRYPTO', `Crypto (${cryptoCount})`]
+                        ] as Array<[CarryFilterMode, string]>
+                      ).map(([cls, lbl]) => (
+                        <button
+                          key={cls}
+                          type="button"
+                          className={`ef-filter-btn ${pickerClassFilter === cls ? 'is-active' : ''}`}
+                          onClick={() => setPickerClassFilter(cls)}
                         >
-                          {activeScorecard.killzoneAlignment.alignmentStatus}
-                        </span>
-                      </div>
-                      <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#dcd3f2' }}>
-                        {activeScorecard.seasonality.killzoneAffinityNotes}
-                      </p>
-                      <div className="ef-sync-stats">
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">Active Signals</div>
-                          <div className="ef-stat-val">{activeScorecard.killzoneAlignment.activeSetupCount}</div>
-                        </div>
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">Optimal Session</div>
-                          <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
-                            {activeScorecard.seasonality.bestKillzone}
-                          </div>
-                        </div>
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">RSI (14D) / ADR%</div>
-                          <div className="ef-stat-val">
-                            {activeScorecard.technical.rsi14.toFixed(1)} · {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}%
-                          </div>
-                        </div>
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">5D / 20D Mom</div>
-                          <div
-                            className="ef-stat-val"
-                            style={{ color: activeScorecard.technical.return5dPct >= 0 ? '#69F0AE' : '#FF8A80' }}
-                          >
-                            {formatSigned(activeScorecard.technical.return5dPct, 1)}% / {formatSigned(activeScorecard.technical.return20dPct, 1)}%
-                          </div>
-                        </div>
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">30D Vol %ile</div>
-                          <div className="ef-stat-val">{activeScorecard.technical.volatilityPercentile30d}%ile</div>
-                        </div>
-                        <div className="ef-stat-box">
-                          <div className="ef-stat-label">52W COT Index</div>
-                          <div className="ef-stat-val" style={{ color: '#38bdf8' }}>
-                            {activeScorecard.cot.cotIndex52w.toFixed(1)}% (Z {activeScorecard.cot.cotZScore52w.toFixed(2)})
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                        {(
-                          [
-                            ['5D', activeScorecard.technical.mtfAlignment.d5],
-                            ['20D', activeScorecard.technical.mtfAlignment.d20],
-                            ['50D', activeScorecard.technical.mtfAlignment.d50],
-                            ['Monthly', activeScorecard.technical.mtfAlignment.monthly]
-                          ] as Array<[string, 'Bullish' | 'Bearish' | 'Flat']>
-                        ).map(([tf, dir]) => (
-                          <div
-                            key={tf}
-                            style={{
-                              padding: '5px 6px',
-                              borderRadius: 6,
-                              textAlign: 'center',
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              background:
-                                dir === 'Bullish'
-                                  ? 'rgba(0,230,118,0.14)'
-                                  : dir === 'Bearish'
-                                    ? 'rgba(255,82,82,0.14)'
-                                    : 'rgba(255,255,255,0.05)',
-                              color: dir === 'Bullish' ? '#69F0AE' : dir === 'Bearish' ? '#FF8A80' : '#cfc5e8'
-                            }}
-                          >
-                            {tf}: {dir}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    {/* Base vs Quote Macro Tug of War */}
-                    <section className="ef-card ef-perf-section">
-                      <div className="ef-card-header">
-                        <h2 className="ef-card-title">Base vs Quote Tug-of-War</h2>
-                        <span className="ef-card-meta">
-                          {activeScorecard.tugOfWar.baseLabel} vs {activeScorecard.tugOfWar.quoteLabel}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                        {activeScorecard.tugOfWar.rows.map((row) => (
-                          <div key={row.metric} className="ef-tug-row">
-                            <span
-                              className="ef-num"
-                              style={{
-                                fontWeight: row.advantage === 'BASE' ? 700 : 400,
-                                color: row.advantage === 'BASE' ? '#69F0AE' : '#b7a8d6'
-                              }}
-                            >
-                              {row.baseValue}
-                            </span>
-                            <span style={{ textAlign: 'center', color: '#DFC46B', fontSize: '0.73rem', fontWeight: 600 }}>
-                              {row.metric}
-                            </span>
-                            <span
-                              className="ef-num"
-                              style={{
-                                textAlign: 'right',
-                                fontWeight: row.advantage === 'QUOTE' ? 700 : 400,
-                                color: row.advantage === 'QUOTE' ? '#FF8A80' : '#b7a8d6'
-                              }}
-                            >
-                              {row.quoteValue}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Right: Price vs Score Dual Chart + 11-Pillar Breakdown */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <section className="ef-card ef-perf-section">
-                      <div className="ef-card-header">
-                        <h2 className="ef-card-title">30-Day Price (Gold) vs Historical Edge Score (Cyan)</h2>
-                        <span className="ef-card-meta">
-                          EMA5: {activeScorecard.technical.ema5} · EMA20: {activeScorecard.technical.ema20} · EMA50: {activeScorecard.technical.ema50}
-                        </span>
-                      </div>
-                      <HistoricalScorePriceSvg
-                        series={activeScorecard.historicalSeries}
-                        instrument={activeScorecard.instrument}
-                      />
-                    </section>
+                  <div className="ef-toolbar">
+                    <div className="ef-filter-pills" role="group" aria-label="Select Asset Scorecard">
+                      {pickerScorecards.map((sc) => (
+                        <button
+                          key={sc.instrument}
+                          type="button"
+                          className={`ef-filter-btn ${activeScorecard.instrument === sc.instrument ? 'is-active' : ''}`}
+                          onClick={() => setSelectedSymbol(sc.instrument)}
+                        >
+                          {sc.instrument}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                    <section className="ef-card ef-perf-section">
-                      <div className="ef-card-header">
-                        <h2 className="ef-card-title">11-Pillar Institutional Weight Breakdown</h2>
-                        <span className="ef-card-meta">Weighted Sum Normalized to [-10, +10]</span>
-                      </div>
-                      <div className="ef-pill-grid">
-                        {activeScorecard.factors.map((f) => (
-                          <div key={f.key} className="ef-pillar-card">
-                            <div className="ef-pillar-top">
-                              <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9', letterSpacing: '0.04em' }}>
-                                {f.category}
+                  <div className="ef-deepdive-grid">
+                    {/* Left: Score Gauge + Key Technicals + Manna Killzone Confluence */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">
+                            {activeScorecard.instrument} · {activeHp.label} Gauge
+                          </h2>
+                          <span className="ef-card-meta">
+                            {activeScorecard.priceSource} FEED · 60s SYNC · {activeHp.holdDuration}
+                          </span>
+                        </div>
+                        <ScoreGaugeSvg score={activeHp.score} biasLabel={activeHp.biasLabel} />
+                        <div style={{ textAlign: 'center', marginTop: 6, color: '#cfc5e8', fontSize: '0.84rem' }}>
+                          {activeScorecard.displayName} ·{' '}
+                          <strong className="ef-num" style={{ color: '#ffffff' }}>{activeScorecard.currentPrice}</strong>{' '}
+                          <span className="ef-num" style={{ color: activeScorecard.dailyChangePct >= 0 ? '#69F0AE' : '#FF8A80' }}>
+                            ({formatSigned(activeScorecard.dailyChangePct, 2)}% 1D)
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(20, 9, 38, 0.72)',
+                            border: '1px solid rgba(201, 168, 76, 0.28)',
+                            fontSize: '0.76rem',
+                            color: '#e9e2fb',
+                            lineHeight: 1.4
+                          }}
+                        >
+                          <strong style={{ color: '#DFC46B' }}>{activeHp.executionTimeframes}:</strong> {activeHp.actionNote}
+                        </div>
+                      </section>
+
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">7-Timeframe Structure &amp; Killzone Synergy</h2>
+                          <span
+                            className={`ef-kz-pill ${
+                              activeScorecard.killzoneAlignment.alignmentStatus === 'ALIGNED'
+                                ? 'ef-kz-aligned'
+                                : activeScorecard.killzoneAlignment.alignmentStatus === 'CONFLICT'
+                                  ? 'ef-kz-conflict'
+                                  : 'ef-kz-standby'
+                            }`}
+                          >
+                            {activeScorecard.killzoneAlignment.alignmentStatus}
+                          </span>
+                        </div>
+                        <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#dcd3f2' }}>
+                          {activeScorecard.seasonality.killzoneAffinityNotes}
+                        </p>
+                        <div className="ef-sync-stats">
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">1H / 4H Impulse</div>
+                            <div
+                              className="ef-stat-val"
+                              style={{ color: (activeScorecard.technical.return1hPct ?? 0) >= 0 ? '#69F0AE' : '#FF8A80' }}
+                            >
+                              {formatSigned(activeScorecard.technical.return1hPct ?? 0, 2)}% / {formatSigned(activeScorecard.technical.return4hPct ?? 0, 2)}%
+                            </div>
+                          </div>
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">Optimal Session</div>
+                            <div className="ef-stat-val" style={{ color: '#DFC46B' }}>
+                              {activeScorecard.seasonality.bestKillzone}
+                            </div>
+                          </div>
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">RSI M15 / H1 / D1</div>
+                            <div className="ef-stat-val" style={{ fontSize: '0.82rem' }}>
+                              {(activeScorecard.technical.rsi14M15 ?? 50).toFixed(0)} · {(activeScorecard.technical.rsi14H1 ?? 50).toFixed(0)} · {activeScorecard.technical.rsi14.toFixed(0)}
+                            </div>
+                          </div>
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">Daily ADR Used</div>
+                            <div
+                              className="ef-stat-val"
+                              style={{ color: activeScorecard.technical.dayRangePctOfAtr >= 95 ? '#FF8A80' : '#69F0AE' }}
+                            >
+                              {activeScorecard.technical.dayRangePctOfAtr.toFixed(0)}% ({activeScorecard.technical.volatilityPercentile30d}%ile)
+                            </div>
+                          </div>
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">5D / 20D Mom</div>
+                            <div
+                              className="ef-stat-val"
+                              style={{ color: activeScorecard.technical.return5dPct >= 0 ? '#69F0AE' : '#FF8A80' }}
+                            >
+                              {formatSigned(activeScorecard.technical.return5dPct, 1)}% / {formatSigned(activeScorecard.technical.return20dPct, 1)}%
+                            </div>
+                          </div>
+                          <div className="ef-stat-box">
+                            <div className="ef-stat-label">52W COT Index</div>
+                            <div className="ef-stat-val" style={{ color: '#38bdf8' }}>
+                              {activeScorecard.cot.cotIndex52w.toFixed(1)}% (Z {activeScorecard.cot.cotZScore52w.toFixed(2)})
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+                          {(
+                            [
+                              ['M15', activeScorecard.technical.mtfAlignment.m15 || 'Flat'],
+                              ['H1', activeScorecard.technical.mtfAlignment.h1 || 'Flat'],
+                              ['H4', activeScorecard.technical.mtfAlignment.h4 || 'Flat'],
+                              ['5D', activeScorecard.technical.mtfAlignment.d5],
+                              ['20D', activeScorecard.technical.mtfAlignment.d20],
+                              ['50D', activeScorecard.technical.mtfAlignment.d50],
+                              ['Monthly', activeScorecard.technical.mtfAlignment.monthly]
+                            ] as Array<[string, 'Bullish' | 'Bearish' | 'Flat']>
+                          ).map(([tf, dir]) => (
+                            <div
+                              key={tf}
+                              style={{
+                                padding: '5px 6px',
+                                borderRadius: 6,
+                                textAlign: 'center',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                background:
+                                  dir === 'Bullish'
+                                    ? 'rgba(0,230,118,0.14)'
+                                    : dir === 'Bearish'
+                                      ? 'rgba(255,82,82,0.14)'
+                                      : 'rgba(255,255,255,0.05)',
+                                color: dir === 'Bullish' ? '#69F0AE' : dir === 'Bearish' ? '#FF8A80' : '#cfc5e8'
+                              }}
+                            >
+                              {tf}: {dir}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* Base vs Quote Macro Tug of War */}
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">Base vs Quote Tug-of-War</h2>
+                          <span className="ef-card-meta">
+                            {activeScorecard.tugOfWar.baseLabel} vs {activeScorecard.tugOfWar.quoteLabel}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                          {activeScorecard.tugOfWar.rows.map((row) => (
+                            <div key={row.metric} className="ef-tug-row">
+                              <span
+                                className="ef-num"
+                                style={{
+                                  fontWeight: row.advantage === 'BASE' ? 700 : 400,
+                                  color: row.advantage === 'BASE' ? '#69F0AE' : '#b7a8d6'
+                                }}
+                              >
+                                {row.baseValue}
                               </span>
-                              <span className="ef-heatmap-cell" style={scoreCellStyle(f.contribution * 2)}>
-                                {formatSigned(f.contribution, 2)} (w={f.weight})
+                              <span style={{ textAlign: 'center', color: '#DFC46B', fontSize: '0.73rem', fontWeight: 600 }}>
+                                {row.metric}
+                              </span>
+                              <span
+                                className="ef-num"
+                                style={{
+                                  textAlign: 'right',
+                                  fontWeight: row.advantage === 'QUOTE' ? 700 : 400,
+                                  color: row.advantage === 'QUOTE' ? '#FF8A80' : '#b7a8d6'
+                                }}
+                              >
+                                {row.quoteValue}
                               </span>
                             </div>
-                            <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{f.label}</div>
-                            <div style={{ fontSize: '0.77rem', color: '#b7a8d6', lineHeight: 1.4 }}>{f.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+
+                    {/* Right: 3-Horizon Matrix + Dual Chart + 11-Pillar Breakdown */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Multi-Timeframe Horizon Comparison Cards */}
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">Multi-Timeframe Signal Breakdown — {activeScorecard.instrument}</h2>
+                          <span className="ef-card-meta">
+                            {activeScorecard.timeframeConfluence?.summary || 'Scalp · Intraday · Swing'} ({activeScorecard.technical.intradaySource === 'LIVE_15M_H1_H4' ? 'Live 15m Bars · 60s Sync' : 'Daily'})
+                          </span>
+                        </div>
+                        <div className="ef-tf-cards-grid">
+                          {([scalpHp, intraHp, swingHp] as TimeframeEdgeProfile[]).map((hp) => {
+                            const isSel = selectedHorizon === hp.horizon;
+                            return (
+                              <div
+                                key={hp.horizon}
+                                className={`ef-tf-card ${isSel ? 'is-selected' : ''}`}
+                                onClick={() => setSelectedHorizon(hp.horizon)}
+                                title="Click to make this horizon active across Scanner & Radar"
+                              >
+                                <div className="ef-pillar-top">
+                                  <strong style={{ color: '#DFC46B', fontSize: '0.84rem' }}>
+                                    {hp.horizon === 'SCALP' ? '⚡ SCALPER' : hp.horizon === 'INTRADAY' ? '⏱️ INTRADAY' : '🏛️ SWING'}
+                                  </strong>
+                                  <span className="ef-heatmap-cell" style={scoreCellStyle(hp.score)}>
+                                    {formatSigned(hp.score, 2)}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.73rem', color: '#ffffff', fontWeight: 600 }} className="ef-num">
+                                  {hp.executionTimeframes} · {hp.holdDuration}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                  <span className={biasBadgeClass(hp.biasLabel)}>{hp.biasLabel}</span>
+                                  <span className="ef-mini-chip">{hp.confidencePct}% Conf</span>
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: '#cfc5e8' }} className="ef-num">
+                                  Structure: <strong>{hp.trendPrimary}</strong> / {hp.trendConfirm} · RSI {hp.rsi.toFixed(0)}
+                                </div>
+                                <div style={{ fontSize: '0.71rem', color: hp.adrWarning ? '#FF8A80' : hp.htfConfluence === 'COUNTER_TREND' ? '#ffe082' : '#69F0AE' }}>
+                                  {hp.adrWarning ? '⚠ ADR/RSI Exhaustion Guard Active' : `HTF Swing Alignment: ${hp.htfConfluence}`}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#b7a8d6', lineHeight: 1.4 }}>
+                                  {hp.actionNote}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">30-Day Price (Gold) vs Historical Swing Score (Cyan)</h2>
+                          <span className="ef-card-meta">
+                            EMA5: {activeScorecard.technical.ema5} · EMA20: {activeScorecard.technical.ema20} · EMA50: {activeScorecard.technical.ema50} · 2m Sync
+                          </span>
+                        </div>
+                        <HistoricalScorePriceSvg
+                          series={activeScorecard.historicalSeries}
+                          instrument={activeScorecard.instrument}
+                        />
+                      </section>
+
+                      <section className="ef-card ef-perf-section">
+                        <div className="ef-card-header">
+                          <h2 className="ef-card-title">11-Pillar Institutional Weight Breakdown (Swing D1–W1 Model)</h2>
+                          <span className="ef-card-meta">Weighted Sum Normalized to [-10, +10]</span>
+                        </div>
+                        <div className="ef-pill-grid">
+                          {activeScorecard.factors.map((f) => (
+                            <div key={f.key} className="ef-pillar-card">
+                              <div className="ef-pillar-top">
+                                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#a99bc9', letterSpacing: '0.04em' }}>
+                                  {f.category}
+                                </span>
+                                <span className="ef-heatmap-cell" style={scoreCellStyle(f.contribution * 2)}>
+                                  {formatSigned(f.contribution, 2)} (w={f.weight})
+                                </span>
+                              </div>
+                              <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{f.label}</div>
+                              <div style={{ fontSize: '0.77rem', color: '#b7a8d6', lineHeight: 1.4 }}>{f.detail}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* TAB 2B: DEDICATED GOLD SCORECARD (REAL YIELDS / DXY / VIX / GC-SI / COT) */}
             {activeTab === 'gold' && snapshot.goldScorecard && (
@@ -1135,8 +1565,8 @@ export const EdgeFinderPage: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">COMEX Gold (GC / XAU) Edge Gauge</h2>
-                        <span className="ef-card-meta">7-Pillar Precious Metals Model</span>
+                        <h2 className="ef-card-title">COMEX Gold (GC / XAU) Macro Swing Gauge</h2>
+                        <span className="ef-card-meta">7-Pillar D1–W1 Precious Metals Model</span>
                       </div>
                       <ScoreGaugeSvg
                         score={snapshot.goldScorecard.totalScore}
@@ -1153,7 +1583,7 @@ export const EdgeFinderPage: React.FC = () => {
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
                         <h2 className="ef-card-title">Macro Gold Inputs (Live)</h2>
-                        <span className="ef-card-meta">FRED + Yahoo + CFTC</span>
+                        <span className="ef-card-meta">FRED + Yahoo 5m · CFTC 30m Sync</span>
                       </div>
                       <div className="ef-sync-stats">
                         <div className="ef-stat-box">
@@ -1186,7 +1616,7 @@ export const EdgeFinderPage: React.FC = () => {
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
                         <h2 className="ef-card-title">30-Day COMEX Gold (Gold) vs US Dollar Index DXY (Cyan)</h2>
-                        <span className="ef-card-meta">52W COT Index: {snapshot.goldScorecard.cotIndex52w.toFixed(1)}%</span>
+                        <span className="ef-card-meta">52W COT Index: {snapshot.goldScorecard.cotIndex52w.toFixed(1)}% · 5m–30m Sync</span>
                       </div>
                       <GoldVsDxyChartSvg series={snapshot.goldScorecard.series30d} />
                     </section>
@@ -1216,7 +1646,7 @@ export const EdgeFinderPage: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 2C: CARRY TRADE SCANNER (ALL 28 FX PAIRS) */}
+            {/* TAB 2C: MULTI-ASSET CARRY, FUTURES ROLL & CRYPTO FUNDING SCANNER (56 ASSETS) */}
             {activeTab === 'carry' && (
               <div
                 role="tabpanel"
@@ -1224,27 +1654,52 @@ export const EdgeFinderPage: React.FC = () => {
                 aria-labelledby="tab-carry"
                 className="ef-tabpanel"
               >
+                <div className="ef-toolbar">
+                  <div className="ef-filter-pills" role="group" aria-label="Filter Carry Roll Funding Asset Class">
+                    {(
+                      [
+                        ['ALL', `All Assets (${snapshot.carryTrades.length})`],
+                        ['FOREX', `FX Rate Carry (${forexCount})`],
+                        ['FUTURES', `Futures Roll & Term Yield (${futuresCount})`],
+                        ['CRYPTO', `Crypto CME / Perp Basis (${cryptoCount})`]
+                      ] as Array<[CarryFilterMode, string]>
+                    ).map(([cls, lbl]) => (
+                      <button
+                        key={cls}
+                        type="button"
+                        className={`ef-filter-btn ${carryFilter === cls ? 'is-active' : ''}`}
+                        onClick={() => setCarryFilter(cls)}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="ef-card-meta">
+                    Active Bias Column: {activeHorizonMeta.label} · BIS 60m · FRED 3M T-Bill 5m · CFTC 30m
+                  </span>
+                </div>
+
                 <div tabIndex={0} role="region" aria-labelledby="ef-carry-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-carry-caption">
-                      G8 FX Carry Trade Scanner (All 28 Currency Pairs) — Ranked by Live BIS Central Bank Rate Differential &amp; Carry-to-ATR Efficiency.
+                      Manna Multi-Asset Carry, Futures Roll &amp; Crypto Basis Scanner ({sortedCarryTrades.length} Assets) — FX Central Bank Differentials, Treasury/Futures Roll Regime, and CFTC Crypto Basis vs US 3M T-Bill Funding.
                     </caption>
                     <thead>
                       <tr>
                         <th scope="col" aria-sort={carrySortKey === 'instrument' ? carrySortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('instrument')}>
-                            <span>FX Pair</span>
+                            <span>Instrument &amp; Regime</span>
                             <span>{carrySortKey === 'instrument' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Base / Quote Rate</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Yield / Implied vs Funding</span></th>
                         <th scope="col" aria-sort={carrySortKey === 'rateSpreadPct' ? carrySortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('rateSpreadPct')}>
-                            <span>Yield Spread (bps)</span>
+                            <span>Carry / Basis Spread</span>
                             <span>{carrySortKey === 'rateSpreadPct' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
-                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Optimal Carry Side</span></th>
+                        <th scope="col"><span style={{ display: 'block', padding: '11px 12px' }}>Optimal Carry Bias</span></th>
                         <th scope="col" aria-sort={carrySortKey === 'carryAtrRatio' ? carrySortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('carryAtrRatio')}>
                             <span>Carry / ATR Ratio</span>
@@ -1253,7 +1708,7 @@ export const EdgeFinderPage: React.FC = () => {
                         </th>
                         <th scope="col" aria-sort={carrySortKey === 'assetTotalScore' ? carrySortDir : undefined}>
                           <button type="button" className="ef-sort-btn" onClick={() => handleCarrySort('assetTotalScore')}>
-                            <span>Edge Score</span>
+                            <span>{selectedHorizon} Score (S/I/SW)</span>
                             <span>{carrySortKey === 'assetTotalScore' ? (carrySortDir === 'ascending' ? '▲' : '▼') : '↕'}</span>
                           </button>
                         </th>
@@ -1261,50 +1716,64 @@ export const EdgeFinderPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedCarryTrades.map((ct) => (
-                        <tr key={ct.instrument} onClick={() => handleSelectAssetForDeepDive(ct.instrument)}>
-                          <th scope="row">
-                            <div style={{ fontWeight: 700, color: '#ffffff' }}>{ct.instrument}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>
-                              {ct.baseCurrency} vs {ct.quoteCurrency}
-                            </div>
-                          </th>
-                          <td className="ef-num">
-                            {ct.baseRate.toFixed(2)}% / {ct.quoteRate.toFixed(2)}%
-                          </td>
-                          <td>
-                            <span className="ef-heatmap-cell" style={scoreCellStyle(ct.rateSpreadPct)}>
-                              {ct.rateSpreadBps >= 0 ? `+${ct.rateSpreadBps}` : ct.rateSpreadBps} bps ({formatSigned(ct.rateSpreadPct, 2)}%)
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`ef-kz-pill ${
-                                ct.carryDirection === 'LONG'
-                                  ? 'ef-bias-buy'
-                                  : ct.carryDirection === 'SHORT'
-                                    ? 'ef-bias-sell'
-                                    : 'ef-kz-standby'
-                              }`}
-                            >
-                              {ct.carryDirection === 'NEUTRAL' ? 'FLAT SPREAD' : `POSITIVE CARRY ${ct.carryDirection}`}
-                            </span>
-                          </td>
-                          <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>
-                            {ct.carryAtrRatio.toFixed(2)}x
-                          </td>
-                          <td>
-                            <span className="ef-heatmap-cell" style={scoreCellStyle(ct.assetTotalScore)}>
-                              {formatSigned(ct.assetTotalScore, 1)} ({ct.biasLabel})
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`ef-kz-pill ${ct.alignedWithEdge ? 'ef-kz-aligned' : 'ef-kz-standby'}`}>
-                              {ct.alignedWithEdge ? 'CARRY + EDGE ALIGNED' : `TREND: ${ct.technicalTrend}`}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {sortedCarryTrades.map((ct) => {
+                        const activeCarryScore =
+                          selectedHorizon === 'SCALP'
+                            ? ct.scalpScore
+                            : selectedHorizon === 'INTRADAY'
+                              ? ct.intradayScore
+                              : ct.swingScore;
+                        return (
+                          <tr key={ct.instrument} onClick={() => handleSelectAssetForDeepDive(ct.instrument)}>
+                            <th scope="row">
+                              <div style={{ fontWeight: 700, color: '#ffffff' }}>{ct.instrument}</div>
+                              <div style={{ fontSize: '0.69rem', color: '#DFC46B', fontWeight: 500 }}>
+                                {ct.category} · {ct.regimeLabel}
+                              </div>
+                            </th>
+                            <td className="ef-num">
+                              <div>{ct.baseRate.toFixed(2)}% / {ct.quoteRate.toFixed(2)}%</div>
+                              <div style={{ fontSize: '0.68rem', color: '#9f91c2' }}>
+                                {ct.carryType === 'FX_RATE_DIFF' ? 'CB Policy Diff' : ct.carryType === 'FUTURES_ROLL_YIELD' ? 'Implied vs 3M T-Bill' : 'Basis vs USD Rate'}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="ef-heatmap-cell" style={scoreCellStyle(ct.rateSpreadPct)}>
+                                {ct.rateSpreadBps >= 0 ? `+${ct.rateSpreadBps}` : ct.rateSpreadBps} bps ({formatSigned(ct.rateSpreadPct, 2)}%)
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`ef-kz-pill ${
+                                  ct.carryDirection === 'LONG'
+                                    ? 'ef-bias-buy'
+                                    : ct.carryDirection === 'SHORT'
+                                      ? 'ef-bias-sell'
+                                      : 'ef-kz-standby'
+                                }`}
+                              >
+                                {ct.carryDirection === 'NEUTRAL' ? 'FLAT SPREAD' : `POSITIVE ${ct.carryDirection}`}
+                              </span>
+                            </td>
+                            <td className="ef-num" style={{ fontWeight: 700, color: '#DFC46B' }}>
+                              {ct.carryAtrRatio.toFixed(2)}x
+                            </td>
+                            <td>
+                              <span className="ef-heatmap-cell" style={scoreCellStyle(activeCarryScore)}>
+                                {formatSigned(activeCarryScore, 1)}
+                              </span>
+                              <div className="ef-num" style={{ fontSize: '0.67rem', color: '#a99bc9', marginTop: 2 }}>
+                                S {formatSigned(ct.scalpScore, 1)} · I {formatSigned(ct.intradayScore, 1)} · SW {formatSigned(ct.swingScore, 1)}
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`ef-kz-pill ${ct.alignedWithEdge ? 'ef-kz-aligned' : 'ef-kz-standby'}`}>
+                                {ct.alignedWithEdge ? 'CARRY + SWING ALIGNED' : `D1: ${ct.technicalTrend}`}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1326,11 +1795,31 @@ export const EdgeFinderPage: React.FC = () => {
                         12-Week Managed Money Net Positioning — {activeScorecard.instrument} ({activeScorecard.cot.contractName})
                       </h2>
                       <span className="ef-card-meta">
-                        Source: {activeScorecard.cot.source} · 52W Index: {activeScorecard.cot.cotIndex52w.toFixed(1)}% · Z: {activeScorecard.cot.cotZScore52w.toFixed(2)} · Report {activeScorecard.cot.reportDate}
+                        Source: {activeScorecard.cot.source} (30m Poll · Weekly Fri 15:30 ET) · 52W Idx: {activeScorecard.cot.cotIndex52w.toFixed(1)}% · Report {activeScorecard.cot.reportDate}
                       </span>
                     </div>
+                    <div className="ef-filter-pills" style={{ marginBottom: 8 }}>
+                      {(
+                        [
+                          ['ALL', `All (${scorecards.length})`],
+                          ['FOREX', `Forex (${forexCount})`],
+                          ['FUTURES', `Futures (${futuresCount})`],
+                          ['CRYPTO', `Crypto (${cryptoCount})`]
+                        ] as Array<[CarryFilterMode, string]>
+                      ).map(([cls, lbl]) => (
+                        <button
+                          key={cls}
+                          type="button"
+                          className={`ef-filter-btn ${pickerClassFilter === cls ? 'is-active' : ''}`}
+                          style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                          onClick={() => setPickerClassFilter(cls)}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
                     <div className="ef-filter-pills" style={{ marginBottom: 12 }}>
-                      {scorecards.map((sc) => (
+                      {pickerScorecards.map((sc) => (
                         <button
                           key={sc.instrument}
                           type="button"
@@ -1351,7 +1840,7 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-cot-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-cot-caption">
-                      CFTC Commitments of Traders — Non-Commercial &amp; Commercial Hedger Positioning + 52-Week Percentile Index Across All {scorecards.length} Tracked Assets.
+                      CFTC Commitments of Traders — Non-Commercial &amp; Commercial Hedger Positioning + 52-Week Percentile Index Across All {pickerScorecards.length} Filtered Assets ({scorecards.length} Total).
                     </caption>
                     <thead>
                       <tr>
@@ -1367,11 +1856,11 @@ export const EdgeFinderPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {scorecards.map((sc) => (
+                      {pickerScorecards.map((sc) => (
                         <tr key={sc.instrument} onClick={() => setSelectedSymbol(sc.instrument)}>
                           <th scope="row">
                             <div style={{ fontWeight: 700, color: '#ffffff' }}>{sc.instrument}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{sc.cot.reportDate}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>{sc.category} · {sc.cot.reportDate}</div>
                           </th>
                           <td className="ef-num">{sc.cot.cftcCode}</td>
                           <td className="ef-num">
@@ -1446,7 +1935,7 @@ export const EdgeFinderPage: React.FC = () => {
                 <div tabIndex={0} role="region" aria-labelledby="ef-targets-caption" className="ef-table-wrapper ef-perf-section">
                   <table className="ef-table">
                     <caption id="ef-targets-caption">
-                      Wall Street Institutional Analyst Consensus Targets Across Macro &amp; Sector Bellwethers (Live Yahoo Finance Consensus).
+                      Wall Street Institutional Analyst Consensus Targets Across Macro, Energy, Metals &amp; Crypto Equities (COIN, MSTR, NVDA, XOM, NEM — 60m Live Sync).
                     </caption>
                     <thead>
                       <tr>
@@ -1584,9 +2073,9 @@ export const EdgeFinderPage: React.FC = () => {
               >
                 <section className="ef-card ef-perf-section">
                   <div className="ef-card-header">
-                    <h2 className="ef-card-title">Retail Crowd Contrarian Radar</h2>
+                    <h2 className="ef-card-title">Retail Crowd Contrarian Radar (All {scorecards.length} FX, Futures &amp; Crypto Assets)</h2>
                     <span className="ef-card-meta">
-                      Crowd Long &ge; 58% → Contrarian Bearish · Crowd Short &ge; 58% → Contrarian Bullish
+                      CFTC Non-Reportables · 30m Poll / Weekly Fri · {crowdedRetailCount} Crowded Extremes
                     </span>
                   </div>
                   <div className="ef-pill-grid">
@@ -1603,7 +2092,9 @@ export const EdgeFinderPage: React.FC = () => {
                           onClick={() => handleSelectAssetForDeepDive(sc.instrument)}
                         >
                           <div className="ef-pillar-top">
-                            <strong style={{ color: '#ffffff', fontSize: '0.96rem' }}>{sc.instrument}</strong>
+                            <strong style={{ color: '#ffffff', fontSize: '0.96rem' }}>
+                              {sc.instrument} <span style={{ fontSize: '0.7rem', color: '#9f91c2', fontWeight: 400 }}>({sc.category})</span>
+                            </strong>
                             {rs.crowdedWarning && (
                               <span className="ef-kz-pill ef-kz-aligned">CROWD EXTREME</span>
                             )}
@@ -1645,7 +2136,7 @@ export const EdgeFinderPage: React.FC = () => {
                         10-Year Monthly Seasonality Distribution — {activeScorecard.instrument}
                       </h2>
                       <span className="ef-card-meta">
-                        Best Session: {activeScorecard.seasonality.bestKillzone} · Current Month Avg:{' '}
+                        Yahoo 10Y Monthly · 6h Sync · Best Session: {activeScorecard.seasonality.bestKillzone} · Avg:{' '}
                         {formatSigned(activeScorecard.seasonality.currentMonthAvgReturn, 2)}% ({activeScorecard.seasonality.currentMonthWinRate}% Win)
                       </span>
                     </div>
@@ -1730,7 +2221,7 @@ export const EdgeFinderPage: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 6: GLOBAL MACRO, CENTRAL BANK HUB & ECONOMIC CALENDAR */}
+            {/* TAB 6: GLOBAL MACRO, FUTURES SECTORS, CRYPTO REGIME & CALENDAR */}
             {activeTab === 'macro' && (
               <div
                 role="tabpanel"
@@ -1738,12 +2229,87 @@ export const EdgeFinderPage: React.FC = () => {
                 aria-labelledby="tab-macro"
                 className="ef-tabpanel"
               >
+                {/* Futures Sector Strength & Crypto Institutional Regime */}
+                <div className="ef-two-col-grid">
+                  <section className="ef-card ef-perf-section">
+                    <div className="ef-card-header">
+                      <h2 className="ef-card-title">Futures Institutional Sector Rotation (5 Sectors · 18 Contracts)</h2>
+                      <span className="ef-card-meta">CFTC 30m + Yahoo 60s Sync</span>
+                    </div>
+                    <div className="ef-pill-grid">
+                      {(snapshot.futuresStrength || []).map((sec) => (
+                        <div
+                          key={sec.sector}
+                          className="ef-pillar-card"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleSelectAssetForDeepDive(sec.topContract)}
+                        >
+                          <div className="ef-pillar-top">
+                            <span style={{ fontWeight: 700, color: '#ffffff' }}>#{sec.rank} {sec.sector}</span>
+                            <span className="ef-heatmap-cell" style={scoreCellStyle(sec.strengthScore)}>
+                              {formatSigned(sec.strengthScore, 1)}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#DFC46B', fontWeight: 600 }}>
+                            {sec.regime} ({sec.contractCount} contracts)
+                          </div>
+                          <div style={{ fontSize: '0.73rem', color: '#b7a8d6' }} className="ef-num">
+                            Leader: <strong style={{ color: '#69F0AE' }}>{sec.topContract}</strong> · Lag: <strong style={{ color: '#FF8A80' }}>{sec.weakestContract}</strong> · COT {sec.cotNetLongPct.toFixed(0)}% Long
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="ef-card ef-perf-section">
+                    <div className="ef-card-header">
+                      <h2 className="ef-card-title">Crypto Institutional Matrix (10 CME &amp; Coinbase COT Contracts)</h2>
+                      <span className="ef-card-meta">60s Price/M15 · Weekly CFTC COT</span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="ef-table" style={{ minWidth: 520 }}>
+                        <thead>
+                          <tr>
+                            <th scope="col"><span style={{ display: 'block', padding: '8px 10px' }}>Asset</span></th>
+                            <th scope="col"><span style={{ display: 'block', padding: '8px 10px' }}>Price / 1D</span></th>
+                            <th scope="col"><span style={{ display: 'block', padding: '8px 10px' }}>COT Long%</span></th>
+                            <th scope="col"><span style={{ display: 'block', padding: '8px 10px' }}>Scalp / Intra / Swing</span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(snapshot.cryptoStrength || []).map((cr) => (
+                            <tr key={cr.instrument} onClick={() => handleSelectAssetForDeepDive(cr.instrument)}>
+                              <th scope="row" style={{ padding: '7px 10px' }}>
+                                <span style={{ fontWeight: 700, color: '#ffffff' }}>#{cr.rank} {cr.instrument}</span>
+                              </th>
+                              <td className="ef-num" style={{ padding: '7px 10px' }}>
+                                ${cr.currentPrice >= 10 ? cr.currentPrice.toLocaleString() : cr.currentPrice.toFixed(4)}{' '}
+                                <span style={{ color: cr.dailyMomentumPct >= 0 ? '#69F0AE' : '#FF8A80', fontSize: '0.72rem' }}>
+                                  ({formatSigned(cr.dailyMomentumPct, 1)}%)
+                                </span>
+                              </td>
+                              <td className="ef-num" style={{ padding: '7px 10px', color: '#38bdf8' }}>
+                                {cr.cotLongPct.toFixed(1)}%
+                              </td>
+                              <td style={{ padding: '7px 10px' }}>
+                                <span className="ef-mini-chip">
+                                  {cr.scalpBias} / {cr.intradayBias} / {cr.swingBias}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
+
                 {/* US Treasury Yield Curve & Live FRED Macro Valuation */}
                 {snapshot.macroInternals && (
                   <div className="ef-two-col-grid">
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
-                        <h2 className="ef-card-title">US Treasury Yield Curve &amp; Intermarket Regime</h2>
+                        <h2 className="ef-card-title">US Treasury Yield Curve &amp; Intermarket Regime (5m Sync)</h2>
                         <span
                           className={`ef-kz-pill ${
                             snapshot.macroInternals.yieldCurve.curveRegime.includes('Inverted')
@@ -1805,7 +2371,7 @@ export const EdgeFinderPage: React.FC = () => {
                     <section className="ef-card ef-perf-section">
                       <div className="ef-card-header">
                         <h2 className="ef-card-title">Live FRED US Macro Health &amp; Valuation</h2>
-                        <span className="ef-card-meta">Updated {snapshot.macroInternals.fredUsMacro.updatedAt}</span>
+                        <span className="ef-card-meta">5m Poll · Release {snapshot.macroInternals.fredUsMacro.updatedAt}</span>
                       </div>
                       <div className="ef-sync-stats">
                         <div className="ef-stat-box">

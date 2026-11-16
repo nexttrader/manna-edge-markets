@@ -42,17 +42,25 @@ async function runTests() {
   assert.strictEqual(canRoleAccessEdgeFinder('admin', defaultRollout), false);
   assert.strictEqual(canRoleAccessEdgeFinder('trader', defaultRollout), false);
 
-  console.log('2. Testing full live EdgeFinder snapshot generation across 41 assets & G8 economies...');
+  console.log('2. Testing full live EdgeFinder snapshot generation across 56 assets, 3 Trader Horizons & G8 economies...');
   const snapshot = await buildEdgeFinderSnapshot(true);
-  assert.strictEqual(EDGE_FINDER_ASSETS.length, 41, 'Universe must cover all 41 institutional assets');
-  assert.strictEqual(snapshot.scorecards.length, 41, 'Should compute all 41 assets');
+  assert.strictEqual(EDGE_FINDER_ASSETS.length, 56, 'Universe must cover all 56 institutional assets (28 FX + 18 Futures + 10 Crypto)');
+  assert.strictEqual(snapshot.scorecards.length, 56, 'Should compute all 56 assets');
+  assert.strictEqual(snapshot.scorecards.filter((s) => s.assetClass === 'forex').length, 28, 'Must include 28 FX pairs');
+  assert.strictEqual(snapshot.scorecards.filter((s) => s.assetClass === 'futures').length, 18, 'Must include 18 Futures contracts');
+  assert.strictEqual(snapshot.scorecards.filter((s) => s.assetClass === 'crypto').length, 10, 'Must include 10 Crypto contracts');
   assert.strictEqual(snapshot.economies.length, 8, 'Should include all G8 economies');
   assert.strictEqual(snapshot.currencyStrength.length, 8, 'Should rank all G8 currencies');
-  assert.strictEqual(snapshot.carryTrades.length, 28, 'Should rank all 28 G8 FX carry trade pairs');
+  assert.strictEqual(snapshot.futuresStrength.length, 5, 'Should rank all 5 Futures sectors');
+  assert.strictEqual(snapshot.cryptoStrength.length, 10, 'Should rank all 10 Crypto contracts');
+  assert.strictEqual(snapshot.carryTrades.length, 56, 'Carry/Roll/Funding scanner must cover all 56 assets');
   assert.strictEqual(snapshot.syncStatus.cftcSource, 'CFTC_LIVE', 'CFTC COT feed must be live');
   assert.strictEqual(snapshot.syncStatus.macroSource, 'LIVE_BIS_WORLDBANK', 'Macro feed must be live BIS + World Bank');
   assert.strictEqual(snapshot.syncStatus.yieldsSource, 'LIVE_FRED_YAHOO', 'Yield curve & FRED macro feed must be live');
-  assert.strictEqual(snapshot.syncStatus.livePriceCount, 41, 'All 41 assets must have live Yahoo price feeds');
+  assert.strictEqual(snapshot.syncStatus.intradaySource, 'LIVE_15M_H1_H4', 'Intraday M15/H1/H4 candles must be live');
+  assert.strictEqual(snapshot.syncStatus.livePriceCount, 56, 'All 56 assets must have live Yahoo price feeds');
+  assert.strictEqual(snapshot.syncStatus.refreshIntervalSeconds, 60, 'Auto-poll interval must be 60 seconds');
+  assert.strictEqual(snapshot.syncStatus.feedCadences.length, 8, 'Must report exact update cadences for all 8 data streams');
   assert(snapshot.riskGauge.score >= 5 && snapshot.riskGauge.score <= 95, 'Risk gauge out of bounds');
 
   // Verify live US Treasury Yield Curve, VIX, DXY, and FRED US Macro Valuation
@@ -88,13 +96,25 @@ async function runTests() {
     assert.strictEqual(sc.cot.source, 'CFTC_LIVE', `${sc.instrument} COT must be live CFTC data`);
     assert(sc.retailSentiment.source.includes('CFTC'), `${sc.instrument} retail sentiment must come from live CFTC non-reportables`);
     assert(sc.totalScore >= -10 && sc.totalScore <= 10, `${sc.instrument} score out of [-10, 10]: ${sc.totalScore}`);
+    assert.strictEqual(sc.technical.intradaySource, 'LIVE_15M_H1_H4', `${sc.instrument} must compute M15/H1/H4 from live 15m candles`);
+    for (const h of ['SCALP', 'INTRADAY', 'SWING'] as const) {
+      const prof = sc.timeframes[h];
+      assert(prof, `${sc.instrument} missing timeframe profile ${h}`);
+      assert(prof.score >= -10 && prof.score <= 10, `${sc.instrument} ${h} score out of bounds: ${prof.score}`);
+      assert(prof.confidencePct >= 30 && prof.confidencePct <= 100, `${sc.instrument} ${h} confidence invalid`);
+      assert(prof.actionNote.length > 10, `${sc.instrument} ${h} missing actionNote`);
+    }
+    assert(sc.timeframeConfluence.alignedCount >= 0 && sc.timeframeConfluence.alignedCount <= 3, 'TF confluence out of bounds');
     assert.strictEqual(sc.factors.length, 11, `${sc.instrument} must include all 11 weighted pillars`);
     const weightSum = sc.factors.reduce((sum, f) => sum + f.weight, 0);
     assert(Math.abs(weightSum - 10) < 0.01, `${sc.instrument} pillar weights must sum to 10.0, got ${weightSum}`);
     assert.strictEqual(sc.cot.history12w.length, 12, `${sc.instrument} COT must include 12 weeks live history`);
     assert(sc.cot.cotIndex52w >= 0 && sc.cot.cotIndex52w <= 100, `${sc.instrument} 52W COT index out of range`);
     assert(Number.isFinite(sc.cot.cotZScore52w), `${sc.instrument} 52W COT Z-score must be finite`);
-    assert(sc.technical.mtfAlignment.alignedCount >= 0 && sc.technical.mtfAlignment.alignedCount <= 4, 'MTF count out of range');
+    assert(['Bullish', 'Bearish', 'Flat'].includes(sc.technical.mtfAlignment.m15), `${sc.instrument} M15 invalid`);
+    assert(['Bullish', 'Bearish', 'Flat'].includes(sc.technical.mtfAlignment.h1), `${sc.instrument} H1 invalid`);
+    assert(['Bullish', 'Bearish', 'Flat'].includes(sc.technical.mtfAlignment.h4), `${sc.instrument} H4 invalid`);
+    assert(sc.technical.mtfAlignment.alignedCount >= 0 && sc.technical.mtfAlignment.alignedCount <= 7, 'MTF count out of range (0-7)');
     assert(sc.technical.volatilityPercentile30d >= 0 && sc.technical.volatilityPercentile30d <= 100, 'Vol percentile out of range');
     assert(Math.abs((sc.retailSentiment.longPct + sc.retailSentiment.shortPct) - 100) < 0.3, 'Retail split must sum to 100%');
     assert.strictEqual(sc.seasonality.monthlyReturns10Y.length, 12, 'Seasonality must span 12 months');

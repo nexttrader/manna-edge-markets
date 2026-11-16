@@ -9,6 +9,35 @@ import { EconomicEvent, newsEngine } from '../news/news-engine';
 
 export type EconomyCode = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'AUD' | 'CAD' | 'CHF' | 'NZD';
 export type EdgeBiasLabel = 'Strong Buy' | 'Buy' | 'Neutral' | 'Sell' | 'Strong Sell';
+export type TraderHorizon = 'SCALP' | 'INTRADAY' | 'SWING';
+
+export interface TimeframeEdgeProfile {
+  horizon: TraderHorizon;
+  label: string;
+  executionTimeframes: string;
+  holdDuration: string;
+  score: number;
+  biasLabel: EdgeBiasLabel;
+  confidencePct: number;
+  trendPrimary: 'Bullish' | 'Bearish' | 'Flat';
+  trendConfirm: 'Bullish' | 'Bearish' | 'Flat';
+  rsi: number;
+  adrUsedPct: number;
+  adrWarning: boolean;
+  htfConfluence: 'ALIGNED' | 'COUNTER_TREND' | 'NEUTRAL';
+  weightsSummary: string;
+  actionNote: string;
+}
+
+export interface FeedCadenceItem {
+  key: string;
+  name: string;
+  provider: string;
+  pollCadence: string;
+  upstreamFrequency: string;
+  status: 'LIVE' | 'PARTIAL' | 'BASELINE';
+  lastUpdated: string;
+}
 
 export interface EdgeFinderRollout {
   visibleToAdmins: boolean;
@@ -134,8 +163,8 @@ export interface KillzoneAlignment {
 export interface AssetEdgeScorecard {
   instrument: string;
   displayName: string;
-  assetClass: 'forex' | 'futures';
-  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Crypto';
+  assetClass: 'forex' | 'futures' | 'crypto';
+  category: 'Major FX' | 'Cross FX' | 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Agriculture' | 'Crypto';
   baseCurrency: string;
   quoteCurrency: string;
   currentPrice: number;
@@ -143,6 +172,17 @@ export interface AssetEdgeScorecard {
   priceSource: 'LIVE' | 'REFERENCE';
   totalScore: number;
   biasLabel: EdgeBiasLabel;
+  timeframes: {
+    SCALP: TimeframeEdgeProfile;
+    INTRADAY: TimeframeEdgeProfile;
+    SWING: TimeframeEdgeProfile;
+  };
+  timeframeConfluence: {
+    allAligned: boolean;
+    alignedCount: number;
+    summary: string;
+    dominantBias: EdgeBiasLabel;
+  };
   cotScore: number;
   retailScore: number;
   seasonalityScore: number;
@@ -160,6 +200,9 @@ export interface AssetEdgeScorecard {
     ema20: number;
     ema50: number;
     rsi14: number;
+    rsi14M15: number;
+    rsi14H1: number;
+    rsi14H4: number;
     atr14: number;
     atrPct: number;
     high30d: number;
@@ -168,9 +211,15 @@ export interface AssetEdgeScorecard {
     distanceFromEma20Pct: number;
     dayRangePctOfAtr: number;
     volatilityPercentile30d: number;
+    return1hPct: number;
+    return4hPct: number;
     return5dPct: number;
     return20dPct: number;
+    intradaySource: 'LIVE_15M_H1_H4' | 'DAILY_DERIVED';
     mtfAlignment: {
+      m15: 'Bullish' | 'Bearish' | 'Flat';
+      h1: 'Bullish' | 'Bearish' | 'Flat';
+      h4: 'Bullish' | 'Bearish' | 'Flat';
       d5: 'Bullish' | 'Bearish' | 'Flat';
       d20: 'Bullish' | 'Bearish' | 'Flat';
       d50: 'Bullish' | 'Bearish' | 'Flat';
@@ -187,8 +236,11 @@ export interface AssetEdgeScorecard {
 
 export interface CarryTradeItem {
   instrument: string;
-  baseCurrency: EconomyCode;
-  quoteCurrency: EconomyCode;
+  assetClass: 'forex' | 'futures' | 'crypto';
+  category: AssetEdgeScorecard['category'];
+  carryType: 'FX_RATE_DIFF' | 'FUTURES_ROLL_YIELD' | 'CRYPTO_FUNDING_BASIS';
+  baseCurrency: string;
+  quoteCurrency: string;
   baseRate: number;
   quoteRate: number;
   rateSpreadPct: number;
@@ -196,9 +248,13 @@ export interface CarryTradeItem {
   carryDirection: 'LONG' | 'SHORT' | 'NEUTRAL';
   carryAtrRatio: number;
   assetTotalScore: number;
+  scalpScore: number;
+  intradayScore: number;
+  swingScore: number;
   biasLabel: EdgeBiasLabel;
   alignedWithEdge: boolean;
   technicalTrend: 'Bullish' | 'Bearish' | 'Ranging';
+  regimeLabel: string;
 }
 
 export interface MacroInternalsData {
@@ -297,6 +353,32 @@ export interface CurrencyStrengthItem {
   bestShortPair: string;
 }
 
+export interface FuturesStrengthItem {
+  sector: 'Equity Index' | 'Metals' | 'Energy' | 'Rates' | 'Agriculture';
+  strengthScore: number;
+  dailyMomentumPct: number;
+  rank: number;
+  topContract: string;
+  weakestContract: string;
+  cotNetLongPct: number;
+  contractCount: number;
+  regime: string;
+}
+
+export interface CryptoStrengthItem {
+  symbol: string;
+  instrument: string;
+  displayName: string;
+  strengthScore: number;
+  dailyMomentumPct: number;
+  rank: number;
+  currentPrice: number;
+  cotLongPct: number;
+  scalpBias: EdgeBiasLabel;
+  intradayBias: EdgeBiasLabel;
+  swingBias: EdgeBiasLabel;
+}
+
 export interface RiskGauge {
   score: number;
   regime: 'Risk-On Expansion' | 'Balanced Rotation' | 'Risk-Off Defensive';
@@ -309,6 +391,8 @@ export interface EdgeFinderSnapshot {
   scorecards: AssetEdgeScorecard[];
   economies: MacroEconomyData[];
   currencyStrength: CurrencyStrengthItem[];
+  futuresStrength: FuturesStrengthItem[];
+  cryptoStrength: CryptoStrengthItem[];
   riskGauge: RiskGauge;
   carryTrades: CarryTradeItem[];
   goldScorecard: GoldScorecardData;
@@ -327,10 +411,13 @@ export interface EdgeFinderSnapshot {
     cftcSource: 'CFTC_LIVE' | 'INSTITUTIONAL_MODEL';
     macroSource?: 'LIVE_BIS_WORLDBANK' | 'BASELINE';
     yieldsSource: 'LIVE_FRED_YAHOO' | 'PARTIAL';
+    intradaySource: 'LIVE_15M_H1_H4' | 'PARTIAL';
     smartMoneyCount: number;
     livePriceCount: number;
     totalAssets: number;
     cacheAgeSeconds: number;
+    refreshIntervalSeconds: number;
+    feedCadences: FeedCadenceItem[];
   };
 }
 
@@ -378,26 +465,42 @@ const YAHOO_SYMBOL_MAP: Record<string, string> = {
   'NZD/JPY': 'NZDJPY=X',
   'NZD/CAD': 'NZDCAD=X',
   'NZD/CHF': 'NZDCHF=X',
-  // 13 Futures / Commodities / Rates / Crypto
+  // 18 Futures / Indices / Metals / Energy / Rates / Agriculture
   ES: 'ES=F',
   NQ: 'NQ=F',
   YM: 'YM=F',
   RTY: 'RTY=F',
+  NKD: 'NKD=F',
   ZN: 'ZN=F',
+  ZB: 'ZB=F',
   GC: 'GC=F',
   SI: 'SI=F',
   HG: 'HG=F',
   PL: 'PL=F',
+  PA: 'PA=F',
   CL: 'CL=F',
+  BZ: 'BZ=F',
   NG: 'NG=F',
+  ZC: 'ZC=F',
+  ZS: 'ZS=F',
+  ZW: 'ZW=F',
+  // 10 Crypto (CME + Coinbase Derivatives CFTC Regulated)
   'BTC/USD': 'BTC-USD',
-  'ETH/USD': 'ETH-USD'
+  'ETH/USD': 'ETH-USD',
+  'SOL/USD': 'SOL-USD',
+  'XRP/USD': 'XRP-USD',
+  'DOGE/USD': 'DOGE-USD',
+  'ADA/USD': 'ADA-USD',
+  'AVAX/USD': 'AVAX-USD',
+  'LINK/USD': 'LINK-USD',
+  'LTC/USD': 'LTC-USD',
+  'SUI/USD': 'SUI20947-USD'
 };
 
 interface AssetDefinition {
   instrument: string;
   displayName: string;
-  assetClass: 'forex' | 'futures';
+  assetClass: 'forex' | 'futures' | 'crypto';
   category: AssetEdgeScorecard['category'];
   baseCurrency: string;
   quoteCurrency: string;
@@ -819,7 +922,7 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     bestKillzone: 'LONDON',
     killzoneNotes: 'High-yield NZD funding carry spread against low-yield SNB policy.'
   },
-  // === 13 FUTURES / METALS / ENERGY / RATES / CRYPTO ===
+  // === 18 FUTURES / INDICES / METALS / ENERGY / RATES / AGRICULTURE ===
   {
     instrument: 'ES',
     displayName: 'E-Mini S&P 500 Futures',
@@ -873,6 +976,19 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     killzoneNotes: 'High sensitivity to domestic PMI, regional banking liquidity, and NY PM closing sweeps.'
   },
   {
+    instrument: 'NKD',
+    displayName: 'Nikkei 225 Yen-Denom Futures (CME)',
+    assetClass: 'futures',
+    category: 'Equity Index',
+    baseCurrency: 'NKY',
+    quoteCurrency: 'JPY',
+    decimals: 0,
+    cftcCode: '240743',
+    contractName: 'NIKKEI STOCK AVERAGE YEN DENOM - CHICAGO MERCANTILE EXCHANGE',
+    bestKillzone: 'ASIA',
+    killzoneNotes: 'Tokyo TSE open (19:00 NY) & BoJ FX intervention sentiment drive Asia equity displacement.'
+  },
+  {
     instrument: 'ZN',
     displayName: '10-Year US Treasury Note Futures',
     assetClass: 'futures',
@@ -884,6 +1000,19 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     contractName: 'UST 10Y NOTE - CHICAGO BOARD OF TRADE',
     bestKillzone: 'NY_AM',
     killzoneNotes: '08:30 NY CPI/NFP & 13:00 NY Treasury auctions anchor macro rate volatility.'
+  },
+  {
+    instrument: 'ZB',
+    displayName: '30-Year US Treasury Bond Futures',
+    assetClass: 'futures',
+    category: 'Rates',
+    baseCurrency: 'UST30',
+    quoteCurrency: 'USD',
+    decimals: 3,
+    cftcCode: '020601',
+    contractName: 'UST BOND - CHICAGO BOARD OF TRADE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Long-end duration benchmark pricing Fed terminal curve & long-bond auction tails.'
   },
   {
     instrument: 'GC',
@@ -938,6 +1067,19 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     killzoneNotes: 'Precious-industrial hybrid tracking Gold/Silver relative value and auto catalysts.'
   },
   {
+    instrument: 'PA',
+    displayName: 'Palladium Futures (NYMEX)',
+    assetClass: 'futures',
+    category: 'Metals',
+    baseCurrency: 'XPD',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '075651',
+    contractName: 'PALLADIUM - NEW YORK MERCANTILE EXCHANGE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Thin industrial metals liquidity produces sharp short-covering rallies around NY open.'
+  },
+  {
     instrument: 'CL',
     displayName: 'WTI Crude Oil Futures (NYMEX)',
     assetClass: 'futures',
@@ -949,6 +1091,19 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     contractName: 'WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE',
     bestKillzone: 'NY_AM',
     killzoneNotes: 'NYMEX 09:00 NY pit & Wednesday 10:30 EIA inventories govern institutional liquidity.'
+  },
+  {
+    instrument: 'BZ',
+    displayName: 'Brent Crude Oil Futures (ICE/NYMEX)',
+    assetClass: 'futures',
+    category: 'Energy',
+    baseCurrency: 'BRENT',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '06765T',
+    contractName: 'BRENT LAST DAY - NEW YORK MERCANTILE EXCHANGE',
+    bestKillzone: 'LONDON',
+    killzoneNotes: 'Global seaborne crude benchmark sensitive to London geopolitics & OPEC+ flows.'
   },
   {
     instrument: 'NG',
@@ -964,9 +1119,49 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     killzoneNotes: 'Thursday 10:30 NY EIA gas storage release drives high-ATR trend expansions.'
   },
   {
+    instrument: 'ZC',
+    displayName: 'CBOT Corn Futures',
+    assetClass: 'futures',
+    category: 'Agriculture',
+    baseCurrency: 'CORN',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '002602',
+    contractName: 'CORN - CHICAGO BOARD OF TRADE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'CBOT 09:30 NY day pit open & USDA WASDE noon releases anchor grain flow.'
+  },
+  {
+    instrument: 'ZS',
+    displayName: 'CBOT Soybeans Futures',
+    assetClass: 'futures',
+    category: 'Agriculture',
+    baseCurrency: 'SOYB',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '005602',
+    contractName: 'SOYBEANS - CHICAGO BOARD OF TRADE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Biofuel/crush demand & export sales prints drive directional sweep moves.'
+  },
+  {
+    instrument: 'ZW',
+    displayName: 'CBOT SRW Wheat Futures',
+    assetClass: 'futures',
+    category: 'Agriculture',
+    baseCurrency: 'WHEAT',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '001602',
+    contractName: 'WHEAT-SRW - CHICAGO BOARD OF TRADE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Black Sea export shocks & commercial hedger extremes fuel multi-day reversals.'
+  },
+  // === 10 CRYPTOASSETS (CME + COINBASE DERIVATIVES CFTC COT) ===
+  {
     instrument: 'BTC/USD',
     displayName: 'Bitcoin / US Dollar (CME COT)',
-    assetClass: 'futures',
+    assetClass: 'crypto',
     category: 'Crypto',
     baseCurrency: 'BTC',
     quoteCurrency: 'USD',
@@ -979,7 +1174,7 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
   {
     instrument: 'ETH/USD',
     displayName: 'Ethereum / US Dollar (CME COT)',
-    assetClass: 'futures',
+    assetClass: 'crypto',
     category: 'Crypto',
     baseCurrency: 'ETH',
     quoteCurrency: 'USD',
@@ -988,6 +1183,110 @@ export const EDGE_FINDER_ASSETS: AssetDefinition[] = [
     contractName: 'ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE',
     bestKillzone: 'NY_AM',
     killzoneNotes: 'High-beta digital asset tracking BTC SMT divergence & US real liquidity conditions.'
+  },
+  {
+    instrument: 'SOL/USD',
+    displayName: 'Solana / US Dollar (CME COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'SOL',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '177741',
+    contractName: 'SOL - CHICAGO MERCANTILE EXCHANGE',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'High-beta Layer-1 momentum leader; tracks NQ risk appetite & NY equities liquidity.'
+  },
+  {
+    instrument: 'XRP/USD',
+    displayName: 'XRP / US Dollar (CME COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'XRP',
+    quoteCurrency: 'USD',
+    decimals: 4,
+    cftcCode: '176740',
+    contractName: 'XRP - CHICAGO MERCANTILE EXCHANGE',
+    bestKillzone: 'ASIA',
+    killzoneNotes: 'Strong Asia/Tokyo retail volume followed by NY AM CME futures institutional flows.'
+  },
+  {
+    instrument: 'DOGE/USD',
+    displayName: 'Dogecoin / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'DOGE',
+    quoteCurrency: 'USD',
+    decimals: 5,
+    cftcCode: '168LM2',
+    contractName: 'DOGECOIN PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Retail sentiment & speculative risk appetite beta gauge around NY cash open.'
+  },
+  {
+    instrument: 'ADA/USD',
+    displayName: 'Cardano / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'ADA',
+    quoteCurrency: 'USD',
+    decimals: 4,
+    cftcCode: '174LM2',
+    contractName: 'CARDONA PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'LONDON',
+    killzoneNotes: 'Rotates sharply with ETH/BTC ratio and broad altcoin speculative inflows.'
+  },
+  {
+    instrument: 'AVAX/USD',
+    displayName: 'Avalanche / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'AVAX',
+    quoteCurrency: 'USD',
+    decimals: 3,
+    cftcCode: '171LM2',
+    contractName: 'AVALANCHE PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Institutional RWA/subnet narrative beta reacting cleanly to US Treasury yield swings.'
+  },
+  {
+    instrument: 'LINK/USD',
+    displayName: 'Chainlink / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'LINK',
+    quoteCurrency: 'USD',
+    decimals: 3,
+    cftcCode: '170LM2',
+    contractName: 'CHAINLINK PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Oracle/DeFi infrastructure leader with strong smart-money COT extremes.'
+  },
+  {
+    instrument: 'LTC/USD',
+    displayName: 'Litecoin / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'LTC',
+    quoteCurrency: 'USD',
+    decimals: 2,
+    cftcCode: '167LM1',
+    contractName: 'LITECOIN PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'NY_AM',
+    killzoneNotes: 'Legacy PoW liquidity proxy showing clean mean-reversion sweeps at daily levels.'
+  },
+  {
+    instrument: 'SUI/USD',
+    displayName: 'Sui / US Dollar (Coinbase Perp COT)',
+    assetClass: 'crypto',
+    category: 'Crypto',
+    baseCurrency: 'SUI',
+    quoteCurrency: 'USD',
+    decimals: 4,
+    cftcCode: '180LM3',
+    contractName: 'SUI PERP STYLE - COINBASE DERIVATIVES, LLC',
+    bestKillzone: 'ASIA',
+    killzoneNotes: 'High-beta Asia/NY cross-session momentum token with steep ADR velocity.'
   }
 ];
 
@@ -1062,15 +1361,17 @@ interface CachedLiveMacro {
 let cotCache: CachedCotRaw | null = null;
 const seasonalityCache: Record<string, CachedSeasonalityEntry> = {};
 const dailyMarketCache: Record<string, CachedDailyMarketEntry> = {};
+const intradayMarketCache: Record<string, CachedDailyMarketEntry> = {};
 let macroExternalCache: CachedLiveMacro | null = null;
 let macroInternalsCache: { fetchedAt: number; data: MacroInternalsData } | null = null;
 let smartMoneyCache: { fetchedAt: number; data: SmartMoneyData } | null = null;
 let snapshotCache: { data: EdgeFinderSnapshot; cachedAt: number } | null = null;
 
-const SNAPSHOT_TTL_MS = 90_000;
-const DAILY_MARKET_TTL_MS = 3 * 60_000;
+const SNAPSHOT_TTL_MS = 60_000;
+const INTRADAY_MARKET_TTL_MS = 60_000;
+const DAILY_MARKET_TTL_MS = 120_000;
 const COT_TTL_MS = 30 * 60_000;
-const MACRO_INTERNALS_TTL_MS = 30 * 60_000;
+const MACRO_INTERNALS_TTL_MS = 5 * 60_000;
 const SMART_MONEY_TTL_MS = 60 * 60_000;
 const SEASONALITY_TTL_MS = 6 * 3600_000;
 const MACRO_TTL_MS = 60 * 60_000;
@@ -1089,7 +1390,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item
   return results;
 }
 
-const YAHOO_MAX_CONCURRENT = 8;
+const YAHOO_MAX_CONCURRENT = 18;
 let yahooActiveCount = 0;
 const yahooWaitQueue: Array<() => void> = [];
 
@@ -1654,7 +1955,7 @@ async function fetchLiveCftcCot(): Promise<CachedCotRaw | null> {
       'open_interest_all'
     ].join(',');
     const whereClause = `cftc_contract_market_code in(${inClause}) AND report_date_as_yyyy_mm_dd >= "${cutoffIso}"`;
-    const url = `${CFTC_ENDPOINT}?$select=${encodeURIComponent(selectFields)}&$where=${encodeURIComponent(whereClause)}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=1800`;
+    const url = `${CFTC_ENDPOINT}?$select=${encodeURIComponent(selectFields)}&$where=${encodeURIComponent(whereClause)}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=4000`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(9000)
@@ -1948,8 +2249,63 @@ async function fetchYahooMonthlySeasonality(asset: AssetDefinition): Promise<{ m
   return { monthlyReturns10Y, monthlyWinRate10Y };
 }
 
+async function fetchYahooIntraday15m(asset: AssetDefinition): Promise<{
+  candles15m: Candle[];
+  livePrice: number | null;
+  isLive: boolean;
+}> {
+  const cached = intradayMarketCache[asset.instrument];
+  if (cached && Date.now() - cached.fetchedAt < INTRADAY_MARKET_TTL_MS) {
+    return {
+      candles15m: cached.candles,
+      livePrice: cached.livePrice,
+      isLive: cached.isLive
+    };
+  }
+
+  const yahooSym = YAHOO_SYMBOL_MAP[asset.instrument];
+  if (yahooSym) {
+    try {
+      const start14d = new Date(Date.now() - 14 * 86_400_000);
+      const chart = await runYahooLimited(
+        () => yahooClient.chart(yahooSym, { period1: start14d, interval: '15m' }),
+        10_000
+      );
+      const quotes = (chart?.quotes || []).filter(
+        (q) => q && q.open != null && q.high != null && q.low != null && q.close != null && q.date
+      );
+      if (quotes.length >= 20) {
+        const candles15m: Candle[] = quotes.map((q) => ({
+          open: roundTo(q.open!, asset.decimals),
+          high: roundTo(q.high!, asset.decimals),
+          low: roundTo(q.low!, asset.decimals),
+          close: roundTo(q.close!, asset.decimals),
+          volume: q.volume || 0,
+          timestamp: new Date(q.date).toISOString()
+        }));
+        const metaPrice = chart?.meta?.regularMarketPrice;
+        const livePrice = typeof metaPrice === 'number' && metaPrice > 0
+          ? roundTo(metaPrice, asset.decimals)
+          : candles15m[candles15m.length - 1].close;
+        intradayMarketCache[asset.instrument] = {
+          fetchedAt: Date.now(),
+          candles: candles15m,
+          livePrice,
+          isLive: true
+        };
+        return { candles15m, livePrice, isLive: true };
+      }
+    } catch {
+      // fall through cleanly to fallback
+    }
+  }
+
+  return { candles15m: [], livePrice: null, isLive: false };
+}
+
 async function fetchAssetMarketData(asset: AssetDefinition): Promise<{
   candles: Candle[];
+  candles15m: Candle[];
   livePrice: number | null;
   isLive: boolean;
   monthlyReturns10Y: number[];
@@ -2027,13 +2383,20 @@ async function fetchAssetMarketData(asset: AssetDefinition): Promise<{
     return { candles: [], livePrice: null, isLive: false };
   })();
 
-  const [daily, seasonal] = await Promise.all([
+  const [daily, intraday, seasonal] = await Promise.all([
     dailyPromise,
+    fetchYahooIntraday15m(asset),
     fetchYahooMonthlySeasonality(asset)
   ]);
 
+  const livePrice = intraday.livePrice ?? daily.livePrice;
+  const isLive = (intraday.isLive || daily.isLive) && livePrice !== null;
+
   return {
-    ...daily,
+    candles: daily.candles,
+    candles15m: intraday.candles15m,
+    livePrice,
+    isLive,
     ...seasonal
   };
 }
@@ -2212,7 +2575,7 @@ async function fetchMacroInternals(): Promise<MacroInternalsData> {
   return data;
 }
 
-const SMART_MONEY_UNIVERSE = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'TSLA', 'JPM', 'GS', 'XOM', 'NEM', 'FCX'];
+const SMART_MONEY_UNIVERSE = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'TSLA', 'JPM', 'GS', 'XOM', 'NEM', 'FCX', 'COIN', 'MSTR'];
 
 async function fetchSmartMoneyAndTargets(): Promise<SmartMoneyData> {
   if (smartMoneyCache && Date.now() - smartMoneyCache.fetchedAt < SMART_MONEY_TTL_MS) {
@@ -2352,6 +2715,32 @@ function calcAtr(candles: Candle[], period = 14): number {
   }
   const slice = trs.slice(-period);
   return slice.reduce((a, b) => a + b, 0) / Math.max(slice.length, 1);
+}
+
+function aggregateCandles(candles: Candle[], groupSize: number): Candle[] {
+  if (candles.length === 0 || groupSize <= 1) return candles;
+  const result: Candle[] = [];
+  for (let i = 0; i < candles.length; i += groupSize) {
+    const slice = candles.slice(i, i + groupSize);
+    if (slice.length === 0) continue;
+    let high = slice[0].high;
+    let low = slice[0].low;
+    let vol = 0;
+    for (const c of slice) {
+      if (c.high > high) high = c.high;
+      if (c.low < low) low = c.low;
+      vol += c.volume || 0;
+    }
+    result.push({
+      open: slice[0].open,
+      high,
+      low,
+      close: slice[slice.length - 1].close,
+      volume: vol,
+      timestamp: slice[slice.length - 1].timestamp
+    });
+  }
+  return result;
 }
 
 function deriveSeasonality(
@@ -2509,21 +2898,22 @@ function buildMacroTugOfWar(
 
   const isMetal = asset.category === 'Metals';
   const isEnergy = asset.category === 'Energy';
+  const isAgri = asset.category === 'Agriculture';
   const isRates = asset.category === 'Rates';
   const isTechOrIndex = asset.category === 'Equity Index';
   const isCrypto = asset.category === 'Crypto';
 
   const rateSignal: -1 | 0 | 1 =
-    isMetal || isRates ? (usd.stance === 'Dovish' || usd.rateExpectation === 'Cut' ? 1 : usd.rate >= 4.25 ? -1 : 0) :
+    isMetal || isRates || isAgri ? (usd.stance === 'Dovish' || usd.rateExpectation === 'Cut' ? 1 : usd.rate >= 4.25 ? -1 : 0) :
     isTechOrIndex || isCrypto ? (usd.rateExpectation === 'Cut' ? 1 : usd.stance === 'Hawkish' && usd.rate >= 4.5 ? -1 : 0) :
-    0;
+    usd.stance === 'Dovish' ? 1 : 0;
 
   const gdpSignal: -1 | 0 | 1 =
     isRates ? (usd.gdpQoQ >= 2.3 ? -1 : 1) :
     usd.gdpQoQ >= 1.8 ? 1 : usd.gdpQoQ < 0.8 ? -1 : 0;
 
   const cpiSignal: -1 | 0 | 1 =
-    isMetal || isEnergy || isCrypto ? (usd.coreCpiYoY >= 2.6 ? 1 : -1) :
+    isMetal || isEnergy || isAgri || isCrypto ? (usd.coreCpiYoY >= 2.6 ? 1 : -1) :
     isRates ? (usd.coreCpiYoY >= 2.8 ? -1 : 1) :
     usd.coreCpiYoY <= 2.7 ? 1 : -1;
 
@@ -2543,7 +2933,7 @@ function buildMacroTugOfWar(
   const factors: Array<Pick<FactorBreakdownItem, 'key' | 'label' | 'category' | 'signal' | 'weight' | 'detail'>> = [
     {
       key: 'interestRates',
-      label: 'Real Yield / Fed Policy',
+      label: isCrypto ? 'USD Liquidity & Fed Policy' : 'Real Yield / Fed Policy',
       category: 'Fundamental',
       signal: rateSignal,
       weight: 1.25,
@@ -2555,7 +2945,7 @@ function buildMacroTugOfWar(
       category: 'Fundamental',
       signal: gdpSignal,
       weight: 0.75,
-      detail: `US GDP Growth ${usd.gdpQoQ.toFixed(1)}% (${isRates ? 'Bond inverse' : 'Risk sensitivity'})`
+      detail: `US GDP Growth ${usd.gdpQoQ.toFixed(1)}% (${isRates ? 'Bond inverse' : 'Demand / Risk sensitivity'})`
     },
     {
       key: 'cpi',
@@ -2563,7 +2953,7 @@ function buildMacroTugOfWar(
       category: 'Fundamental',
       signal: cpiSignal,
       weight: 0.75,
-      detail: `US Core CPI ${usd.coreCpiYoY.toFixed(1)}% (${isMetal || isEnergy ? 'Inflation hedge' : 'Multiple pressure'})`
+      detail: `US Core CPI ${usd.coreCpiYoY.toFixed(1)}% (${isMetal || isEnergy || isAgri || isCrypto ? 'Hard/Monetary hedge' : isRates ? 'Duration pressure' : 'Multiple pressure'})`
     },
     {
       key: 'unemployment',
@@ -2802,17 +3192,125 @@ function computeRiskGauge(scorecards: AssetEdgeScorecard[]): RiskGauge {
   return { score: finalScore, regime, drivers };
 }
 
+function computeFuturesStrength(scorecards: AssetEdgeScorecard[]): FuturesStrengthItem[] {
+  const sectors: FuturesStrengthItem['sector'][] = ['Equity Index', 'Metals', 'Energy', 'Rates', 'Agriculture'];
+  const items: FuturesStrengthItem[] = sectors.map((sector) => {
+    const group = scorecards.filter((sc) => sc.assetClass === 'futures' && sc.category === sector);
+    if (group.length === 0) {
+      return {
+        sector,
+        strengthScore: 0,
+        dailyMomentumPct: 0,
+        rank: 0,
+        topContract: '—',
+        weakestContract: '—',
+        cotNetLongPct: 50,
+        contractCount: 0,
+        regime: 'No Contracts'
+      };
+    }
+    const sorted = [...group].sort((a, b) => b.totalScore - a.totalScore);
+    const strengthScore = roundTo(group.reduce((s, x) => s + x.totalScore, 0) / group.length, 1);
+    const dailyMomentumPct = roundTo(group.reduce((s, x) => s + x.dailyChangePct, 0) / group.length, 2);
+    const cotNetLongPct = roundTo(group.reduce((s, x) => s + x.cot.longPct, 0) / group.length, 1);
+    const regime =
+      strengthScore >= 2.0 ? 'Institutional Accumulation' :
+      strengthScore <= -2.0 ? 'Institutional Distribution' : 'Mixed Sector Rotation';
+
+    return {
+      sector,
+      strengthScore,
+      dailyMomentumPct,
+      rank: 0,
+      topContract: sorted[0].instrument,
+      weakestContract: sorted[sorted.length - 1].instrument,
+      cotNetLongPct,
+      contractCount: group.length,
+      regime
+    };
+  });
+
+  items.sort((a, b) => b.strengthScore - a.strengthScore || b.dailyMomentumPct - a.dailyMomentumPct);
+  return items.map((item, idx) => ({ ...item, rank: idx + 1 }));
+}
+
+function computeCryptoStrength(scorecards: AssetEdgeScorecard[]): CryptoStrengthItem[] {
+  const cryptos = scorecards
+    .filter((sc) => sc.assetClass === 'crypto')
+    .map((sc) => ({
+      symbol: sc.baseCurrency,
+      instrument: sc.instrument,
+      displayName: sc.displayName,
+      strengthScore: roundTo(sc.totalScore, 1),
+      dailyMomentumPct: roundTo(sc.dailyChangePct, 2),
+      rank: 0,
+      currentPrice: sc.currentPrice,
+      cotLongPct: roundTo(sc.cot.longPct, 1),
+      scalpBias: sc.timeframes.SCALP.biasLabel,
+      intradayBias: sc.timeframes.INTRADAY.biasLabel,
+      swingBias: sc.timeframes.SWING.biasLabel
+    }))
+    .sort((a, b) => b.strengthScore - a.strengthScore || b.dailyMomentumPct - a.dailyMomentumPct);
+
+  return cryptos.map((item, idx) => ({ ...item, rank: idx + 1 }));
+}
+
 function computeCarryTrades(
   scorecards: AssetEdgeScorecard[],
-  econByCode: Record<EconomyCode, MacroEconomyData>
+  econByCode: Record<EconomyCode, MacroEconomyData>,
+  macroInternals: MacroInternalsData
 ): CarryTradeItem[] {
-  const fxScorecards = scorecards.filter((sc) => sc.assetClass === 'forex');
-  const items: CarryTradeItem[] = fxScorecards.map((sc) => {
-    const baseCurrency = sc.baseCurrency as EconomyCode;
-    const quoteCurrency = sc.quoteCurrency as EconomyCode;
-    const baseRate = econByCode[baseCurrency]?.rate ?? 0;
-    const quoteRate = econByCode[quoteCurrency]?.rate ?? 0;
-    const rateSpreadPct = roundTo(baseRate - quoteRate, 3);
+  const usdBill3m = macroInternals.yieldCurve.m3 > 0 ? macroInternals.yieldCurve.m3 : (econByCode.USD?.rate ?? 4.0);
+
+  const items: CarryTradeItem[] = scorecards.map((sc) => {
+    let carryType: CarryTradeItem['carryType'] = 'FX_RATE_DIFF';
+    let baseRate = 0;
+    let quoteRate = usdBill3m;
+    let rateSpreadPct = 0;
+    let regimeLabel = 'Neutral Yield Spread';
+
+    if (sc.assetClass === 'forex') {
+      carryType = 'FX_RATE_DIFF';
+      baseRate = econByCode[sc.baseCurrency as EconomyCode]?.rate ?? 0;
+      quoteRate = econByCode[sc.quoteCurrency as EconomyCode]?.rate ?? 0;
+      rateSpreadPct = roundTo(baseRate - quoteRate, 3);
+      regimeLabel =
+        rateSpreadPct >= 1.5 ? 'High Positive FX Carry' :
+        rateSpreadPct >= 0.25 ? 'Positive FX Carry' :
+        rateSpreadPct <= -1.5 ? 'Deep Negative FX Carry' :
+        rateSpreadPct <= -0.25 ? 'Negative FX Carry' : 'Balanced Policy Spread';
+    } else if (sc.assetClass === 'futures') {
+      carryType = 'FUTURES_ROLL_YIELD';
+      if (sc.category === 'Rates') {
+        const bondYield = sc.instrument === 'ZB' ? macroInternals.yieldCurve.y30 : macroInternals.yieldCurve.y10;
+        baseRate = roundTo(bondYield, 3);
+        quoteRate = roundTo(usdBill3m, 3);
+        rateSpreadPct = roundTo(baseRate - quoteRate, 3);
+        regimeLabel = rateSpreadPct >= 0 ? 'Positive Duration Curve Roll' : 'Inverted Repo Funding Drag';
+      } else {
+        const commTilt = (sc.cot.commercialLongPct - 50) * 0.14;
+        const curveMomentum = clamp(sc.technical.return20dPct * 0.35, -3.5, 4.5);
+        baseRate = roundTo(usdBill3m + commTilt + curveMomentum, 3);
+        quoteRate = roundTo(usdBill3m, 3);
+        rateSpreadPct = roundTo(baseRate - quoteRate, 3);
+        regimeLabel =
+          rateSpreadPct >= 0.6 ? 'Backwardation / Tight Supply Roll' :
+          rateSpreadPct <= -0.6 ? 'Contango / Cost-of-Carry Drag' : 'Flat Futures Term Structure';
+      }
+    } else {
+      carryType = 'CRYPTO_FUNDING_BASIS';
+      const specSkew = (sc.cot.longPct - 50) * 0.22;
+      const smallSpecHeat = (sc.retailSentiment.longPct - 50) * 0.14;
+      const momBasis = clamp(sc.technical.return5dPct * 0.45, -4.0, 6.0);
+      baseRate = roundTo(usdBill3m + specSkew + smallSpecHeat + momBasis, 3);
+      quoteRate = roundTo(usdBill3m, 3);
+      rateSpreadPct = roundTo(baseRate - quoteRate, 3);
+      regimeLabel =
+        rateSpreadPct >= 3.0 ? 'Elevated Long Perp / CME Basis' :
+        rateSpreadPct >= 0.5 ? 'Positive Contango Basis' :
+        rateSpreadPct <= -1.0 ? 'Negative Funding / Backwardation' : 'Balanced Perp Basis';
+    }
+
     const rateSpreadBps = Math.round(rateSpreadPct * 100);
     const carryDirection: CarryTradeItem['carryDirection'] =
       rateSpreadPct >= 0.25 ? 'LONG' : rateSpreadPct <= -0.25 ? 'SHORT' : 'NEUTRAL';
@@ -2824,8 +3322,11 @@ function computeCarryTrades(
 
     return {
       instrument: sc.instrument,
-      baseCurrency,
-      quoteCurrency,
+      assetClass: sc.assetClass,
+      category: sc.category,
+      carryType,
+      baseCurrency: sc.baseCurrency,
+      quoteCurrency: sc.quoteCurrency,
       baseRate,
       quoteRate,
       rateSpreadPct,
@@ -2833,9 +3334,13 @@ function computeCarryTrades(
       carryDirection,
       carryAtrRatio,
       assetTotalScore: sc.totalScore,
+      scalpScore: sc.timeframes.SCALP.score,
+      intradayScore: sc.timeframes.INTRADAY.score,
+      swingScore: sc.timeframes.SWING.score,
       biasLabel: sc.biasLabel,
       alignedWithEdge,
-      technicalTrend: sc.technical.trendDirection
+      technicalTrend: sc.technical.trendDirection,
+      regimeLabel
     };
   });
 
@@ -3026,6 +3531,323 @@ function cotSignalsForDate(weeklySeries: CotWeeklyRow[], dateStr: string, fallba
   return { cot: cotSig, retail: retSig };
 }
 
+function dirVal(dir: 'Bullish' | 'Bearish' | 'Flat'): -1 | 0 | 1 {
+  return dir === 'Bullish' ? 1 : dir === 'Bearish' ? -1 : 0;
+}
+
+function emaTrendSignal(price: number, fast: number, slow: number): 'Bullish' | 'Bearish' | 'Flat' {
+  if (price <= 0 || fast <= 0 || slow <= 0) return 'Flat';
+  if (price > fast && fast >= slow) return 'Bullish';
+  if (price < fast && fast <= slow) return 'Bearish';
+  return 'Flat';
+}
+
+function rsiZoneSignal(rsi: number): -1 | 0 | 1 {
+  if (rsi >= 54 && rsi <= 72) return 1;
+  if (rsi <= 46 && rsi >= 28) return -1;
+  return 0;
+}
+
+function directionFromScore(score: number): 'LONG' | 'SHORT' | 'NEUTRAL' {
+  if (score >= 2.0) return 'LONG';
+  if (score <= -2.0) return 'SHORT';
+  return 'NEUTRAL';
+}
+
+function computeIntradayMetrics(
+  candles15m: Candle[],
+  currentPrice: number,
+  fallbackTrend: 'Bullish' | 'Bearish' | 'Ranging',
+  fallbackRsi: number,
+  fallbackReturn5d: number
+): {
+  m15Sig: 'Bullish' | 'Bearish' | 'Flat';
+  h1Sig: 'Bullish' | 'Bearish' | 'Flat';
+  h4Sig: 'Bullish' | 'Bearish' | 'Flat';
+  rsi14M15: number;
+  rsi14H1: number;
+  rsi14H4: number;
+  return1hPct: number;
+  return4hPct: number;
+  intradaySource: 'LIVE_15M_H1_H4' | 'DAILY_DERIVED';
+} {
+  if (candles15m.length >= 25 && currentPrice > 0) {
+    const closes15 = candles15m.map((c) => c.close);
+    const m15Ema9 = calcEma(closes15, Math.min(9, closes15.length));
+    const m15Ema21 = calcEma(closes15, Math.min(21, closes15.length));
+    const m15Sig = emaTrendSignal(currentPrice, m15Ema9, m15Ema21);
+    const rsi14M15 = calcRsi(closes15, Math.min(14, Math.max(2, closes15.length - 1)));
+
+    const c1h = closes15.length >= 5 ? closes15[closes15.length - 5] : closes15[0];
+    const c4h = closes15.length >= 17 ? closes15[closes15.length - 17] : closes15[0];
+    const return1hPct = c1h > 0 ? roundTo(((currentPrice - c1h) / c1h) * 100, 2) : 0;
+    const return4hPct = c4h > 0 ? roundTo(((currentPrice - c4h) / c4h) * 100, 2) : 0;
+
+    const h1Candles = aggregateCandles(candles15m, 4);
+    const h1Closes = h1Candles.map((c) => c.close);
+    const h1Fast = calcEma(h1Closes, Math.min(20, Math.max(2, h1Closes.length)));
+    const h1Slow = calcEma(h1Closes, Math.min(50, Math.max(4, h1Closes.length)));
+    const h1Sig = h1Closes.length >= 8 ? emaTrendSignal(currentPrice, h1Fast, h1Slow) : m15Sig;
+    const rsi14H1 = h1Closes.length >= 5 ? calcRsi(h1Closes, Math.min(14, h1Closes.length - 1)) : rsi14M15;
+
+    const h4Candles = aggregateCandles(candles15m, 16);
+    const h4Closes = h4Candles.map((c) => c.close);
+    const h4Fast = calcEma(h4Closes, Math.min(12, Math.max(2, h4Closes.length)));
+    const h4Slow = calcEma(h4Closes, Math.min(26, Math.max(3, h4Closes.length)));
+    const h4Sig = h4Closes.length >= 6 ? emaTrendSignal(currentPrice, h4Fast, h4Slow) : h1Sig;
+    const rsi14H4 = h4Closes.length >= 5 ? calcRsi(h4Closes, Math.min(14, h4Closes.length - 1)) : rsi14H1;
+
+    return {
+      m15Sig,
+      h1Sig,
+      h4Sig,
+      rsi14M15,
+      rsi14H1,
+      rsi14H4,
+      return1hPct,
+      return4hPct,
+      intradaySource: 'LIVE_15M_H1_H4'
+    };
+  }
+
+  const derivedDir: 'Bullish' | 'Bearish' | 'Flat' =
+    fallbackTrend === 'Ranging' ? 'Flat' : fallbackTrend;
+  return {
+    m15Sig: derivedDir,
+    h1Sig: derivedDir,
+    h4Sig: derivedDir,
+    rsi14M15: fallbackRsi,
+    rsi14H1: fallbackRsi,
+    rsi14H4: fallbackRsi,
+    return1hPct: roundTo(fallbackReturn5d / 15, 2),
+    return4hPct: roundTo(fallbackReturn5d / 5, 2),
+    intradaySource: 'DAILY_DERIVED'
+  };
+}
+
+function buildTimeframeProfiles(params: {
+  asset: AssetDefinition;
+  swingScore: number;
+  fundamentalScore: number;
+  trendScoreRaw: -1 | 0 | 1;
+  mannaSignal: -1 | 0 | 1;
+  cot: CotPositioningRecord;
+  retailSentiment: RetailSentimentRecord;
+  seasonality: SeasonalityRecord;
+  killzoneAlignment: KillzoneAlignment;
+  m15Sig: 'Bullish' | 'Bearish' | 'Flat';
+  h1Sig: 'Bullish' | 'Bearish' | 'Flat';
+  h4Sig: 'Bullish' | 'Bearish' | 'Flat';
+  d5Sig: 'Bullish' | 'Bearish' | 'Flat';
+  d20Sig: 'Bullish' | 'Bearish' | 'Flat';
+  d50Sig: 'Bullish' | 'Bearish' | 'Flat';
+  monthlySig: 'Bullish' | 'Bearish' | 'Flat';
+  rsi14M15: number;
+  rsi14H1: number;
+  rsi14D1: number;
+  return1hPct: number;
+  return4hPct: number;
+  atrPct: number;
+  dayRangePctOfAtr: number;
+}): {
+  timeframes: AssetEdgeScorecard['timeframes'];
+  timeframeConfluence: AssetEdgeScorecard['timeframeConfluence'];
+} {
+  const {
+    asset,
+    swingScore,
+    fundamentalScore,
+    trendScoreRaw,
+    mannaSignal,
+    cot,
+    retailSentiment,
+    seasonality,
+    killzoneAlignment,
+    m15Sig,
+    h1Sig,
+    h4Sig,
+    d50Sig,
+    monthlySig,
+    rsi14M15,
+    rsi14H1,
+    rsi14D1,
+    return1hPct,
+    return4hPct,
+    atrPct,
+    dayRangePctOfAtr
+  } = params;
+
+  const m15Dir = dirVal(m15Sig);
+  const h1Dir = dirVal(h1Sig);
+  const h4Dir = dirVal(h4Sig);
+  const swingDir = directionFromScore(swingScore);
+
+  const mom1hSig = signalFromDiff(return1hPct, Math.max(0.04, atrPct * 0.08));
+  const mom4hSig = signalFromDiff(return4hPct, Math.max(0.08, atrPct * 0.18));
+  const macroGuard = clamp(fundamentalScore / 3.0, -1, 1);
+
+  // 1. SCALP PROFILE (M5 - M15)
+  const rawScalp =
+    m15Dir * 2.5 +
+    h1Dir * 1.75 +
+    mom1hSig * 1.0 +
+    mom4hSig * 0.75 +
+    mannaSignal * 1.5 +
+    rsiZoneSignal(rsi14M15) * 0.75 +
+    retailSentiment.sentimentScore * 0.75 +
+    macroGuard * 1.0;
+
+  const scalpAdrWarn = dayRangePctOfAtr >= 95 || rsi14M15 >= 75 || rsi14M15 <= 25;
+  const scalpScore = roundTo(clamp(scalpAdrWarn ? rawScalp * 0.72 : rawScalp, -10, 10), 2);
+  const scalpDir = directionFromScore(scalpScore);
+  const scalpHtfConfluence: TimeframeEdgeProfile['htfConfluence'] =
+    scalpDir === 'NEUTRAL' || swingDir === 'NEUTRAL'
+      ? 'NEUTRAL'
+      : scalpDir === swingDir
+      ? 'ALIGNED'
+      : 'COUNTER_TREND';
+
+  const scalpAgree =
+    (m15Dir !== 0 && m15Dir === h1Dir ? 1 : 0) +
+    (mom1hSig !== 0 && mom1hSig === m15Dir ? 1 : 0) +
+    (scalpHtfConfluence === 'ALIGNED' ? 1 : 0);
+  const scalpConfidence = Math.round(clamp(44 + Math.abs(scalpScore) * 3.4 + scalpAgree * 6 - (scalpAdrWarn ? 12 : 0), 32, 95));
+
+  const scalpActionNote = scalpAdrWarn
+    ? `ADR/RSI stretched (${dayRangePctOfAtr.toFixed(0)}% Daily ADR · M15 RSI ${rsi14M15.toFixed(0)}) — wait for M5/M15 pullback to EMA9/21.`
+    : scalpHtfConfluence === 'COUNTER_TREND'
+    ? `Counter-trend M15 ${scalpDir} vs ${swingDir} Swing — tight TP targets only during ${asset.bestKillzone} session.`
+    : scalpDir === 'NEUTRAL'
+    ? `M15/H1 consolidating (${dayRangePctOfAtr.toFixed(0)}% ADR used) — wait for ${asset.bestKillzone} Killzone liquidity sweep.`
+    : `${scalpDir} M5–M15 setup aligned with H1 & Swing bias · ${killzoneAlignment.activeSetupCount > 0 ? `${killzoneAlignment.killzone} Killzone active` : `Best window: ${asset.bestKillzone}`}.`;
+
+  const SCALP: TimeframeEdgeProfile = {
+    horizon: 'SCALP',
+    label: 'Scalper',
+    executionTimeframes: 'M1 / M5 / M15 (H1 Filter)',
+    holdDuration: '15m – 2h',
+    score: scalpScore,
+    biasLabel: classifyBiasLabel(scalpScore),
+    confidencePct: scalpConfidence,
+    trendPrimary: m15Sig,
+    trendConfirm: h1Sig,
+    rsi: rsi14M15,
+    adrUsedPct: dayRangePctOfAtr,
+    adrWarning: scalpAdrWarn,
+    htfConfluence: scalpHtfConfluence,
+    weightsSummary: '70% M15/H1 Structure & Killzone Flow · 30% Retail Liquidity & Macro Guard',
+    actionNote: scalpActionNote
+  };
+
+  // 2. INTRADAY PROFILE (H1 - H4)
+  const macroIntra = clamp(fundamentalScore / 3.5, -1, 1);
+  const rawIntra =
+    h1Dir * 2.0 +
+    h4Dir * 2.0 +
+    trendScoreRaw * 1.0 +
+    mom4hSig * 0.75 +
+    rsiZoneSignal(rsi14H1) * 0.5 +
+    mannaSignal * 1.0 +
+    cot.cotScore * 0.75 +
+    retailSentiment.sentimentScore * 0.75 +
+    macroIntra * 1.25;
+
+  const intraAdrWarn = dayRangePctOfAtr >= 115 || rsi14H1 >= 76 || rsi14H1 <= 24;
+  const intraScore = roundTo(clamp(intraAdrWarn ? rawIntra * 0.78 : rawIntra, -10, 10), 2);
+  const intraDir = directionFromScore(intraScore);
+  const intraHtfConfluence: TimeframeEdgeProfile['htfConfluence'] =
+    intraDir === 'NEUTRAL' || swingDir === 'NEUTRAL'
+      ? 'NEUTRAL'
+      : intraDir === swingDir
+      ? 'ALIGNED'
+      : 'COUNTER_TREND';
+
+  const intraAgree =
+    (h1Dir !== 0 && h1Dir === h4Dir ? 1 : 0) +
+    (h4Dir !== 0 && h4Dir === trendScoreRaw ? 1 : 0) +
+    (intraHtfConfluence === 'ALIGNED' ? 1 : 0);
+  const intraConfidence = Math.round(clamp(46 + Math.abs(intraScore) * 3.5 + intraAgree * 6 - (intraAdrWarn ? 10 : 0), 35, 96));
+
+  const intraActionNote = intraAdrWarn
+    ? `Extended intraday expansion (${dayRangePctOfAtr.toFixed(0)}% ADR · H1 RSI ${rsi14H1.toFixed(0)}) — favor H1 FVG retracement entries.`
+    : intraHtfConfluence === 'COUNTER_TREND'
+    ? `Intraday H1/H4 ${intraDir} counter to Swing macro — target nearest H4 liquidity pool.`
+    : intraDir === 'NEUTRAL'
+    ? `H1/H4 structure neutral — watch ${asset.bestKillzone} session displacement before committing.`
+    : `Session H1–H4 ${intraDir} aligned with D1 macro flow · H1 RSI ${rsi14H1.toFixed(0)} · Optimal window: ${asset.bestKillzone}.`;
+
+  const INTRADAY: TimeframeEdgeProfile = {
+    horizon: 'INTRADAY',
+    label: 'Intraday / Day Trade',
+    executionTimeframes: 'M15 / H1 / H4 (D1 Bias)',
+    holdDuration: '2h – 24h',
+    score: intraScore,
+    biasLabel: classifyBiasLabel(intraScore),
+    confidencePct: intraConfidence,
+    trendPrimary: h1Sig,
+    trendConfirm: h4Sig,
+    rsi: rsi14H1,
+    adrUsedPct: dayRangePctOfAtr,
+    adrWarning: intraAdrWarn,
+    htfConfluence: intraHtfConfluence,
+    weightsSummary: '55% H1/H4/D1 Trend & Killzones · 25% COT/Retail Flow · 20% Macro Diff',
+    actionNote: intraActionNote
+  };
+
+  // 3. SWING PROFILE (D1 - W1)
+  const swingAgree =
+    (trendScoreRaw !== 0 && trendScoreRaw === cot.cotScore ? 1 : 0) +
+    (cot.cotScore !== 0 && Math.sign(fundamentalScore) === cot.cotScore ? 1 : 0) +
+    (seasonality.seasonalityScore !== 0 && seasonality.seasonalityScore === dirVal(d50Sig) ? 1 : 0);
+  const swingConfidence = Math.round(clamp(48 + Math.abs(swingScore) * 3.6 + swingAgree * 6, 36, 97));
+  const swingActionNote =
+    swingDir === 'NEUTRAL'
+      ? `Multi-factor Swing balance neutral — wait for D1/W1 breakout or 52W COT extreme shift.`
+      : `Multi-day ${swingDir} position bias · 52W COT ${cot.cotIndex52w.toFixed(0)}% · 10Y Seasonality ${seasonality.currentMonthWinRate}% win rate.`;
+
+  const SWING: TimeframeEdgeProfile = {
+    horizon: 'SWING',
+    label: 'Swing / Position',
+    executionTimeframes: 'H4 / D1 / W1 (10Y Macro)',
+    holdDuration: '3d – 4w',
+    score: swingScore,
+    biasLabel: classifyBiasLabel(swingScore),
+    confidencePct: swingConfidence,
+    trendPrimary: d50Sig,
+    trendConfirm: monthlySig,
+    rsi: rsi14D1,
+    adrUsedPct: dayRangePctOfAtr,
+    adrWarning: false,
+    htfConfluence: swingDir === 'NEUTRAL' ? 'NEUTRAL' : 'ALIGNED',
+    weightsSummary: '47.5% Macro & Rates · 25% COT & Retail Fade · 20% D1/W1 Trend & 10Y Seasonal · 7.5% Killzone',
+    actionNote: swingActionNote
+  };
+
+  const dirs = [scalpDir, intraDir, swingDir];
+  const longs = dirs.filter((d) => d === 'LONG').length;
+  const shorts = dirs.filter((d) => d === 'SHORT').length;
+  const alignedCount = Math.max(longs, shorts);
+  const allAligned = longs === 3 || shorts === 3;
+  const avgScore = roundTo((scalpScore + intraScore + swingScore) / 3, 2);
+
+  let summary = 'NEUTRAL CONSOLIDATION';
+  if (longs === 3) summary = '3/3 ALIGNED BULLISH (Scalp + Intra + Swing)';
+  else if (shorts === 3) summary = '3/3 ALIGNED BEARISH (Scalp + Intra + Swing)';
+  else if (longs === 2) summary = '2/3 BULLISH (Partial Pullback)';
+  else if (shorts === 2) summary = '2/3 BEARISH (Partial Pullback)';
+  else if (longs >= 1 && shorts >= 1) summary = 'CONFLICTING HORIZONS (Counter-Trend)';
+
+  return {
+    timeframes: { SCALP, INTRADAY, SWING },
+    timeframeConfluence: {
+      allAligned,
+      alignedCount,
+      summary,
+      dominantBias: classifyBiasLabel(avgScore)
+    }
+  };
+}
+
 export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<EdgeFinderSnapshot> {
   if (!forceRefresh && snapshotCache && Date.now() - snapshotCache.cachedAt < SNAPSHOT_TTL_MS) {
     return {
@@ -3048,7 +3870,7 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     getMacroEconomies(allEvents),
     fetchMacroInternals(),
     fetchSmartMoneyAndTargets(),
-    mapWithConcurrency(EDGE_FINDER_ASSETS, 12, (asset) => fetchAssetMarketData(asset))
+    mapWithConcurrency(EDGE_FINDER_ASSETS, 16, (asset) => fetchAssetMarketData(asset))
   ]);
 
   const { economies, macroSource } = macroRes;
@@ -3058,10 +3880,11 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
   }, {} as Record<EconomyCode, MacroEconomyData>);
 
   let livePriceCount = 0;
+  let liveIntradayCount = 0;
   let hasLiveCot = false;
 
   const scorecards: AssetEdgeScorecard[] = EDGE_FINDER_ASSETS.map((asset, idx) => {
-    const { candles, livePrice, isLive, monthlyReturns10Y, monthlyWinRate10Y } = marketDataList[idx];
+    const { candles, candles15m, livePrice, isLive, monthlyReturns10Y, monthlyWinRate10Y } = marketDataList[idx];
     if (isLive && livePrice !== null) livePriceCount += 1;
 
     const closes = candles.map((c) => c.close);
@@ -3105,17 +3928,21 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
       currentPrice > ema50 && ema20 > ema50 ? 'Bullish' : currentPrice < ema50 && ema20 < ema50 ? 'Bearish' : 'Flat';
     const monthlySig: 'Bullish' | 'Bearish' | 'Flat' =
       returnMonthlyPct >= 0.5 && currentPrice > ema50 ? 'Bullish' : returnMonthlyPct <= -0.5 && currentPrice < ema50 ? 'Bearish' : 'Flat';
-    const allTfs = [d5Sig, d20Sig, d50Sig, monthlySig];
-    const alignedCount = Math.max(
-      allTfs.filter((t) => t === 'Bullish').length,
-      allTfs.filter((t) => t === 'Bearish').length
-    );
 
     const trendScoreRaw: -1 | 0 | 1 =
       currentPrice > 0 && currentPrice > ema20 && ema20 >= ema50 ? 1 :
       currentPrice > 0 && currentPrice < ema20 && ema20 <= ema50 ? -1 : 0;
     const trendDirection: AssetEdgeScorecard['technical']['trendDirection'] =
       trendScoreRaw === 1 ? 'Bullish' : trendScoreRaw === -1 ? 'Bearish' : 'Ranging';
+
+    const intraday = computeIntradayMetrics(candles15m, currentPrice, trendDirection, rsi14, return5dPct);
+    if (intraday.intradaySource === 'LIVE_15M_H1_H4') liveIntradayCount += 1;
+
+    const allTfs = [intraday.m15Sig, intraday.h1Sig, intraday.h4Sig, d5Sig, d20Sig, d50Sig, monthlySig];
+    const alignedCount = Math.max(
+      allTfs.filter((t) => t === 'Bullish').length,
+      allTfs.filter((t) => t === 'Bearish').length
+    );
 
     const { cot, retailSentiment, weeklySeries } = buildCotAndRetailFromLive(asset, liveCot);
     if (cot.source === 'CFTC_LIVE') hasLiveCot = true;
@@ -3158,7 +3985,7 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
         signal: trendScoreRaw,
         weight: 1.25,
         contribution: roundTo(trendScoreRaw * 1.25, 2),
-        detail: `${trendDirection} vs EMA20/50 · RSI ${rsi14.toFixed(1)} · MTF ${alignedCount}/4`
+        detail: `${trendDirection} vs EMA20/50 · RSI ${rsi14.toFixed(1)} · MTF ${alignedCount}/7`
       },
       ...macroFactors.map((mf) => ({
         ...mf,
@@ -3188,6 +4015,32 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
     const factors = [...baseFactorsWithoutManna, mannaFactor];
     const totalScore = roundTo(clamp(factors.reduce((s, f) => s + f.contribution, 0), -10, 10), 2);
     const fundamentalScore = roundTo(macroFactors.reduce((s, f) => s + f.signal * f.weight, 0), 2);
+
+    const { timeframes, timeframeConfluence } = buildTimeframeProfiles({
+      asset,
+      swingScore: totalScore,
+      fundamentalScore,
+      trendScoreRaw,
+      mannaSignal,
+      cot,
+      retailSentiment,
+      seasonality,
+      killzoneAlignment,
+      m15Sig: intraday.m15Sig,
+      h1Sig: intraday.h1Sig,
+      h4Sig: intraday.h4Sig,
+      d5Sig,
+      d20Sig,
+      d50Sig,
+      monthlySig,
+      rsi14M15: intraday.rsi14M15,
+      rsi14H1: intraday.rsi14H1,
+      rsi14D1: rsi14,
+      return1hPct: intraday.return1hPct,
+      return4hPct: intraday.return4hPct,
+      atrPct,
+      dayRangePctOfAtr
+    });
 
     const cotContrib = roundTo(cot.cotScore * 1.5, 2);
     const retailContrib = roundTo(retailSentiment.sentimentScore * 1.0, 2);
@@ -3225,6 +4078,8 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
       priceSource: isLive && livePrice !== null ? 'LIVE' : 'REFERENCE',
       totalScore,
       biasLabel: classifyBiasLabel(totalScore),
+      timeframes,
+      timeframeConfluence,
       cotScore: cotContrib,
       retailScore: retailContrib,
       seasonalityScore: roundTo(seasonality.seasonalityScore * 0.75, 2),
@@ -3238,6 +4093,9 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
         ema20,
         ema50,
         rsi14,
+        rsi14M15: intraday.rsi14M15,
+        rsi14H1: intraday.rsi14H1,
+        rsi14H4: intraday.rsi14H4,
         atr14,
         atrPct,
         high30d,
@@ -3246,9 +4104,15 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
         distanceFromEma20Pct,
         dayRangePctOfAtr,
         volatilityPercentile30d,
+        return1hPct: intraday.return1hPct,
+        return4hPct: intraday.return4hPct,
         return5dPct,
         return20dPct,
+        intradaySource: intraday.intradaySource,
         mtfAlignment: {
+          m15: intraday.m15Sig,
+          h1: intraday.h1Sig,
+          h4: intraday.h4Sig,
           d5: d5Sig,
           d20: d20Sig,
           d50: d50Sig,
@@ -3267,17 +4131,97 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
   scorecards.sort((a, b) => Math.abs(b.totalScore) - Math.abs(a.totalScore));
 
   const currencyStrength = computeCurrencyStrength(economies, scorecards);
+  const futuresStrength = computeFuturesStrength(scorecards);
+  const cryptoStrength = computeCryptoStrength(scorecards);
   const riskGauge = computeRiskGauge(scorecards);
-  const carryTrades = computeCarryTrades(scorecards, econByCode);
+  const carryTrades = computeCarryTrades(scorecards, econByCode, macroInternals);
   const goldScorecard = computeGoldScorecard(scorecards, econByCode, macroInternals);
   const correlations = computeCorrelations(scorecards);
+  const nowIso = new Date().toISOString();
+
+  const feedCadences: FeedCadenceItem[] = [
+    {
+      key: 'intraday_price',
+      name: 'Spot, Futures & Crypto Quotes',
+      provider: 'Yahoo Finance 15m + Meta Quote',
+      pollCadence: 'Every 60s (Auto-Poll)',
+      upstreamFrequency: 'Live Exchange Ticks',
+      status: livePriceCount >= EDGE_FINDER_ASSETS.length - 2 ? 'LIVE' : 'PARTIAL',
+      lastUpdated: nowIso
+    },
+    {
+      key: 'intraday_mtf',
+      name: 'Scalp & Intraday (M15 / H1 / H4)',
+      provider: 'Yahoo Finance 15m OHLC Candles',
+      pollCadence: 'Every 60s',
+      upstreamFrequency: 'Live 15-Min Session Bars',
+      status: liveIntradayCount >= EDGE_FINDER_ASSETS.length - 4 ? 'LIVE' : 'PARTIAL',
+      lastUpdated: nowIso
+    },
+    {
+      key: 'daily_trend',
+      name: 'Daily Trend, ADR & 30D History',
+      provider: 'Yahoo Finance Daily Bars',
+      pollCadence: 'Every 2m',
+      upstreamFrequency: 'Rolling Daily Session',
+      status: livePriceCount > 0 ? 'LIVE' : 'PARTIAL',
+      lastUpdated: nowIso
+    },
+    {
+      key: 'yields_dxy_vix',
+      name: 'US Treasury Curve, DXY & VIX',
+      provider: 'Yahoo Yields + St. Louis FRED',
+      pollCadence: 'Every 5m',
+      upstreamFrequency: 'Intraday Yields + Daily TIPS',
+      status: macroInternals.yieldsSource === 'LIVE_FRED_YAHOO' ? 'LIVE' : 'PARTIAL',
+      lastUpdated: macroInternals.fredUsMacro.updatedAt || nowIso
+    },
+    {
+      key: 'cftc_cot',
+      name: 'CFTC Commitments of Traders',
+      provider: 'CFTC Socrata API (6dca-aqww)',
+      pollCadence: 'Every 30m',
+      upstreamFrequency: 'Weekly (Fridays 15:30 ET)',
+      status: hasLiveCot ? 'LIVE' : 'BASELINE',
+      lastUpdated: scorecards[0]?.cot.reportDate || nowIso
+    },
+    {
+      key: 'central_banks',
+      name: 'G8 Policy Rates & Macro Releases',
+      provider: 'BIS SDMX + World Bank + IMF + Calendar',
+      pollCadence: 'Every 60m (+ Calendar Surprises)',
+      upstreamFrequency: 'Central Bank Meetings & Releases',
+      status: macroSource === 'LIVE_BIS_WORLDBANK' ? 'LIVE' : 'BASELINE',
+      lastUpdated: economies[0]?.updatedAt || nowIso
+    },
+    {
+      key: 'smart_money',
+      name: 'SEC Insiders, 13F & Bank Targets',
+      provider: 'SEC Form 4 / 13F / Street Consensus',
+      pollCadence: 'Every 60m',
+      upstreamFrequency: 'Daily Filings & Ratings',
+      status: smartMoney.bankAndStreetTargets.length > 0 ? 'LIVE' : 'PARTIAL',
+      lastUpdated: smartMoney.updatedAt || nowIso
+    },
+    {
+      key: 'seasonality',
+      name: '10-Year Monthly Seasonality',
+      provider: 'Yahoo Finance 10Y Monthly Closes',
+      pollCadence: 'Every 6h',
+      upstreamFrequency: 'Monthly Window Close',
+      status: 'LIVE',
+      lastUpdated: nowIso
+    }
+  ];
 
   const snapshot: EdgeFinderSnapshot = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: nowIso,
     rollout,
     scorecards,
     economies,
     currencyStrength,
+    futuresStrength,
+    cryptoStrength,
     riskGauge,
     carryTrades,
     goldScorecard,
@@ -3293,10 +4237,13 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
       cftcSource: hasLiveCot ? 'CFTC_LIVE' : 'INSTITUTIONAL_MODEL',
       macroSource,
       yieldsSource: macroInternals.yieldsSource,
+      intradaySource: liveIntradayCount >= EDGE_FINDER_ASSETS.length - 4 ? 'LIVE_15M_H1_H4' : 'PARTIAL',
       smartMoneyCount: smartMoney.insiders.length + smartMoney.whales.length + smartMoney.bankAndStreetTargets.length,
       livePriceCount,
       totalAssets: EDGE_FINDER_ASSETS.length,
-      cacheAgeSeconds: 0
+      cacheAgeSeconds: 0,
+      refreshIntervalSeconds: 60,
+      feedCadences
     }
   };
 
@@ -3315,5 +4262,8 @@ export function clearEdgeFinderCaches(): void {
   }
   for (const k of Object.keys(dailyMarketCache)) {
     delete dailyMarketCache[k];
+  }
+  for (const k of Object.keys(intradayMarketCache)) {
+    delete intradayMarketCache[k];
   }
 }
