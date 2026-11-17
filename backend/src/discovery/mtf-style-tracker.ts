@@ -276,7 +276,10 @@ export function evaluateMtfRowLifecycle(
   const r1 = row.r_multiple_1 && row.r_multiple_1 > 0 ? row.r_multiple_1 : 2.0;
   const r2 = row.r_multiple_2 && row.r_multiple_2 > 0 ? row.r_multiple_2 : 3.0;
   const isLong = String(row.bias).toLowerCase() === 'long';
-  const spread = quote?.spread && quote.spread > 0 ? quote.spread : getDefaultSpread(row.instrument, market);
+  const defaultSpread = getDefaultSpread(row.instrument, market);
+  const spread = quote?.spread && quote.spread > 0
+    ? Math.min(quote.spread, defaultSpread * 2.5)
+    : defaultSpread;
 
   const livePrice = quote?.price && quote.price > 0 ? quote.price : row.last_price || 0;
   const currentBid = quote?.bid && quote.bid > 0 ? quote.bid : livePrice;
@@ -358,8 +361,12 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
-        if (cLowAsk <= zoneHigh) {
-          const fill = round(Math.min(cOpenAsk, zoneHigh));
+        if (cLowAsk <= zoneHigh && cHighAsk >= zoneLow) {
+          // Only fill if candle traded inside the entry zone rather than opening past the zone near SL
+          if (cOpenAsk < zoneLow && cHighAsk < zoneLow) {
+            continue;
+          }
+          const fill = round(Math.max(zoneLow, Math.min(cOpenAsk, zoneHigh)));
           if (fill <= origStop) {
             state = 'invalidated';
             invalidationReason = 'stop_breached_pre_entry';
@@ -403,8 +410,11 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
-        if (cHighBid >= zoneLow) {
-          const fill = round(Math.max(cOpenBid, zoneLow));
+        if (cHighBid >= zoneLow && cLowBid <= zoneHigh) {
+          if (cOpenBid > zoneHigh && cLowBid > zoneHigh) {
+            continue;
+          }
+          const fill = round(Math.min(zoneHigh, Math.max(cOpenBid, zoneLow)));
           if (fill >= origStop) {
             state = 'invalidated';
             invalidationReason = 'stop_breached_pre_entry';
@@ -442,7 +452,7 @@ export function evaluateMtfRowLifecycle(
     }
 
     const entryPrice = entryPriceRecorded && entryPriceRecorded > 0 ? entryPriceRecorded : row.entry_zone_mid;
-    let initialRisk = Math.abs(entryPrice - origStop);
+    let initialRisk = Math.max(Math.abs(entryPrice - origStop), Math.abs(row.entry_zone_mid - origStop));
     if (initialRisk < 1e-6 && row.tp1) {
       initialRisk = Math.abs(row.tp1 - entryPrice) / r1;
     }
@@ -463,15 +473,7 @@ export function evaluateMtfRowLifecycle(
         break;
       }
 
-      // 2. Check +1.5R Break Even trigger
-      const maxBarProfit = isLong ? Math.max(0, cHighBid - entryPrice) : Math.max(0, entryPrice - cLowAsk);
-      const maxBarR = initialRisk > 0 ? maxBarProfit / initialRisk : 0;
-      if (!isBreakeven && maxBarR >= 1.5) {
-        isBreakeven = 1;
-        stop = round(entryPrice);
-      }
-
-      // 3. Check TP2 (+3R price level -> +2.20R blended 80/20) directly
+      // 2. Check TP2 (+3R price level -> +2.20R blended 80/20) directly (BE locks only when TP1 hits)
       const hitTp2 = isLong ? cHighBid >= row.tp2 : cLowAsk <= row.tp2;
       if (hitTp2) {
         state = 'resolved';
@@ -526,11 +528,11 @@ export function evaluateMtfRowLifecycle(
   if (livePrice > 0 && OPEN_MTF_STATES.includes(state)) {
     if (state === 'awaiting_entry') {
       if (isLong) {
-        if (currentAsk <= zoneHigh && currentBid > origStop) {
+        if (currentAsk >= zoneLow && currentAsk <= zoneHigh && currentBid > origStop) {
           state = 'active';
           entryTriggeredAt = entryTriggeredAt || nowIso;
           filledAt = filledAt || entryTriggeredAt;
-          entryPriceRecorded = round(Math.min(currentAsk, zoneHigh));
+          entryPriceRecorded = round(Math.max(zoneLow, Math.min(currentAsk, zoneHigh)));
           stop = origStop;
           metadata = enrichMetadataWithEntrySession(metadata, entryTriggeredAt);
         } else if (currentBid >= row.tp1) {
@@ -543,18 +545,18 @@ export function evaluateMtfRowLifecycle(
           invalidationReason = 'stop_breached_pre_entry';
           invalidationDetail = `Live Bid (${round(currentBid)}) breached SL (${origStop}) before filling entry`;
           resolvedAt = nowIso;
-        } else if (atr14 > 0 && (zoneLow - currentBid) > 1.5 * atr14) {
+        } else if (atr14 > 0 && (zoneLow - currentBid) > 1.0 * atr14) {
           state = 'invalidated';
           invalidationReason = 'price_displaced';
-          invalidationDetail = `Price displaced > 1.5x ATR below zone (${zoneLow}) prior to entry`;
+          invalidationDetail = `Price displaced > 1.0x ATR below zone (${zoneLow}) prior to entry`;
           resolvedAt = nowIso;
         }
       } else {
-        if (currentBid >= zoneLow && currentAsk < origStop) {
+        if (currentBid >= zoneLow && currentBid <= zoneHigh && currentAsk < origStop) {
           state = 'active';
           entryTriggeredAt = entryTriggeredAt || nowIso;
           filledAt = filledAt || entryTriggeredAt;
-          entryPriceRecorded = round(Math.max(currentBid, zoneLow));
+          entryPriceRecorded = round(Math.min(zoneHigh, Math.max(currentBid, zoneLow)));
           stop = origStop;
           metadata = enrichMetadataWithEntrySession(metadata, entryTriggeredAt);
         } else if (currentAsk <= row.tp1) {
@@ -567,10 +569,10 @@ export function evaluateMtfRowLifecycle(
           invalidationReason = 'stop_breached_pre_entry';
           invalidationDetail = `Live Ask (${round(currentAsk)}) breached SL (${origStop}) before filling entry`;
           resolvedAt = nowIso;
-        } else if (atr14 > 0 && (currentAsk - zoneHigh) > 1.5 * atr14) {
+        } else if (atr14 > 0 && (currentAsk - zoneHigh) > 1.0 * atr14) {
           state = 'invalidated';
           invalidationReason = 'price_displaced';
-          invalidationDetail = `Price displaced > 1.5x ATR above zone (${zoneHigh}) prior to entry`;
+          invalidationDetail = `Price displaced > 1.0x ATR above zone (${zoneHigh}) prior to entry`;
           resolvedAt = nowIso;
         }
       }
@@ -578,19 +580,6 @@ export function evaluateMtfRowLifecycle(
 
     if (state === 'active') {
       const entryPrice = entryPriceRecorded && entryPriceRecorded > 0 ? entryPriceRecorded : row.entry_zone_mid;
-      let initialRisk = Math.abs(entryPrice - origStop);
-      if (initialRisk < 1e-6 && row.tp1) {
-        initialRisk = Math.abs(row.tp1 - entryPrice) / r1;
-      }
-
-      const openProfit = isLong ? Math.max(0, currentBid - entryPrice) : Math.max(0, entryPrice - currentAsk);
-      const openR = initialRisk > 0 ? openProfit / initialRisk : 0;
-
-      if (!isBreakeven && openR >= 1.5) {
-        isBreakeven = 1;
-        stop = round(entryPrice);
-      }
-
       if (isLong) {
         if (currentBid >= row.tp2) {
           state = 'resolved';
@@ -1000,6 +989,23 @@ export async function syncMtfSetupsAndGetLiveBoard(
         stillOpenByInst.delete(c.instrument);
       } else {
         continue;
+      }
+    }
+
+    // Post-loss churn guard: wait 15m (Scalp) / 2h (Swing) after an SL before firing again on same asset
+    if (!existing) {
+      const cooldownMs = tradingStyle === 'SCALP' ? 15 * 60 * 1000 : 2 * 60 * 60 * 1000;
+      const recentLosses = await queryDb<{ resolved_at: string | null }>(
+        `SELECT resolved_at FROM mtf_style_setups
+         WHERE trading_style = ? AND instrument = ? AND signal_state = 'resolved' AND outcome_type = 'sl_hit'
+         ORDER BY resolved_at DESC LIMIT 1`,
+        [tradingStyle, c.instrument]
+      );
+      if (recentLosses.length > 0 && recentLosses[0].resolved_at) {
+        const elapsedSinceSl = Date.now() - new Date(recentLosses[0].resolved_at).getTime();
+        if (elapsedSinceSl >= 0 && elapsedSinceSl < cooldownMs) {
+          continue;
+        }
       }
     }
 

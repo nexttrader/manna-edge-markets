@@ -91,24 +91,47 @@ function getActiveSessionNameUTC(): string {
   return 'asia';
 }
 
-function determineDirectionalBias(contextCandles: Candle[], fastPeriod: number, slowPeriod: number): { bias: Bias; strength: number } {
+function determineDirectionalBias(
+  contextCandles: Candle[],
+  fastPeriod: number,
+  slowPeriod: number,
+  style: TradingStyleMode
+): { bias: Bias; strength: number } | null {
   const closes = contextCandles.map((c) => c.close);
   const emaFast = computeEma(closes, fastPeriod);
   const emaSlow = computeEma(closes, slowPeriod);
   const latestClose = closes[closes.length - 1] || 1;
   const spreadPct = Math.abs(emaFast - emaSlow) / Math.max(latestClose, 1e-6);
 
-  const recentSlice = contextCandles.slice(-6);
-  const netMove = recentSlice.length >= 2
-    ? recentSlice[recentSlice.length - 1].close - recentSlice[0].open
-    : 0;
-
-  let bias: Bias = emaFast >= emaSlow ? 'long' : 'short';
-  if (spreadPct < 0.0002 && netMove !== 0) {
-    bias = netMove >= 0 ? 'long' : 'short';
+  // Reject flat/choppy regimes where fast/slow EMAs have no meaningful separation
+  const minSpreadPct = style === 'scalp' ? 0.0003 : 0.0008;
+  if (spreadPct < minSpreadPct) {
+    return null;
   }
 
-  const strength = Math.min(1, 0.72 + Math.min(0.24, spreadPct * 80));
+  const bias: Bias = emaFast >= emaSlow ? 'long' : 'short';
+
+  // Higher-timeframe structure confluence check (HH/HL vs LH/LL over recent 10 bars)
+  const recentCtx = contextCandles.slice(-10);
+  let hhHlCount = 0;
+  let lhLlCount = 0;
+  for (let i = 1; i < recentCtx.length; i++) {
+    if (recentCtx[i].high > recentCtx[i - 1].high && recentCtx[i].low >= recentCtx[i - 1].low) {
+      hhHlCount++;
+    } else if (recentCtx[i].low < recentCtx[i - 1].low && recentCtx[i].high <= recentCtx[i - 1].high) {
+      lhLlCount++;
+    }
+  }
+
+  // Never trade against strict opposing context structure
+  if (bias === 'long' && lhLlCount > hhHlCount) {
+    return null;
+  }
+  if (bias === 'short' && hhHlCount > lhLlCount) {
+    return null;
+  }
+
+  const strength = Math.min(1, 0.74 + Math.min(0.24, spreadPct * 80));
   return { bias, strength };
 }
 
@@ -153,21 +176,34 @@ async function buildSetupForInstrument(
   const atr14 = computeATR(entryCandles, 14);
   if (!atr14 || atr14 <= 0) return null;
 
-  const { bias, strength } = determineDirectionalBias(
+  const biasRes = determineDirectionalBias(
     contextCandles,
     style === 'scalp' ? 9 : 12,
-    style === 'scalp' ? 21 : 26
+    style === 'scalp' ? 21 : 26,
+    style
   );
+  if (!biasRes) return null;
+  const { bias, strength } = biasRes;
+
+  // Reject falling-knife / vertical-squeeze entries where latest completed entry bar closed strongly against bias
+  const prevBar = entryCandles[entryCandles.length - 2] || entryCandles[entryCandles.length - 1];
+  const barBody = Math.abs(prevBar.close - prevBar.open);
+  if (bias === 'long' && prevBar.close < prevBar.open && barBody > atr14 * 0.75) {
+    return null;
+  }
+  if (bias === 'short' && prevBar.close > prevBar.open && barBody > atr14 * 0.75) {
+    return null;
+  }
 
   const decimals = getInstrumentDecimals(instrument, market);
   const round = (v: number) => Number(v.toFixed(decimals));
 
   const zoneOffsetMult = style === 'scalp' ? 0.35 : 0.45;
-  const stopPadMult = style === 'scalp' ? 0.12 : 0.20;
+  const stopPadMult = style === 'scalp' ? 0.15 : 0.25;
   const zoneHalfWidthMult = style === 'scalp' ? 0.14 : 0.18;
 
-  // Search freshest valid structural lookbacks so we never emit an already-hit TP1/TP2 or stopped setup
-  const candidateLookbacks = style === 'scalp' ? [6, 10, 14] : [5, 8, 12];
+  // Search true structural swing lookbacks so stops protect beyond real swings, never micro 5-bar noise
+  const candidateLookbacks = style === 'scalp' ? [10, 16, 22] : [8, 14, 20];
   let selectedZone: {
     entryLow: number;
     entryHigh: number;
@@ -180,6 +216,11 @@ async function buildSetupForInstrument(
     risk: number;
     anchorTime: string;
   } | null = null;
+
+  const defaultSpread = market === 'forex' ? (instrument.includes('JPY') ? 0.015 : 0.00012) : 0.25;
+  const effectiveSpread = quote?.spread && quote.spread > 0
+    ? Math.min(quote.spread, defaultSpread * 2.5)
+    : defaultSpread;
 
   for (const lookback of candidateLookbacks) {
     const recentBars = entryCandles.slice(-lookback);
@@ -216,13 +257,16 @@ async function buildSetupForInstrument(
     const publishedRisk = Math.abs(entryMid - stop);
     if (publishedRisk <= 0) continue;
 
+    // Never allow spread cost to exceed 22% of the stop distance
+    if (effectiveSpread / publishedRisk > 0.22) continue;
+
     const tp1 = round(bias === 'long' ? entryMid + publishedRisk * 2.0 : entryMid - publishedRisk * 2.0);
     const tp2 = round(bias === 'long' ? entryMid + publishedRisk * 3.0 : entryMid - publishedRisk * 3.0);
 
-    // Pre-publish gate: discard setups whose TP1 was already reached or Stop was already breached
+    // Pre-publish gate: discard setups whose zone is already penetrated past its far edge, TP1 already reached, or SL breached
     const isValidPrice = bias === 'long'
-      ? (currentBid > stop && currentBid < tp1 && (currentPrice - entryHigh) <= atr14 * 4.5)
-      : (currentAsk < stop && currentAsk > tp1 && (entryLow - currentPrice) <= atr14 * 4.5);
+      ? (currentBid >= entryLow && currentBid > stop && currentBid < tp1 && (currentPrice - entryHigh) <= atr14 * 3.0)
+      : (currentAsk <= entryHigh && currentAsk < stop && currentAsk > tp1 && (entryLow - currentPrice) <= atr14 * 3.0);
 
     if (!isValidPrice) continue;
 
@@ -252,14 +296,14 @@ async function buildSetupForInstrument(
   const { entryLow, entryHigh, entryMid, stop, tp1, tp2, r1, r2, risk, anchorTime } = selectedZone;
   const nowIso = new Date().toISOString();
 
-  // Limit fill check at creation: Long buys at Ask <= entryHigh; Short sells at Bid >= entryLow
+  // Limit fill check at creation: strictly inside [entryLow, entryHigh] so full planned risk stays intact
   const filledAtCreation = bias === 'long'
-    ? (currentAsk <= entryHigh && currentBid > stop)
-    : (currentBid >= entryLow && currentAsk < stop);
+    ? (currentAsk >= entryLow && currentAsk <= entryHigh && currentBid > stop)
+    : (currentBid >= entryLow && currentBid <= entryHigh && currentAsk < stop);
 
   const signalState: 'active' | 'awaiting_entry' = filledAtCreation ? 'active' : 'awaiting_entry';
   const entryPriceRecorded = filledAtCreation
-    ? round(bias === 'long' ? Math.min(currentAsk, entryHigh) : Math.max(currentBid, entryLow))
+    ? round(Math.max(entryLow, Math.min(entryHigh, bias === 'long' ? currentAsk : currentBid)))
     : undefined;
   const entryTriggeredAt = filledAtCreation ? nowIso : undefined;
 

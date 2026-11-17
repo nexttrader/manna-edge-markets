@@ -120,16 +120,22 @@ export function getTimeframeStopDistance(
   }
 
   const isJpy = instrument.includes('JPY');
+  // Calibrate noise floors per timeframe AND spread friction:
+  // - Forex 5m needs >=0.85x base floor (~8.5p EURUSD, ~10.2p GBPUSD, ~6.8p EURGBP) so 1-2 pip ECN spreads + noise don't insta-stop
+  // - Swing 1h (2.5x) & 4h (4.5x) protect against normal higher-timeframe swing sweeps
   const tfFloorScale =
-    entryTimeframe === '5m' ? 0.45 :
-    entryTimeframe === '1h' ? 1.80 :
-    3.50; // 4h
+    entryTimeframe === '5m' ? (market === 'forex' ? 0.85 : 0.55) :
+    entryTimeframe === '1h' ? 2.50 :
+    4.50; // 4h
 
   const fallbackAtr = market === 'futures'
     ? 2.0 * tfFloorScale
     : (isJpy ? 0.20 : 0.0010) * tfFloorScale;
   const safeAtr = (isNaN(atr14) || atr14 <= 0) ? fallbackAtr : atr14;
-  const atrMultiplier = isJpy ? 1.4 : 1.25;
+  const atrMultiplier =
+    entryTimeframe === '5m' ? (isJpy ? 1.6 : 1.5) :
+    entryTimeframe === '1h' ? (isJpy ? 1.7 : 1.6) :
+    (isJpy ? 1.85 : 1.75); // 4h
   const safeRaw = (isNaN(rawCalculatedRisk) || rawCalculatedRisk <= 0) ? safeAtr * atrMultiplier : rawCalculatedRisk;
   const atrRiskDistance = Math.max(safeRaw, safeAtr * atrMultiplier);
 

@@ -76,16 +76,16 @@ async function runTests() {
   const swing1hStopEur = getTimeframeStopDistance('EUR/USD', 0.0012, 0.0008, 'forex', '1h');
   const swing4hStopEur = getTimeframeStopDistance('EUR/USD', 0.0024, 0.0016, 'forex', '4h');
 
-  assert.strictEqual(scalpStopEur, 0.00045, 'EUR/USD 5M scalp floor should be 4.5 pips (0.00045)');
+  assert.strictEqual(scalpStopEur, 0.00085, 'EUR/USD 5M scalp floor should be 8.5 pips (0.00085)');
   assert.strictEqual(intradayStopEur, 0.001, 'EUR/USD 15M intraday floor should be 10 pips (0.0010)');
-  assert.strictEqual(swing1hStopEur, 0.0018, 'EUR/USD 1H swing floor should be 18 pips (0.0018)');
-  assert.strictEqual(swing4hStopEur, 0.0035, 'EUR/USD 4H swing floor should be 35 pips (0.0035)');
+  assert.strictEqual(swing1hStopEur, 0.0025, 'EUR/USD 1H swing floor should be 25 pips (0.0025)');
+  assert.strictEqual(swing4hStopEur, 0.0045, 'EUR/USD 4H swing floor should be 45 pips (0.0045)');
   assert.ok(scalpStopEur < intradayStopEur && intradayStopEur < swing1hStopEur && swing1hStopEur < swing4hStopEur);
 
   const scalpStopNq = getTimeframeStopDistance('NQ', 8.0, 5.0, 'futures', '5m');
   const swing4hStopNq = getTimeframeStopDistance('NQ', 60.0, 40.0, 'futures', '4h');
-  assert.strictEqual(scalpStopNq, 15.75, 'NQ 5M scalp floor should be 15.75 pts');
-  assert.strictEqual(swing4hStopNq, 122.5, 'NQ 4H swing floor should be 122.5 pts');
+  assert.strictEqual(scalpStopNq, 19.25, 'NQ 5M scalp floor should be 19.25 pts');
+  assert.strictEqual(swing4hStopNq, 157.5, 'NQ 4H swing floor should be 157.5 pts');
   console.log('✅ TEST 1: Timeframe-calibrated stop loss floors (5M < 15M < 1H < 4H) passed');
 
   // ── TEST 2: UTC-Aligned 4H Candle Aggregation ──
@@ -316,6 +316,79 @@ async function runTests() {
   assert.strictEqual(calTrade!.trading_style, 'SWING');
   assert.strictEqual(calTrade!.realized_r, 2.2, 'Calendar MTF outcome must carry blended +2.2R');
   console.log('✅ TEST 7: 80/20 Blended R Accounting & Calendar MTF Outcomes passed');
+
+  // TEST 8: Inside-zone fill guard, TP1-only BE protection, FX 5M/Swing stop floors, and post-SL cooldown
+  const eurusd5mFloor = getTimeframeStopDistance('EUR/USD', 0.0002, 0.0002, 'forex', '5m');
+  assert.ok(eurusd5mFloor >= 0.00085, `FX 5M floor must protect spread (>=8.5p, got ${eurusd5mFloor})`);
+  const gbpusd1hFloor = getTimeframeStopDistance('GBP/USD', 0.0008, 0.0010, 'forex', '1h');
+  assert.ok(gbpusd1hFloor >= 0.0030, `Swing 1H GBP/USD floor must be >=30p (got ${gbpusd1hFloor})`);
+
+  const outsideZoneRow = makeRow({ id: 'test-outside-zone' });
+  const slightlyBelowRes = evaluateMtfRowLifecycle(
+    outsideZoneRow,
+    { price: 20997, bid: 20997, ask: 20997.25, spread: 0.25 },
+    [{ open: 20998, high: 20999, low: 20996, close: 20997, volume: 100, timestamp: '2026-11-16T14:02:00.000Z' }],
+    5.0,
+    '2026-11-16T14:02:30.000Z'
+  );
+  assert.strictEqual(slightlyBelowRes.signal_state, 'awaiting_entry', 'Price strictly below zoneLow must NOT fill Long near SL');
+  assert.strictEqual(slightlyBelowRes.entry_price_recorded, null);
+
+  const displacedRes = evaluateMtfRowLifecycle(
+    outsideZoneRow,
+    { price: 20992, bid: 20992, ask: 20992.25, spread: 0.25 },
+    [{ open: 20995, high: 20998, low: 20991, close: 20992, volume: 100, timestamp: '2026-11-16T14:02:00.000Z' }],
+    5.0,
+    '2026-11-16T14:02:30.000Z'
+  );
+  assert.strictEqual(displacedRes.signal_state, 'invalidated', 'Price displaced > 1x ATR below zone must invalidate pre-entry');
+  assert.strictEqual(displacedRes.invalidation_reason, 'price_displaced');
+
+  // Reaching +1.5R before TP1 must NOT choke active trade with premature BE stop
+  const activeNoPrematureBe = makeRow({
+    id: 'test-no-early-be',
+    signal_state: 'active',
+    entry_price_recorded: 21010,
+    entry_triggered_at: '2026-11-16T14:02:00.000Z',
+    filled_at: '2026-11-16T14:02:00.000Z',
+    stop: 20985,
+    initial_stop: 20985,
+    tp1: 21060,
+    tp2: 21085
+  });
+  const noEarlyBeRes = evaluateMtfRowLifecycle(
+    activeNoPrematureBe,
+    { price: 21012, bid: 21012, ask: 21012.25, spread: 0.25 },
+    [
+      // Rallies +1.6R (21010 + 40 = 21050 < tp1 21060), then pulls back near 21010 without hitting SL
+      { open: 21015, high: 21050, low: 21009, close: 21012, volume: 100, timestamp: '2026-11-16T14:05:00.000Z' }
+    ],
+    5.0,
+    '2026-11-16T14:05:30.000Z'
+  );
+  assert.strictEqual(noEarlyBeRes.signal_state, 'active', 'Pullback after +1.6R (pre-TP1) must remain active, not choke at BE');
+  assert.strictEqual(noEarlyBeRes.is_breakeven, 0);
+
+  // Cooldown guard after recent sl_hit on same instrument
+  const recentSlAt = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price,
+      entry_triggered_at, resolved_at, outcome_type, invalidation_reason, created_at, updated_at
+    ) VALUES ('mtf-scalp-COOL-sl', 'mtf-scalp-COOL-sl', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'COOLINST', 'futures', 'long', 100, 101, 100.5, 95, 95, 111.5, 117, 2, 3, 85, 90, 'ny_am', 'resolved', 0, -1, 94.9, ?, ?, 'sl_hit', 'sl_hit', ?, ?)`,
+    [recentSlAt, recentSlAt, recentSlAt, recentSlAt]
+  );
+  const cooldownCandidate: MtfStyleSetup = {
+    ...pendingCandidate1,
+    id: 'mtf-scalp-COOL-new',
+    instrument: 'COOLINST'
+  };
+  const boardCooldown = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [cooldownCandidate]);
+  assert.ok(!boardCooldown.setups.some((s) => s.id === 'mtf-scalp-COOL-new'), 'Cooldown must block immediate churn re-entry after sl_hit');
+  console.log('✅ TEST 8: Inside-zone fills, TP1-only BE, FX/Swing stop floors, and post-SL cooldown passed');
 
   console.log('\n🎉 All Scalping, Swing & Chart Lifecycle tests passed!');
 }
