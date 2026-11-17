@@ -1,5 +1,6 @@
 import { queryDb } from '../db/database';
 import * as queries from '../db/queries';
+import { computeBlendedRealizedR } from './r-accounting';
 
 export interface ReportSummary {
   periodType: 'daily' | 'weekly' | 'monthly' | 'session';
@@ -95,29 +96,37 @@ export async function generateReportMetrics(
       stratStats[stratKey] = { trades: 0, wins: 0, tp1Hits: 0, tp2Hits: 0, winRate: 0, totalR: 0 };
     }
 
-    let rVal = 0;
+    let rVal = computeBlendedRealizedR({
+      outcomeType: o.outcome_type,
+      rMultiple1: setup?.r_multiple_1 || 2.0,
+      rMultiple2: setup?.r_multiple_2 || 3.0,
+      wasRunner: o.was_runner,
+      fallbackR: o.realized_pl
+    });
     const typeStr = String(o.outcome_type || '').toLowerCase();
 
     if (typeStr.includes('tp2')) {
       wins++;
       tp2Hits++;
-      rVal = setup?.r_multiple_2 || 3.0;
       stratStats[stratKey].wins++;
       stratStats[stratKey].tp2Hits = (stratStats[stratKey].tp2Hits || 0) + 1;
     } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
       wins++;
       tp1Hits++;
-      rVal = setup?.r_multiple_1 || 2.0;
       stratStats[stratKey].wins++;
       stratStats[stratKey].tp1Hits = (stratStats[stratKey].tp1Hits || 0) + 1;
     } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
       losses++;
-      rVal = -1.0;
     } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
-      breakevens++;
-      rVal = 0.0;
-    } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
-      rVal = Math.max(-1.0, o.realized_pl);
+      if (o.was_runner) {
+        wins++;
+        tp1Hits++;
+        stratStats[stratKey].wins++;
+        stratStats[stratKey].tp1Hits = (stratStats[stratKey].tp1Hits || 0) + 1;
+      } else {
+        breakevens++;
+      }
+    } else {
       if (rVal > 0) { wins++; stratStats[stratKey].wins++; }
       else if (rVal < 0) { losses++; }
       else { breakevens++; }

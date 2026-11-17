@@ -482,7 +482,7 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
                     </div>
                   </div>
                   <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '2px' }}>
-                    Total Locked + Float: <strong style={{ color: '#38bdf8' }}>+{(2.0 + Math.max(0, signal.unrealizedR ?? 0)).toFixed(2)}R</strong>
+                    Total Locked + Float: <strong style={{ color: '#38bdf8' }}>+{((0.80 * (signal.r_multiple_1 || 2.0)) + (0.20 * Math.max(0, signal.unrealizedR ?? 0))).toFixed(2)}R</strong>
                   </div>
                 </div>
               ) : (
@@ -1012,6 +1012,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
             strategyFilter="elite_fractal" 
             marketFilter={marketFilter}
             onMarketFilterChange={setMarketFilter}
+            enableStyleToggle={false}
           />
         </div>
       )}

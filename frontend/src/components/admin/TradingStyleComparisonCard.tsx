@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { API_BASE } from '../../config';
+import { estimateTradeFeeR, getEffectiveRealizedR, useFeesToggle } from '../../utils/rAccounting';
 
 export interface StyleComparisonRow {
   style: 'SCALP' | 'INTRADAY' | 'SWING';
@@ -45,6 +46,30 @@ export const TradingStyleComparisonCard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [includeFees, toggleFees] = useFeesToggle();
+
+  const displayedStyles = useMemo(() => {
+    if (!styleReport) return [];
+    if (!includeFees) return styleReport.styles;
+    return styleReport.styles.map((row) => {
+      const mtfSamples = (styleReport.recentMtfSetups || []).filter(
+        s => s.trading_style === row.style && (s.signal_state === 'resolved' || s.signal_state === 'runner')
+      );
+      const defaultAvgFee = row.style === 'SCALP' ? 0.075 : row.style === 'SWING' ? 0.013 : 0.043;
+      const avgFee = mtfSamples.length > 0
+        ? mtfSamples.reduce((sum, s) => sum + estimateTradeFeeR(s), 0) / mtfSamples.length
+        : defaultAvgFee;
+      const resolvedCount = row.resolvedSetups || 0;
+      const totalFee = resolvedCount * avgFee;
+      const netTotalR = Number((row.totalRealizedR - totalFee).toFixed(2));
+      const netExpectancy = resolvedCount > 0 ? Number((netTotalR / resolvedCount).toFixed(2)) : 0;
+      return {
+        ...row,
+        totalRealizedR: netTotalR,
+        expectancyR: netExpectancy,
+      };
+    });
+  }, [styleReport, includeFees]);
 
   const fetchStyleComparison = async (refresh = false) => {
     if (refresh) setSyncingStyles(true);
@@ -101,6 +126,23 @@ export const TradingStyleComparisonCard: React.FC = () => {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={toggleFees}
+            style={{
+              background: includeFees ? 'rgba(245, 158, 11, 0.22)' : 'rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${includeFees ? 'rgba(245, 158, 11, 0.7)' : 'rgba(255, 255, 255, 0.16)'}`,
+              color: includeFees ? '#fbbf24' : '#cbd5e1',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.75rem'
+            }}
+            title="Toggle estimated broker round-turn fees & commissions on/off"
+          >
+            💸 Fees: {includeFees ? 'ON' : 'OFF'}
+          </button>
           <button
             type="button"
             className="scd-filter-btn active"
@@ -180,7 +222,7 @@ export const TradingStyleComparisonCard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {styleReport.styles.map((row) => (
+                    {displayedStyles.map((row) => (
                       <tr key={row.style}>
                         <td
                           style={{
@@ -265,7 +307,11 @@ export const TradingStyleComparisonCard: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {styleReport.recentMtfSetups.map((s) => (
+                        {styleReport.recentMtfSetups.map((s) => {
+                          const displayR = (s.signal_state === 'resolved' || s.signal_state === 'runner')
+                            ? getEffectiveRealizedR(s, includeFees)
+                            : s.realized_r;
+                          return (
                           <tr key={s.id}>
                             <td
                               style={{
@@ -293,21 +339,22 @@ export const TradingStyleComparisonCard: React.FC = () => {
                               style={{
                                 fontWeight: 700,
                                 color:
-                                  s.realized_r > 0
+                                  displayR > 0
                                     ? '#34d399'
-                                    : s.realized_r < 0
+                                    : displayR < 0
                                     ? '#f87171'
                                     : '#94a3b8'
                               }}
                             >
-                              {s.realized_r > 0 ? `+${s.realized_r}R` : `${s.realized_r}R`}
+                              {displayR > 0 ? `+${displayR}R` : `${displayR}R`}
                             </td>
                             <td>{Math.round(s.conviction_score)}%</td>
                             <td style={{ color: '#94a3b8' }}>
                               {new Date(s.created_at).toLocaleString()}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

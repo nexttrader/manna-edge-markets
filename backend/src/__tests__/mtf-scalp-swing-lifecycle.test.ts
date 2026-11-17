@@ -14,8 +14,10 @@ import {
   ensureMtfTrackerTable,
   evaluateMtfRowLifecycle,
   syncMtfSetupsAndGetLiveBoard,
+  getMtfCalendarOutcomes,
   TrackedMtfSetupRow
 } from '../discovery/mtf-style-tracker';
+import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { queryDb } from '../db/database';
 import type { Candle } from '../discovery/types';
 import type { MtfStyleSetup } from '../discovery/mtf-style-signals';
@@ -127,7 +129,7 @@ async function runTests() {
   assert.strictEqual(afterTp1.entry_price_recorded, 21010, 'Limit fill price should clamp to entry_zone_high');
   assert.strictEqual(afterTp1.is_breakeven, 1, 'Stop must move to BE on TP1');
   assert.strictEqual(afterTp1.stop, 21010, 'Stop price must move to recorded entry price');
-  assert.strictEqual(afterTp1.realized_r, 2.0, 'Runner must lock +2.0R');
+  assert.strictEqual(afterTp1.realized_r, 1.6, 'Runner must lock 80% @ 2R = +1.60R');
 
   // Now TP2 hits at 14:08
   const runnerRow = makeRow({
@@ -149,7 +151,7 @@ async function runTests() {
   );
   assert.strictEqual(tp2Result.signal_state, 'resolved', 'Runner hitting TP2 must close as resolved');
   assert.strictEqual(tp2Result.outcome_type, 'tp2_hit');
-  assert.strictEqual(tp2Result.realized_r, 3.0);
+  assert.strictEqual(tp2Result.realized_r, 2.2, 'TP2 hit must blend 80%@2R + 20%@3R = +2.20R');
   assert.strictEqual(tp2Result.resolved_at, '2026-11-16T14:08:00.000Z');
   console.log('✅ TEST 3: Scalp Entry -> BE -> TP1 Runner -> TP2 Resolved chronological lifecycle passed');
 
@@ -204,7 +206,7 @@ async function runTests() {
   );
   assert.strictEqual(swingRes.signal_state, 'resolved', 'Runner hitting BE stop must close as resolved keeping TP1');
   assert.strictEqual(swingRes.outcome_type, 'tp1_hit');
-  assert.strictEqual(swingRes.realized_r, 2.0);
+  assert.strictEqual(swingRes.realized_r, 1.6, 'Runner stopped at BE must realize 80%@2R + 20%@0R = +1.60R');
   assert.strictEqual(swingRes.entry_triggered_at, '2026-11-15T12:00:00.000Z');
   assert.strictEqual(swingRes.resolved_at, '2026-11-15T20:00:00.000Z');
   console.log('✅ TEST 5: Swing Short (D1 · 4H) Entry -> Runner -> BE Retrace (+2R) passed');
@@ -288,6 +290,32 @@ async function runTests() {
   assert.ok(board2.setups.some((s) => s.id === 'mtf-scalp-TESTINST-2'), 'Active setup must be preserved');
   assert.ok(!board2.setups.some((s) => s.id === 'mtf-scalp-TESTINST-3'), 'New candidate must not supersede active setup');
   console.log('✅ TEST 6: Pending zone superseding & active trade preservation passed');
+
+  // TEST 7: True 80/20 Blended R Accounting & Calendar MTF Outcomes
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: 2.0, rMultiple2: 3.0 }), 1.6);
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: 2.0, rMultiple2: 3.0 }), 2.2);
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'be_hit', rMultiple1: 2.0, rMultiple2: 3.0, wasRunner: false }), 0.0);
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'be_hit', rMultiple1: 2.0, rMultiple2: 3.0, wasRunner: true }), 1.6);
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'sl_hit', rMultiple1: 2.0, rMultiple2: 3.0 }), -1.0);
+  assert.strictEqual(computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: 2.5, rMultiple2: 4.0 }), 2.8);
+
+  const calRowId = 'mtf-swing-CALTEST-1';
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price,
+      entry_triggered_at, resolved_at, outcome_type, invalidation_reason, created_at, updated_at
+    ) VALUES (?, ?, 'SWING', 'd1_h4', 'manna_swing', '1D', '4H', 'EUR/USD', 'forex', 'long', 1.0800, 1.0810, 1.0805, 1.0770, 1.0770, 1.0875, 1.0910, 2, 3, 88, 92, 'london', 'resolved', 1, 2.2, 1.0912, ?, ?, 'tp2_hit', 'tp2_hit', ?, ?)`,
+    [calRowId, calRowId, baseTime, baseTime, baseTime, baseTime]
+  );
+  const calOutcomes = await getMtfCalendarOutcomes();
+  const calTrade = calOutcomes.find(o => o.setup_id === calRowId);
+  assert.ok(calTrade, 'Resolved MTF trade must appear in calendar outcomes');
+  assert.strictEqual(calTrade!.trading_style, 'SWING');
+  assert.strictEqual(calTrade!.realized_r, 2.2, 'Calendar MTF outcome must carry blended +2.2R');
+  console.log('✅ TEST 7: 80/20 Blended R Accounting & Calendar MTF Outcomes passed');
 
   console.log('\n🎉 All Scalping, Swing & Chart Lifecycle tests passed!');
 }

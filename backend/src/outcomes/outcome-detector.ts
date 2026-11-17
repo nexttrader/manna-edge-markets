@@ -5,6 +5,7 @@ import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
 import { isMarketOpen } from '../scheduler/killzone-mapper';
+import { computeBlendedRealizedR } from '../analytics/r-accounting';
 
 const logger = createLogger('OutcomeDetector');
 
@@ -189,14 +190,12 @@ export class OutcomeDetector {
         }
         
         if (hitDetected) {
-          // Hard-cap: SL always -1R, BE always 0R, never more or less
-          const realizedPL = outcomeType === 'tp2_hit'
-            ? (setup.r_multiple_2 || 3.0)
-            : outcomeType === 'tp1_hit'
-              ? (setup.r_multiple_1 || 2.0)
-              : outcomeType === 'be_hit'
-                ? 0.0
-                : -1.0; // sl_hit hard-capped at -1.0R
+          // 80/20 partial scale-out accounting: TP1+BE = 0.80*r1 (+1.60R), TP2 = 0.80*r1 + 0.20*r2 (+2.20R), BE = 0R, SL = -1R
+          const realizedPL = computeBlendedRealizedR({
+            outcomeType,
+            rMultiple1: setup.r_multiple_1 || 2.0,
+            rMultiple2: setup.r_multiple_2 || 3.0
+          });
           
           const risk = Math.abs(entryPrice - origStop);
           // FIX #7: Default to null — fabricated fallback values corrupt historical analytics.
@@ -334,10 +333,14 @@ export class OutcomeDetector {
         
         if (tp2Hit) {
           const execPrice = isLong ? Math.max(currentPrice, tp2Target) : Math.min(currentPrice, tp2Target);
-          const newRealizedR = setup.r_multiple_2 || 3.0;
+          const newRealizedR = computeBlendedRealizedR({
+            outcomeType: 'tp2_hit',
+            rMultiple1: setup.r_multiple_1 || 2.0,
+            rMultiple2: setup.r_multiple_2 || 3.0
+          });
           
           let runnerMae: number | undefined;
-          let runnerMfe = newRealizedR;
+          let runnerMfe = setup.r_multiple_2 || 3.0;
           let runnerHigh = maxHigh;
           let runnerLow = minLow;
           let runnerBars = 1;
@@ -377,17 +380,21 @@ export class OutcomeDetector {
             invalidation_reason: 'tp2_hit'
           });
           
-          logger.info({ setupId: setup.id, instrument: setup.instrument, newRealizedR }, 'Runner reached TP2 (3R)! Analytics upgraded to 3R');
+          logger.info({ setupId: setup.id, instrument: setup.instrument, newRealizedR }, 'Runner reached TP2! Analytics upgraded to blended 80/20 R');
           publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp2_hit', realized_pl: newRealizedR, was_runner: 1 } });
         } else if (beHit) {
-          const finalRealizedR = setup.r_multiple_1 || 2.0;
+          const finalRealizedR = computeBlendedRealizedR({
+            outcomeType: 'tp1_hit',
+            rMultiple1: setup.r_multiple_1 || 2.0,
+            rMultiple2: setup.r_multiple_2 || 3.0
+          });
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
             tradable: 0,
             resolved_at: new Date().toISOString(),
             invalidation_reason: 'tp1_hit'
           });
           
-          logger.info({ setupId: setup.id, instrument: setup.instrument, finalRealizedR }, 'Runner retraced to Break Even after TP1. Full 2.0R TP1 win retained in analytics.');
+          logger.info({ setupId: setup.id, instrument: setup.instrument, finalRealizedR }, 'Runner retraced to Break Even after TP1. Banked 80% TP1 win retained in analytics.');
           publishEvents.emit('setup_resolved', { 
             setup: { ...setup, signal_state: 'resolved', invalidation_reason: 'tp1_hit' }, 
             outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: finalRealizedR, was_runner: 1, exit_reason: 'TP1 (Runner BE)' } 

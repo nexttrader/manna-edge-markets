@@ -21,6 +21,7 @@ import { ExpandableCalendar } from '../components/ExpandableCalendar';
 import { SetupChartModal } from '../components/SetupChartModal';
 import { TelegramResendModal } from '../components/TelegramResendModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
+import { getEffectiveRealizedR, estimateTradeFeeR, useFeesToggle } from '../utils/rAccounting';
 import type { EdgeSetup } from '../types';
 
 function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
@@ -241,6 +242,7 @@ export const AdminPanel: React.FC = () => {
 
   const [supportUnreadCount, _setSupportUnreadCount] = useState(0);
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
+  const [includeFees, toggleFees] = useFeesToggle();
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
 
   const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
@@ -682,6 +684,17 @@ export const AdminPanel: React.FC = () => {
   const strategies = analytics?.strategies || [];
   const killzones = analytics?.killzones;
   const recentOutcomes = analytics?.recentOutcomes || [];
+  const computeStrategyFeeR = (stratId: string | 'all', totalTradesCount: number) => {
+    const matching = stratId === 'all'
+      ? recentOutcomes
+      : recentOutcomes.filter((o: any) => (o.strategy_id || 'manna_snd') === stratId);
+    if (matching.length === 0) return Number((totalTradesCount * 0.043).toFixed(2));
+    const sampleFee = matching.reduce((sum: number, o: any) => sum + estimateTradeFeeR(o), 0);
+    if (totalTradesCount > matching.length) {
+      return Number(((sampleFee / matching.length) * totalTradesCount).toFixed(2));
+    }
+    return Number(sampleFee.toFixed(2));
+  };
   const convictionPerformance = analytics?.convictionPerformance;
   const totalOutcomePages = Math.ceil(recentOutcomes.length / OUTCOMES_PER_PAGE) || 1;
   const paginatedOutcomes = recentOutcomes.slice((outcomesPage - 1) * OUTCOMES_PER_PAGE, outcomesPage * OUTCOMES_PER_PAGE);
@@ -1458,15 +1471,41 @@ export const AdminPanel: React.FC = () => {
               ))}
             </div>
 
-        <ExpandableCalendar outcomes={recentOutcomes} strategyFilter={strategyFilter} />
+        <ExpandableCalendar
+          outcomes={recentOutcomes}
+          mtfOutcomes={analytics?.mtfOutcomes || []}
+          strategyFilter={strategyFilter}
+          enableStyleToggle={true}
+          includeFees={includeFees}
+          onToggleFees={toggleFees}
+        />
 
         <MetricsPanel />
 
         {/* Strategy Performance Matrix Comparison Cards */}
         <div className="strategy-matrix-container font-mono">
-          <div className="matrix-section-header">
-            <h2 className="section-title">⚡ STRATEGY PERFORMANCE MATRIX</h2>
-            <span className="matrix-subtitle">Real-time institutional performance metrics & strategy breakdown</span>
+          <div className="matrix-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 className="section-title">⚡ STRATEGY PERFORMANCE MATRIX</h2>
+              <span className="matrix-subtitle">Real-time institutional performance metrics &amp; strategy breakdown (80/20 scale-out R)</span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleFees}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: `1px solid ${includeFees ? 'rgba(245,158,11,0.7)' : 'rgba(255,255,255,0.18)'}`,
+                background: includeFees ? 'rgba(245,158,11,0.2)' : 'rgba(0,0,0,0.35)',
+                color: includeFees ? '#fbbf24' : 'rgba(255,255,255,0.75)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Toggle estimated broker round-turn fees & commissions on/off"
+            >
+              💸 Fees: {includeFees ? 'ON (Net of Fees)' : 'OFF (Gross R)'}
+            </button>
           </div>
 
           <div className="strategy-cards-grid font-mono">
@@ -1522,10 +1561,22 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div className="strat-hero-return-box">
-                  <span className="hero-return-label">NET REALIZED RETURN</span>
-                  <span className={`hero-return-value ${analytics.collective.totalRealizedR > 0 ? 'text-green' : analytics.collective.totalRealizedR < 0 ? 'text-red' : 'text-cyan'}`}>
-                    {analytics.collective.totalRealizedR > 0 ? '+' : ''}{analytics.collective.totalRealizedR}R
-                  </span>
+                  {(() => {
+                    const colFeeR = includeFees
+                      ? computeStrategyFeeR('all', (analytics.collective.resolvedSignals || 0) + (analytics.collective.runnerCount || 0))
+                      : 0;
+                    const colDisplayR = Number((analytics.collective.totalRealizedR - colFeeR).toFixed(2));
+                    return (
+                      <>
+                        <span className="hero-return-label">
+                          {includeFees ? `NET REALIZED RETURN (-${colFeeR}R FEES)` : 'NET REALIZED RETURN (GROSS)'}
+                        </span>
+                        <span className={`hero-return-value ${colDisplayR > 0 ? 'text-green' : colDisplayR < 0 ? 'text-red' : 'text-cyan'}`}>
+                          {colDisplayR > 0 ? '+' : ''}{colDisplayR}R
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -1582,10 +1633,22 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div className="strat-hero-return-box">
-                  <span className="hero-return-label">NET REALIZED RETURN</span>
-                  <span className={`hero-return-value ${strat.totalRealizedR > 0 ? 'text-green' : strat.totalRealizedR < 0 ? 'text-red' : 'text-cyan'}`}>
-                    {strat.totalRealizedR > 0 ? '+' : ''}{strat.totalRealizedR}R
-                  </span>
+                  {(() => {
+                    const stratFeeR = includeFees
+                      ? computeStrategyFeeR(strat.id, (strat.resolvedSignals || 0) + (strat.runnerCount || 0))
+                      : 0;
+                    const stratDisplayR = Number((strat.totalRealizedR - stratFeeR).toFixed(2));
+                    return (
+                      <>
+                        <span className="hero-return-label">
+                          {includeFees ? `NET REALIZED RETURN (-${stratFeeR}R FEES)` : 'NET REALIZED RETURN (GROSS)'}
+                        </span>
+                        <span className={`hero-return-value ${stratDisplayR > 0 ? 'text-green' : stratDisplayR < 0 ? 'text-red' : 'text-cyan'}`}>
+                          {stratDisplayR > 0 ? '+' : ''}{stratDisplayR}R
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -2325,7 +2388,7 @@ export const AdminPanel: React.FC = () => {
                 <tbody>
                   {paginatedOutcomes.map((o: any) => {
                     const isWin = o.outcome_type?.includes('tp');
-                    const rVal = o.realized_r ?? 0;
+                    const rVal = getEffectiveRealizedR(o, includeFees);
                     const telegramId = formatTelegramTradeId({ id: o.setup_id || o.id, instrument: o.instrument });
                     const isCopied = copiedOutcomeTradeId === o.id || copiedOutcomeTradeId === o.setup_id;
 

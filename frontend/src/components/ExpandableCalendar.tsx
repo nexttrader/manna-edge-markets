@@ -2,7 +2,17 @@ import { useState, useMemo } from 'react';
 import type { EdgeSetup } from '../types';
 import { SetupChartModal } from './SetupChartModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
+import {
+  getAccurateRealizedR,
+  estimateTradeFeeR,
+  getEffectiveRealizedR,
+  getTradeStyleCategory,
+  useFeesToggle,
+  type TradingStyleFilter,
+} from '../utils/rAccounting';
 import './ExpandableCalendar.css';
+
+export { getAccurateRealizedR };
 
 interface Outcome {
   id: string;
@@ -11,6 +21,11 @@ interface Outcome {
   market?: string;
   bias?: string;
   strategy_id?: string;
+  trading_style?: string;
+  timeframe?: string;
+  htf_timeframe?: string;
+  entry_timeframe?: string;
+  was_runner?: boolean | number;
   conviction_score?: number;
   outcome_type: string;
   realized_r?: number;
@@ -44,39 +59,7 @@ interface Outcome {
   metadata?: any;
 }
 
-export function getAccurateRealizedR(trade: Outcome): number {
-  const strat = trade.strategy_id || '';
-  const ot = (trade.outcome_type || trade.invalidation_reason || '').toLowerCase();
-
-  // For Elite Fractal and Sentinel v2, enforce true 80/20 partial scale-out accounting:
-  if (strat === 'elite_fractal' || strat === 'sentinel_v2') {
-    const r1 = 2.0;
-    const r2 = 3.0;
-
-    if (ot.includes('tp2')) {
-      // 80% at TP1 + 20% at TP2
-      return Number(((0.80 * r1) + (0.20 * r2)).toFixed(2));
-    }
-    if (ot.includes('tp1')) {
-      // 80% at TP1 + 20% at BE
-      return Number((0.80 * r1).toFixed(2));
-    }
-    if (ot.includes('be') || ot.includes('breakeven')) {
-      return 0.0;
-    }
-    if (ot.includes('sl') || ot.includes('stop')) {
-      return -1.0;
-    }
-  }
-
-  // Fallback to trade.realized_r if present
-  if (trade.realized_r !== undefined && trade.realized_r !== null) {
-    return Number(trade.realized_r);
-  }
-  return 0.0;
-}
-
-function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
+function convertOutcomeToSetup(trade: Outcome, includeFees: boolean): EdgeSetup {
   const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
   const initialStop = trade.initial_stop || trade.stop || 0;
   const currentStop = trade.stop || initialStop;
@@ -86,7 +69,7 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
     trade.outcome_type?.includes('sl') ? initialStop :
     trade.outcome_type?.includes('be') ? entryPrice : undefined
   );
-  const calculatedR = getAccurateRealizedR(trade);
+  const calculatedR = getEffectiveRealizedR(trade, includeFees);
 
   return {
     id: trade.setup_id || trade.id,
@@ -96,6 +79,10 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
     conviction_score: trade.conviction_score || 85,
     conviction: trade.conviction_score || 85,
     strategy_id: trade.strategy_id || 'manna_snd',
+    trading_style: (trade.trading_style as EdgeSetup['trading_style']) || undefined,
+    timeframe: trade.timeframe,
+    htf_timeframe: trade.htf_timeframe,
+    entry_timeframe: trade.entry_timeframe,
     signal_state: 'resolved',
     entry_zone_low: trade.entry_zone_low || (entryPrice ? entryPrice * 0.999 : 0),
     entry_zone_high: trade.entry_zone_high || (entryPrice ? entryPrice * 1.001 : 0),
@@ -127,9 +114,13 @@ function convertOutcomeToSetup(trade: Outcome): EdgeSetup {
 
 interface ExpandableCalendarProps {
   outcomes: Outcome[];
+  mtfOutcomes?: Outcome[];
   strategyFilter: string;
   marketFilter?: 'all' | 'forex' | 'futures';
   onMarketFilterChange?: (market: 'all' | 'forex' | 'futures') => void;
+  enableStyleToggle?: boolean;
+  includeFees?: boolean;
+  onToggleFees?: () => void;
 }
 
 function getOutcomeMarket(trade: Outcome): 'forex' | 'futures' {
@@ -223,12 +214,20 @@ function getTradingDayAndSession(timeStr: string): { tradingDay: string; session
 
 export function ExpandableCalendar({
   outcomes = [],
+  mtfOutcomes = [],
   strategyFilter = 'all',
   marketFilter: propsMarketFilter,
-  onMarketFilterChange
+  onMarketFilterChange,
+  enableStyleToggle = true,
+  includeFees: propsIncludeFees,
+  onToggleFees: propsOnToggleFees,
 }: ExpandableCalendarProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [internalMarketFilter, setInternalMarketFilter] = useState<'all' | 'forex' | 'futures'>(propsMarketFilter || 'all');
+  const [styleFilter, setStyleFilter] = useState<TradingStyleFilter>('intraday');
+  const [internalIncludeFees, toggleInternalFees] = useFeesToggle();
+  const activeIncludeFees = propsIncludeFees !== undefined ? propsIncludeFees : internalIncludeFees;
+  const handleToggleFees = propsOnToggleFees || toggleInternalFees;
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
   const [selectedReviewSetup, setSelectedReviewSetup] = useState<EdgeSetup | null>(null);
@@ -277,15 +276,45 @@ export function ExpandableCalendar({
     return stratId === strategyFilter;
   };
 
-  // 1. Calculate overall Forex vs Futures realized R splits
-  const { totalFuturesR, totalForexR, totalCombinedR, forexCount, futuresCount } = useMemo(() => {
+  // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes
+  const { combinedOutcomes, styleCounts } = useMemo(() => {
+    const taggedIntraday = outcomes.map(o => ({
+      ...o,
+      trading_style: o.trading_style || 'INTRADAY',
+    }));
+    const merged: Outcome[] = enableStyleToggle ? [...taggedIntraday, ...mtfOutcomes] : taggedIntraday;
+    const counts = { intraday: 0, scalp: 0, swing: 0, all: 0 };
+
+    merged.forEach(o => {
+      const style = getTradeStyleCategory(o);
+      if (style === 'intraday' && !matchesStrategy(o.strategy_id)) return;
+      counts[style]++;
+      counts.all++;
+    });
+
+    return { combinedOutcomes: merged, styleCounts: counts };
+  }, [outcomes, mtfOutcomes, enableStyleToggle, strategyFilter]);
+
+  const activeStyleFilter: TradingStyleFilter = enableStyleToggle ? styleFilter : 'intraday';
+
+  const matchesActiveStyleAndStrategy = (o: Outcome) => {
+    const style = getTradeStyleCategory(o);
+    if (activeStyleFilter !== 'all' && style !== activeStyleFilter) return false;
+    if (style === 'intraday' && !matchesStrategy(o.strategy_id)) return false;
+    return true;
+  };
+
+  // 1. Calculate overall Forex vs Futures realized R splits (respecting Style + Fees toggle)
+  const { totalFuturesR, totalForexR, totalCombinedR, totalFeesR, forexCount, futuresCount } = useMemo(() => {
     let fut = 0;
     let fx = 0;
+    let feesSum = 0;
     let fCount = 0;
     let futCount = 0;
-    outcomes.forEach(o => {
-      if (!matchesStrategy(o.strategy_id)) return;
-      const r = getAccurateRealizedR(o);
+    combinedOutcomes.forEach(o => {
+      if (!matchesActiveStyleAndStrategy(o)) return;
+      const feeR = estimateTradeFeeR(o);
+      const r = getEffectiveRealizedR(o, activeIncludeFees);
       const mkt = getOutcomeMarket(o);
       if (mkt === 'forex') {
         fx += r;
@@ -294,20 +323,24 @@ export function ExpandableCalendar({
         fut += r;
         futCount++;
       }
+      if (currentMarketFilter === 'all' || mkt === currentMarketFilter) {
+        feesSum += feeR;
+      }
     });
     return {
       totalFuturesR: fut,
       totalForexR: fx,
       totalCombinedR: fut + fx,
+      totalFeesR: feesSum,
       forexCount: fCount,
       futuresCount: futCount
     };
-  }, [outcomes, strategyFilter]);
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter]);
 
-  // 2. Filter outcomes by the selected strategy and market, mapping them to trading days and sessions
+  // 2. Filter outcomes by the selected style, strategy and market, mapping them to trading days and sessions
   const processedOutcomes = useMemo(() => {
-    const filtered = outcomes.filter(o => {
-      if (!matchesStrategy(o.strategy_id)) return false;
+    const filtered = combinedOutcomes.filter(o => {
+      if (!matchesActiveStyleAndStrategy(o)) return false;
       if (currentMarketFilter !== 'all') {
         if (getOutcomeMarket(o) !== currentMarketFilter) return false;
       }
@@ -337,7 +370,7 @@ export function ExpandableCalendar({
     });
 
     return grouped;
-  }, [outcomes, strategyFilter, currentMarketFilter]);
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter]);
 
   // 3. Generate Calendar Month Grid Cells
   const calendarCells = useMemo(() => {
@@ -394,7 +427,7 @@ export function ExpandableCalendar({
         Object.keys(dayTradingData).forEach((sKey) => {
           const session = sKey as SessionType;
           const trades = dayTradingData[session];
-          const sessionTotalR = trades.reduce((acc, t) => acc + getAccurateRealizedR(t), 0);
+          const sessionTotalR = trades.reduce((acc, t) => acc + getEffectiveRealizedR(t, activeIncludeFees), 0);
           sessionsData[session] = {
             trades,
             totalR: sessionTotalR
@@ -402,7 +435,7 @@ export function ExpandableCalendar({
           dayTotalR += sessionTotalR;
           trades.forEach(t => {
             dayTradesCount++;
-            const r = getAccurateRealizedR(t);
+            const r = getEffectiveRealizedR(t, activeIncludeFees);
             const mkt = getOutcomeMarket(t);
             if (mkt === 'forex') {
               dayForexR += r;
@@ -455,7 +488,7 @@ export function ExpandableCalendar({
     }
 
     return cells;
-  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter]);
+  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter, activeIncludeFees]);
 
   // Navigate Months
   const handlePrevMonth = () => {
@@ -486,7 +519,7 @@ export function ExpandableCalendar({
         ...selectedDayData.sessions.ny_pm.trades
       ];
       allTrades.forEach(t => {
-        const r = getAccurateRealizedR(t);
+        const r = getEffectiveRealizedR(t, activeIncludeFees);
         const mkt = getOutcomeMarket(t);
         if (mkt === 'forex') {
           fx += r;
@@ -496,7 +529,7 @@ export function ExpandableCalendar({
       });
     }
     return { dayFuturesR: fut, dayForexR: fx };
-  }, [selectedDayData]);
+  }, [selectedDayData, activeIncludeFees]);
 
   const handleDayClick = (cell: DayData) => {
     if (!cell.isCurrentMonth) return;
@@ -519,6 +552,38 @@ export function ExpandableCalendar({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: '1.15rem' }}>Session Performance Calendar</h2>
+                {enableStyleToggle && (
+                  <div className="calendar-style-toggle" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className={`calendar-style-btn ${activeStyleFilter === 'intraday' ? 'active intraday' : ''}`}
+                      onClick={() => { setStyleFilter('intraday'); setSelectedDayStr(null); }}
+                    >
+                      📊 Intraday ({styleCounts.intraday})
+                    </button>
+                    <button
+                      type="button"
+                      className={`calendar-style-btn ${activeStyleFilter === 'scalp' ? 'active scalp' : ''}`}
+                      onClick={() => { setStyleFilter('scalp'); setSelectedDayStr(null); }}
+                    >
+                      ⚡ Scalping ({styleCounts.scalp})
+                    </button>
+                    <button
+                      type="button"
+                      className={`calendar-style-btn ${activeStyleFilter === 'swing' ? 'active swing' : ''}`}
+                      onClick={() => { setStyleFilter('swing'); setSelectedDayStr(null); }}
+                    >
+                      🌊 Swing ({styleCounts.swing})
+                    </button>
+                    <button
+                      type="button"
+                      className={`calendar-style-btn ${activeStyleFilter === 'all' ? 'active all' : ''}`}
+                      onClick={() => { setStyleFilter('all'); setSelectedDayStr(null); }}
+                    >
+                      🌐 All ({styleCounts.all})
+                    </button>
+                  </div>
+                )}
                 <div className="calendar-market-toggle" onClick={(e) => e.stopPropagation()}>
                   <button 
                     type="button" 
@@ -542,6 +607,14 @@ export function ExpandableCalendar({
                     📈 Futures ({futuresCount})
                   </button>
                 </div>
+                <button
+                  type="button"
+                  className={`calendar-fees-toggle ${activeIncludeFees ? 'on' : 'off'}`}
+                  onClick={(e) => { e.stopPropagation(); handleToggleFees(); }}
+                  title="Toggle estimated broker round-turn fees & commissions on/off"
+                >
+                  💸 Fees: {activeIncludeFees ? 'ON' : 'OFF'}
+                </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
                 {currentMarketFilter === 'all' ? (
@@ -562,6 +635,14 @@ export function ExpandableCalendar({
                   <>
                     <span className="market-split-label" style={{ color: '#fbbf24' }}>FUTURES CUMULATIVE:</span>
                     <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
+                  </>
+                )}
+                {activeIncludeFees && totalFeesR > 0 && (
+                  <>
+                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                    <span style={{ color: '#f59e0b', fontSize: '0.74rem' }}>
+                      Fees Deducted: -{totalFeesR.toFixed(2)}R (-${(totalFeesR * riskPerR).toFixed(2)})
+                    </span>
                   </>
                 )}
               </div>
@@ -623,11 +704,52 @@ export function ExpandableCalendar({
                   <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
                 </>
               )}
+              {activeIncludeFees && totalFeesR > 0 && (
+                <>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                  <span style={{ color: '#f59e0b', fontSize: '0.74rem' }}>
+                    Fees Deducted: -{totalFeesR.toFixed(2)}R (-${(totalFeesR * riskPerR).toFixed(2)})
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         <div className="calendar-controls">
+          {enableStyleToggle && (
+            <div className="calendar-style-toggle">
+              <button
+                type="button"
+                className={`calendar-style-btn ${activeStyleFilter === 'intraday' ? 'active intraday' : ''}`}
+                onClick={() => { setStyleFilter('intraday'); setSelectedDayStr(null); }}
+              >
+                📊 Intraday ({styleCounts.intraday})
+              </button>
+              <button
+                type="button"
+                className={`calendar-style-btn ${activeStyleFilter === 'scalp' ? 'active scalp' : ''}`}
+                onClick={() => { setStyleFilter('scalp'); setSelectedDayStr(null); }}
+              >
+                ⚡ Scalping ({styleCounts.scalp})
+              </button>
+              <button
+                type="button"
+                className={`calendar-style-btn ${activeStyleFilter === 'swing' ? 'active swing' : ''}`}
+                onClick={() => { setStyleFilter('swing'); setSelectedDayStr(null); }}
+              >
+                🌊 Swing ({styleCounts.swing})
+              </button>
+              <button
+                type="button"
+                className={`calendar-style-btn ${activeStyleFilter === 'all' ? 'active all' : ''}`}
+                onClick={() => { setStyleFilter('all'); setSelectedDayStr(null); }}
+              >
+                🌐 All ({styleCounts.all})
+              </button>
+            </div>
+          )}
+
           {/* Market Toggle in Main Header Controls */}
           <div className="calendar-market-toggle">
             <button 
@@ -652,6 +774,15 @@ export function ExpandableCalendar({
               📈 Futures ({futuresCount})
             </button>
           </div>
+
+          <button
+            type="button"
+            className={`calendar-fees-toggle ${activeIncludeFees ? 'on' : 'off'}`}
+            onClick={handleToggleFees}
+            title="Toggle estimated broker round-turn fees & commissions on/off"
+          >
+            💸 Fees: {activeIncludeFees ? 'ON' : 'OFF'}
+          </button>
 
           {/* Risk unit size selection */}
           <div className="risk-input-group">
@@ -799,8 +930,11 @@ export function ExpandableCalendar({
                       sessionData.trades.map((trade) => {
                         const isWin = trade.outcome_type?.includes('tp');
                         const isLoss = trade.outcome_type?.includes('sl');
-                        const tradeR = getAccurateRealizedR(trade);
+                        const grossR = getAccurateRealizedR(trade);
+                        const feeR = estimateTradeFeeR(trade);
+                        const tradeR = getEffectiveRealizedR(trade, activeIncludeFees);
                         const tradePnlClass = getPnlClass(tradeR);
+                        const tradeStyle = getTradeStyleCategory(trade);
                         const telegramId = formatTelegramTradeId({ id: trade.setup_id || trade.id, instrument: trade.instrument });
                         const isCopied = copiedTradeId === trade.id || copiedTradeId === trade.setup_id;
 
@@ -817,12 +951,30 @@ export function ExpandableCalendar({
                           <div 
                             key={trade.id} 
                             className="session-trade-item"
-                            onClick={() => setSelectedReviewSetup(convertOutcomeToSetup(trade))}
+                            onClick={() => setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees))}
                             title="Click to review trade audit and open chart view"
                           >
                             <div className="trade-item-header">
                               <span className="trade-symbol-bias">
                                 {trade.instrument || 'SETUP'}
+                                <span
+                                  className="trade-strat-badge"
+                                  style={{
+                                    background: tradeStyle === 'scalp'
+                                      ? 'rgba(245, 158, 11, 0.16)'
+                                      : tradeStyle === 'swing'
+                                      ? 'rgba(16, 185, 129, 0.16)'
+                                      : 'rgba(99, 102, 241, 0.16)',
+                                    border: `1px solid ${tradeStyle === 'scalp' ? '#f59e0b' : tradeStyle === 'swing' ? '#10b981' : '#818cf8'}`,
+                                    color: tradeStyle === 'scalp' ? '#fbbf24' : tradeStyle === 'swing' ? '#34d399' : '#a5b4fc',
+                                    fontSize: '0.6rem',
+                                    fontWeight: 800,
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                  }}
+                                >
+                                  {tradeStyle === 'scalp' ? '⚡ SCALP' : tradeStyle === 'swing' ? '🌊 SWING' : '📊 INTRADAY'}
+                                </span>
                                 <span 
                                   className="trade-strat-badge" 
                                   style={{ 
@@ -892,22 +1044,27 @@ export function ExpandableCalendar({
                               </div>
                             </div>
                             
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '0.78rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '0.78rem', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ color: 'var(--kdt-text-muted, #888)' }}>
                                 Strategy: <span style={{ color: '#fff' }}>{trade.strategy_id || 'manna_snd'}</span>
+                                {activeIncludeFees && (
+                                  <span style={{ color: '#f59e0b', marginLeft: '6px', fontSize: '0.7rem' }}>
+                                    (Gross {formatPNLString(grossR)} · Fee -{feeR.toFixed(2)}R)
+                                  </span>
+                                )}
                               </span>
                               <span className={`trade-pnl-value ${tradePnlClass}`}>
                                 {formatPNLString(tradeR)} ({formatCurrency(tradeR)})
                               </span>
                             </div>
 
-                            {trade.strategy_id === 'elite_fractal' && isWin && (
+                            {isWin && (
                               <div style={{ fontSize: '0.67rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(167,139,250,0.25)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>⚡ Scale-Out:</span>
+                                <span>⚡ 80/20 Scale-Out:</span>
                                 <strong>
                                   {trade.outcome_type?.includes('tp2') 
-                                    ? `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ ${trade.r_multiple_2 || 3}R (+${((trade.r_multiple_2 || 3) * 0.2).toFixed(2)}R)`
-                                    : `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ BE (+0.00R)`}
+                                    ? `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ ${trade.r_multiple_2 || 3}R (+${((trade.r_multiple_2 || 3) * 0.2).toFixed(2)}R) = +${(((trade.r_multiple_1 || 2) * 0.8) + ((trade.r_multiple_2 || 3) * 0.2)).toFixed(2)}R`
+                                    : `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ BE (+0.00R) = +${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R`}
                                 </strong>
                               </div>
                             )}
@@ -925,7 +1082,7 @@ export function ExpandableCalendar({
                               className="trade-review-btn font-mono"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedReviewSetup(convertOutcomeToSetup(trade));
+                                setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees));
                               }}
                             >
                               📊 Review Trade & Chart View

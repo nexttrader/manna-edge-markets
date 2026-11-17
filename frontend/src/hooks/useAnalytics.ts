@@ -72,6 +72,7 @@ export interface AnalyticsData {
   recentOutcomes: Array<{
     id: string;
     setup_id: string;
+    trading_style?: string;
     instrument?: string;
     market?: string;
     bias?: string;
@@ -90,6 +91,7 @@ export interface AnalyticsData {
     holding_duration_min?: number;
     created_at?: string;
   }>;
+  mtfOutcomes?: Array<any>;
 }
 
 export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number = 10000) {

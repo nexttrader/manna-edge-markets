@@ -577,10 +577,10 @@ class TelegramBotService {
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 <b>Trade ID:</b> <code>${id}</code>
 📊 <b>Asset:</b> ${sym}
-🎯 <b>Action:</b> CLOSE PARTIAL (50%)
-📢 <b>Status:</b> TP1 HIT (+2.0R)
+🎯 <b>Action:</b> CLOSE PARTIAL (80%)
+📢 <b>Status:</b> TP1 HIT (+2.0R Level · +1.60R Banked)
 💰 <b>Price Level:</b> <code>${setup.tp1}</code>
-👉 <b>Instruction:</b> Close 50% lot size at TP1 (+2.0R). Keep remaining runner open for TP2 with Stop Loss locked at Breakeven (<code>${bePx}</code>).
+👉 <b>Instruction:</b> Close 80% lot size at TP1 (+2.0R). Keep remaining 20% runner open for TP2 with Stop Loss locked at Breakeven (<code>${bePx}</code>).
 📅 <b>Date &amp; Time:</b> <code>${fmtTs()}</code>
 ━━━━━━━━━━━━━━━━━━━━━`;
   }
@@ -593,10 +593,10 @@ class TelegramBotService {
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 <b>Trade ID:</b> <code>${id}</code>
 📊 <b>Asset:</b> ${sym}
-🎯 <b>Action:</b> CLOSE FULL POSITION
-📢 <b>Status:</b> TP2 HIT (+3.0R)
+🎯 <b>Action:</b> CLOSE REMAINING 20% RUNNER
+📢 <b>Status:</b> TP2 HIT (+3.0R Level · +2.20R Blended Net)
 💰 <b>Price Level:</b> <code>${setup.tp2 ?? setup.tp1}</code>
-🎉 <b>Result:</b> Full TP2 runner target achieved! Trade closed at +3.0R profit.
+🎉 <b>Result:</b> TP2 runner target achieved! 80% @ +2.0R + 20% @ +3.0R = +2.20R blended profit.
 📅 <b>Date &amp; Time:</b> <code>${fmtTs()}</code>
 ━━━━━━━━━━━━━━━━━━━━━`;
   }

@@ -15,6 +15,8 @@ import { runSystemHealthCheck, getCachedSystemHealth } from '../diagnostics/heal
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { calculateTradeExcursion, buildSequenceExcursionCSV, buildCandleReplayCSV, loadDetailedTradeExcursions, preloadCandlesForSymbols, DetailedTradeExcursion } from '../analytics/candle-excursion-service';
 import { backfillDatabaseOutcomes } from '../analytics/backfill-csv-mae';
+import { computeBlendedRealizedR } from '../analytics/r-accounting';
+import { getMtfCalendarOutcomes } from '../discovery/mtf-style-tracker';
 
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
 import { saveSignalsSnapshot } from '../db/signal-snapshot-restore';
@@ -986,12 +988,12 @@ async function performRetroactiveRestoration(): Promise<{ deletedOutcomesCount: 
   // Restore setups that hit TP1 but were mistakenly marked as be_hit when the runner remainder touched entry
   await queryDb(`UPDATE edge_setups SET invalidation_reason = 'tp1_hit' WHERE invalidation_reason = 'be_hit' AND id IN (SELECT setup_id FROM outcomes WHERE outcome_type = 'tp1_hit')`);
   await queryDb(`UPDATE forex_edge_setups SET invalidation_reason = 'tp1_hit' WHERE invalidation_reason = 'be_hit' AND id IN (SELECT setup_id FROM outcomes WHERE outcome_type = 'tp1_hit')`);
-  await queryDb(`UPDATE outcomes SET outcome_type = 'tp1_hit', realized_pl = 2.0 WHERE outcome_type = 'be_hit' AND was_runner = 1`);
+  await queryDb(`UPDATE outcomes SET outcome_type = 'tp1_hit', realized_pl = 1.6 WHERE outcome_type = 'be_hit' AND was_runner = 1`);
 
   await queryDb(`UPDATE outcomes SET realized_pl = -1.0 WHERE outcome_type = 'sl_hit' AND (realized_pl IS NULL OR realized_pl < -1.0 OR realized_pl > 0)`);
   await queryDb(`UPDATE outcomes SET realized_pl = 0.0 WHERE (outcome_type = 'be_hit' OR outcome_type = 'breakeven') AND (was_runner IS NULL OR was_runner = 0) AND realized_pl != 0.0`);
-  await queryDb(`UPDATE outcomes SET realized_pl = 2.0 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
-  await queryDb(`UPDATE outcomes SET realized_pl = 3.0 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0)`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 1.6 WHERE outcome_type = 'tp1_hit' AND (realized_pl IS NULL OR realized_pl <= 0 OR realized_pl = 2.0)`);
+  await queryDb(`UPDATE outcomes SET realized_pl = 2.2 WHERE outcome_type = 'tp2_hit' AND (realized_pl IS NULL OR realized_pl <= 0 OR realized_pl = 3.0)`);
 
   // 4. Sync state ONLY for truly entered trades (entry_triggered_at IS NOT NULL) that have valid outcomes
   await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
@@ -1164,13 +1166,9 @@ router.get('/analytics', async (req: Request, res: Response) => {
     let matrixRankOneLosses = 0;
 
     const enrichedOutcomes = outcomes.map((o: any) => {
-      let tradeR = 0;
-      // Hard-cap: losses are always -1R
-      if (o.outcome_type === 'tp1_hit') tradeR = o.r_multiple_1 || 2.0;
-      else if (o.outcome_type === 'tp2_hit') tradeR = o.r_multiple_2 || 3.0;
-      else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
-      else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
-      else {
+      let fallbackCustomR: number | null = null;
+      const otLower = String(o.outcome_type || '').toLowerCase();
+      if (!otLower.includes('tp') && !otLower.includes('sl') && !otLower.includes('stop') && !otLower.includes('be') && !otLower.includes('breakeven')) {
         const entryPrice = o.entry_price_recorded || o.entry_zone_mid;
         const initialStop = o.initial_stop || o.stop;
         let risk = Math.abs(entryPrice - initialStop);
@@ -1179,10 +1177,18 @@ router.get('/analytics', async (req: Request, res: Response) => {
         const execPrice = o.execution_price || entryPrice;
         const diff = isLong ? (execPrice - entryPrice) : (entryPrice - execPrice);
         if (risk > 0) {
-          tradeR = Number((diff / risk).toFixed(2));
-          if (tradeR < -1.0) tradeR = -1.0;
+          fallbackCustomR = Math.max(-1.0, Number((diff / risk).toFixed(2)));
         }
       }
+
+      const tradeR = computeBlendedRealizedR({
+        outcomeType: o.outcome_type,
+        invalidationReason: o.invalidation_reason,
+        rMultiple1: o.r_multiple_1 || 2.0,
+        rMultiple2: o.r_multiple_2 || 3.0,
+        wasRunner: o.was_runner,
+        fallbackR: fallbackCustomR ?? o.realized_pl
+      });
 
       const signalTime = o.time_signaled;
       const entryTime = o.time_entered;
@@ -1236,6 +1242,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
         time_to_fill_min: timeToFillMin,
         holding_duration_min: holdingDurationMin || o.duration_min,
         duration_min: o.duration_min || holdingDurationMin,
+        trading_style: 'INTRADAY',
         realized_r: tradeR
       };
     });
@@ -1394,6 +1401,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
     const avgTimeToFill = fillTimeCount > 0 ? Number((totalFillTimeMs / (fillTimeCount * 60000)).toFixed(1)) : 0;
     const avgHoldingDuration = holdingTimeCount > 0 ? Number((totalHoldingTimeMs / (holdingTimeCount * 60000)).toFixed(1)) : 0;
 
+    const mtfOutcomes = await getMtfCalendarOutcomes().catch(() => []);
+
     res.json({
       summary: {
         totalSetupsCreated: futuresTotal + forexTotal,
@@ -1437,7 +1446,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
       convictionPerformance,
       invalidations: invStats,
       killzones: killzonePerformance,
-      recentOutcomes: enrichedOutcomes
+      recentOutcomes: enrichedOutcomes,
+      mtfOutcomes
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
@@ -1692,7 +1702,15 @@ function buildAnalyticsCSV(
 
     const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid || o.execution_price || 1.0;
     const origStop = setup.initial_stop || setup.stop || (isLong ? entryPrice * 0.995 : entryPrice * 1.005);
-    const realizedR = o.realized_r !== undefined ? o.realized_r : (o.outcome_type === 'tp1_hit' ? 2.0 : o.outcome_type === 'tp2_hit' ? 3.0 : o.outcome_type === 'sl_hit' ? -1.0 : 0.0);
+    const realizedR = o.realized_r !== undefined
+      ? o.realized_r
+      : computeBlendedRealizedR({
+          outcomeType: o.outcome_type,
+          rMultiple1: setup.r_multiple_1 || 2.0,
+          rMultiple2: setup.r_multiple_2 || 3.0,
+          wasRunner: o.was_runner,
+          fallbackR: o.realized_pl
+        });
 
     const durMin = o.duration_min !== undefined ? o.duration_min : (o.holding_duration_min !== undefined ? o.holding_duration_min : 30);
     const barsHeld = o.bars_held || Math.max(1, Math.round(durMin));
@@ -1865,11 +1883,13 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
       const sigTime = setup?.created_at || o.created_at;
       if (sigTime < earliestTime) earliestTime = sigTime;
 
-      let tradeR = 0;
-      if (o.outcome_type === 'tp1_hit') tradeR = setup?.r_multiple_1 || 2.0;
-      else if (o.outcome_type === 'tp2_hit') tradeR = setup?.r_multiple_2 || 3.0;
-      else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
-      else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
+      const tradeR = computeBlendedRealizedR({
+        outcomeType: o.outcome_type,
+        rMultiple1: setup?.r_multiple_1 || 2.0,
+        rMultiple2: setup?.r_multiple_2 || 3.0,
+        wasRunner: o.was_runner,
+        fallbackR: o.realized_pl
+      });
 
       const fillMin = setup?.created_at && setup?.entry_triggered_at
         ? Number(((new Date(setup.entry_triggered_at).getTime() - new Date(setup.created_at).getTime()) / 60000).toFixed(1))
@@ -2099,11 +2119,13 @@ router.post('/analytics/reset', async (req: Request, res: Response) => {
       const sigTime = setup?.created_at || o.created_at;
       if (sigTime < earliestTime) earliestTime = sigTime;
 
-      let tradeR = 0;
-      if (o.outcome_type === 'tp1_hit') tradeR = setup?.r_multiple_1 || 2.0;
-      else if (o.outcome_type === 'tp2_hit') tradeR = setup?.r_multiple_2 || 3.0;
-      else if (o.outcome_type === 'sl_hit') tradeR = -1.0;
-      else if (o.outcome_type === 'be_hit' || o.outcome_type === 'breakeven') tradeR = 0.0;
+      const tradeR = computeBlendedRealizedR({
+        outcomeType: o.outcome_type,
+        rMultiple1: setup?.r_multiple_1 || 2.0,
+        rMultiple2: setup?.r_multiple_2 || 3.0,
+        wasRunner: o.was_runner,
+        fallbackR: o.realized_pl
+      });
 
       let fillMin: number | undefined;
       if (setup?.created_at && setup?.entry_triggered_at) {
@@ -2731,24 +2753,30 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         };
       }
 
-      // Hard-cap R values: SL = -1R, TP1 = +r1, TP2 = +r2, BE = 0R
-      let tradeR = 0;
+      // 80/20 Blended R values: SL = -1R, TP1 (+BE) = 0.80*r1 (+1.60R), TP2 = 0.80*r1 + 0.20*r2 (+2.20R), BE = 0R
+      const tradeR = computeBlendedRealizedR({
+        outcomeType: outcome.outcome_type,
+        rMultiple1: parentSetup?.r_multiple_1 || 2.0,
+        rMultiple2: parentSetup?.r_multiple_2 || 3.0,
+        wasRunner: outcome.was_runner,
+        fallbackR: outcome.realized_pl
+      });
       if (outcome.outcome_type === 'tp1_hit') {
-        tradeR = parentSetup?.r_multiple_1 || 2.0;
         strategyStats[stratId].wins += 1;
         strategyStats[stratId].tp1Hits += 1;
       } else if (outcome.outcome_type === 'tp2_hit') {
-        tradeR = parentSetup?.r_multiple_2 || 3.0;
         strategyStats[stratId].wins += 1;
         strategyStats[stratId].tp2Hits += 1;
       } else if (outcome.outcome_type === 'sl_hit') {
-        tradeR = -1.0; // always capped
         strategyStats[stratId].losses += 1;
       } else if (outcome.outcome_type === 'be_hit' || outcome.outcome_type === 'breakeven') {
-        tradeR = 0.0;
-        strategyStats[stratId].breakevens += 1;
-      } else if (outcome.realized_pl !== undefined && outcome.realized_pl !== null) {
-        tradeR = Math.max(-1.0, outcome.realized_pl); // never worse than -1R
+        if (outcome.was_runner) {
+          strategyStats[stratId].wins += 1;
+          strategyStats[stratId].tp1Hits += 1;
+        } else {
+          strategyStats[stratId].breakevens += 1;
+        }
+      } else {
         if (tradeR > 0) strategyStats[stratId].wins += 1;
         else if (tradeR < 0) strategyStats[stratId].losses += 1;
         else strategyStats[stratId].breakevens += 1;
@@ -2756,7 +2784,7 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
 
       if (outcome.was_runner === 1 || parentSetup?.signal_state === 'runner') {
         strategyStats[stratId].runnerCount += 1;
-        strategyStats[stratId].runnerRealizedR += (outcome.runner_realized_r || tradeR || 0);
+        strategyStats[stratId].runnerRealizedR += tradeR;
       }
 
       strategyStats[stratId].totalRealizedR += tradeR;

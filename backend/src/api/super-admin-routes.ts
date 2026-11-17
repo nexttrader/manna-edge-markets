@@ -14,6 +14,7 @@ import { telegramBotService } from '../notifications/telegram-bot';
 import { instrumentStateTelemetry, DASHBOARD_PHASES } from '../discovery/strategies/elite-fractal';
 import { getMtfStyleSignals } from '../discovery/mtf-style-signals';
 import { getTradingStyleComparisonReport } from '../discovery/mtf-style-tracker';
+import { computeBlendedRealizedR } from '../analytics/r-accounting';
 
 
 const router = express.Router();
@@ -1029,24 +1030,26 @@ router.get('/assets', async (_req: Request, res: Response) => {
       const st = assetStatsMap[sym];
       st.totalTrades++;
       const typeStr = String(o.outcome_type || '').toLowerCase();
-      let rVal = 0;
-      if (typeStr.includes('tp2')) {
+      const rVal = computeBlendedRealizedR({
+        outcomeType: o.outcome_type,
+        rMultiple1: parent?.r_multiple_1 || 2.0,
+        rMultiple2: parent?.r_multiple_2 || 3.0,
+        wasRunner: o.was_runner,
+        fallbackR: o.realized_pl
+      });
+      if (typeStr.includes('tp2') || typeStr.includes('tp1') || typeStr.includes('tp')) {
         st.wins++;
-        rVal = parent?.r_multiple_2 || 3.0;
-      } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
-        st.wins++;
-        rVal = parent?.r_multiple_1 || 2.0;
       } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
         st.losses++;
-        rVal = -1.0;
       } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
-        st.breakevens++;
-        rVal = 0.0;
-      } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
-        rVal = Math.max(-1.0, o.realized_pl);
-        if (rVal > 0) st.wins++;
-        else if (rVal < 0) st.losses++;
+        if (o.was_runner) st.wins++;
         else st.breakevens++;
+      } else if (rVal > 0) {
+        st.wins++;
+      } else if (rVal < 0) {
+        st.losses++;
+      } else {
+        st.breakevens++;
       }
       st.totalRealizedR += rVal;
     }
@@ -1287,14 +1290,17 @@ async function calculateStrategyComparisonData(filters?: {
     const isDisplayed = !disabledAssets.includes(parentSetup.instrument);
     const typeStr = String(o.outcome_type || '').toLowerCase();
     let isWin = false;
-    let rVal = 0;
-    if (typeStr.includes('tp2')) { isWin = true; rVal = parentSetup?.r_multiple_2 || 3.0; }
-    else if (typeStr.includes('tp1') || typeStr.includes('tp')) { isWin = true; rVal = parentSetup?.r_multiple_1 || 2.0; }
-    else if (typeStr.includes('sl') || typeStr.includes('stop')) { rVal = -1.0; }
-    else if (typeStr.includes('be') || typeStr.includes('breakeven')) { rVal = 0.0; }
-    else if (o.realized_pl !== undefined && o.realized_pl !== null) {
-      rVal = Math.max(-1.0, o.realized_pl);
-      if (rVal > 0) isWin = true;
+    const rVal = computeBlendedRealizedR({
+      outcomeType: o.outcome_type,
+      rMultiple1: parentSetup?.r_multiple_1 || 2.0,
+      rMultiple2: parentSetup?.r_multiple_2 || 3.0,
+      wasRunner: o.was_runner,
+      fallbackR: o.realized_pl
+    });
+    if (typeStr.includes('tp2') || typeStr.includes('tp1') || typeStr.includes('tp') || ((typeStr.includes('be') || typeStr.includes('breakeven')) && o.was_runner)) {
+      isWin = true;
+    } else if (rVal > 0) {
+      isWin = true;
     }
 
     if (isDisplayed) {
@@ -1465,7 +1471,13 @@ async function calculateStrategyComparisonData(filters?: {
     const isFutures = marketKey === 'futures';
     const kzKey = (setup?.killzone_origin || 'london').toLowerCase().replace(/^kz_/, '');
 
-    let rVal = 0;
+    let rVal = computeBlendedRealizedR({
+      outcomeType: o.outcome_type,
+      rMultiple1: setup?.r_multiple_1 || 2.0,
+      rMultiple2: setup?.r_multiple_2 || 3.0,
+      wasRunner: o.was_runner,
+      fallbackR: o.realized_pl
+    });
     let isWin = false;
     let isLoss = false;
     let isBE = false;
@@ -1474,32 +1486,27 @@ async function calculateStrategyComparisonData(filters?: {
       isWin = true;
       st.wins++;
       st.tp2Hits++;
-      rVal = setup?.r_multiple_2 || 3.0;
     } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
       isWin = true;
       st.wins++;
       st.tp1Hits++;
-      rVal = setup?.r_multiple_1 || 2.0;
     } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
       isLoss = true;
       st.losses++;
-      rVal = -1.0;
     } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
-      // If the trade was a runner or previously achieved TP1, retain the TP1 win (+2.0R)
       const meta = (() => { try { return JSON.parse(setup?.metadata || '{}'); } catch { return {}; } })();
       const isRunnerTp1 = Boolean(o.was_runner || setup?.invalidation_reason === 'tp1_hit' || meta?.tp1_hit_at);
       if (isRunnerTp1) {
         isWin = true;
         st.wins++;
         st.tp1Hits++;
-        rVal = setup?.r_multiple_1 || 2.0;
+        rVal = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: setup?.r_multiple_1 || 2.0, rMultiple2: setup?.r_multiple_2 || 3.0 });
       } else {
         isBE = true;
         st.breakevens++;
         rVal = 0.0;
       }
-    } else if (o.realized_pl !== undefined && o.realized_pl !== null) {
-      rVal = Math.max(-1.0, o.realized_pl);
+    } else {
       if (rVal > 0) { isWin = true; st.wins++; }
       else if (rVal < 0) { isLoss = true; st.losses++; }
       else { isBE = true; st.breakevens++; }
@@ -1540,12 +1547,19 @@ async function calculateStrategyComparisonData(filters?: {
       poiType: (() => {
         try { return JSON.parse(setup?.metadata || '{}').poi_type || 'N/A'; } catch { return 'N/A'; }
       })(),
-      entryPrice: setup?.entry_zone_mid || 0,
+      entryPrice: setup?.entry_price_recorded || setup?.entry_zone_mid || 0,
+      entry_price_recorded: setup?.entry_price_recorded || setup?.entry_zone_mid || 0,
+      initial_stop: setup?.initial_stop || setup?.stop || 0,
       stopLoss: setup?.stop || 0,
       tp1: setup?.tp1 || 0,
       tp2: setup?.tp2 || 0,
+      r_multiple_1: setup?.r_multiple_1 || 2.0,
+      r_multiple_2: setup?.r_multiple_2 || 3.0,
       outcomeType: o.outcome_type || 'N/A',
+      outcome_type: o.outcome_type || 'N/A',
       realizedR: Number(rVal.toFixed(2)),
+      realized_r: Number(rVal.toFixed(2)),
+      realized_pl: Number(rVal.toFixed(2)),
       mae: o.mae !== null && o.mae !== undefined ? Number(o.mae) : null,
       mfe: o.mfe !== null && o.mfe !== undefined ? Number(o.mfe) : null,
       highestPrice: o.highest_price || null,

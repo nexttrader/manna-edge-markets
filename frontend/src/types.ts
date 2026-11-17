@@ -97,6 +97,10 @@ export interface EdgeSetup {
   order_type?: string;
   strategy_id?: string;
   strategy_tier?: string;
+  trading_style?: string;
+  timeframe?: string;
+  htf_timeframe?: string;
+  entry_timeframe?: string;
   metadata?: string;
   opposing_strategy_warning?: string;
   correlation_note?: string;

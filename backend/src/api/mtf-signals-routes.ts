@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { getMtfStyleSignals, SwingPairMode, TradingStyleMode } from '../discovery/mtf-style-signals';
+import { getMtfCalendarOutcomes } from '../discovery/mtf-style-tracker';
 
 const router = express.Router();
 
@@ -51,6 +52,27 @@ router.get('/preview', async (_req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: err?.message || 'Failed to load MTF preview'
+    });
+  }
+});
+
+/**
+ * GET /api/mtf-signals/outcomes
+ * Returns resolved/runner Scalping & Swing trades formatted for the Session Performance Calendar.
+ */
+router.get('/outcomes', async (_req: Request, res: Response) => {
+  try {
+    const outcomes = await getMtfCalendarOutcomes();
+    return res.json({
+      success: true,
+      outcomes,
+      count: outcomes.length,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to load MTF calendar outcomes'
     });
   }
 });

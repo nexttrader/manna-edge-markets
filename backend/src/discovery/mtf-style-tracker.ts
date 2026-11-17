@@ -1,4 +1,5 @@
 import { isPg, queryDb } from '../db/database';
+import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { computeATR } from './atr';
 import type { MtfStyleSetup, SwingPairMode, TradingStyleMode } from './mtf-style-signals';
 import { getInstrumentDecimals } from './stop-loss-rules';
@@ -470,20 +471,20 @@ export function evaluateMtfRowLifecycle(
         stop = round(entryPrice);
       }
 
-      // 3. Check TP2 (+3R) directly
+      // 3. Check TP2 (+3R price level -> +2.20R blended 80/20) directly
       const hitTp2 = isLong ? cHighBid >= row.tp2 : cLowAsk <= row.tp2;
       if (hitTp2) {
         state = 'resolved';
         outcomeType = 'tp2_hit';
         invalidationReason = 'tp2_hit';
-        invalidationDetail = `TP2 (${row.tp2}) achieved (+${r2}R)`;
-        realizedR = r2;
+        realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+        invalidationDetail = `TP2 (${row.tp2}) achieved (+${realizedR.toFixed(2)}R blended 80/20)`;
         executionPrice = row.tp2;
         resolvedAt = c.timestamp;
         break;
       }
 
-      // 4. Check TP1 (+2R) -> move to Runner with BE stop
+      // 4. Check TP1 (+2R price level -> +1.60R banked 80%) -> move to Runner with BE stop
       const hitTp1 = isLong ? cHighBid >= row.tp1 : cLowAsk <= row.tp1;
       if (hitTp1) {
         state = 'runner';
@@ -491,7 +492,7 @@ export function evaluateMtfRowLifecycle(
         stop = round(entryPrice);
         outcomeType = 'tp1_hit';
         invalidationReason = 'tp1_hit';
-        realizedR = r1;
+        realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
         continue;
       }
     } else if (state === 'runner') {
@@ -502,8 +503,8 @@ export function evaluateMtfRowLifecycle(
         state = 'resolved';
         outcomeType = 'tp1_hit';
         invalidationReason = 'tp1_hit';
-        invalidationDetail = `Runner retraced to BE (${round(stop)}); +${r1}R TP1 win retained`;
-        realizedR = r1;
+        realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
+        invalidationDetail = `Runner retraced to BE (${round(stop)}); +${realizedR.toFixed(2)}R banked (80% at TP1)`;
         executionPrice = round(stop);
         resolvedAt = c.timestamp;
         break;
@@ -512,8 +513,8 @@ export function evaluateMtfRowLifecycle(
         state = 'resolved';
         outcomeType = 'tp2_hit';
         invalidationReason = 'tp2_hit';
-        invalidationDetail = `Runner reached TP2 (${row.tp2}) (+${r2}R)`;
-        realizedR = r2;
+        realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+        invalidationDetail = `Runner reached TP2 (${row.tp2}) (+${realizedR.toFixed(2)}R blended 80/20)`;
         executionPrice = row.tp2;
         resolvedAt = c.timestamp;
         break;
@@ -595,8 +596,8 @@ export function evaluateMtfRowLifecycle(
           state = 'resolved';
           outcomeType = 'tp2_hit';
           invalidationReason = 'tp2_hit';
-          invalidationDetail = `TP2 (${row.tp2}) reached on live Bid (${round(currentBid)})`;
-          realizedR = r2;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `TP2 (${row.tp2}) reached on live Bid (${round(currentBid)}) (+${realizedR.toFixed(2)}R blended 80/20)`;
           executionPrice = round(Math.max(currentBid, row.tp2));
           resolvedAt = nowIso;
         } else if (currentBid >= row.tp1) {
@@ -605,7 +606,7 @@ export function evaluateMtfRowLifecycle(
           stop = round(entryPrice);
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
-          realizedR = r1;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
         } else if (currentBid <= stop) {
           state = 'resolved';
           outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
@@ -620,8 +621,8 @@ export function evaluateMtfRowLifecycle(
           state = 'resolved';
           outcomeType = 'tp2_hit';
           invalidationReason = 'tp2_hit';
-          invalidationDetail = `TP2 (${row.tp2}) reached on live Ask (${round(currentAsk)})`;
-          realizedR = r2;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `TP2 (${row.tp2}) reached on live Ask (${round(currentAsk)}) (+${realizedR.toFixed(2)}R blended 80/20)`;
           executionPrice = round(Math.min(currentAsk, row.tp2));
           resolvedAt = nowIso;
         } else if (currentAsk <= row.tp1) {
@@ -630,7 +631,7 @@ export function evaluateMtfRowLifecycle(
           stop = round(entryPrice);
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
-          realizedR = r1;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
         } else if (currentAsk >= stop) {
           state = 'resolved';
           outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
@@ -648,16 +649,16 @@ export function evaluateMtfRowLifecycle(
           state = 'resolved';
           outcomeType = 'tp2_hit';
           invalidationReason = 'tp2_hit';
-          invalidationDetail = `Runner hit TP2 (${row.tp2}) on live Bid`;
-          realizedR = r2;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `Runner hit TP2 (${row.tp2}) on live Bid (+${realizedR.toFixed(2)}R blended 80/20)`;
           executionPrice = round(Math.max(currentBid, row.tp2));
           resolvedAt = nowIso;
         } else if (currentBid <= stop) {
           state = 'resolved';
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
-          invalidationDetail = `Runner retraced to BE (${round(stop)}); +${r1}R TP1 win retained`;
-          realizedR = r1;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `Runner retraced to BE (${round(stop)}); +${realizedR.toFixed(2)}R banked (80% at TP1)`;
           executionPrice = round(entryPrice);
           resolvedAt = nowIso;
         }
@@ -666,16 +667,16 @@ export function evaluateMtfRowLifecycle(
           state = 'resolved';
           outcomeType = 'tp2_hit';
           invalidationReason = 'tp2_hit';
-          invalidationDetail = `Runner hit TP2 (${row.tp2}) on live Ask`;
-          realizedR = r2;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp2_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `Runner hit TP2 (${row.tp2}) on live Ask (+${realizedR.toFixed(2)}R blended 80/20)`;
           executionPrice = round(Math.min(currentAsk, row.tp2));
           resolvedAt = nowIso;
         } else if (currentAsk >= stop) {
           state = 'resolved';
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
-          invalidationDetail = `Runner retraced to BE (${round(stop)}); +${r1}R TP1 win retained`;
-          realizedR = r1;
+          realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
+          invalidationDetail = `Runner retraced to BE (${round(stop)}); +${realizedR.toFixed(2)}R banked (80% at TP1)`;
           executionPrice = round(entryPrice);
           resolvedAt = nowIso;
         }
@@ -692,8 +693,8 @@ export function evaluateMtfRowLifecycle(
       state = 'resolved';
       outcomeType = 'tp1_hit';
       invalidationReason = 'runner_closed_max_age';
-      invalidationDetail = `Runner auto-closed after max holding window; +${r1}R TP1 win retained`;
-      realizedR = r1;
+      realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
+      invalidationDetail = `Runner auto-closed after max holding window; +${realizedR.toFixed(2)}R banked (80% at TP1)`;
       executionPrice = row.tp1;
       resolvedAt = nowIso;
     }
@@ -895,7 +896,14 @@ function rowToMtfSetup(row: TrackedMtfSetupRow): MtfStyleSetup {
     outcome_type: row.outcome_type ?? undefined,
     invalidation_reason: row.invalidation_reason ?? undefined,
     invalidation_detail: row.invalidation_detail ?? undefined,
-    realized_r: row.realized_r ?? undefined,
+    realized_r: computeBlendedRealizedR({
+      outcomeType: row.outcome_type || (row.signal_state === 'tp2_hit' ? 'tp2_hit' : (row.signal_state === 'tp1_hit' || row.signal_state === 'runner') ? 'tp1_hit' : row.signal_state === 'stopped' ? 'sl_hit' : row.signal_state === 'expired' ? 'be_hit' : undefined),
+      invalidationReason: row.invalidation_reason,
+      rMultiple1: r1,
+      rMultiple2: r2,
+      wasRunner: row.signal_state === 'runner',
+      fallbackR: row.realized_r
+    }),
     created_at: row.created_at,
     killzone_origin: row.killzone_origin || 'ny_am',
     metadata: row.metadata || JSON.stringify({
@@ -1137,6 +1145,127 @@ export async function recordAndSyncMtfSetups(setups: MtfStyleSetup[]): Promise<v
   await syncMtfSetupsAndGetLiveBoard(style, swingMode, setups);
 }
 
+export function getMtfRowBlendedR(r: TrackedMtfSetupRow): number {
+  const mappedOt =
+    r.outcome_type ||
+    (r.signal_state === 'tp2_hit'
+      ? 'tp2_hit'
+      : r.signal_state === 'tp1_hit' || r.signal_state === 'runner'
+        ? 'tp1_hit'
+        : r.signal_state === 'stopped'
+          ? 'sl_hit'
+          : r.signal_state === 'expired'
+            ? 'be_hit'
+            : undefined);
+  return computeBlendedRealizedR({
+    outcomeType: mappedOt,
+    invalidationReason: r.invalidation_reason,
+    rMultiple1: r.r_multiple_1 || 2.0,
+    rMultiple2: r.r_multiple_2 || 3.0,
+    wasRunner: r.signal_state === 'runner',
+    fallbackR: r.realized_r
+  });
+}
+
+/**
+ * Returns all closed/runner Scalping & Swing setups formatted as Calendar Outcomes
+ * so the Session Performance Calendar can toggle between Intraday, Scalping, and Swing.
+ */
+export async function getMtfCalendarOutcomes(): Promise<any[]> {
+  await ensureMtfTrackerTable();
+  const rows = await queryDb<TrackedMtfSetupRow>(
+    `SELECT * FROM mtf_style_setups
+     WHERE signal_state IN ('resolved', 'runner', 'tp1_hit', 'tp2_hit', 'stopped', 'expired')
+     ORDER BY COALESCE(resolved_at, updated_at, created_at) DESC`
+  );
+
+  return rows.map((r) => {
+    const mappedOutcomeType =
+      r.outcome_type ||
+      (r.signal_state === 'tp2_hit'
+        ? 'tp2_hit'
+        : r.signal_state === 'tp1_hit' || r.signal_state === 'runner'
+          ? 'tp1_hit'
+          : r.signal_state === 'stopped'
+            ? 'sl_hit'
+            : r.signal_state === 'expired'
+              ? 'be_hit'
+              : 'resolved');
+
+    const realizedR = getMtfRowBlendedR(r);
+    const entryPx = r.entry_price_recorded || r.entry_zone_mid;
+    const origStop = r.initial_stop || r.stop;
+    const exitPx =
+      r.execution_price ||
+      (mappedOutcomeType === 'tp2_hit'
+        ? r.tp2
+        : mappedOutcomeType === 'tp1_hit'
+          ? r.tp1
+          : mappedOutcomeType === 'sl_hit'
+            ? origStop
+            : entryPx);
+
+    const timeSignaled = r.created_at;
+    const timeEntered = r.entry_triggered_at || r.filled_at || r.created_at;
+    const timeExited = r.resolved_at || r.updated_at || r.filled_at || r.created_at;
+
+    let timeToFillMin: number | undefined;
+    if (timeSignaled && timeEntered) {
+      const diff = (new Date(timeEntered).getTime() - new Date(timeSignaled).getTime()) / 60000;
+      if (Number.isFinite(diff) && diff >= 0) timeToFillMin = Number(diff.toFixed(1));
+    }
+
+    let holdMin: number | undefined;
+    if (timeEntered && timeExited) {
+      const diff = (new Date(timeExited).getTime() - new Date(timeEntered).getTime()) / 60000;
+      if (Number.isFinite(diff) && diff >= 0) holdMin = Number(diff.toFixed(1));
+    }
+
+    return {
+      id: `mtf_out_${r.id}`,
+      setup_id: r.id,
+      trading_style: r.trading_style, // 'SCALP' | 'SWING'
+      swing_mode: r.swing_mode || undefined,
+      context_tf: r.context_tf,
+      entry_tf: r.entry_tf,
+      instrument: r.instrument,
+      market: r.market || (r.instrument.includes('/') ? 'forex' : 'futures'),
+      setup_market: r.market || (r.instrument.includes('/') ? 'forex' : 'futures'),
+      bias: r.bias,
+      strategy_id: r.strategy_id || (r.trading_style === 'SCALP' ? 'manna_scalper' : 'manna_swing'),
+      conviction_score: r.conviction_score,
+      outcome_type: mappedOutcomeType,
+      realized_r: realizedR,
+      realized_pl: realizedR,
+      entry_price: entryPx,
+      entry_price_recorded: r.entry_price_recorded || entryPx,
+      entry_zone_low: r.entry_zone_low,
+      entry_zone_high: r.entry_zone_high,
+      entry_zone_mid: r.entry_zone_mid,
+      initial_stop: origStop,
+      stop: r.stop,
+      tp1: r.tp1,
+      tp2: r.tp2,
+      r_multiple_1: r.r_multiple_1 || 2.0,
+      r_multiple_2: r.r_multiple_2 || 3.0,
+      execution_price: exitPx,
+      execution_time: timeExited,
+      time_signaled: timeSignaled,
+      time_entered: timeEntered,
+      time_exited: timeExited,
+      time_to_fill_min: timeToFillMin,
+      holding_duration_min: holdMin,
+      duration_min: holdMin,
+      killzone_origin: r.killzone_origin || 'ny_am',
+      created_at: timeExited,
+      invalidation_reason: r.invalidation_reason || mappedOutcomeType,
+      invalidation_detail: r.invalidation_detail || undefined,
+      trade_id: r.id,
+      metadata: r.metadata
+    };
+  });
+}
+
 export async function getTradingStyleComparisonReport(): Promise<{
   generatedAt: string;
   styles: StyleComparisonRow[];
@@ -1148,12 +1277,17 @@ export async function getTradingStyleComparisonReport(): Promise<{
     `SELECT * FROM mtf_style_setups ORDER BY created_at DESC LIMIT 500`
   );
 
+  const normalizedMtfRows = mtfRows.map((r) => ({
+    ...r,
+    realized_r: getMtfRowBlendedR(r)
+  }));
+
   const buildMtfStats = (
     style: 'SCALP' | 'SWING',
     label: string,
     timeframes: string
   ): StyleComparisonRow => {
-    const rows = mtfRows.filter((r) => r.trading_style === style);
+    const rows = normalizedMtfRows.filter((r) => r.trading_style === style);
     const awaitingEntry = rows.filter((r) => r.signal_state === 'awaiting_entry').length;
     const activeSetups = rows.filter((r) => r.signal_state === 'active' || r.signal_state === 'runner').length;
 
@@ -1202,36 +1336,44 @@ export async function getTradingStyleComparisonReport(): Promise<{
 
   // Intraday stats from existing edge_setups + forex_edge_setups + outcomes (read-only)
   const [futuresSetups, forexSetups, outcomes] = await Promise.all([
-    queryDb<any>(`SELECT id, signal_state, conviction_score FROM edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT id, signal_state, conviction_score FROM forex_edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT outcome_type, was_runner, realized_pl FROM outcomes`)
+    queryDb<any>(`SELECT id, signal_state, conviction_score, r_multiple_1, r_multiple_2 FROM edge_setups WHERE superseded = 0`),
+    queryDb<any>(`SELECT id, signal_state, conviction_score, r_multiple_1, r_multiple_2 FROM forex_edge_setups WHERE superseded = 0`),
+    queryDb<any>(`SELECT setup_id, outcome_type, was_runner, realized_pl FROM outcomes`)
   ]);
 
   const allIntraday = [...futuresSetups, ...forexSetups];
+  const setupMap = new Map<string, any>();
+  for (const s of allIntraday) setupMap.set(String(s.id), s);
+
   let intraWins = 0;
   let intraLosses = 0;
   let intraBe = 0;
   let intraTotalR = 0;
 
   for (const o of outcomes) {
+    const parent = setupMap.get(String(o.setup_id));
     const typeStr = String(o.outcome_type || '').toLowerCase();
-    if (typeStr.includes('tp2')) {
+    const tradeR = computeBlendedRealizedR({
+      outcomeType: o.outcome_type,
+      rMultiple1: parent?.r_multiple_1 || 2.0,
+      rMultiple2: parent?.r_multiple_2 || 3.0,
+      wasRunner: o.was_runner,
+      fallbackR: o.realized_pl
+    });
+    if (typeStr.includes('tp') || ((typeStr.includes('be') || typeStr.includes('breakeven')) && o.was_runner)) {
       intraWins++;
-      intraTotalR += 3.0;
-    } else if (typeStr.includes('tp1') || typeStr.includes('tp')) {
-      intraWins++;
-      intraTotalR += 2.0;
     } else if (typeStr.includes('sl') || typeStr.includes('stop')) {
       intraLosses++;
-      intraTotalR -= 1.0;
     } else if (typeStr.includes('be') || typeStr.includes('breakeven')) {
-      if (o.was_runner) {
-        intraWins++;
-        intraTotalR += 2.0;
-      } else {
-        intraBe++;
-      }
+      intraBe++;
+    } else if (tradeR > 0) {
+      intraWins++;
+    } else if (tradeR < 0) {
+      intraLosses++;
+    } else {
+      intraBe++;
     }
+    intraTotalR += tradeR;
   }
 
   intraTotalR = Number(intraTotalR.toFixed(2));
@@ -1268,6 +1410,6 @@ export async function getTradingStyleComparisonReport(): Promise<{
       intradayRow,
       buildMtfStats('SWING', 'Swing Desk', 'D1 · 4H / 4H · 1H')
     ],
-    recentMtfSetups: mtfRows.slice(0, 40)
+    recentMtfSetups: normalizedMtfRows.slice(0, 40)
   };
 }

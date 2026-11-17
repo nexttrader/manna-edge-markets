@@ -657,10 +657,12 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   );
 
   const outcomeR = setup.realized_r !== undefined ? setup.realized_r : (
-    (setup.outcome_type || setup.invalidation_reason)?.includes('tp2') ? (setup.r_multiple_2 || 3.0) :
-    (setup.outcome_type || setup.invalidation_reason)?.includes('tp1') ? (setup.r_multiple_1 || 2.0) :
-    (setup.outcome_type || setup.invalidation_reason)?.includes('sl') ? -1.0 :
-    (setup.outcome_type || setup.invalidation_reason)?.includes('be') ? 0.0 : undefined
+    (setup.outcome_type || setup.invalidation_reason)?.includes('tp2')
+      ? Number((0.80 * (setup.r_multiple_1 || 2.0) + 0.20 * (setup.r_multiple_2 || 3.0)).toFixed(2))
+      : (setup.outcome_type || setup.invalidation_reason)?.includes('tp1')
+        ? Number((0.80 * (setup.r_multiple_1 || 2.0)).toFixed(2))
+        : (setup.outcome_type || setup.invalidation_reason)?.includes('sl') ? -1.0
+        : (setup.outcome_type || setup.invalidation_reason)?.includes('be') ? 0.0 : undefined
   );
   const outcomePl = setup.realized_pl !== undefined ? setup.realized_pl : (outcomeR !== undefined ? outcomeR * 100 : undefined);
 

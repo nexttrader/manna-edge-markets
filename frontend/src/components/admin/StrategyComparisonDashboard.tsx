@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { API_BASE } from '../../config';
 import './StrategyComparisonDashboard.css';
 import { EquityCurve } from './EquityCurve';
+import { estimateTradeFeeR, getTradeMarketCategory, useFeesToggle } from '../../utils/rAccounting';
 
 
 interface StrategyStat {
@@ -68,6 +69,7 @@ export const StrategyComparisonDashboard: React.FC = () => {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('all');
   const [assetVisibility, setAssetVisibility] = useState<'all' | 'displayed_only' | 'hidden_only'>('all');
   const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
+  const [includeFees, toggleFees] = useFeesToggle();
   
   const [data, setData] = useState<ComparisonData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -94,6 +96,76 @@ export const StrategyComparisonDashboard: React.FC = () => {
   useEffect(() => {
     fetchComparisonData();
   }, [timeframe, market, session, selectedStrategyId, assetVisibility, selectedInstrument]);
+
+  const displayData = useMemo(() => {
+    if (!data || !includeFees) return data;
+    const logs = data.tradeLogs || [];
+    const feesByStrat: Record<string, { total: number; count: number; futures: number; forex: number; sessions: Record<string, number> }> = {};
+
+    logs.forEach((t: any) => {
+      const sid = t.strategy_id || 'manna_snd';
+      if (!feesByStrat[sid]) {
+        feesByStrat[sid] = { total: 0, count: 0, futures: 0, forex: 0, sessions: { london: 0, ny_am: 0, ny_pm: 0, asia: 0 } };
+      }
+      const fee = estimateTradeFeeR(t);
+      feesByStrat[sid].total += fee;
+      feesByStrat[sid].count++;
+      if (getTradeMarketCategory(t) === 'forex') {
+        feesByStrat[sid].forex += fee;
+      } else {
+        feesByStrat[sid].futures += fee;
+      }
+      const kz = String(t.killzone || '').toLowerCase();
+      if (kz in feesByStrat[sid].sessions) {
+        feesByStrat[sid].sessions[kz] += fee;
+      }
+    });
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const adjustedStrategies = data.strategies.map((s) => {
+      const statFees = feesByStrat[s.strategyId];
+      const scale = statFees && statFees.count > 0 && s.totalTrades > statFees.count
+        ? s.totalTrades / statFees.count
+        : 1;
+      const totalFee = statFees ? statFees.total * scale : s.totalTrades * 0.043;
+      const futFee = statFees ? statFees.futures * scale : s.marketBreakdown.futures.totalTrades * 0.045;
+      const fxFee = statFees ? statFees.forex * scale : s.marketBreakdown.forex.totalTrades * 0.04;
+
+      const netTotalR = round2(s.totalRealizedR - totalFee);
+      const netExpR = s.totalTrades > 0 ? round2(netTotalR / s.totalTrades) : 0;
+
+      return {
+        ...s,
+        totalRealizedR: netTotalR,
+        expectancyR: netExpR,
+        marketBreakdown: {
+          futures: { ...s.marketBreakdown.futures, totalR: round2(s.marketBreakdown.futures.totalR - futFee) },
+          forex: { ...s.marketBreakdown.forex, totalR: round2(s.marketBreakdown.forex.totalR - fxFee) },
+        },
+        sessionBreakdown: {
+          london: { ...s.sessionBreakdown.london, totalR: round2(s.sessionBreakdown.london.totalR - (statFees ? statFees.sessions.london * scale : 0)) },
+          ny_am: { ...s.sessionBreakdown.ny_am, totalR: round2(s.sessionBreakdown.ny_am.totalR - (statFees ? statFees.sessions.ny_am * scale : 0)) },
+          ny_pm: { ...s.sessionBreakdown.ny_pm, totalR: round2(s.sessionBreakdown.ny_pm.totalR - (statFees ? statFees.sessions.ny_pm * scale : 0)) },
+          asia: { ...s.sessionBreakdown.asia, totalR: round2(s.sessionBreakdown.asia.totalR - (statFees ? statFees.sessions.asia * scale : 0)) },
+        },
+      };
+    });
+
+    const totalCombinedR = round2(adjustedStrategies.reduce((sum, s) => sum + s.totalRealizedR, 0));
+    const bestExp = adjustedStrategies.length > 0
+      ? [...adjustedStrategies].sort((a, b) => b.expectancyR - a.expectancyR)[0]
+      : null;
+
+    return {
+      ...data,
+      summary: {
+        ...data.summary,
+        totalCombinedR,
+        bestExpectancyStrategy: bestExp ? { id: bestExp.strategyId, name: bestExp.strategyName, expectancyR: bestExp.expectancyR } : null,
+      },
+      strategies: adjustedStrategies,
+    };
+  }, [data, includeFees]);
 
   const handleDownloadExport = (format: 'markdown' | 'json' | 'csv') => {
     const url = `${API_BASE}/api/super-admin/strategy-analytics/export?format=${format}&timeframe=${timeframe}&market=${market}&session=${session}&strategy_id=${selectedStrategyId}&asset_visibility=${assetVisibility}&instrument=${selectedInstrument}`;
@@ -158,13 +230,32 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
             <span className="scd-title-icon">⚔️</span>
             <div>
               <div className="scd-title-text">SUPER ADMIN STRATEGY SUCCESS &amp; COMPARISON MATRIX</div>
-              <div className="scd-subtitle">Real-time performance analytics with turned-off vs active asset toggle &amp; LLM prompt exporter</div>
+              <div className="scd-subtitle">Real-time 80/20 scale-out analytics with turned-off vs active asset toggle &amp; LLM prompt exporter</div>
             </div>
           </div>
 
-          <button type="button" className="scd-refresh-btn" onClick={fetchComparisonData}>
-            🔄 {loading ? 'Computing...' : 'Refresh Analytics'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={toggleFees}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: `1px solid ${includeFees ? 'rgba(245,158,11,0.75)' : 'rgba(255,255,255,0.2)'}`,
+                background: includeFees ? 'rgba(245,158,11,0.2)' : 'rgba(0,0,0,0.35)',
+                color: includeFees ? '#fbbf24' : 'rgba(255,255,255,0.8)',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+              }}
+              title="Toggle estimated broker round-turn fees & commissions on/off"
+            >
+              💸 Fees: {includeFees ? 'ON' : 'OFF'}
+            </button>
+            <button type="button" className="scd-refresh-btn" onClick={fetchComparisonData}>
+              🔄 {loading ? 'Computing...' : 'Refresh Analytics'}
+            </button>
+          </div>
         </div>
 
         {/* ── Asset Scope Switcher Bar (Turned Off vs On) ── */}
@@ -369,36 +460,36 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
       )}
 
       {/* Executive Summary Highlights Banner */}
-      {data && (
+      {displayData && (
         <div className="scd-highlights-grid">
           <div className="scd-highlight-box gold">
-            <span className="scd-highlight-label">📊 Combined System R-Gain</span>
+            <span className="scd-highlight-label">📊 Combined System R-Gain {includeFees ? '(Net Fees)' : '(Gross)'}</span>
             <span className="scd-highlight-value" style={{ color: '#ffab00' }}>
-              {data.summary.totalCombinedR > 0 ? `+${data.summary.totalCombinedR}R` : `${data.summary.totalCombinedR}R`}
+              {displayData.summary.totalCombinedR > 0 ? `+${displayData.summary.totalCombinedR}R` : `${displayData.summary.totalCombinedR}R`}
             </span>
-            <span className="scd-highlight-sub">{data.summary.totalCombinedTrades} Total Resolved Trades</span>
+            <span className="scd-highlight-sub">{displayData.summary.totalCombinedTrades} Total Resolved Trades</span>
           </div>
 
           <div className="scd-highlight-box green">
             <span className="scd-highlight-label">🏆 Top Win-Rate Strategy</span>
             <span className="scd-highlight-value" style={{ color: '#00e676' }}>
-              {data.summary.bestWinRateStrategy ? `${data.summary.bestWinRateStrategy.winRate}%` : 'N/A'}
+              {displayData.summary.bestWinRateStrategy ? `${displayData.summary.bestWinRateStrategy.winRate}%` : 'N/A'}
             </span>
-            <span className="scd-highlight-sub">{data.summary.bestWinRateStrategy?.name || 'No data'}</span>
+            <span className="scd-highlight-sub">{displayData.summary.bestWinRateStrategy?.name || 'No data'}</span>
           </div>
 
           <div className="scd-highlight-box cyan">
             <span className="scd-highlight-label">🚀 Top Expectancy Strategy</span>
             <span className="scd-highlight-value" style={{ color: '#00e5ff' }}>
-              {data.summary.bestExpectancyStrategy ? `+${data.summary.bestExpectancyStrategy.expectancyR}R` : 'N/A'}
+              {displayData.summary.bestExpectancyStrategy ? `${displayData.summary.bestExpectancyStrategy.expectancyR > 0 ? '+' : ''}${displayData.summary.bestExpectancyStrategy.expectancyR}R` : 'N/A'}
             </span>
-            <span className="scd-highlight-sub">{data.summary.bestExpectancyStrategy?.name || 'No data'}</span>
+            <span className="scd-highlight-sub">{displayData.summary.bestExpectancyStrategy?.name || 'No data'}</span>
           </div>
 
           <div className="scd-highlight-box purple">
             <span className="scd-highlight-label">🛡️ Active Tracked Engines</span>
             <span className="scd-highlight-value" style={{ color: '#ce93d8' }}>
-              {data.summary.totalStrategiesTracked}
+              {displayData.summary.totalStrategiesTracked}
             </span>
             <span className="scd-highlight-sub">Manna Elite v1.2 &amp; Custom Engines</span>
           </div>
@@ -435,7 +526,7 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
 
       {/* Side-by-Side Strategy Stat Cards Grid */}
       <div className="scd-cards-grid">
-        {(data?.strategies || []).map((s) => (
+        {(displayData?.strategies || []).map((s) => (
           <div key={s.strategyId} className="scd-strat-card">
             <div className="scd-strat-header">
               <div>
@@ -526,18 +617,19 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
       </div>
 
       {/* Equity Curve — cumulative R per strategy */}
-      {data && (
+      {displayData && (
         <EquityCurve
-          tradeLogs={data.tradeLogs ?? []}
-          strategies={data.strategies ?? []}
+          tradeLogs={displayData.tradeLogs ?? []}
+          strategies={displayData.strategies ?? []}
+          includeFees={includeFees}
         />
       )}
 
       {/* Comparative Strategy Matrix Table */}
-      {data && data.strategies.length > 0 && (
+      {displayData && displayData.strategies.length > 0 && (
         <div style={{ background: 'rgba(18, 18, 28, 0.85)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
           <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', color: '#ffab00', fontWeight: 800 }}>
-            📋 COMPARATIVE PERFORMANCE MATRIX
+            📋 COMPARATIVE PERFORMANCE MATRIX {includeFees ? '· NET OF FEES' : '· GROSS 80/20 R'}
           </h3>
 
 
@@ -559,14 +651,14 @@ ${JSON.stringify(data.tradeLogs.slice(0, 100), null, 2)}`;
                 </tr>
               </thead>
               <tbody>
-                {data.strategies.map((s) => (
+                {displayData.strategies.map((s) => (
                   <tr key={s.strategyId}>
                     <td style={{ fontWeight: 800, color: '#fff' }}>{s.strategyName}</td>
                     <td><span className="scd-strat-id-badge">{s.strategyId}</span></td>
                     <td style={{ fontWeight: 900, color: s.winRate >= 60 ? '#00e676' : s.winRate >= 45 ? '#ffab00' : '#ff1744' }}>{s.winRate}%</td>
                     <td>{s.totalTrades}</td>
                     <td style={{ fontWeight: 900, color: s.totalRealizedR >= 0 ? '#00e676' : '#ff1744' }}>{s.totalRealizedR > 0 ? `+${s.totalRealizedR}R` : `${s.totalRealizedR}R`}</td>
-                    <td style={{ fontWeight: 800, color: '#00e5ff' }}>+{s.expectancyR}R</td>
+                    <td style={{ fontWeight: 800, color: '#00e5ff' }}>{s.expectancyR > 0 ? `+${s.expectancyR}R` : `${s.expectancyR}R`}</td>
                     <td>{s.profitFactor}</td>
                     <td>{s.marketBreakdown.futures.winRate}%</td>
                     <td>{s.marketBreakdown.forex.winRate}%</td>

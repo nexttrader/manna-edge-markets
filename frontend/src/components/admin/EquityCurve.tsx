@@ -1,12 +1,23 @@
 import React, { useMemo } from 'react';
+import { getEffectiveRealizedR } from '../../utils/rAccounting';
 import './EquityCurve.css';
 
 interface TradeLog {
   strategy_id?: string;
   realized_pl?: number;
+  realized_r?: number;
+  realizedR?: number;
+  market?: string;
+  instrument?: string;
+  entry_price?: number;
+  entry_price_recorded?: number;
+  initial_stop?: number;
+  r_multiple_1?: number;
+  r_multiple_2?: number;
   created_at?: string;
   time_exited?: string;
   outcome_type?: string;
+  trading_style?: string;
 }
 
 interface StrategyStat {
@@ -17,6 +28,7 @@ interface StrategyStat {
 interface Props {
   tradeLogs: TradeLog[];
   strategies: StrategyStat[];
+  includeFees?: boolean;
 }
 
 // One colour per strategy — add more if needed
@@ -32,7 +44,7 @@ function getColour(id: string, index: number): string {
   return STRATEGY_COLOURS[id] ?? FALLBACK_COLOURS[index % FALLBACK_COLOURS.length];
 }
 
-export const EquityCurve: React.FC<Props> = ({ tradeLogs, strategies }) => {
+export const EquityCurve: React.FC<Props> = ({ tradeLogs, strategies, includeFees = false }) => {
   // Build per-strategy equity series from chronological trade logs
   const series = useMemo(() => {
     // Sort all logs by exit time then created_at
@@ -50,7 +62,7 @@ export const EquityCurve: React.FC<Props> = ({ tradeLogs, strategies }) => {
     curves['combined'] = [{ r: 0, label: 'Start' }];
 
     sorted.forEach(t => {
-      const pl = Number(t.realized_pl ?? 0);
+      const pl = getEffectiveRealizedR(t, includeFees);
       const sid = t.strategy_id ?? '';
       const label = t.time_exited
         ? new Date(t.time_exited).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -65,7 +77,7 @@ export const EquityCurve: React.FC<Props> = ({ tradeLogs, strategies }) => {
     });
 
     return curves;
-  }, [tradeLogs, strategies]);
+  }, [tradeLogs, strategies, includeFees]);
 
   // Determine chart bounds
   const allR = Object.values(series).flatMap(pts => pts.map(p => p.r));
