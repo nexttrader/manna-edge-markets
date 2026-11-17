@@ -248,6 +248,10 @@ export function ExpandableCalendar({
     'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
   ];
+  const shortMonthNames = [
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'
+  ];
 
   // Formatting helpers declared early to be used in calculations
   const formatPNLString = (rVal: number) => {
@@ -371,6 +375,45 @@ export function ExpandableCalendar({
 
     return grouped;
   }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter]);
+
+  // 2b. Compute Monthly P&L breakdown across all 12 months of the active year (respecting Style, Market & Fees toggles)
+  const { monthlyReturns, yearTotalR, yearTradesCount } = useMemo(() => {
+    const months = shortMonthNames.map((label, monthIndex) => ({
+      monthIndex,
+      label,
+      netR: 0,
+      trades: 0,
+    }));
+    let yrTotal = 0;
+    let yrCount = 0;
+
+    Object.entries(processedOutcomes).forEach(([tradingDay, daySessions]) => {
+      const yearStr = tradingDay.slice(0, 4);
+      if (Number(yearStr) !== currentYear) return;
+      const monthIdx = Number(tradingDay.slice(5, 7)) - 1;
+      if (monthIdx < 0 || monthIdx > 11) return;
+
+      (['asia', 'london', 'ny_am', 'ny_pm'] as SessionType[]).forEach((sk) => {
+        daySessions[sk].forEach((t) => {
+          const r = getEffectiveRealizedR(t, activeIncludeFees);
+          months[monthIdx].netR += r;
+          months[monthIdx].trades += 1;
+          yrTotal += r;
+          yrCount += 1;
+        });
+      });
+    });
+
+    months.forEach((m) => {
+      m.netR = Number(m.netR.toFixed(2));
+    });
+
+    return {
+      monthlyReturns: months,
+      yearTotalR: Number(yrTotal.toFixed(2)),
+      yearTradesCount: yrCount,
+    };
+  }, [processedOutcomes, currentYear, activeIncludeFees]);
 
   // 3. Generate Calendar Month Grid Cells
   const calendarCells = useMemo(() => {
@@ -716,7 +759,54 @@ export function ExpandableCalendar({
           </div>
         </div>
 
-        <div className="calendar-controls">
+        {/* 12-Month Yearly P&L Strip */}
+        <div className="monthly-returns-strip">
+          <div className="monthly-strip-header">
+            <span className="monthly-strip-title">📆 {currentYear} MONTHLY RETURNS</span>
+            <span className="monthly-strip-ytd">
+              {currentYear} Total ({yearTradesCount} trades):{' '}
+              <strong className={getPnlClass(yearTotalR)}>
+                {formatPNLString(yearTotalR)} ({formatCurrency(yearTotalR)})
+              </strong>
+            </span>
+          </div>
+          <div className="monthly-strip-grid">
+            {monthlyReturns.map((m) => {
+              const isSelectedMonth = m.monthIndex === currentMonth;
+              const hasTrades = m.trades > 0;
+              const toneClass = !hasTrades
+                ? 'empty'
+                : m.netR > 0.01
+                ? 'positive'
+                : m.netR < -0.01
+                ? 'negative'
+                : 'flat';
+
+              return (
+                <button
+                  key={m.label}
+                  type="button"
+                  className={`monthly-pill ${toneClass} ${isSelectedMonth ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedDayStr(null);
+                    setCurrentDate(new Date(currentYear, m.monthIndex, 1));
+                  }}
+                  title={`${monthNames[m.monthIndex]} ${currentYear}: ${m.trades} trades (${formatPNLString(m.netR)})`}
+                >
+                  <span className="monthly-pill-name">{m.label}</span>
+                  <span className={`monthly-pill-r ${hasTrades ? getPnlClass(m.netR) : 'text-muted'}`}>
+                    {hasTrades ? formatPNLString(m.netR) : '—'}
+                  </span>
+                  <span className="monthly-pill-usd">
+                    {hasTrades ? formatCurrency(m.netR).replace('.00', '') : '0 trades'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="calendar-controls" style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           {enableStyleToggle && (
             <div className="calendar-style-toggle">
               <button

@@ -642,16 +642,16 @@
   border-radius: 8px;
   padding: 2px;
   gap: 3px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .calendar-style-btn {
-  padding: 5px 10px;
+  padding: 5px 9px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 0.72rem;
+  font-size: 0.71rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -712,5 +712,122 @@
   border-color: rgba(245, 158, 11, 0.7);
   color: #fbbf24;
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+
+/* 12-Month Yearly Returns Strip */
+.monthly-returns-strip {
+  width: 100%;
+  flex-basis: 100%;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.monthly-strip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+
+.monthly-strip-title {
+  color: var(--kdt-gold, #ffd700);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.monthly-strip-ytd {
+  color: #bbb;
+}
+
+.monthly-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.monthly-pill {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 5px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.16s ease;
+  color: #ddd;
+}
+
+.monthly-pill:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.monthly-pill.positive {
+  border-color: rgba(0, 230, 118, 0.28);
+  background: rgba(0, 230, 118, 0.05);
+}
+
+.monthly-pill.negative {
+  border-color: rgba(255, 82, 82, 0.28);
+  background: rgba(255, 82, 82, 0.05);
+}
+
+.monthly-pill.empty {
+  opacity: 0.48;
+}
+
+.monthly-pill.active {
+  border-color: var(--kdt-gold, #ffd700);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.22);
+  opacity: 1;
+}
+
+.monthly-pill-name {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.05em;
+}
+
+.monthly-pill.active .monthly-pill-name {
+  color: var(--kdt-gold, #ffd700);
+}
+
+.monthly-pill-r {
+  font-size: 0.74rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.monthly-pill-usd {
+  font-size: 0.61rem;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .monthly-strip-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .calendar-style-toggle {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .monthly-strip-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
