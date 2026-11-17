@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { API_BASE } from '../config';
+import { useAuth } from '../context/AuthContext';
 import type { EdgeSetup } from '../types';
 
 export type DashboardStyleTab = 'scalp' | 'intraday' | 'swing';
@@ -36,8 +37,10 @@ export function useMtfStyleSetups(
   styleTab: DashboardStyleTab,
   swingMode: SwingPairMode
 ) {
+  const { effectiveRole } = useAuth();
   const isMtf = styleTab === 'scalp' || styleTab === 'swing';
-  const cacheKey = styleTab === 'scalp' ? 'scalp' : `swing:${swingMode}`;
+  const baseKey = styleTab === 'scalp' ? 'scalp' : `swing:${swingMode}`;
+  const cacheKey = `${baseKey}:${effectiveRole}`;
 
   const [setups, setSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.setups || []);
   const [runnerSetups, setRunnerSetups] = useState<EdgeSetup[]>(() => mtfClientCache.get(cacheKey)?.runnerSetups || []);
@@ -70,7 +73,7 @@ export function useMtfStyleSetups(
       setContextTf(styleTab === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H');
       setEntryTf(styleTab === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H');
     }
-  }, [isMtf, styleTab, swingMode, cacheKey]);
+  }, [isMtf, styleTab, swingMode, cacheKey, effectiveRole]);
 
   const fetchDesk = useCallback(async (force = false) => {
     if (!isMtf) return;
@@ -93,6 +96,7 @@ export function useMtfStyleSetups(
     try {
       const qs = new URLSearchParams({
         style: styleTab,
+        role: effectiveRole,
         ...(styleTab === 'swing' ? { swingMode } : {}),
         ...(force ? { refresh: '1' } : {})
       });
@@ -124,7 +128,7 @@ export function useMtfStyleSetups(
     } finally {
       setLoading(false);
     }
-  }, [isMtf, styleTab, swingMode, cacheKey]);
+  }, [isMtf, styleTab, swingMode, cacheKey, effectiveRole]);
 
   useEffect(() => {
     if (!isMtf) return;

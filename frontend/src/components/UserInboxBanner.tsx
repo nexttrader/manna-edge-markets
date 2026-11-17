@@ -7,7 +7,7 @@ interface UserInboxBannerProps {
 }
 
 export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox }) => {
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [reportBannerText, setReportBannerText] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
@@ -15,7 +15,7 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
   const [lastSeenCount, setLastSeenCount] = useState(0);
 
   const fetchUnread = useCallback(async () => {
-    if (!user?.email || user.role === 'admin' || user.role === 'super_admin') return;
+    if (!user?.email || effectiveRole === 'admin' || effectiveRole === 'super_admin') return;
     try {
       const res = await fetch(`${API_BASE}/api/support/tickets/user/${encodeURIComponent(user.email)}`);
       const data = await res.json();
@@ -29,7 +29,7 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
         setLastSeenCount(prev => (total < prev ? total : prev));
       }
     } catch {}
-  }, [user?.email, user?.role, lastSeenCount]);
+  }, [user?.email, effectiveRole, lastSeenCount]);
 
   useEffect(() => {
     fetchUnread();
@@ -39,7 +39,7 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
 
   // Connect to SSE stream for instant performance report notifications!
   useEffect(() => {
-    if (!user || user.role === 'admin' || user.role === 'super_admin') return;
+    if (!user || effectiveRole === 'admin' || effectiveRole === 'super_admin') return;
 
     let es: EventSource | null = null;
     try {
@@ -60,7 +60,7 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
     return () => {
       if (es) es.close();
     };
-  }, [user]);
+  }, [user, effectiveRole]);
 
   useEffect(() => {
     if ((unreadCount > 0 || reportBannerText) && !dismissed) {
@@ -80,7 +80,7 @@ export const UserInboxBanner: React.FC<UserInboxBannerProps> = ({ onOpenInbox })
     handleDismiss();
   };
 
-  if (!user || user.role === 'admin' || user.role === 'super_admin') return null;
+  if (!user || effectiveRole === 'admin' || effectiveRole === 'super_admin') return null;
   if (!visible) return null;
 
   return (

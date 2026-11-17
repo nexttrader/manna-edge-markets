@@ -30,6 +30,7 @@ import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
 import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
+import { useStrategies } from '../hooks/useAdmin';
 import {
   type DashboardStyleTab,
   type SwingPairMode,
@@ -53,21 +54,22 @@ function saveFilters(filters: object) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, originalAdmin, isImpersonating } = useAuth();
+  const { user, isImpersonating, effectiveRole } = useAuth();
   const { maintenance } = useMaintenance();
-  const isClientView = user?.role !== 'admin' && user?.role !== 'super_admin';
+  const isClientView = effectiveRole !== 'admin' && effectiveRole !== 'super_admin';
   const showMaintenanceLock = maintenance.enabled && isClientView;
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
+  const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
 
   const { setups, runnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { strategies: visibleStrategies } = useStrategies();
 
   const [styleTab, setStyleTab] = useState<DashboardStyleTab>('intraday');
   const [swingMode, setSwingMode] = useState<SwingPairMode>('d1_h4');
@@ -484,8 +486,12 @@ export const Dashboard: React.FC = () => {
                     onChange={(e) => updateFilter(setStrategyFilter, 'strategyFilter', e.target.value as StrategyFilter)}
                   >
                     <option value="all">All Strategies</option>
-                    <option value="sentinel_v2">{isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
-                    <option value="manna_snd">Manna SnD</option>
+                    {(visibleStrategies.length === 0 || visibleStrategies.some(s => s.id === 'sentinel_v2')) && (
+                      <option value="sentinel_v2">{isSuperAdmin ? 'Manna Elite v1.2 (Trade Sentinel Elite Framework)' : 'Manna Elite v1.2'}</option>
+                    )}
+                    {(visibleStrategies.length === 0 || visibleStrategies.some(s => s.id === 'manna_snd')) && (
+                      <option value="manna_snd">Manna SnD</option>
+                    )}
                   </select>
                 </div>
 

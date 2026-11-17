@@ -43,11 +43,9 @@ interface SetupCardProps {
 }
 
 export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = false, onToggleWatchlist, isTagged = false, onToggleTag, onInvalidate }) => {
-  const { user, originalAdmin, isImpersonating } = useAuth();
-  const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
-  const isAdmin = isImpersonating
-    ? (user?.role === 'admin' || user?.role === 'super_admin')
-    : (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin');
+  const { isImpersonating, effectiveRole } = useAuth();
+  const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin';
   const {
     canAccessEdgeFinder,
     loading: edgeFinderLoading,

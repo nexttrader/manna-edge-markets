@@ -17,15 +17,14 @@ import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
 import { type EdgeSetup } from '../types';
 import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
+import { RoleViewSwitcher } from './RoleViewSwitcher';
 
 export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] }) => {
   const navigate = useNavigate();
-  const { user, logout, originalAdmin, elevateToSuperAdmin, isImpersonating } = useAuth();
+  const { user, logout, elevateToSuperAdmin, isImpersonating, effectiveRole } = useAuth();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
-  const isAdmin = isImpersonating
-    ? (user?.role === 'admin' || user?.role === 'super_admin')
-    : (user?.role === 'admin' || user?.role === 'super_admin' || originalAdmin?.role === 'admin');
-  const isSuperAdmin = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin') && !isImpersonating;
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin';
+  const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
   const { activityLogs, setShowActivityFeed } = useSignalNotifications();
   const location = useLocation();
@@ -39,7 +38,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
   const [lastClickTime, setLastClickTime] = useState(0);
 
 
-  const isTrader = user?.role === 'trader';
+  const isTrader = effectiveRole === 'trader';
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -263,6 +262,8 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
 
             <ThemeToggle />
 
+            <RoleViewSwitcher />
+
             {/* Account Dropdown Menu */}
             {user ? (
               <div className="dropdown-wrapper font-mono">
@@ -287,7 +288,12 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                         {user.email} {isSuperAdmin ? '👁️' : ''}
                       </div>
                       <div className="user-role-badge">
-                        Role: <strong>{user.role.toUpperCase()}</strong>
+                        View: <strong>{effectiveRole.toUpperCase()}</strong>
+                        {effectiveRole !== user.role && (
+                          <span style={{ color: '#fbbf24', marginLeft: '6px' }}>
+                            (Account: {user.role.toUpperCase()})
+                          </span>
+                        )}
                       </div>
                       <div className="user-last-active">
                         🕒 Active: {user.lastActive || 'Just now'}
@@ -415,6 +421,10 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             </div>
 
             <div className="mobile-nav-footer">
+              <div className="mobile-voice-section">
+                <RoleViewSwitcher compact onAfterSwitch={() => setMobileMenuOpen(false)} />
+              </div>
+
               <div className="mobile-voice-section">
                 <span className="mobile-section-label">Voice Alerts</span>
                 <div className="mobile-voice-controls">

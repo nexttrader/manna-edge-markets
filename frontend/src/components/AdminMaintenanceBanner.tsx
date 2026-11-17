@@ -3,10 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { useMaintenance } from '../context/MaintenanceContext';
 
 export const AdminMaintenanceBanner: React.FC = () => {
-  const { user, isImpersonating, originalAdmin } = useAuth();
+  const { effectiveRole } = useAuth();
   const { maintenance, toggleMaintenance } = useMaintenance();
 
-  const isAdmin = (user?.role === 'admin' || user?.role === 'super_admin') || (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin'));
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin';
 
   if (!isAdmin || !maintenance.enabled) {
     return null;

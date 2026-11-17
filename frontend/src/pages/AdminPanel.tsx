@@ -73,7 +73,7 @@ function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
 }
 
 export const AdminPanel: React.FC = () => {
-  const { user, originalAdmin, logout, impersonateUser } = useAuth();
+  const { user, logout, impersonateUser, effectiveRole, isImpersonating } = useAuth();
   const navigate = useNavigate();
   const { triggerRun, triggerMannaSndScan, disableSignal, cancelUnwantedBatch, cancelRebootSignals } = useAdmin();
   const [isCancellingAll, setIsCancellingAll] = useState(false);
@@ -621,7 +621,7 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const isSuperAdmin = user?.role === 'super_admin' || originalAdmin?.role === 'super_admin';
+  const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
 
 
 

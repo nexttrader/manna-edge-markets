@@ -1455,8 +1455,11 @@ router.get('/analytics', async (req: Request, res: Response) => {
 });
 
 function isSuperAdminRequest(req: Request): boolean {
-  const roleHeader = (req.headers['x-user-role'] || req.headers['x-role'] || req.query.role || req.query.user_role || '').toString().toLowerCase();
-  const userEmail = (req.headers['x-user-email'] || req.headers['x-email'] || req.query.email || req.query.user_email || '').toString().toLowerCase();
+  const roleHeader = (req.headers['x-user-role'] || req.headers['x-role'] || req.query.role || req.query.user_role || '').toString().toLowerCase().trim();
+  if (roleHeader === 'admin' || roleHeader === 'trader') {
+    return false;
+  }
+  const userEmail = (req.headers['x-user-email'] || req.headers['x-email'] || req.query.email || req.query.user_email || '').toString().toLowerCase().trim();
 
   return roleHeader === 'super_admin' || userEmail === 'chadwinsolomon@gmail.com' || userEmail === 'superadmin@mannaedge.com';
 }

@@ -469,12 +469,8 @@ function computeRoleAccess(role: string, rolloutData: EdgeFinderRollout): boolea
 }
 
 export function useEdgeFinderAccess() {
-  const { user, originalAdmin, isImpersonating } = useAuth();
-  const effectiveRole = isImpersonating
-    ? (user?.role || 'trader')
-    : user?.role === 'super_admin' || originalAdmin?.role === 'super_admin'
-      ? 'super_admin'
-      : (user?.role || 'guest');
+  const { user, originalAdmin, effectiveRole: authEffectiveRole } = useAuth();
+  const effectiveRole = user ? authEffectiveRole : 'guest';
 
   const isSuperAdmin = effectiveRole === 'super_admin';
   const isAdmin = effectiveRole === 'admin';
@@ -622,12 +618,8 @@ export function useEdgeFinderAccess() {
 }
 
 export function useEdgeFinderData(enabled = true) {
-  const { user, originalAdmin, isImpersonating } = useAuth();
-  const effectiveRole = isImpersonating
-    ? (user?.role || 'trader')
-    : user?.role === 'super_admin' || originalAdmin?.role === 'super_admin'
-      ? 'super_admin'
-      : (user?.role || 'guest');
+  const { user, originalAdmin, effectiveRole: authEffectiveRole } = useAuth();
+  const effectiveRole = user ? authEffectiveRole : 'guest';
 
   const [snapshot, setSnapshot] = useState<EdgeFinderSnapshot | null>(() =>
     enabled ? sharedSnapshotCache.data : null

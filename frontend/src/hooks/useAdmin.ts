@@ -86,11 +86,11 @@ export function useAdmin() {
 
 export function useStrategies() {
   const [strategies, setStrategies] = useState<{ id: string; name: string; enabled: boolean }[]>([]);
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   const fetchStrategies = useCallback(async () => {
     try {
-      const role = user?.role || 'admin';
+      const role = effectiveRole || user?.role || 'admin';
       const email = encodeURIComponent(user?.email || '');
       const res = await fetch(`${API_BASE}/api/admin/strategies/status?role=${role}&email=${email}`);
       if (res.ok) {
@@ -100,7 +100,7 @@ export function useStrategies() {
     } catch {
       // Fallback
     }
-  }, [user]);
+  }, [user, effectiveRole]);
 
   const toggleStrategy = async (strategyId: string, enabled: boolean) => {
     try {

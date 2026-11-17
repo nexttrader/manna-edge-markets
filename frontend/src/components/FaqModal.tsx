@@ -11,9 +11,9 @@ interface FaqModalProps {
 }
 
 export const FaqModal: React.FC<FaqModalProps> = ({ onClose }) => {
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const { canAccessEdgeFinder, isSuperAdmin, isAdmin: isEdgeFinderAdmin } = useEdgeFinderAccess();
-  const isAdmin = isEdgeFinderAdmin || isSuperAdmin || user?.role === 'admin' || user?.role === 'super_admin';
+  const isAdmin = isEdgeFinderAdmin || isSuperAdmin || effectiveRole === 'admin' || effectiveRole === 'super_admin';
 
   // User profile active strategies & tier (defaults to all active for admin/pro, dynamic for profile)
   const activeStrategies = useMemo(() => {

@@ -27,14 +27,11 @@ function ProtectedTraderRoute({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isImpersonating, originalAdmin } = useAuth();
-  if (isImpersonating && (originalAdmin?.role === 'admin' || originalAdmin?.role === 'super_admin')) {
-    return <>{children}</>;
-  }
+  const { user, effectiveRole } = useAuth();
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  if (user.role !== 'admin' && user.role !== 'super_admin') {
+  if (effectiveRole !== 'admin' && effectiveRole !== 'super_admin') {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
@@ -67,15 +64,24 @@ function ProtectedEdgeFinderRoute({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedSuperAdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isImpersonating, originalAdmin } = useAuth();
+  const { user, isRealSuperAdmin, effectiveRole } = useAuth();
   const navigate = useNavigate();
 
-  if (isImpersonating && originalAdmin?.role === 'super_admin') {
+  if (effectiveRole === 'super_admin') {
     return <>{children}</>;
   }
 
-  if (user && user.role === 'super_admin') {
-    return <>{children}</>;
+  if (isRealSuperAdmin) {
+    return <Navigate to={effectiveRole === 'admin' ? '/admin' : '/dashboard'} replace />;
+  }
+
+  if (!user) {
+    return (
+      <MasterPasscodeModal
+        onSuccess={() => {}}
+        onCancel={() => navigate('/dashboard')}
+      />
+    );
   }
 
   return (

@@ -1,0 +1,80 @@
+.role-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(14, 9, 26, 0.92);
+  border: 1px solid rgba(179, 136, 255, 0.35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.role-view-switcher.is-previewing {
+  border-color: rgba(251, 191, 36, 0.75);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.22);
+}
+
+.rvs-prefix {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 0 4px 0 6px;
+}
+
+.rvs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.role-view-switcher.is-compact .rvs-btn {
+  padding: 4px 8px;
+  font-size: 0.68rem;
+}
+
+.rvs-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvs-btn.super_admin.active {
+  background: rgba(179, 136, 255, 0.22);
+  border-color: rgba(179, 136, 255, 0.7);
+  color: #e2c6ff;
+}
+
+.rvs-btn.admin.active {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.75);
+  color: #fcd34d;
+}
+
+.rvs-btn.trader.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.75);
+  color: #7dd3fc;
+}
+
+.rvs-icon {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .rvs-prefix {
+    display: none;
+  }
+}

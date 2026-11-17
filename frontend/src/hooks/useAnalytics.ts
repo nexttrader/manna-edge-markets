@@ -98,11 +98,11 @@ export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number 
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const role = user?.role || 'admin';
+      const role = effectiveRole || user?.role || 'admin';
       const email = encodeURIComponent(user?.email || '');
       const baseUrl = strategyId && strategyId !== 'all'
         ? `${API_BASE}/api/admin/analytics?strategy_id=${encodeURIComponent(strategyId)}&role=${role}&email=${email}`
@@ -128,7 +128,7 @@ export function useAnalytics(strategyId: string = 'all', pollIntervalMs: number 
     } finally {
       setLoading(false);
     }
-  }, [strategyId, user]);
+  }, [strategyId, user, effectiveRole]);
 
   useEffect(() => {
     fetchAnalytics();

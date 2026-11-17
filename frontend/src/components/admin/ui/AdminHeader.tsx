@@ -1,6 +1,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useEdgeFinderAccess } from '../../../hooks/useEdgeFinder';
+import { useAuth } from '../../../context/AuthContext';
+import { RoleViewSwitcher } from '../../RoleViewSwitcher';
 
 export interface AdminTabConfig {
   id: string;
@@ -44,6 +46,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { effectiveRole } = useAuth();
+  const showSuperAdminControls = isSuperAdminUser && effectiveRole === 'super_admin';
 
   return (
     <header className="console-header">
@@ -63,7 +67,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
               </h1>
 
               {/* Console Switcher (for privileged users) */}
-              {isSuperAdminUser && (
+              {showSuperAdminControls && (
                 <div className="console-switcher font-mono">
                   <button
                     type="button"
@@ -155,6 +159,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
               )}
             </div>
           )}
+
+          <RoleViewSwitcher compact />
 
           {/* Role Badge */}
           <div className={`console-role-pill ${currentConsole === 'super_admin' ? 'vault' : 'admin'}`}>

@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_BASE } from '../config';
 
+export type RoleViewMode = 'trader' | 'admin' | 'super_admin';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'trader' | 'admin' | 'super_admin';
+  role: RoleViewMode;
   tier?: 'free' | 'forex_only' | 'futures_forex';
   marketAccess?: 'all' | 'futures' | 'forex';
   mustChangePassword?: boolean;
@@ -26,6 +28,11 @@ interface AuthContextType {
   user: User | null;
   originalAdmin: User | null;
   isImpersonating: boolean;
+  actualRole: RoleViewMode;
+  isRealSuperAdmin: boolean;
+  viewRole: RoleViewMode;
+  effectiveRole: RoleViewMode;
+  setViewRole: (role: RoleViewMode) => void;
   login: (
     email: string,
     role?: 'trader' | 'admin' | 'super_admin',
@@ -86,6 +93,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const isImpersonating = !!originalAdmin;
+  const actualRole: RoleViewMode = (user?.role === 'super_admin' || originalAdmin?.role === 'super_admin')
+    ? 'super_admin'
+    : (user?.role || 'trader');
+  const isRealSuperAdmin = actualRole === 'super_admin';
+
+  const VIEW_ROLE_KEY = 'manna_super_admin_view_role';
+  const [viewRole, setViewRoleState] = useState<RoleViewMode>(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_ROLE_KEY);
+      if (saved === 'super_admin' || saved === 'admin' || saved === 'trader') {
+        return saved;
+      }
+    } catch {}
+    return 'super_admin';
+  });
+
+  const setViewRole = (nextRole: RoleViewMode) => {
+    if (!isRealSuperAdmin || isImpersonating) return;
+    setViewRoleState(nextRole);
+    try {
+      localStorage.setItem(VIEW_ROLE_KEY, nextRole);
+    } catch {}
+  };
+
+  const effectiveRole: RoleViewMode = isImpersonating
+    ? (user?.role || 'trader')
+    : isRealSuperAdmin
+      ? viewRole
+      : (user?.role || 'trader');
 
   useEffect(() => {
     if (user) {
@@ -200,8 +236,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tier: 'futures_forex'
       };
       setUser(superUser);
-      localStorage.setItem('manna_user', JSON.stringify(superUser));
+      setViewRoleState('super_admin');
+      try { localStorage.setItem('manna_user', JSON.stringify(superUser)); localStorage.setItem(VIEW_ROLE_KEY, 'super_admin'); } catch {}
     } else {
+      setViewRoleState('super_admin');
+      try { localStorage.setItem(VIEW_ROLE_KEY, 'super_admin'); } catch {}
       login('superadmin@mannaedge.com', 'super_admin', 'Master Telemetry Admin', 'futures_forex');
     }
   };
@@ -209,10 +248,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     setOriginalAdmin(null);
+    setViewRoleState('super_admin');
     try {
       localStorage.removeItem('manna_user');
       localStorage.removeItem('manna_original_admin');
       localStorage.removeItem('manna_passcode_unlocked');
+      localStorage.removeItem(VIEW_ROLE_KEY);
       sessionStorage.clear();
     } catch {
       /* ignore */
@@ -225,6 +266,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user, 
         originalAdmin, 
         isImpersonating, 
+        actualRole,
+        isRealSuperAdmin,
+        viewRole,
+        effectiveRole,
+        setViewRole,
         login, 
         logout, 
         elevateToSuperAdmin,

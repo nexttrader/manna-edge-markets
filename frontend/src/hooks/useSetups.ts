@@ -11,9 +11,16 @@ export function useSetups() {
   const [error, setError] = useState<string | null>(null);
 
   const { speak } = useVoice();
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const knownSetupIdsRef = useRef<Set<string>>(new Set());
   const isInitialFetchRef = useRef<boolean>(true);
+  const lastRoleRef = useRef<string>(effectiveRole);
+
+  if (lastRoleRef.current !== effectiveRole) {
+    lastRoleRef.current = effectiveRole;
+    isInitialFetchRef.current = true;
+    knownSetupIdsRef.current.clear();
+  }
 
   const fetchSetups = useCallback(async () => {
     if (!user || !user.email) {
@@ -25,7 +32,7 @@ export function useSetups() {
     }
 
     try {
-      const role = user.role || 'trader';
+      const role = effectiveRole || user.role || 'trader';
       const email = encodeURIComponent(user.email);
       const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`);
       if (!res.ok) throw new Error('Failed to fetch setups');
@@ -68,7 +75,7 @@ export function useSetups() {
     } finally {
       setLoading(false);
     }
-  }, [speak, user]);
+  }, [speak, user, effectiveRole]);
 
   useEffect(() => {
     fetchSetups();

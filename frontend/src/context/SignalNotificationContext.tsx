@@ -63,7 +63,7 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
   });
 
   const { speak } = useVoice();
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   const prevSetupsRef = useRef<Map<string, EdgeSetup>>(new Map());
   const isInitialLoad = useRef(true);
@@ -131,7 +131,7 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
   const fetchSetups = useCallback(async () => {
     try {
       // Fetch both active AND recent past setups so exit/invalidation/replacement events are detected reliably!
-      const role = user?.role || 'trader';
+      const role = effectiveRole || user?.role || 'trader';
       const email = encodeURIComponent(user?.email || '');
       const [activeRes, pastRes] = await Promise.all([
         fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`),

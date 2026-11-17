@@ -42,12 +42,12 @@ export function useDecisionMatrix() {
   const [topFocus, setTopFocus] = useState<DecisionMatrixItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const prevTopIdRef = useRef<string | null>(null);
 
   const fetchMatrix = useCallback(async () => {
     try {
-      const role = user?.role || 'trader';
+      const role = effectiveRole || user?.role || 'trader';
       const email = encodeURIComponent(user?.email || '');
       const res = await fetch(`${API_BASE}/api/accelerate/decision-matrix?role=${role}&email=${email}`);
       if (!res.ok) throw new Error('Failed to fetch decision matrix');
@@ -69,7 +69,7 @@ export function useDecisionMatrix() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, effectiveRole]);
 
   useEffect(() => {
     fetchMatrix();
