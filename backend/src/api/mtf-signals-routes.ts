@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { getMtfStyleSignals, SwingPairMode, TradingStyleMode } from '../discovery/mtf-style-signals';
-import { getMtfCalendarOutcomes } from '../discovery/mtf-style-tracker';
+import { getAllMtfRunners, getMtfCalendarOutcomes } from '../discovery/mtf-style-tracker';
 import * as queries from '../db/queries';
 
 const router = express.Router();
@@ -89,6 +89,36 @@ router.get('/outcomes', async (_req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: err?.message || 'Failed to load MTF calendar outcomes'
+    });
+  }
+});
+
+/**
+ * GET /api/mtf-signals/runners?role=...
+ * Returns all active TP1-banked runner positions across Scalping and Swing desks.
+ */
+router.get('/runners', async (req: Request, res: Response) => {
+  try {
+    const role = String(req.query.role || req.headers['x-user-role'] || 'trader').toLowerCase().trim();
+    let setups = await getAllMtfRunners();
+
+    if (role !== 'super_admin') {
+      const disabledAssets = await queries.getDisabledDisplayAssets();
+      if (disabledAssets.length > 0) {
+        setups = setups.filter(s => !disabledAssets.includes(s.instrument));
+      }
+    }
+
+    return res.json({
+      success: true,
+      setups,
+      count: setups.length,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to load MTF active runners'
     });
   }
 });

@@ -101,6 +101,8 @@ export interface EdgeSetup {
   timeframe?: string;
   htf_timeframe?: string;
   entry_timeframe?: string;
+  context_tf?: string;
+  entry_tf?: string;
   metadata?: string;
   opposing_strategy_warning?: string;
   correlation_note?: string;

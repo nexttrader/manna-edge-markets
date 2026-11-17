@@ -133,7 +133,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
     <>
       <header className="dashboard-header">
         <div className="container header-container">
-          <div className="header-left">
+          <div className="header-brand-left">
             <button
               className="mobile-menu-toggle-btn"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -152,68 +152,68 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
               <span className="logo-emblem">M</span>
               <span className="logo-title-text">MANNA EDGE</span>
             </Link>
-
-            <nav className="header-nav font-mono desktop-only-nav" aria-label="Primary Navigation">
-              <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
-                Dashboard
-              </Link>
-              <button
-                type="button"
-                className="nav-link"
-                onClick={() => setShowInbox(true)}
-                title="Open Support Desk & Submit Tickets"
-              >
-                Support
-                {inboxUnread > 0 && (
-                  <span className="support-badge-count">{inboxUnread}</span>
-                )}
-              </button>
-              <button
-                type="button"
-                className="nav-link"
-                onClick={() => setShowActivityFeed(true)}
-                title="Open Live Signal Activity Log & Timeline Feed"
-              >
-                Live Feed
-                {activityLogs.length > 0 && (
-                  <span className="nav-count-pill">{activityLogs.length}</span>
-                )}
-              </button>
-              <button
-                type="button"
-                className="nav-link"
-                onClick={() => setShowCalendar(true)}
-                title="View Economic News Calendar"
-              >
-                Calendar
-              </button>
-              <button
-                type="button"
-                className="nav-link"
-                onClick={() => setShowFaq(true)}
-                title="View Platform Guides & Knowledge Base"
-              >
-                FAQ
-              </button>
-
-              {canAccessEdgeFinder && (
-                <Link to="/edge-finder" className={`nav-link nav-link-gold ${location.pathname === '/edge-finder' ? 'active' : ''}`}>
-                  EdgeFinder
-                </Link>
-              )}
-
-              {isAdmin && (
-                <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
-                  Admin
-                </Link>
-              )}
-              {isSuperAdmin && (
-                <Link to="/vault-5287" className={`nav-link nav-link-vault ${location.pathname === '/vault-5287' ? 'active' : ''}`}>
-                  Master Desk
-                </Link>
-              )}
-            </nav>
           </div>
+
+          <nav className="header-nav font-mono desktop-only-nav" aria-label="Primary Navigation">
+            <Link to="/dashboard" className={`nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}>
+              Dashboard
+            </Link>
+            <button
+              type="button"
+              className="nav-link"
+              onClick={() => setShowInbox(true)}
+              title="Open Support Desk & Submit Tickets"
+            >
+              Support
+              {inboxUnread > 0 && (
+                <span className="support-badge-count">{inboxUnread}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="nav-link"
+              onClick={() => setShowActivityFeed(true)}
+              title="Open Live Signal Activity Log & Timeline Feed"
+            >
+              Live Feed
+              {activityLogs.length > 0 && (
+                <span className="nav-count-pill">{activityLogs.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="nav-link"
+              onClick={() => setShowCalendar(true)}
+              title="View Economic News Calendar"
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              className="nav-link"
+              onClick={() => setShowFaq(true)}
+              title="View Platform Guides & Knowledge Base"
+            >
+              FAQ
+            </button>
+
+            {canAccessEdgeFinder && (
+              <Link to="/edge-finder" className={`nav-link nav-link-gold ${location.pathname === '/edge-finder' ? 'active' : ''}`}>
+                EdgeFinder
+              </Link>
+            )}
+
+            {isAdmin && (
+              <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
+                Admin
+              </Link>
+            )}
+            {isSuperAdmin && (
+              <Link to="/vault-5287" className={`nav-link nav-link-vault ${location.pathname === '/vault-5287' ? 'active' : ''}`}>
+                Master Desk
+              </Link>
+            )}
+          </nav>
           
           <div className="header-actions">
             {/* Voice Announcements Toggle & Settings */}
@@ -262,7 +262,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
 
             <ThemeToggle />
 
-            <RoleViewSwitcher />
+            <RoleViewSwitcher compact />
 
             {/* Account Dropdown Menu */}
             {user ? (

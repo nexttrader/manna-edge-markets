@@ -12,25 +12,26 @@
 
 .header-container {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
-  gap: 12px;
+  min-height: 50px;
+  gap: 8px 14px;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1640px;
   margin: 0 auto;
-  padding: 6px 16px;
+  padding: 7px 18px;
   box-sizing: border-box;
   overflow: visible !important;
 }
 
+.header-brand-left,
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-  min-width: 0;
-  white-space: nowrap;
+  gap: 10px;
+  flex-shrink: 0;
+  order: 1;
 }
 
 .header-logo {
@@ -69,21 +70,25 @@
 }
 
 .header-nav {
+  order: 2;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 2px;
   background: rgba(17, 10, 30, 0.9);
   padding: 3px;
   border-radius: 8px;
   border: 1px solid var(--kdt-purple-border);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .nav-link {
   position: relative;
-  padding: 5px 10px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-family: var(--font-label);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -92,7 +97,7 @@
   transition: background 0.16s ease, color 0.16s ease;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
   background: none;
   border: none;
@@ -134,11 +139,15 @@
 }
 
 .header-actions {
+  order: 3;
   display: flex;
   align-items: center;
-  gap: 10px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
   position: relative;
+  max-width: 100%;
 }
 
 /* Dropdown Wrapper & Unclipped Popover */
@@ -551,11 +560,30 @@
 }
 
 /* Breakpoint rules */
+@media (max-width: 1520px) {
+  .header-brand-left {
+    order: 1;
+  }
+  .header-actions {
+    order: 2;
+    margin-left: auto;
+  }
+  .header-nav.desktop-only-nav {
+    order: 3;
+    flex-basis: 100%;
+    width: 100%;
+    justify-content: flex-start;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+}
+
 @media (max-width: 1200px) {
   .nav-link {
     padding: 5px 8px;
     font-size: 0.72rem;
   }
+  .header-brand-left,
   .header-left {
     gap: 8px;
   }
@@ -578,7 +606,7 @@
     gap: 6px;
   }
   .header-container {
-    padding: 0 12px;
+    padding: 6px 12px;
   }
 }
 

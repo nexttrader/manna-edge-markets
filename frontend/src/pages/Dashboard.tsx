@@ -70,7 +70,7 @@ export const Dashboard: React.FC = () => {
 
   const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
 
-  const { setups, runnerSetups, loading, refetch } = useSetups();
+  const { setups, runnerSetups, allRunnerSetups, loading, refetch } = useSetups();
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
@@ -105,11 +105,11 @@ export const Dashboard: React.FC = () => {
 
   const safeSetups = Array.isArray(setups) ? setups : [];
   const safeRunners = Array.isArray(runnerSetups) ? runnerSetups : [];
+  const safeAllRunners = Array.isArray(allRunnerSetups) && allRunnerSetups.length > 0 ? allRunnerSetups : safeRunners;
   const safeMtfSetups = Array.isArray(mtfDesk.setups) ? mtfDesk.setups : [];
   const safeMtfRunners = Array.isArray(mtfDesk.runnerSetups) ? mtfDesk.runnerSetups : [];
   const safeMtfPast = Array.isArray(mtfDesk.pastSetups) ? mtfDesk.pastSetups : [];
 
-  const activeRunnerSetups = styleTab === 'intraday' ? safeRunners : safeMtfRunners;
   const baseDeskSetups =
     styleTab === 'intraday'
       ? (stateFilter === 'runner'
@@ -252,8 +252,8 @@ export const Dashboard: React.FC = () => {
               onOpenCalculator={(s) => setCalcSetup(s)}
             />
             <RunnersPanel
-              runnerSetups={activeRunnerSetups}
-              loading={activeLoading}
+              runnerSetups={safeAllRunners}
+              loading={loading}
               autoExpand={stateFilter === 'runner'}
             />
             {canAccessEdgeFinder && (

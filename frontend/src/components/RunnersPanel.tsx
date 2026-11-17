@@ -11,9 +11,20 @@ interface RunnersPanelProps {
   autoExpand?: boolean;
 }
 
+type RunnerStyleFilter = 'all' | 'scalp' | 'intraday' | 'swing';
+
+function getRunnerStyle(setup: EdgeSetup): 'scalp' | 'intraday' | 'swing' {
+  const style = (setup.trading_style || '').toUpperCase();
+  const strat = (setup.strategy_id || '').toLowerCase();
+  if (style === 'SCALP' || strat === 'manna_scalper') return 'scalp';
+  if (style === 'SWING' || strat === 'manna_swing') return 'swing';
+  return 'intraday';
+}
+
 export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loading, autoExpand }) => {
   // Default to minimized/collapsed state unless autoExpand is requested
   const [isExpanded, setIsExpanded] = useState(false);
+  const [styleFilter, setStyleFilter] = useState<RunnerStyleFilter>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedChartSetup, setSelectedChartSetup] = useState<EdgeSetup | null>(null);
 
@@ -35,6 +46,14 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
     const ageMs = Date.now() - new Date(runnerStart).getTime();
     return ageMs < 5 * 24 * 60 * 60 * 1000;
   });
+
+  const scalpRunnersCount = activeRunners.filter(s => getRunnerStyle(s) === 'scalp').length;
+  const intradayRunnersCount = activeRunners.filter(s => getRunnerStyle(s) === 'intraday').length;
+  const swingRunnersCount = activeRunners.filter(s => getRunnerStyle(s) === 'swing').length;
+
+  const displayedRunners = activeRunners.filter(s =>
+    styleFilter === 'all' ? true : getRunnerStyle(s) === styleFilter
+  );
 
   // Keep selectedChartSetup reactive to latest live price ticks in activeRunners
   const activeChartSetup = selectedChartSetup
@@ -63,10 +82,15 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
             <span className="runners-icon">🏃</span>
             <span>ACTIVE RUNNERS DESK</span>
             <span className="runners-badge font-mono">{activeRunners.length} RUNNING</span>
+            <span className="runners-mini-splits font-mono">
+              <span>⚡{scalpRunnersCount}</span>
+              <span>📊{intradayRunnersCount}</span>
+              <span>🌊{swingRunnersCount}</span>
+            </span>
           </div>
           {isExpanded && (
             <p className="runners-subtitle font-mono">
-              Setups that reached TP1 (2R Logged). Tracking strictly for TP2 (3R) for up to 5 days (auto-closes if TP2 or BE not reached) without blocking new discovery scans.
+              Live TP1-banked runners across Scalping, Intraday &amp; Swing (80% banked @ 2R = +1.60R, 20% trailing at BE for 3R TP2 = +2.20R Net).
             </p>
           )}
         </div>
@@ -78,19 +102,52 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
 
       {isExpanded && (
         <div className="runners-panel-body animate-fade-in">
-          {activeRunners.length === 0 ? (
+          <div className="runners-style-tabs font-mono" role="tablist" aria-label="Filter Runners by Trading Style">
+            <button
+              type="button"
+              className={`runners-style-tab ${styleFilter === 'all' ? 'active all' : ''}`}
+              onClick={() => setStyleFilter('all')}
+            >
+              🌐 All Desks ({activeRunners.length})
+            </button>
+            <button
+              type="button"
+              className={`runners-style-tab ${styleFilter === 'scalp' ? 'active scalp' : ''}`}
+              onClick={() => setStyleFilter('scalp')}
+            >
+              ⚡ Scalping ({scalpRunnersCount})
+            </button>
+            <button
+              type="button"
+              className={`runners-style-tab ${styleFilter === 'intraday' ? 'active intraday' : ''}`}
+              onClick={() => setStyleFilter('intraday')}
+            >
+              📊 Intraday ({intradayRunnersCount})
+            </button>
+            <button
+              type="button"
+              className={`runners-style-tab ${styleFilter === 'swing' ? 'active swing' : ''}`}
+              onClick={() => setStyleFilter('swing')}
+            >
+              🌊 Swing ({swingRunnersCount})
+            </button>
+          </div>
+
+          {displayedRunners.length === 0 ? (
             <div className="runners-empty font-mono">
               <div className="runners-empty-icon">🛡️</div>
               <div style={{ color: '#00e5ff', fontWeight: 700, fontSize: '0.95rem', marginBottom: '4px' }}>
-                NO ACTIVE RUNNERS AT THIS MOMENT
+                {activeRunners.length === 0
+                  ? 'NO ACTIVE RUNNERS AT THIS MOMENT'
+                  : `NO ACTIVE ${styleFilter.toUpperCase()} RUNNERS AT THIS MOMENT`}
               </div>
               <div style={{ color: '#aaa', fontSize: '0.8rem' }}>
-                When an active trade reaches Take Profit 1 (+2.00R), it logs 2R into Analytics, moves Stop Loss to Break Even, and appears here to track for TP2 (+3.00R).
+                When a Scalping, Intraday, or Swing trade hits Take Profit 1 (+2.00R), 80% banks (+1.60R), Stop Loss locks at Break Even, and the 20% runner tracks here toward TP2 (+2.20R Net).
               </div>
             </div>
           ) : (
             <div className="runners-grid">
-               {activeRunners.map((setup) => {
+               {displayedRunners.map((setup) => {
                 const currentPrice = setup.current_price || 0;
                 const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid || 0;
                 const isLong = (setup.bias || 'long').toLowerCase() === 'long';
@@ -116,11 +173,25 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                 const entryTimestamp = setup.entry_triggered_at || setup.entryAt || setup.created_at || setup.createdAt;
                 const telegramId = formatTelegramTradeId(setup);
 
+                const runnerStyle = getRunnerStyle(setup);
+                const tfTag = runnerStyle === 'scalp'
+                  ? '⚡ SCALP · 15M/5M'
+                  : runnerStyle === 'swing'
+                  ? `🌊 SWING · ${setup.context_tf || '1D'}/${setup.entry_tf || '4H'}`
+                  : '📊 INTRADAY · 1H/15M';
+                const r1 = setup.r_multiple_1 || 2.0;
+                const r2 = setup.r_multiple_2 || 3.0;
+                const bankedR = Number((0.8 * r1).toFixed(2));
+                const fullR = Number((0.8 * r1 + 0.2 * r2).toFixed(2));
+
                 return (
                   <div key={setup.id} className={`runner-card glass-card ${isLong ? 'is-long' : 'is-short'}`}>
                     <div className="runner-card-header">
-                      <div className="runner-symbol-group">
+                      <div className="runner-symbol-group" style={{ flexWrap: 'wrap' }}>
                         <span className="runner-symbol font-mono">{setup.instrument}</span>
+                        <span className={`runner-style-pill font-mono ${runnerStyle}`}>
+                          {tfTag}
+                        </span>
                         <span className={`runner-bias-badge font-mono ${isLong ? 'bias-long' : 'bias-short'}`}>
                           {isLong ? '▲ LONG' : '▼ SHORT'}
                         </span>
@@ -149,7 +220,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                         >
                           📈 Chart
                         </button>
-                        <span className="runner-logged-badge font-mono">+2.00R SECURED</span>
+                        <span className="runner-logged-badge font-mono">+{bankedR.toFixed(2)}R BANKED</span>
                       </div>
                     </div>
 
@@ -235,8 +306,8 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                           <div className="runner-progress-marker tp1-marker" style={{ left: `${tp1Percent}%` }} />
                         </div>
                         <div className="runner-progress-stats font-mono">
-                          <span className="progress-pct">{progressPercent.toFixed(0)}% reached</span>
-                          <span className="progress-r">+{((progressPercent / 100) * 3.0).toFixed(2)}R</span>
+                          <span className="progress-pct">{progressPercent.toFixed(0)}% to TP2</span>
+                          <span className="progress-r">Blended: +{bankedR.toFixed(2)}R → +{fullR.toFixed(2)}R</span>
                         </div>
                       </div>
                     </div>
@@ -276,7 +347,7 @@ export const RunnersPanel: React.FC<RunnersPanelProps> = ({ runnerSetups, loadin
                       </div>
 
                       <div className="runner-tracking-note font-mono">
-                        Tracking for TP2 upgrade from 2R to 3R (Max 5 days) • New scans on {setup.instrument} UNBLOCKED
+                        80% banked @ {r1.toFixed(1)}R (+{bankedR.toFixed(2)}R) • Trailing final 20% to TP2 (+{fullR.toFixed(2)}R Net)
                       </div>
                     </div>
                   </div>

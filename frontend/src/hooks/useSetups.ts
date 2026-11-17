@@ -7,6 +7,7 @@ import { API_BASE } from '../config';
 export function useSetups() {
   const [setups, setSetups] = useState<EdgeSetup[]>([]);
   const [runnerSetups, setRunnerSetups] = useState<EdgeSetup[]>([]);
+  const [allRunnerSetups, setAllRunnerSetups] = useState<EdgeSetup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,15 +40,40 @@ export function useSetups() {
       const data = await res.json();
       const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : [];
 
-      // Fetch active runners
+      // Fetch active runners across Intraday AND Scalping/Swing desks in parallel
       try {
-        const runnersRes = await fetch(`${API_BASE}/api/accelerate/runner-setups?role=${role}&email=${email}`);
+        const [runnersRes, mtfRunnersRes] = await Promise.all([
+          fetch(`${API_BASE}/api/accelerate/runner-setups?role=${role}&email=${email}`),
+          fetch(`${API_BASE}/api/mtf-signals/runners?role=${role}`).catch(() => null),
+        ]);
+
+        let intraRunners: EdgeSetup[] = [];
         if (runnersRes.ok) {
           const runnersData = await runnersRes.json();
           if (Array.isArray(runnersData.setups)) {
-            setRunnerSetups(runnersData.setups);
+            intraRunners = runnersData.setups.map((s: EdgeSetup) => ({
+              ...s,
+              trading_style: s.trading_style || 'INTRADAY',
+            }));
+            setRunnerSetups(intraRunners);
           }
         }
+
+        let mtfRunners: EdgeSetup[] = [];
+        if (mtfRunnersRes && mtfRunnersRes.ok) {
+          const mtfData = await mtfRunnersRes.json();
+          if (Array.isArray(mtfData.setups)) {
+            mtfRunners = mtfData.setups;
+          }
+        }
+
+        const merged = [...intraRunners];
+        mtfRunners.forEach((m) => {
+          if (!merged.some((existing) => existing.id === m.id)) {
+            merged.push(m);
+          }
+        });
+        setAllRunnerSetups(merged);
       } catch (rErr) {
         console.warn('Failed to fetch runner setups:', rErr);
       }
@@ -83,5 +109,5 @@ export function useSetups() {
     return () => clearInterval(interval);
   }, [fetchSetups]);
 
-  return { setups: Array.isArray(setups) ? setups : [], runnerSetups, loading, error, refetch: fetchSetups };
+  return { setups: Array.isArray(setups) ? setups : [], runnerSetups, allRunnerSetups, loading, error, refetch: fetchSetups };
 }

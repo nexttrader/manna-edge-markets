@@ -1565,3 +1565,23 @@ export async function getTradingStyleComparisonReport(): Promise<{
     recentMtfSetups: normalizedMtfRows.slice(0, 40)
   };
 }
+
+/**
+ * Returns ALL active runner trades across Scalping and Swing (both D1·4H and 4H·1H)
+ * after refreshing them against live quotes/candles so the Active Runners Desk
+ * shows live runners across every trading style together.
+ */
+export async function getAllMtfRunners(): Promise<MtfStyleSetup[]> {
+  await ensureMtfTrackerTable();
+  const rows = await queryDb<TrackedMtfSetupRow>(
+    `SELECT * FROM mtf_style_setups
+     WHERE signal_state = 'runner'
+     ORDER BY COALESCE(entry_triggered_at, created_at) DESC`
+  );
+  if (rows.length === 0) return [];
+  const evaluated = await evaluateAndPersistOpenRows(rows, new Date().toISOString());
+  return evaluated
+    .filter((r) => r.signal_state === 'runner')
+    .map(rowToMtfSetup)
+    .sort((a, b) => (b.conviction_score || 0) - (a.conviction_score || 0));
+}
