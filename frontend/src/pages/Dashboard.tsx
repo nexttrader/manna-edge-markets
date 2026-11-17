@@ -300,6 +300,19 @@ export const Dashboard: React.FC = () => {
                 <span className="style-desk-heading">
                   <span className="style-desk-name">Scalping</span>
                   <span className="style-tf-chip">15M · 5M</span>
+                  <span
+                    className="style-beta-badge"
+                    tabIndex={0}
+                    role="note"
+                    aria-label="Beta mode: Scalping is still in testing mode while we fine-tune speed, stops, and filters. Always double-check before trading."
+                    title="Still in testing mode — we are fine-tuning fast entries, stops, and filters. Always double-check before trading."
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    BETA MODE <span className="beta-info-dot" aria-hidden="true">?</span>
+                    <span className="style-beta-tooltip" role="tooltip">
+                      Still in testing mode — we&apos;re still fine-tuning fast entries, stops, and filters. Trade cautiously and double-check setups.
+                    </span>
+                  </span>
                 </span>
                 <span className="style-desk-sub">Fast Momentum</span>
               </span>
@@ -344,6 +357,19 @@ export const Dashboard: React.FC = () => {
                 <span className="style-desk-heading">
                   <span className="style-desk-name">Swing</span>
                   <span className="style-tf-chip">{swingMode === 'd1_h4' ? 'D1 · 4H' : '4H · 1H'}</span>
+                  <span
+                    className="style-beta-badge"
+                    tabIndex={0}
+                    role="note"
+                    aria-label="Beta mode: Swing trading is still in testing mode while we fine-tune multi-day timing and stops. Always double-check before trading."
+                    title="Still in testing mode — we are fine-tuning multi-day entries, stops, and filters. Always double-check before trading."
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    BETA MODE <span className="beta-info-dot" aria-hidden="true">?</span>
+                    <span className="style-beta-tooltip" role="tooltip">
+                      Still in testing mode — we&apos;re still fine-tuning multi-day timing, stops, and filters. Trade cautiously and double-check setups.
+                    </span>
+                  </span>
                 </span>
                 <span className="style-desk-sub">Multi-Day Macro</span>
               </span>

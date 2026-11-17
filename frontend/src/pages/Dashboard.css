@@ -233,6 +233,9 @@ html[data-theme="light"] .dashboard-ef-cta-action {
   border: 1px solid rgba(212, 175, 55, 0.25);
   border-radius: 14px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 .style-desk-bar:hover {
@@ -411,6 +414,88 @@ html[data-theme="light"] .dashboard-ef-cta-action {
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.22);
   color: #ffffff;
+}
+
+.style-beta-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  color: #fbbf24;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.beta-info-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.26);
+  color: #fde68a;
+  font-size: 0.55rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.style-beta-tooltip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: 245px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #120926;
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.72);
+  color: #f8fafc;
+  font-size: 0.69rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+  z-index: 90;
+}
+
+.style-beta-badge:hover .style-beta-tooltip,
+.style-beta-badge:focus-visible .style-beta-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+html[data-theme="light"] .style-beta-badge {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(217, 119, 6, 0.55);
+  color: #92400e;
+}
+
+html[data-theme="light"] .beta-info-dot {
+  background: rgba(217, 119, 6, 0.2);
+  color: #78350f;
+}
+
+html[data-theme="light"] .style-beta-tooltip {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(217, 119, 6, 0.6);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
 }
 
 @media (max-width: 780px) {
