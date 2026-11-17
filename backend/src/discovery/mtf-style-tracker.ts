@@ -27,8 +27,20 @@ function edgeLabelIsStrongForBias(label: EdgeBiasLabel, bias: Bias): boolean {
   return bias === 'long' ? label === 'Strong Buy' : label === 'Strong Sell';
 }
 
+function classifyHorizonStatus(bias: Bias, score: number): 'AGREES' | 'COUNTER' | 'NEUTRAL' {
+  if (bias === 'long') {
+    if (score >= 0.5) return 'AGREES';
+    if (score <= -0.5) return 'COUNTER';
+    return 'NEUTRAL';
+  }
+  if (score <= -0.5) return 'AGREES';
+  if (score >= 0.5) return 'COUNTER';
+  return 'NEUTRAL';
+}
+
 /**
  * Gates Scalping & Swing signals strictly on EdgeFinder Agreement OR Strong Confluence.
+ * Rejects any signal that would render COUNTER MACRO BIAS or EDGEFINDER NEUTRAL (e.g. Intraday opposing).
  * Intraday signals are never filtered here and remain untouched.
  */
 export function evaluateEdgeFinderConfluence(
@@ -47,6 +59,16 @@ export function evaluateEdgeFinderConfluence(
     };
   }
 
+  const scalpScore = scorecard.timeframes?.SCALP?.score ?? scorecard.totalScore;
+  const intraScore = scorecard.timeframes?.INTRADAY?.score ?? scorecard.totalScore;
+  const swingScore = scorecard.timeframes?.SWING?.score ?? scorecard.totalScore;
+
+  const scalpStatus = classifyHorizonStatus(bias, scalpScore);
+  const intraStatus = classifyHorizonStatus(bias, intraScore);
+  const swingStatus = classifyHorizonStatus(bias, swingScore);
+  const opposingCount = [scalpStatus, intraStatus, swingStatus].filter(s => s === 'COUNTER').length;
+  const agreesCount = [scalpStatus, intraStatus, swingStatus].filter(s => s === 'AGREES').length;
+
   const profile = style === 'scalp' ? scorecard.timeframes.SCALP : scorecard.timeframes.SWING;
   const conf = scorecard.timeframeConfluence;
   const overallMatches = edgeLabelMatchesBias(scorecard.biasLabel, bias);
@@ -56,6 +78,19 @@ export function evaluateEdgeFinderConfluence(
   const isStrongProfile = edgeLabelIsStrongForBias(profile.biasLabel, bias);
   const notCounterTrend = profile.htfConfluence !== 'COUNTER_TREND';
 
+  // Reject immediately if Intraday or any other EdgeFinder horizon is opposing (would show COUNTER MACRO BIAS)
+  if (intraStatus === 'COUNTER' || opposingCount > 0) {
+    return {
+      approved: false,
+      matchType: 'REJECTED',
+      reason: `Counter macro bias on EdgeFinder horizon (${style.toUpperCase()}: ${profile.biasLabel}, INTRADAY: ${intraScore}, ${conf.summary})`,
+      score: profile.score,
+      biasLabel: profile.biasLabel,
+      summary: conf.summary
+    };
+  }
+
+  // 1. Strong Confluence: 3/3 aligned horizons OR Strong Buy/Sell confirmed without any counter horizon
   if (
     (conf.allAligned && dominantMatches) ||
     (isStrongProfile && notCounterTrend && overallMatches) ||
@@ -71,7 +106,8 @@ export function evaluateEdgeFinderConfluence(
     };
   }
 
-  if (profileMatches && overallMatches && notCounterTrend) {
+  // 2. Agreement: Style horizon & overall EdgeFinder agree without COUNTER_TREND or opposing horizons
+  if (profileMatches && overallMatches && notCounterTrend && (intraStatus === 'AGREES' || agreesCount >= 2)) {
     return {
       approved: true,
       matchType: 'STYLE_AND_OVERALL_AGREEMENT',
@@ -1023,11 +1059,15 @@ export async function syncMtfSetupsAndGetLiveBoard(
   const stillOpenByInst = new Map<string, TrackedMtfSetupRow>();
   for (const r of evaluatedOpen) {
     if (OPEN_MTF_STATES.includes(r.signal_state)) {
-      // Clear pending un-entered zones if EdgeFinder does not agree or lack strong confluence
-      if (r.signal_state === 'awaiting_entry' && edgeScorecards && edgeScorecards.size > 0) {
+      if (edgeScorecards && edgeScorecards.size > 0) {
         const sc = edgeScorecards.get((r.instrument || '').toUpperCase());
         const efCheck = evaluateEdgeFinderConfluence(sc, style, (r.bias || 'long') as Bias);
-        if (!efCheck.approved) {
+        const isLegacyPreGateActive =
+          r.signal_state === 'active' &&
+          (!r.metadata || !String(r.metadata).includes('edgefinder_confluence'));
+
+        // Clear un-entered pending zones OR pre-gate legacy active rows if EdgeFinder does not agree
+        if (!efCheck.approved && (r.signal_state === 'awaiting_entry' || isLegacyPreGateActive)) {
           await queryDb(
             `UPDATE mtf_style_setups
              SET signal_state = 'invalidated', invalidation_reason = 'edgefinder_conflict',
@@ -1177,6 +1217,11 @@ export async function syncMtfSetupsAndGetLiveBoard(
   const openRows = Array.from(stillOpenByInst.values());
   const activeAndPending = openRows
     .filter((r) => r.signal_state === 'awaiting_entry' || r.signal_state === 'active')
+    .filter((r) => {
+      if (!edgeScorecards || edgeScorecards.size === 0) return true;
+      const sc = edgeScorecards.get((r.instrument || '').toUpperCase());
+      return evaluateEdgeFinderConfluence(sc, style, (r.bias || 'long') as Bias).approved;
+    })
     .map(rowToMtfSetup)
     .sort((a, b) => b.conviction_score - a.conviction_score);
 

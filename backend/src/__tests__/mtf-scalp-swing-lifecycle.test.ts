@@ -403,24 +403,30 @@ async function runTests() {
     allAligned?: boolean;
     dominantBias?: any;
     summary?: string;
-  }): AssetEdgeScorecard =>
-    ({
+  }): AssetEdgeScorecard => {
+    const scoreFor = (lbl: string): number =>
+      lbl === 'Strong Buy' ? 6.0 : lbl === 'Buy' ? 2.5 : lbl === 'Strong Sell' ? -6.0 : lbl === 'Sell' ? -2.5 : 0.1;
+    const overallLbl = overrides.biasLabel || 'Strong Buy';
+    const scalpLbl = overrides.scalpLabel || 'Strong Buy';
+    const swingLbl = overrides.swingLabel || 'Strong Buy';
+    return ({
       instrument: overrides.instrument || 'EUR/USD',
-      biasLabel: overrides.biasLabel || 'Strong Buy',
+      totalScore: scoreFor(overallLbl),
+      biasLabel: overallLbl,
       timeframes: {
         SCALP: {
-          score: 6.2,
-          biasLabel: overrides.scalpLabel || 'Strong Buy',
+          score: scoreFor(scalpLbl),
+          biasLabel: scalpLbl,
           htfConfluence: overrides.scalpHtf || 'ALIGNED'
         },
         INTRADAY: {
-          score: 5.5,
-          biasLabel: overrides.biasLabel || 'Strong Buy',
+          score: scoreFor(overallLbl),
+          biasLabel: overallLbl,
           htfConfluence: 'ALIGNED'
         },
         SWING: {
-          score: 5.8,
-          biasLabel: overrides.swingLabel || 'Strong Buy',
+          score: scoreFor(swingLbl),
+          biasLabel: swingLbl,
           htfConfluence: overrides.swingHtf || 'ALIGNED'
         }
       },
@@ -431,6 +437,7 @@ async function runTests() {
         dominantBias: overrides.dominantBias || 'Strong Buy'
       }
     } as unknown as AssetEdgeScorecard);
+  };
 
   // 9a. 3/3 Strong Confluence approves long and rejects short
   const efStrongBull = makeScorecard({});
@@ -439,7 +446,7 @@ async function runTests() {
   assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'swing', 'long').approved, true);
   assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'scalp', 'short').approved, false);
 
-  // 9b. Neutral or Counter-Trend rejected unless strong confluence
+  // 9b. Neutral, Counter-Trend, or Counter-Intraday Horizon rejected (so COUNTER MACRO BIAS never renders on Scalp/Swing cards)
   const efNeutral = makeScorecard({
     biasLabel: 'Neutral',
     scalpLabel: 'Buy',
@@ -459,6 +466,16 @@ async function runTests() {
     summary: 'CONFLICTING HORIZONS (Counter-Trend)'
   });
   assert.strictEqual(evaluateEdgeFinderConfluence(efCounterTrend, 'scalp', 'long').approved, false);
+
+  const efCounterIntradayHorizon: AssetEdgeScorecard = {
+    ...makeScorecard({ biasLabel: 'Buy', scalpLabel: 'Buy', scalpHtf: 'ALIGNED', swingLabel: 'Buy', swingHtf: 'ALIGNED', allAligned: false, dominantBias: 'Neutral' }),
+    timeframes: {
+      SCALP: { score: 3.5, biasLabel: 'Buy', htfConfluence: 'ALIGNED' } as any,
+      INTRADAY: { score: -1.0, biasLabel: 'Neutral', htfConfluence: 'NEUTRAL' } as any,
+      SWING: { score: 2.0, biasLabel: 'Buy', htfConfluence: 'ALIGNED' } as any
+    }
+  };
+  assert.strictEqual(evaluateEdgeFinderConfluence(efCounterIntradayHorizon, 'scalp', 'long').approved, false, 'Negative Intraday horizon (-1.0) must reject CL-style Counter Macro Bias on Scalp');
 
   // 9c. Overall + horizon agreement without counter-trend approves
   const efAgree = makeScorecard({

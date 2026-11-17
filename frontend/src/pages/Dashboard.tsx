@@ -29,7 +29,12 @@ import { MockMaintenanceSignalCard } from '../components/MockMaintenanceSignalCa
 import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
-import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
+import {
+  useEdgeFinderAccess,
+  useEdgeFinderData,
+  findEdgeFinderScorecard,
+  computeSignalEdgeConfluence,
+} from '../hooks/useEdgeFinder';
 import { useStrategies } from '../hooks/useAdmin';
 import {
   type DashboardStyleTab,
@@ -69,6 +74,7 @@ export const Dashboard: React.FC = () => {
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { snapshot: edgeSnapshot } = useEdgeFinderData(canAccessEdgeFinder);
   const { strategies: visibleStrategies } = useStrategies();
 
   const [styleTab, setStyleTab] = useState<DashboardStyleTab>('intraday');
@@ -123,6 +129,23 @@ export const Dashboard: React.FC = () => {
     if (!setup) return false;
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
+
+    // On Scalping & Swing live desks ONLY (never Intraday), hide any live signal card where EdgeFinder is Counter Macro Bias or Neutral
+    if (
+      (styleTab === 'scalp' || styleTab === 'swing') &&
+      stateStr !== 'resolved' &&
+      stateStr !== 'invalidated' &&
+      stateStr !== 'superseded' &&
+      edgeSnapshot?.scorecards?.length
+    ) {
+      const sc = findEdgeFinderScorecard(setup.instrument || '', edgeSnapshot.scorecards);
+      if (sc) {
+        const ef = computeSignalEdgeConfluence(setup.bias || 'long', sc);
+        if (ef.state === 'COUNTER' || ef.state === 'NEUTRAL') {
+          return false;
+        }
+      }
+    }
     const biasStr = (setup.bias || 'long').toLowerCase();
     const stratId = (setup.strategy_id || 'sentinel_v2').toLowerCase();
     const currentPrice = setup.current_price;
