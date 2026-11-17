@@ -559,8 +559,75 @@
   color: #fff;
 }
 
+/* Compact Unified Utility Capsule */
+.header-utility-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(17, 10, 30, 0.9);
+  border: 1px solid var(--kdt-purple-border);
+}
+
+.utility-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.utility-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.16s ease;
+  padding: 0;
+}
+
+.utility-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.utility-icon-btn.is-enabled {
+  background: rgba(0, 230, 118, 0.14);
+  border-color: rgba(0, 230, 118, 0.35);
+}
+
+.utility-icon-btn.is-disabled {
+  background: rgba(255, 82, 82, 0.1);
+  border-color: rgba(255, 82, 82, 0.25);
+  opacity: 0.85;
+}
+
+.header-utility-capsule .circuit-breaker {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-size: 0.7rem;
+  gap: 5px;
+}
+
+.header-utility-capsule .theme-toggle-btn.is-compact {
+  padding: 3px 5px;
+  border: none;
+  background: transparent;
+}
+
+.nav-resources-menu {
+  left: 0;
+  right: auto;
+  min-width: 225px;
+}
+
 /* Breakpoint rules */
-@media (max-width: 1520px) {
+@media (max-width: 1180px) {
   .header-brand-left {
     order: 1;
   }
@@ -575,17 +642,6 @@
     justify-content: flex-start;
     padding: 4px 6px;
     gap: 4px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .nav-link {
-    padding: 5px 8px;
-    font-size: 0.72rem;
-  }
-  .header-brand-left,
-  .header-left {
-    gap: 8px;
   }
 }
 
@@ -700,9 +756,14 @@ html[data-theme="light"] .logo-emblem {
   border-color: rgba(122, 85, 0, 0.55);
 }
 
-html[data-theme="light"] .header-nav {
+html[data-theme="light"] .header-nav,
+html[data-theme="light"] .header-utility-capsule {
   background: #f1f5f9;
   border-color: rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .utility-divider {
+  background: rgba(15, 23, 42, 0.14);
 }
 
 html[data-theme="light"] .nav-link {

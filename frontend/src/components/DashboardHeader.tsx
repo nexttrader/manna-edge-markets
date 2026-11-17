@@ -33,6 +33,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
   const [showInbox, setShowInbox] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showResourcesMenu, setShowResourcesMenu] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
@@ -46,6 +47,7 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
       const target = e.target as HTMLElement;
       if (!target.closest('.dropdown-wrapper')) {
         setShowUserMenu(false);
+        setShowResourcesMenu(false);
       }
     };
     document.addEventListener('click', handleClickOutside);
@@ -161,17 +163,6 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             <button
               type="button"
               className="nav-link"
-              onClick={() => setShowInbox(true)}
-              title="Open Support Desk & Submit Tickets"
-            >
-              Support
-              {inboxUnread > 0 && (
-                <span className="support-badge-count">{inboxUnread}</span>
-              )}
-            </button>
-            <button
-              type="button"
-              className="nav-link"
               onClick={() => setShowActivityFeed(true)}
               title="Open Live Signal Activity Log & Timeline Feed"
             >
@@ -180,28 +171,66 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                 <span className="nav-count-pill">{activityLogs.length}</span>
               )}
             </button>
-            <button
-              type="button"
-              className="nav-link"
-              onClick={() => setShowCalendar(true)}
-              title="View Economic News Calendar"
-            >
-              Calendar
-            </button>
-            <button
-              type="button"
-              className="nav-link"
-              onClick={() => setShowFaq(true)}
-              title="View Platform Guides & Knowledge Base"
-            >
-              FAQ
-            </button>
 
             {canAccessEdgeFinder && (
               <Link to="/edge-finder" className={`nav-link nav-link-gold ${location.pathname === '/edge-finder' ? 'active' : ''}`}>
                 EdgeFinder
               </Link>
             )}
+
+            <div className="dropdown-wrapper">
+              <button
+                type="button"
+                className={`nav-link ${showResourcesMenu ? 'active' : ''}`}
+                onClick={() => {
+                  setShowResourcesMenu(prev => !prev);
+                  setShowUserMenu(false);
+                }}
+                title="Support, Calendar, FAQ & What's New"
+              >
+                Desk Tools ▾
+                {inboxUnread > 0 && (
+                  <span className="support-badge-count">{inboxUnread}</span>
+                )}
+              </button>
+
+              {showResourcesMenu && (
+                <div className="header-dropdown-menu nav-resources-menu font-mono animate-slide-up">
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => { setShowInbox(true); setShowResourcesMenu(false); }}
+                  >
+                    <span>📬 Support Desk</span>
+                    {inboxUnread > 0 && <span className="mobile-pill-badge red" style={{ marginLeft: 'auto' }}>{inboxUnread}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => { setShowCalendar(true); setShowResourcesMenu(false); }}
+                  >
+                    📅 Economic Calendar
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => { setShowFaq(true); setShowResourcesMenu(false); }}
+                  >
+                    ❓ Knowledge Base / FAQ
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent(OPEN_NEW_FEATURES_EVENT));
+                      setShowResourcesMenu(false);
+                    }}
+                  >
+                    ✨ What's New
+                  </button>
+                </div>
+              )}
+            </div>
 
             {isAdmin && (
               <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
@@ -210,57 +239,44 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             )}
             {isSuperAdmin && (
               <Link to="/vault-5287" className={`nav-link nav-link-vault ${location.pathname === '/vault-5287' ? 'active' : ''}`}>
-                Master Desk
+                Vault
               </Link>
             )}
           </nav>
           
           <div className="header-actions">
-            {/* Voice Announcements Toggle & Settings */}
-            <div className="voice-control-box font-mono desktop-voice-controls">
-              <button 
-                className={`voice-toggle-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
-                onClick={toggleVoice}
-                title={voiceEnabled ? 'Click to Mute Voice Announcements' : 'Click to Enable Voice Announcements'}
-              >
-                {voiceEnabled ? '🔊 Voice' : '🔇 Muted'}
-              </button>
-              {voiceEnabled && (
-                <>
-                  <button 
-                    className="voice-settings-btn" 
-                    onClick={() => testVoice()}
-                    title="Test Audio Voice Alert"
-                  >
-                    ▶
-                  </button>
+            <div className="header-utility-capsule font-mono">
+              <div className="desktop-voice-controls" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                <button
+                  type="button"
+                  className={`utility-icon-btn ${voiceEnabled ? 'is-enabled' : 'is-disabled'}`}
+                  onClick={toggleVoice}
+                  title={voiceEnabled ? 'Voice Alerts ON (Click to Mute)' : 'Voice Alerts Muted (Click to Enable)'}
+                >
+                  {voiceEnabled ? '🔊' : '🔇'}
+                </button>
+                {voiceEnabled && (
                   <button
-                    className="voice-settings-btn"
+                    type="button"
+                    className="utility-icon-btn"
                     onClick={() => setShowVoiceSettings(true)}
-                    title="Configure Voice Settings"
+                    title="Voice Alert Settings"
                   >
                     ⚙️
                   </button>
-                </>
-              )}
+                )}
+              </div>
+
+              <span className="utility-divider" aria-hidden="true" />
+
+              <div className="header-circuit-breaker-wrap">
+                <CircuitBreakerIndicator />
+              </div>
+
+              <span className="utility-divider" aria-hidden="true" />
+
+              <ThemeToggle compact />
             </div>
-
-
-            <div className="header-circuit-breaker-wrap">
-              <CircuitBreakerIndicator />
-            </div>
-
-            <button
-              type="button"
-              className="new-features-flash-btn font-mono"
-              onClick={() => window.dispatchEvent(new CustomEvent(OPEN_NEW_FEATURES_EVENT))}
-              title="See what's new in Manna Edge"
-            >
-              <span className="nf-flash-dot" aria-hidden="true" />
-              NEW FEATURES
-            </button>
-
-            <ThemeToggle />
 
             <RoleViewSwitcher compact />
 
@@ -269,7 +285,10 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
               <div className="dropdown-wrapper font-mono">
                 <button 
                   className={`header-user-btn font-mono ${showUserMenu ? 'active' : ''}`}
-                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  onClick={() => {
+                    setShowUserMenu(!showUserMenu);
+                    setShowResourcesMenu(false);
+                  }}
                   title={`Account: ${user.name || user.email}`}
                 >
                   <span className="user-icon-chip">👤</span>
