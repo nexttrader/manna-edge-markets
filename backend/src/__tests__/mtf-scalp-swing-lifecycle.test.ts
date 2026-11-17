@@ -12,11 +12,13 @@ import { getTimeframeStopDistance } from '../discovery/stop-loss-rules';
 import { aggregateToFourHourCandles } from '../discovery/yahoo-provider';
 import {
   ensureMtfTrackerTable,
+  evaluateEdgeFinderConfluence,
   evaluateMtfRowLifecycle,
   syncMtfSetupsAndGetLiveBoard,
   getMtfCalendarOutcomes,
   TrackedMtfSetupRow
 } from '../discovery/mtf-style-tracker';
+import type { AssetEdgeScorecard } from '../edge-finder/edge-finder-service';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { queryDb } from '../db/database';
 import type { Candle } from '../discovery/types';
@@ -389,6 +391,108 @@ async function runTests() {
   const boardCooldown = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [cooldownCandidate]);
   assert.ok(!boardCooldown.setups.some((s) => s.id === 'mtf-scalp-COOL-new'), 'Cooldown must block immediate churn re-entry after sl_hit');
   console.log('✅ TEST 8: Inside-zone fills, TP1-only BE, FX/Swing stop floors, and post-SL cooldown passed');
+
+  // TEST 9: EdgeFinder Agreement & Strong Confluence Gate (Scalp & Swing only)
+  const makeScorecard = (overrides: {
+    instrument?: string;
+    biasLabel?: any;
+    scalpLabel?: any;
+    scalpHtf?: 'ALIGNED' | 'COUNTER_TREND' | 'NEUTRAL';
+    swingLabel?: any;
+    swingHtf?: 'ALIGNED' | 'COUNTER_TREND' | 'NEUTRAL';
+    allAligned?: boolean;
+    dominantBias?: any;
+    summary?: string;
+  }): AssetEdgeScorecard =>
+    ({
+      instrument: overrides.instrument || 'EUR/USD',
+      biasLabel: overrides.biasLabel || 'Strong Buy',
+      timeframes: {
+        SCALP: {
+          score: 6.2,
+          biasLabel: overrides.scalpLabel || 'Strong Buy',
+          htfConfluence: overrides.scalpHtf || 'ALIGNED'
+        },
+        INTRADAY: {
+          score: 5.5,
+          biasLabel: overrides.biasLabel || 'Strong Buy',
+          htfConfluence: 'ALIGNED'
+        },
+        SWING: {
+          score: 5.8,
+          biasLabel: overrides.swingLabel || 'Strong Buy',
+          htfConfluence: overrides.swingHtf || 'ALIGNED'
+        }
+      },
+      timeframeConfluence: {
+        allAligned: overrides.allAligned ?? true,
+        alignedCount: overrides.allAligned === false ? 1 : 3,
+        summary: overrides.summary || '3/3 ALIGNED BULLISH (Scalp + Intra + Swing)',
+        dominantBias: overrides.dominantBias || 'Strong Buy'
+      }
+    } as unknown as AssetEdgeScorecard);
+
+  // 9a. 3/3 Strong Confluence approves long and rejects short
+  const efStrongBull = makeScorecard({});
+  assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'scalp', 'long').approved, true);
+  assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'scalp', 'long').matchType, 'STRONG_CONFLUENCE');
+  assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'swing', 'long').approved, true);
+  assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'scalp', 'short').approved, false);
+
+  // 9b. Neutral or Counter-Trend rejected unless strong confluence
+  const efNeutral = makeScorecard({
+    biasLabel: 'Neutral',
+    scalpLabel: 'Buy',
+    scalpHtf: 'NEUTRAL',
+    allAligned: false,
+    dominantBias: 'Neutral',
+    summary: 'NEUTRAL CONSOLIDATION'
+  });
+  assert.strictEqual(evaluateEdgeFinderConfluence(efNeutral, 'scalp', 'long').approved, false);
+
+  const efCounterTrend = makeScorecard({
+    biasLabel: 'Buy',
+    scalpLabel: 'Buy',
+    scalpHtf: 'COUNTER_TREND',
+    allAligned: false,
+    dominantBias: 'Buy',
+    summary: 'CONFLICTING HORIZONS (Counter-Trend)'
+  });
+  assert.strictEqual(evaluateEdgeFinderConfluence(efCounterTrend, 'scalp', 'long').approved, false);
+
+  // 9c. Overall + horizon agreement without counter-trend approves
+  const efAgree = makeScorecard({
+    biasLabel: 'Buy',
+    scalpLabel: 'Buy',
+    scalpHtf: 'ALIGNED',
+    swingLabel: 'Buy',
+    swingHtf: 'ALIGNED',
+    allAligned: false,
+    dominantBias: 'Buy',
+    summary: '2/3 BULLISH (Partial Pullback)'
+  });
+  assert.strictEqual(evaluateEdgeFinderConfluence(efAgree, 'scalp', 'long').approved, true);
+  assert.strictEqual(evaluateEdgeFinderConfluence(efAgree, 'swing', 'long').approved, true);
+
+  // 9d. Pending awaiting_entry row invalidates when EdgeFinder conflicts, while active row stays open
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price,
+      created_at, updated_at
+    ) VALUES ('mtf-scalp-EFPEND', 'mtf-scalp-EFPEND', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'EFPEND', 'forex', 'long', 1.1000, 1.1010, 1.1005, 1.0990, 1.0990, 1.1035, 1.1050, 2, 3, 85, 90, 'london', 'awaiting_entry', 0, 0, 1.1020, ?, ?)`,
+    [baseTime, baseTime]
+  );
+  const efMap = new Map<string, AssetEdgeScorecard>([
+    ['EFPEND', makeScorecard({ instrument: 'EFPEND', biasLabel: 'Sell', scalpLabel: 'Sell', allAligned: true, dominantBias: 'Sell', summary: '3/3 ALIGNED BEARISH' })]
+  ]);
+  const boardEf = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [], efMap);
+  assert.ok(!boardEf.setups.some((s) => s.id === 'mtf-scalp-EFPEND'), 'Conflicting EdgeFinder bias must clear pending awaiting_entry setup');
+  const efPendAfter = await queryDb<TrackedMtfSetupRow>(`SELECT * FROM mtf_style_setups WHERE id = 'mtf-scalp-EFPEND'`);
+  assert.strictEqual(efPendAfter[0].invalidation_reason, 'edgefinder_conflict');
+  console.log('✅ TEST 9: EdgeFinder agreement & strong confluence gate passed');
 
   console.log('\n🎉 All Scalping, Swing & Chart Lifecycle tests passed!');
 }

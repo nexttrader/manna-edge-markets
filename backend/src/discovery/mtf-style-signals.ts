@@ -4,7 +4,17 @@ import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from 
 import { getInstrumentDecimals, getTimeframeStopDistance } from './stop-loss-rules';
 import { Bias, Candle } from './types';
 import { aggregateToFourHourCandles, getLiveCandles, getLiveCurrentPrice, getLiveQuoteDetails } from './yahoo-provider';
-import { syncMtfSetupsAndGetLiveBoard } from './mtf-style-tracker';
+import {
+  evaluateEdgeFinderConfluence,
+  syncMtfSetupsAndGetLiveBoard,
+  type EdgeFinderConfluenceDecision
+} from './mtf-style-tracker';
+import {
+  buildEdgeFinderSnapshot,
+  type AssetEdgeScorecard
+} from '../edge-finder/edge-finder-service';
+
+export { evaluateEdgeFinderConfluence, type EdgeFinderConfluenceDecision };
 
 export type TradingStyleMode = 'scalp' | 'swing';
 export type SwingPairMode = 'd1_h4' | 'h4_h1';
@@ -139,7 +149,9 @@ async function buildSetupForInstrument(
   instrument: string,
   market: 'futures' | 'forex',
   style: TradingStyleMode,
-  swingMode: SwingPairMode
+  swingMode: SwingPairMode,
+  edgeScorecard?: AssetEdgeScorecard | null,
+  enforceEdgeFinder = false
 ): Promise<MtfStyleSetup | null> {
   const contextTfCode: '15m' | '4h' | '1d' =
     style === 'scalp' ? '15m' : swingMode === 'd1_h4' ? '1d' : '4h';
@@ -184,6 +196,13 @@ async function buildSetupForInstrument(
   );
   if (!biasRes) return null;
   const { bias, strength } = biasRes;
+
+  const efDecision = enforceEdgeFinder
+    ? evaluateEdgeFinderConfluence(edgeScorecard, style, bias)
+    : null;
+  if (efDecision && !efDecision.approved) {
+    return null;
+  }
 
   // Reject falling-knife / vertical-squeeze entries where latest completed entry bar closed strongly against bias
   const prevBar = entryCandles[entryCandles.length - 2] || entryCandles[entryCandles.length - 1];
@@ -341,7 +360,10 @@ async function buildSetupForInstrument(
 
   const killzone = getActiveSessionNameUTC();
   const styleLabel = style === 'scalp' ? 'Scalping' : 'Swing';
-  const selectionRationale = `${styleLabel} desk (${contextLabel} Context + ${entryLabel} Entry). ${bias.toUpperCase()} structural alignment detected on ${contextLabel} with ${entryLabel} liquidity retrace zone at ${entryMid}. Risk floor calibrated to ${entryLabel} ATR with ${r1.toFixed(2)}R TP1 / ${r2.toFixed(2)}R TP2.`;
+  const efSuffix = efDecision
+    ? ` EdgeFinder: ${efDecision.biasLabel} (${efDecision.score > 0 ? '+' : ''}${efDecision.score}) · ${efDecision.summary}.`
+    : '';
+  const selectionRationale = `${styleLabel} desk (${contextLabel} Context + ${entryLabel} Entry). ${bias.toUpperCase()} structural alignment detected on ${contextLabel} with ${entryLabel} liquidity retrace zone at ${entryMid}. Risk floor calibrated to ${entryLabel} ATR with ${r1.toFixed(2)}R TP1 / ${r2.toFixed(2)}R TP2.${efSuffix}`;
 
   const uniqueId = `mtf-${style}-${style === 'swing' ? swingMode + '-' : ''}${instrument.replace('/', '')}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -384,6 +406,12 @@ async function buildSetupForInstrument(
       entry_tf: entryLabel,
       entry_zone_base_time: anchorTime,
       order_type: filledAtCreation ? 'MARKET ORDER' : (bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT'),
+      edgefinder_confluence: efDecision ? {
+        matchType: efDecision.matchType,
+        score: efDecision.score,
+        biasLabel: efDecision.biasLabel,
+        summary: efDecision.summary
+      } : undefined,
       selection_rationale: selectionRationale
     })
   };
@@ -406,6 +434,15 @@ export async function getMtfStyleSignals(
     const existingScan = discoveryCache.get(cacheKey);
     const shouldDiscover = forceRefresh || !existingScan || Date.now() - existingScan.ts >= ttl;
 
+    const edgeSnapshot = await buildEdgeFinderSnapshot(false).catch(() => null);
+    const edgeByInst = new Map<string, AssetEdgeScorecard>();
+    if (edgeSnapshot?.scorecards) {
+      for (const sc of edgeSnapshot.scorecards) {
+        edgeByInst.set(sc.instrument.toUpperCase(), sc);
+      }
+    }
+    const hasEdgeData = edgeByInst.size > 0;
+
     let discoveredCandidates: MtfStyleSetup[] = [];
     if (shouldDiscover) {
       const targets: Array<{ instrument: string; market: 'futures' | 'forex' }> = [
@@ -414,7 +451,16 @@ export async function getMtfStyleSignals(
       ];
 
       const settled = await Promise.allSettled(
-        targets.map((t) => buildSetupForInstrument(t.instrument, t.market, style, swingMode))
+        targets.map((t) =>
+          buildSetupForInstrument(
+            t.instrument,
+            t.market,
+            style,
+            swingMode,
+            edgeByInst.get(t.instrument.toUpperCase()) || null,
+            hasEdgeData
+          )
+        )
       );
 
       discoveredCandidates = settled
@@ -426,7 +472,12 @@ export async function getMtfStyleSignals(
     }
 
     // Always evaluate open tracked setups against live prices & intra-bar candles and return persisted state
-    const board = await syncMtfSetupsAndGetLiveBoard(style, swingMode, discoveredCandidates);
+    const board = await syncMtfSetupsAndGetLiveBoard(
+      style,
+      swingMode,
+      discoveredCandidates,
+      hasEdgeData ? edgeByInst : undefined
+    );
 
     const contextTf = style === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H';
     const entryTf = style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';

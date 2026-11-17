@@ -2,10 +2,95 @@ import { isPg, queryDb } from '../db/database';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { computeATR } from './atr';
 import type { MtfStyleSetup, SwingPairMode, TradingStyleMode } from './mtf-style-signals';
+import type { AssetEdgeScorecard, EdgeBiasLabel } from '../edge-finder/edge-finder-service';
 import { getInstrumentDecimals } from './stop-loss-rules';
-import { Candle } from './types';
+import { Bias, Candle } from './types';
 import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails } from './yahoo-provider';
 import { getCurrentKillzone, isMarketOpen, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
+
+export interface EdgeFinderConfluenceDecision {
+  approved: boolean;
+  matchType: 'STRONG_CONFLUENCE' | 'STYLE_AND_OVERALL_AGREEMENT' | 'REJECTED';
+  reason: string;
+  score: number;
+  biasLabel: string;
+  summary: string;
+}
+
+function edgeLabelMatchesBias(label: EdgeBiasLabel, bias: Bias): boolean {
+  return bias === 'long'
+    ? label === 'Buy' || label === 'Strong Buy'
+    : label === 'Sell' || label === 'Strong Sell';
+}
+
+function edgeLabelIsStrongForBias(label: EdgeBiasLabel, bias: Bias): boolean {
+  return bias === 'long' ? label === 'Strong Buy' : label === 'Strong Sell';
+}
+
+/**
+ * Gates Scalping & Swing signals strictly on EdgeFinder Agreement OR Strong Confluence.
+ * Intraday signals are never filtered here and remain untouched.
+ */
+export function evaluateEdgeFinderConfluence(
+  scorecard: AssetEdgeScorecard | null | undefined,
+  style: TradingStyleMode,
+  bias: Bias
+): EdgeFinderConfluenceDecision {
+  if (!scorecard) {
+    return {
+      approved: false,
+      matchType: 'REJECTED',
+      reason: 'Missing EdgeFinder scorecard',
+      score: 0,
+      biasLabel: 'Neutral',
+      summary: 'No EdgeFinder data'
+    };
+  }
+
+  const profile = style === 'scalp' ? scorecard.timeframes.SCALP : scorecard.timeframes.SWING;
+  const conf = scorecard.timeframeConfluence;
+  const overallMatches = edgeLabelMatchesBias(scorecard.biasLabel, bias);
+  const profileMatches = edgeLabelMatchesBias(profile.biasLabel, bias);
+  const dominantMatches = edgeLabelMatchesBias(conf.dominantBias, bias);
+  const isStrongOverall = edgeLabelIsStrongForBias(scorecard.biasLabel, bias);
+  const isStrongProfile = edgeLabelIsStrongForBias(profile.biasLabel, bias);
+  const notCounterTrend = profile.htfConfluence !== 'COUNTER_TREND';
+
+  if (
+    (conf.allAligned && dominantMatches) ||
+    (isStrongProfile && notCounterTrend && overallMatches) ||
+    (isStrongOverall && profileMatches)
+  ) {
+    return {
+      approved: true,
+      matchType: 'STRONG_CONFLUENCE',
+      reason: `Strong EdgeFinder confluence (${conf.summary})`,
+      score: profile.score,
+      biasLabel: profile.biasLabel,
+      summary: conf.summary
+    };
+  }
+
+  if (profileMatches && overallMatches && notCounterTrend) {
+    return {
+      approved: true,
+      matchType: 'STYLE_AND_OVERALL_AGREEMENT',
+      reason: `EdgeFinder agrees (${style.toUpperCase()}: ${profile.biasLabel}, Overall: ${scorecard.biasLabel})`,
+      score: profile.score,
+      biasLabel: profile.biasLabel,
+      summary: conf.summary
+    };
+  }
+
+  return {
+    approved: false,
+    matchType: 'REJECTED',
+    reason: `EdgeFinder conflict/neutral (${style.toUpperCase()}: ${profile.biasLabel} / ${profile.htfConfluence}, Overall: ${scorecard.biasLabel}, ${conf.summary})`,
+    score: profile.score,
+    biasLabel: profile.biasLabel,
+    summary: conf.summary
+  };
+}
 
 export interface StyleComparisonRow {
   style: 'SCALP' | 'INTRADAY' | 'SWING';
@@ -915,7 +1000,8 @@ function rowToMtfSetup(row: TrackedMtfSetupRow): MtfStyleSetup {
 export async function syncMtfSetupsAndGetLiveBoard(
   style: TradingStyleMode,
   swingMode: SwingPairMode,
-  candidates: MtfStyleSetup[]
+  candidates: MtfStyleSetup[],
+  edgeScorecards?: Map<string, AssetEdgeScorecard>
 ): Promise<MtfBoardResult> {
   await ensureMtfTrackerTable();
   const nowIso = new Date().toISOString();
@@ -937,6 +1023,21 @@ export async function syncMtfSetupsAndGetLiveBoard(
   const stillOpenByInst = new Map<string, TrackedMtfSetupRow>();
   for (const r of evaluatedOpen) {
     if (OPEN_MTF_STATES.includes(r.signal_state)) {
+      // Clear pending un-entered zones if EdgeFinder does not agree or lack strong confluence
+      if (r.signal_state === 'awaiting_entry' && edgeScorecards && edgeScorecards.size > 0) {
+        const sc = edgeScorecards.get((r.instrument || '').toUpperCase());
+        const efCheck = evaluateEdgeFinderConfluence(sc, style, (r.bias || 'long') as Bias);
+        if (!efCheck.approved) {
+          await queryDb(
+            `UPDATE mtf_style_setups
+             SET signal_state = 'invalidated', invalidation_reason = 'edgefinder_conflict',
+                 invalidation_detail = ?, resolved_at = ?, updated_at = ?
+             WHERE id = ?`,
+            [efCheck.reason, nowIso, nowIso, r.id]
+          );
+          continue;
+        }
+      }
       stillOpenByInst.set(r.instrument, r);
     }
   }
