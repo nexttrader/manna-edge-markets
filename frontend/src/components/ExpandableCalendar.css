@@ -147,10 +147,171 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.calendar-day-cell.has-macro-event.macro-cpi {
+  border-top: 2px solid rgba(251, 146, 60, 0.7);
+  background: linear-gradient(180deg, rgba(251, 146, 60, 0.07) 0%, rgba(255, 255, 255, 0.02) 55%);
+}
+
+.calendar-day-cell.has-macro-event.macro-nfp {
+  border-top: 2px solid rgba(56, 189, 248, 0.7);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.07) 0%, rgba(255, 255, 255, 0.02) 55%);
+}
+
+.calendar-day-cell.has-macro-event.macro-fomc {
+  border-top: 2px solid rgba(232, 121, 249, 0.7);
+  background: linear-gradient(180deg, rgba(232, 121, 249, 0.08) 0%, rgba(255, 255, 255, 0.02) 55%);
+}
+
+.calendar-day-cell.today.has-macro-event {
+  border-color: var(--kdt-gold, #ffd700);
+}
+
+.day-cell-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 18px;
+}
+
 .day-number {
   font-size: 0.9rem;
   font-weight: 800;
   color: var(--kdt-text-muted, #888);
+  line-height: 1.1;
+}
+
+.day-macro-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.day-macro-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.day-macro-badge.macro-cpi {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.16);
+  border: 1px solid rgba(251, 146, 60, 0.55);
+}
+
+.day-macro-badge.macro-nfp {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+}
+
+.day-macro-badge.macro-fomc {
+  color: #e879f9;
+  background: rgba(232, 121, 249, 0.16);
+  border: 1px solid rgba(232, 121, 249, 0.55);
+}
+
+/* Macro Legend & Month Catalyst Strip */
+.calendar-macro-legend-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 9px 14px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.72rem;
+}
+
+.macro-legend-keys,
+.macro-month-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.macro-legend-heading {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--kdt-text-muted, #888);
+}
+
+.macro-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.macro-key-desc {
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.macro-legend-divider {
+  color: rgba(255, 255, 255, 0.16);
+}
+
+.session-legend-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.session-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.macro-month-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 0.67rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.macro-month-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.macro-month-chip.macro-cpi .macro-chip-type { color: #fb923c; font-weight: 900; }
+.macro-month-chip.macro-nfp .macro-chip-type { color: #38bdf8; font-weight: 900; }
+.macro-month-chip.macro-fomc .macro-chip-type { color: #e879f9; font-weight: 900; }
+
+.macro-month-chip.active {
+  border-color: var(--kdt-gold, #ffd700);
+  background: rgba(255, 215, 0, 0.12);
+}
+
+.macro-chip-r {
+  font-weight: 900;
 }
 
 .calendar-day-cell.today .day-number {
@@ -298,6 +459,77 @@
 
 .close-drawer-btn:hover {
   color: #fff;
+}
+
+/* Macro Catalyst Banner in Details Drawer */
+.drawer-macro-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.drawer-macro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.drawer-macro-item.macro-cpi {
+  border-left: 3px solid #fb923c;
+  background: rgba(251, 146, 60, 0.06);
+}
+
+.drawer-macro-item.macro-nfp {
+  border-left: 3px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.drawer-macro-item.macro-fomc {
+  border-left: 3px solid #e879f9;
+  background: rgba(232, 121, 249, 0.06);
+}
+
+.drawer-macro-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drawer-macro-title {
+  font-size: 0.84rem;
+  color: #f8fafc;
+}
+
+.drawer-macro-time {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.drawer-macro-figures {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  margin-left: auto;
+}
+
+.drawer-macro-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.4;
 }
 
 /* Session Cards Inside Expanded Drawer */
@@ -556,6 +788,18 @@
   }
   .day-number {
     font-size: 0.75rem;
+  }
+  .day-macro-badge {
+    font-size: 0.48rem;
+    padding: 1px 3px;
+    letter-spacing: 0.03em;
+  }
+  .calendar-macro-legend-bar {
+    padding: 8px 10px;
+  }
+  .macro-legend-divider,
+  .session-legend-group {
+    display: none;
   }
   .r-pnl-pill {
     font-size: 0.68rem;

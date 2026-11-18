@@ -1,7 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { EdgeSetup } from '../types';
+import { API_BASE } from '../config';
 import { SetupChartModal } from './SetupChartModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
+import {
+  buildMacroEventsMap,
+  formatPlainDateHeading,
+  getTodayPlainDateStr,
+  type LiveFeedEventLike,
+  type MacroCalendarEvent,
+} from '../data/macroCalendarDates';
 import {
   getAccurateRealizedR,
   estimateTradeFeeR,
@@ -147,6 +155,7 @@ interface DayData {
   forexR: number;
   sessions: Record<SessionType, DaySessionData>;
   hasActivity: boolean;
+  macroEvents: MacroCalendarEvent[];
 }
 
 /**
@@ -233,6 +242,30 @@ export function ExpandableCalendar({
   const [selectedReviewSetup, setSelectedReviewSetup] = useState<EdgeSetup | null>(null);
   const [copiedTradeId, setCopiedTradeId] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
+  const [liveMacroEvents, setLiveMacroEvents] = useState<LiveFeedEventLike[]>([]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/news/calendar?currency=USD&impact=high`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && Array.isArray(data.events)) {
+          setLiveMacroEvents(data.events);
+        }
+      })
+      .catch(() => {
+        // Static 2025-2027 BLS/Fed macro schedule remains active offline
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isExpanded]);
+
+  const macroEventsByDate = useMemo(
+    () => buildMacroEventsMap(liveMacroEvents),
+    [liveMacroEvents]
+  );
 
   const currentMarketFilter = propsMarketFilter !== undefined ? propsMarketFilter : internalMarketFilter;
   const handleMarketFilterChange = (m: 'all' | 'forex' | 'futures') => {
@@ -444,7 +477,8 @@ export function ExpandableCalendar({
           ny_am: { trades: [], totalR: 0 },
           ny_pm: { trades: [], totalR: 0 }
         },
-        hasActivity: false
+        hasActivity: false,
+        macroEvents: macroEventsByDate[dateStr] || []
       });
     }
 
@@ -504,7 +538,8 @@ export function ExpandableCalendar({
         futuresR: dayFuturesR,
         forexR: dayForexR,
         sessions: sessionsData,
-        hasActivity
+        hasActivity,
+        macroEvents: macroEventsByDate[dateStr] || []
       });
     }
 
@@ -526,12 +561,20 @@ export function ExpandableCalendar({
           ny_am: { trades: [], totalR: 0 },
           ny_pm: { trades: [], totalR: 0 }
         },
-        hasActivity: false
+        hasActivity: false,
+        macroEvents: macroEventsByDate[dateStr] || []
       });
     }
 
     return cells;
-  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter, activeIncludeFees]);
+  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter, activeIncludeFees, macroEventsByDate]);
+
+  const monthMacroDays = useMemo(
+    () => calendarCells.filter((c) => c.isCurrentMonth && c.macroEvents.length > 0),
+    [calendarCells]
+  );
+
+  const todayStr = getTodayPlainDateStr();
 
   // Navigate Months
   const handlePrevMonth = () => {
@@ -897,6 +940,60 @@ export function ExpandableCalendar({
         </div>
       </div>
 
+      {/* Macro Catalyst Legend & Month Quick-Jump Bar */}
+      <div className="calendar-macro-legend-bar glass-card">
+        <div className="macro-legend-keys">
+          <span className="macro-legend-heading">MACRO CATALYSTS:</span>
+          <span className="macro-key-item" title="US Consumer Price Index (08:30 AM ET)">
+            <span className="day-macro-badge macro-cpi">CPI</span>
+            <span className="macro-key-desc">08:30 ET</span>
+          </span>
+          <span className="macro-key-item" title="US Non-Farm Payrolls (08:30 AM ET)">
+            <span className="day-macro-badge macro-nfp">NFP</span>
+            <span className="macro-key-desc">08:30 ET</span>
+          </span>
+          <span className="macro-key-item" title="FOMC Rate Decision & Statement (02:00 PM ET)">
+            <span className="day-macro-badge macro-fomc">FOMC</span>
+            <span className="macro-key-desc">14:00 ET</span>
+          </span>
+          <span className="macro-legend-divider">|</span>
+          <span className="session-legend-group">
+            <span className="session-legend-item"><span className="session-dot asia" />Asia</span>
+            <span className="session-legend-item"><span className="session-dot london" />London</span>
+            <span className="session-legend-item"><span className="session-dot ny_am" />NY AM</span>
+            <span className="session-legend-item"><span className="session-dot ny_pm" />NY PM</span>
+          </span>
+        </div>
+
+        {monthMacroDays.length > 0 && (
+          <div className="macro-month-chips">
+            <span className="macro-legend-heading">{shortMonthNames[currentMonth]} RELEASES:</span>
+            {monthMacroDays.map((dayCell) => {
+              const primaryType = dayCell.macroEvents[0].type;
+              const combinedLabel = dayCell.macroEvents.map((e) => e.label).join('/');
+              const isSelected = selectedDayStr === dayCell.dateStr;
+              return (
+                <button
+                  key={dayCell.dateStr}
+                  type="button"
+                  className={`macro-month-chip macro-${primaryType.toLowerCase()} ${isSelected ? 'active' : ''}`}
+                  onClick={() => handleDayClick(dayCell)}
+                  title={dayCell.macroEvents.map((e) => `${e.title} (${e.timeET})`).join(' · ')}
+                >
+                  <span>{shortMonthNames[currentMonth]} {dayCell.dayNum}</span>
+                  <span className="macro-chip-type">{combinedLabel}</span>
+                  {dayCell.hasActivity && (
+                    <span className={`macro-chip-r ${getPnlClass(dayCell.totalR)}`}>
+                      {formatPNLString(dayCell.totalR)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Weekdays Header */}
       <div className="calendar-grid">
         {weekdayNames.map(dayName => (
@@ -907,12 +1004,16 @@ export function ExpandableCalendar({
 
         {/* Days Grid */}
         {calendarCells.map((cell, idx) => {
-          const isToday = new Date().toDateString() === new Date(cell.dateStr).toDateString();
+          const isToday = cell.dateStr === todayStr;
+          const primaryMacroClass = cell.macroEvents.length > 0
+            ? `has-macro-event macro-${cell.macroEvents[0].type.toLowerCase()}`
+            : '';
           const cellClasses = [
             'calendar-day-cell',
             !cell.isCurrentMonth ? 'outside-month' : '',
             isToday ? 'today' : '',
             cell.hasActivity ? 'has-trades' : '',
+            primaryMacroClass,
             selectedDayStr === cell.dateStr ? 'selected' : ''
           ].filter(Boolean).join(' ');
 
@@ -927,7 +1028,22 @@ export function ExpandableCalendar({
               onClick={() => handleDayClick(cell)}
               style={selectedDayStr === cell.dateStr ? { borderColor: 'var(--kdt-gold, #ffd700)', background: 'rgba(255,215,0,0.08)' } : {}}
             >
-              <div className="day-number">{cell.dayNum}</div>
+              <div className="day-cell-header">
+                <div className="day-number">{cell.dayNum}</div>
+                {cell.macroEvents.length > 0 && (
+                  <div className="day-macro-badges">
+                    {cell.macroEvents.map((ev) => (
+                      <span
+                        key={`${cell.dateStr}-${ev.type}`}
+                        className={`day-macro-badge macro-${ev.type.toLowerCase()}`}
+                        title={`${ev.title} (${ev.timeET}) — ${ev.impactNote}`}
+                      >
+                        {ev.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               
               {cell.hasActivity && (
                 <div className="day-pnl-summary">
@@ -975,7 +1091,7 @@ export function ExpandableCalendar({
         <div className="calendar-details-drawer glass-card">
           <div className="drawer-header">
             <span className="drawer-title">
-              🔍 PERFORMANCE DETAILS: {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              🔍 PERFORMANCE DETAILS: {formatPlainDateHeading(selectedDayData.dateStr)}
             </span>
             <div className="drawer-summary-stats" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <span className="drawer-stat-pill">
@@ -990,6 +1106,28 @@ export function ExpandableCalendar({
               <button type="button" className="close-drawer-btn" onClick={() => setSelectedDayStr(null)} style={{ marginLeft: '10px' }}>&times;</button>
             </div>
           </div>
+
+          {selectedDayData.macroEvents.length > 0 && (
+            <div className="drawer-macro-banner">
+              {selectedDayData.macroEvents.map((ev) => (
+                <div key={`${selectedDayData.dateStr}-${ev.type}`} className={`drawer-macro-item macro-${ev.type.toLowerCase()}`}>
+                  <div className="drawer-macro-item-head">
+                    <span className={`day-macro-badge macro-${ev.type.toLowerCase()}`}>{ev.label}</span>
+                    <strong className="drawer-macro-title">{ev.title}</strong>
+                    <span className="drawer-macro-time">{ev.timeET}</span>
+                    {(ev.actual || ev.forecast || ev.previous) && (
+                      <span className="drawer-macro-figures">
+                        {ev.actual && <span>Actual: <strong>{ev.actual}</strong></span>}
+                        {ev.forecast && <span>Forecast: <strong>{ev.forecast}</strong></span>}
+                        {ev.previous && <span>Prev: <strong>{ev.previous}</strong></span>}
+                      </span>
+                    )}
+                  </div>
+                  <p className="drawer-macro-note">{ev.impactNote}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="sessions-details-grid">
             {/* 4 Sessions */}
