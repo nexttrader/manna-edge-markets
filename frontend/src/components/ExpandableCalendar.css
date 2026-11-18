@@ -236,11 +236,59 @@
 }
 
 .macro-legend-keys,
-.macro-month-chips {
+.macro-month-chips,
+.macro-legend-right {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.macro-legend-right {
+  margin-left: auto;
+  gap: 10px;
+}
+
+.asset-perf-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.14) 0%, rgba(245, 158, 11, 0.1) 100%);
+  border: 1px solid rgba(255, 215, 0, 0.42);
+  color: var(--kdt-gold, #ffd700);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.asset-perf-trigger-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.24) 0%, rgba(245, 158, 11, 0.18) 100%);
+  border-color: rgba(255, 215, 0, 0.72);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.asset-perf-trigger-btn:focus-visible {
+  outline: 2px solid var(--kdt-gold, #ffd700);
+  outline-offset: 2px;
+}
+
+html[data-theme="light"] .asset-perf-trigger-btn {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #92400e;
+}
+
+html[data-theme="light"] .asset-perf-trigger-btn:hover {
+  background: #fde68a;
+  border-color: #b45309;
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.18);
 }
 
 .macro-legend-heading {

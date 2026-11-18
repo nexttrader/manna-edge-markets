@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import type { EdgeSetup } from '../types';
 import { API_BASE } from '../config';
 import { SetupChartModal } from './SetupChartModal';
+import { AssetPerformanceModal } from './AssetPerformanceModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
 import {
   buildMacroEventsMap,
@@ -202,6 +203,7 @@ export function ExpandableCalendar({
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
   const [selectedReviewSetup, setSelectedReviewSetup] = useState<EdgeSetup | null>(null);
+  const [showAssetPerfModal, setShowAssetPerfModal] = useState<boolean>(false);
   const [copiedTradeId, setCopiedTradeId] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
   const [liveMacroEvents, setLiveMacroEvents] = useState<LiveFeedEventLike[]>([]);
@@ -361,19 +363,21 @@ export function ExpandableCalendar({
   }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter, exitProfile]);
 
   // 2. Filter outcomes by the selected style, strategy and market, mapping them to trading days and sessions
-  const processedOutcomes = useMemo(() => {
-    const filtered = combinedOutcomes.filter(o => {
+  const filteredOutcomesList = useMemo(() => {
+    return combinedOutcomes.filter(o => {
       if (!matchesActiveStyleAndStrategy(o)) return false;
       if (currentMarketFilter !== 'all') {
         if (getOutcomeMarket(o) !== currentMarketFilter) return false;
       }
       return true;
     });
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter]);
 
+  const processedOutcomes = useMemo(() => {
     // Group by Trading Day
     const grouped: Record<string, Record<SessionType, Outcome[]>> = {};
 
-    filtered.forEach(o => {
+    filteredOutcomesList.forEach(o => {
       // Use time_exited, execution_time, or created_at
       const timeToUse = o.time_exited || o.execution_time || o.created_at;
       if (!timeToUse) return;
@@ -394,7 +398,7 @@ export function ExpandableCalendar({
     });
 
     return grouped;
-  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter]);
+  }, [filteredOutcomesList]);
 
   // 2b. Compute Monthly P&L breakdown across all 12 months of the active year (respecting Style, Market & Fees toggles)
   const { monthlyReturns, yearTotalR, yearTradesCount } = useMemo(() => {
@@ -997,33 +1001,44 @@ export function ExpandableCalendar({
           </span>
         </div>
 
-        {monthMacroDays.length > 0 && (
-          <div className="macro-month-chips">
-            <span className="macro-legend-heading">{shortMonthNames[currentMonth]} RELEASES:</span>
-            {monthMacroDays.map((dayCell) => {
-              const primaryType = dayCell.macroEvents[0].type;
-              const combinedLabel = dayCell.macroEvents.map((e) => e.label).join('/');
-              const isSelected = selectedDayStr === dayCell.dateStr;
-              return (
-                <button
-                  key={dayCell.dateStr}
-                  type="button"
-                  className={`macro-month-chip macro-${primaryType.toLowerCase()} ${isSelected ? 'active' : ''}`}
-                  onClick={() => handleDayClick(dayCell)}
-                  title={dayCell.macroEvents.map((e) => `${e.title} (${e.timeET})`).join(' · ')}
-                >
-                  <span>{shortMonthNames[currentMonth]} {dayCell.dayNum}</span>
-                  <span className="macro-chip-type">{combinedLabel}</span>
-                  {dayCell.hasActivity && (
-                    <span className={`macro-chip-r ${getPnlClass(dayCell.totalR)}`}>
-                      {formatPNLString(dayCell.totalR)}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div className="macro-legend-right">
+          {monthMacroDays.length > 0 && (
+            <div className="macro-month-chips">
+              <span className="macro-legend-heading">{shortMonthNames[currentMonth]} RELEASES:</span>
+              {monthMacroDays.map((dayCell) => {
+                const primaryType = dayCell.macroEvents[0].type;
+                const combinedLabel = dayCell.macroEvents.map((e) => e.label).join('/');
+                const isSelected = selectedDayStr === dayCell.dateStr;
+                return (
+                  <button
+                    key={dayCell.dateStr}
+                    type="button"
+                    className={`macro-month-chip macro-${primaryType.toLowerCase()} ${isSelected ? 'active' : ''}`}
+                    onClick={() => handleDayClick(dayCell)}
+                    title={dayCell.macroEvents.map((e) => `${e.title} (${e.timeET})`).join(' · ')}
+                  >
+                    <span>{shortMonthNames[currentMonth]} {dayCell.dayNum}</span>
+                    <span className="macro-chip-type">{combinedLabel}</span>
+                    {dayCell.hasActivity && (
+                      <span className={`macro-chip-r ${getPnlClass(dayCell.totalR)}`}>
+                        {formatPNLString(dayCell.totalR)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button
+            type="button"
+            className="asset-perf-trigger-btn"
+            onClick={() => setShowAssetPerfModal(true)}
+            title="Compare top performing vs worst performing assets over the last 7 or 30 days"
+          >
+            <span aria-hidden="true">📊</span>
+            <span>Top vs Worst Assets</span>
+          </button>
+        </div>
       </div>
 
       {/* Weekdays Header */}
@@ -1385,6 +1400,33 @@ export function ExpandableCalendar({
         <SetupChartModal
           setup={selectedReviewSetup}
           onClose={() => setSelectedReviewSetup(null)}
+        />
+      )}
+
+      {/* Top vs Worst Performing Assets Modal (7D / 30D) */}
+      {showAssetPerfModal && (
+        <AssetPerformanceModal
+          outcomes={filteredOutcomesList}
+          includeFees={activeIncludeFees}
+          exitProfile={exitProfile}
+          riskPerR={riskPerR}
+          styleLabel={
+            !enableStyleToggle || activeStyleFilter === 'intraday'
+              ? 'Intraday'
+              : activeStyleFilter === 'scalp'
+              ? 'Scalping'
+              : activeStyleFilter === 'swing'
+              ? 'Swing'
+              : 'All Styles'
+          }
+          marketLabel={
+            currentMarketFilter === 'forex'
+              ? 'Forex'
+              : currentMarketFilter === 'futures'
+              ? 'Futures'
+              : 'All Markets'
+          }
+          onClose={() => setShowAssetPerfModal(false)}
         />
       )}
     </div>
