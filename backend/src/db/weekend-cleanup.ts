@@ -1,5 +1,5 @@
 import { queryDb } from './database';
-import { isWeekendTrade } from '../scheduler/killzone-mapper';
+import { isPreCutoffScalpTrade, isWeekendTrade, SCALP_TRACKING_START_DAY } from '../scheduler/killzone-mapper';
 
 export interface WeekendCleanupResult {
   outcomesRemoved: number;
@@ -140,4 +140,62 @@ export async function purgeWeekendTradesFromDb(): Promise<WeekendCleanupResult> 
     exclusiveSetupsRemoved,
     totalRemoved
   };
+}
+
+/**
+ * Removes all historical Scalping (`SCALP` / `manna_scalper`) trade records before
+ * `SCALP_TRACKING_START_DAY` (2026-11-18 ET) while keeping Scalping trades from today onwards.
+ */
+export async function purgePreCutoffScalpTradesFromDb(
+  cutoffDay: string = SCALP_TRACKING_START_DAY
+): Promise<{ scalpMtfRemoved: number; scalpOutcomesRemoved: number }> {
+  let scalpMtfRemoved = 0;
+  let scalpOutcomesRemoved = 0;
+
+  try {
+    const mtfScalpRows = await queryDb<any>(
+      `SELECT id, trading_style, strategy_id, created_at, updated_at, resolved_at, filled_at, signal_state
+       FROM mtf_style_setups
+       WHERE trading_style = 'SCALP' OR strategy_id = 'manna_scalper'`
+    );
+    for (const r of mtfScalpRows) {
+      if (isPreCutoffScalpTrade({
+        trading_style: r.trading_style,
+        strategy_id: r.strategy_id,
+        time_signaled: r.created_at,
+        time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
+      }, cutoffDay)) {
+        await queryDb(`DELETE FROM mtf_style_setups WHERE id = ?`, [r.id]);
+        scalpMtfRemoved++;
+      }
+    }
+  } catch {
+    // Table may not exist yet
+  }
+
+  try {
+    const legacyScalpOutcomes = await queryDb<any>(
+      `SELECT id, setup_id, strategy_id, execution_time, created_at FROM outcomes WHERE strategy_id = 'manna_scalper'`
+    );
+    for (const o of legacyScalpOutcomes) {
+      if (isPreCutoffScalpTrade({
+        strategy_id: o.strategy_id,
+        time_signaled: o.created_at,
+        time_exited: o.execution_time || o.created_at
+      }, cutoffDay)) {
+        await queryDb(`DELETE FROM outcomes WHERE id = ?`, [o.id]);
+        scalpOutcomesRemoved++;
+      }
+    }
+  } catch {
+    // Table may not exist yet
+  }
+
+  if (scalpMtfRemoved + scalpOutcomesRemoved > 0) {
+    console.log(
+      `🧹 Purged pre-${cutoffDay} Scalping records: mtf_style_setups=${scalpMtfRemoved}, outcomes=${scalpOutcomesRemoved}`
+    );
+  }
+
+  return { scalpMtfRemoved, scalpOutcomesRemoved };
 }

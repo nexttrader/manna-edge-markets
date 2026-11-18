@@ -13,11 +13,12 @@ import {
   getETTradingDayAndSession,
   isForexMarketOpen,
   isFuturesMarketOpen,
+  isPreCutoffScalpTrade,
   isTradingSessionActive,
   isWeekendTrade,
   mapTimestampToKillzone,
 } from '../scheduler/killzone-mapper';
-import { purgeWeekendTradesFromDb } from '../db/weekend-cleanup';
+import { purgePreCutoffScalpTradesFromDb, purgeWeekendTradesFromDb } from '../db/weekend-cleanup';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 
 async function runTests() {
@@ -227,6 +228,60 @@ async function runTests() {
   assert.strictEqual(remainingEf[0].id, 'ef_valid');
 
   console.log('✅ Test 4: Weekend DB cleanup & recomputed results verified');
+
+  // 5. Pre-2026-11-18 Scalping trade purge (keeps Swing & >= 2026-11-18 Scalping)
+  assert.strictEqual(
+    isPreCutoffScalpTrade({
+      trading_style: 'SCALP',
+      strategy_id: 'manna_scalper',
+      time_signaled: '2026-11-17T14:00:00Z',
+      time_exited: '2026-11-17T15:00:00Z',
+    }),
+    true,
+    'Pre-2026-11-18 Scalping trade must be flagged'
+  );
+  assert.strictEqual(
+    isPreCutoffScalpTrade({
+      trading_style: 'SCALP',
+      strategy_id: 'manna_scalper',
+      time_signaled: '2026-11-18T08:00:00Z',
+      time_exited: '2026-11-18T09:00:00Z',
+    }),
+    false,
+    '2026-11-18 Scalping trade must be preserved'
+  );
+  assert.strictEqual(
+    isPreCutoffScalpTrade({
+      trading_style: 'SWING',
+      strategy_id: 'manna_swing',
+      time_signaled: '2026-10-12T14:00:00Z',
+      time_exited: '2026-10-12T16:00:00Z',
+    }),
+    false,
+    'Swing trades before cutoff must NOT be flagged'
+  );
+
+  // Add a 2026-11-18 SCALP trade and a pre-cutoff SWING trade
+  await queryDb(
+    `INSERT INTO mtf_style_setups (id, trading_style, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['mtf_scalp_today', 'SCALP', '15M', '5M', 'ES', 'futures', 'long', 5900, 5902, 5901, 5895, 5913, 5919, 'resolved', 'tp1_hit', 1.6, '2026-11-18T08:10:00Z', '2026-11-18T09:00:00Z', '2026-11-18T08:00:00Z', '2026-11-18T09:00:00Z']
+  );
+  await queryDb(
+    `INSERT INTO mtf_style_setups (id, trading_style, swing_mode, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['mtf_swing_old', 'SWING', 'd1_h4', '1D', '4H', 'EUR/USD', 'forex', 'long', 1.08, 1.081, 1.0805, 1.077, 1.0875, 1.091, 'resolved', 'tp1_hit', 1.6, '2026-10-12T14:00:00Z', '2026-10-13T10:00:00Z', '2026-10-12T13:00:00Z', '2026-10-13T10:00:00Z']
+  );
+
+  const scalpCleanup = await purgePreCutoffScalpTradesFromDb();
+  assert.strictEqual(scalpCleanup.scalpMtfRemoved, 1, 'Should remove the 1 pre-2026-11-18 SCALP trade (mtf_valid from 2026-10-12)');
+  const mtfAfterScalpCleanup = await queryDb<any>(`SELECT id FROM mtf_style_setups ORDER BY id`);
+  assert.deepStrictEqual(
+    mtfAfterScalpCleanup.map((r: any) => r.id),
+    ['mtf_scalp_today', 'mtf_swing_old'],
+    'Must preserve today SCALP trade and historical SWING trade'
+  );
+  console.log('✅ Test 5: Pre-today Scalping purge & 2026-11-18+ preservation verified');
   console.log('\n🎉 ALL WEEKEND TRADE GUARD TESTS PASSED!');
 }
 

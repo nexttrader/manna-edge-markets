@@ -3,7 +3,7 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 import { Pool } from 'pg';
 import { ensureActiveSignalsRestored } from './signal-snapshot-restore';
-import { purgeWeekendTradesFromDb } from './weekend-cleanup';
+import { purgePreCutoffScalpTradesFromDb, purgeWeekendTradesFromDb } from './weekend-cleanup';
 
 let sqliteDb: Database.Database | null = null;
 let pgPool: Pool | null = null;
@@ -627,6 +627,7 @@ export async function initializeDatabase(): Promise<void> {
                 await ensureActiveSignalsRestored();
                 if (process.env.NODE_ENV !== 'test') {
                     await purgeWeekendTradesFromDb();
+                    await purgePreCutoffScalpTradesFromDb();
                 }
                 return;
             } finally {
@@ -915,6 +916,7 @@ export async function initializeDatabase(): Promise<void> {
     await ensureActiveSignalsRestored();
     if (process.env.NODE_ENV !== 'test') {
         await purgeWeekendTradesFromDb();
+        await purgePreCutoffScalpTradesFromDb();
     }
 }
 

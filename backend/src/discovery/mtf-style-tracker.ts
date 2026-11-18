@@ -6,7 +6,7 @@ import type { AssetEdgeScorecard, EdgeBiasLabel } from '../edge-finder/edge-find
 import { getInstrumentDecimals } from './stop-loss-rules';
 import { Bias, Candle } from './types';
 import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails } from './yahoo-provider';
-import { getCurrentKillzone, isTradingSessionActive, isWeekendTrade, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, isPreCutoffScalpTrade, isTradingSessionActive, isWeekendTrade, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
 
 export interface EdgeFinderConfluenceDecision {
   approved: boolean;
@@ -1259,7 +1259,7 @@ export async function syncMtfSetupsAndGetLiveBoard(
       );
 
   const pastSetups = pastRows
-    .filter((r) => !isWeekendTrade(r))
+    .filter((r) => !isWeekendTrade(r) && !isPreCutoffScalpTrade(r))
     .map(rowToMtfSetup);
 
   return {
@@ -1349,13 +1349,18 @@ export async function getMtfCalendarOutcomes(): Promise<any[]> {
      ORDER BY COALESCE(resolved_at, updated_at, created_at) DESC`
   );
 
-  const rows = rawRows.filter((r) => !isWeekendTrade({
-    market: r.market,
-    instrument: r.instrument,
-    time_signaled: r.created_at,
-    time_entered: r.entry_triggered_at || r.filled_at,
-    time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
-  }));
+  const rows = rawRows.filter((r) => {
+    const candidate = {
+      trading_style: r.trading_style,
+      strategy_id: r.strategy_id,
+      market: r.market,
+      instrument: r.instrument,
+      time_signaled: r.created_at,
+      time_entered: r.entry_triggered_at || r.filled_at,
+      time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
+    };
+    return !isWeekendTrade(candidate) && !isPreCutoffScalpTrade(candidate);
+  });
 
   return rows.map((r) => {
     const mappedOutcomeType =
@@ -1455,13 +1460,18 @@ export async function getTradingStyleComparisonReport(): Promise<{
     `SELECT * FROM mtf_style_setups ORDER BY created_at DESC LIMIT 500`
   );
 
-  const mtfRows = rawMtfRows.filter((r) => !isWeekendTrade({
-    market: r.market,
-    instrument: r.instrument,
-    time_signaled: r.created_at,
-    time_entered: r.entry_triggered_at || r.filled_at,
-    time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
-  }));
+  const mtfRows = rawMtfRows.filter((r) => {
+    const candidate = {
+      trading_style: r.trading_style,
+      strategy_id: r.strategy_id,
+      market: r.market,
+      instrument: r.instrument,
+      time_signaled: r.created_at,
+      time_entered: r.entry_triggered_at || r.filled_at,
+      time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
+    };
+    return !isWeekendTrade(candidate) && !isPreCutoffScalpTrade(candidate);
+  });
 
   const normalizedMtfRows = mtfRows.map((r) => ({
     ...r,

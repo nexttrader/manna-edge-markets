@@ -8,7 +8,7 @@ import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen, isForexMarke
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
-import { purgeWeekendTradesFromDb, type WeekendCleanupResult } from '../db/weekend-cleanup';
+import { purgePreCutoffScalpTradesFromDb, purgeWeekendTradesFromDb, type WeekendCleanupResult } from '../db/weekend-cleanup';
 import { v4 as uuidv4 } from 'uuid';
 import { generateReportMetrics } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
@@ -1005,7 +1005,9 @@ async function performRetroactiveRestoration(): Promise<{
   await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
 
   // 5. Purge any Saturday/Sunday or weekend-closed-market trades across all tables
+  //    plus pre-2026-11-18 Scalping records
   const weekendCleanup = await purgeWeekendTradesFromDb();
+  const scalpCleanup = await purgePreCutoffScalpTradesFromDb();
 
   // 6. Run outcome-detector evaluation on active/runner setups only when session is active
   if (isTradingSessionActive('both')) {
@@ -1013,7 +1015,7 @@ async function performRetroactiveRestoration(): Promise<{
   }
 
   return {
-    deletedOutcomesCount: ((deletedRes as any)?.changes || 0) + weekendCleanup.outcomesRemoved,
+    deletedOutcomesCount: ((deletedRes as any)?.changes || 0) + weekendCleanup.outcomesRemoved + scalpCleanup.scalpOutcomesRemoved,
     restoredSetupsCount: 0,
     weekendCleanup
   };
@@ -1022,10 +1024,12 @@ async function performRetroactiveRestoration(): Promise<{
 router.post('/clean-weekend-trades', async (_req: Request, res: Response) => {
   try {
     const cleanup = await purgeWeekendTradesFromDb();
+    const scalpCleanup = await purgePreCutoffScalpTradesFromDb();
     res.json({
       success: true,
-      message: `Removed ${cleanup.totalRemoved} weekend trade record(s) across calendars and database.`,
-      cleanup
+      message: `Removed ${cleanup.totalRemoved} weekend trade record(s) and ${scalpCleanup.scalpMtfRemoved + scalpCleanup.scalpOutcomesRemoved} pre-today Scalping record(s).`,
+      cleanup,
+      scalpCleanup
     });
   } catch (error) {
     res.status(500).json({ error: 'Weekend trade cleanup failed', details: error instanceof Error ? error.message : String(error) });

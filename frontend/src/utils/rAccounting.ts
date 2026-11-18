@@ -300,3 +300,30 @@ export function isWeekendTrade(trade: WeekendCheckableTrade): boolean {
 
   return false;
 }
+
+export const SCALP_TRACKING_START_DAY = '2026-11-18';
+
+/**
+ * Excludes historical Scalping trade records before 2026-11-18 (ET trading day),
+ * allowing Scalping calendar tracking cleanly from today onwards.
+ */
+export function isPreCutoffScalpTrade(
+  trade: WeekendCheckableTrade,
+  cutoffDay: string = SCALP_TRACKING_START_DAY
+): boolean {
+  if (getTradeStyleCategory(trade) !== 'scalp') return false;
+
+  const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.created_at;
+  if (exitTs) {
+    const td = getETTradingDayAndSession(exitTs);
+    if (td.tradingDay && td.tradingDay < cutoffDay) return true;
+  }
+
+  const sigTs = trade.time_signaled || trade.created_at;
+  if (sigTs) {
+    const td = getETTradingDayAndSession(sigTs);
+    if (td.tradingDay && td.tradingDay < cutoffDay) return true;
+  }
+
+  return false;
+}

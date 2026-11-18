@@ -16,6 +16,7 @@ import {
   getEffectiveRealizedR,
   getTradeStyleCategory,
   getETTradingDayAndSession,
+  isPreCutoffScalpTrade,
   isWeekendTrade,
   useFeesToggle,
   type SessionType,
@@ -250,14 +251,14 @@ export function ExpandableCalendar({
     return stratId === strategyFilter;
   };
 
-  // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes (excluding Saturday/Sunday weekend trades)
+  // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes (excluding Saturday/Sunday weekend trades and pre-2026-11-18 Scalping dev records)
   const { combinedOutcomes, styleCounts } = useMemo(() => {
     const taggedIntraday = outcomes.map(o => ({
       ...o,
       trading_style: o.trading_style || 'INTRADAY',
     }));
     const rawMerged: Outcome[] = enableStyleToggle ? [...taggedIntraday, ...mtfOutcomes] : taggedIntraday;
-    const merged: Outcome[] = rawMerged.filter(o => !isWeekendTrade(o));
+    const merged: Outcome[] = rawMerged.filter(o => !isWeekendTrade(o) && !isPreCutoffScalpTrade(o));
     const counts = { intraday: 0, scalp: 0, swing: 0, all: 0 };
 
     merged.forEach(o => {

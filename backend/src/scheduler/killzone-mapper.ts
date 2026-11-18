@@ -304,6 +304,42 @@ export function isWeekendTrade(trade: {
     return false;
 }
 
+export const SCALP_TRACKING_START_DAY = '2026-11-18';
+
+/**
+ * Returns true if a Scalping trade belongs to before the Scalper calendar reset date
+ * (2026-11-18 ET trading day), so historical beta/dev scalp records are excluded
+ * while live Scalping tracking runs cleanly from today onwards.
+ */
+export function isPreCutoffScalpTrade(trade: {
+    trading_style?: string | null;
+    strategy_id?: string | null;
+    time_exited?: string | null;
+    execution_time?: string | null;
+    resolved_at?: string | null;
+    updated_at?: string | null;
+    time_signaled?: string | null;
+    created_at?: string | null;
+}, cutoffDay: string = SCALP_TRACKING_START_DAY): boolean {
+    const style = (trade.trading_style || '').toUpperCase();
+    const strat = (trade.strategy_id || '').toLowerCase();
+    if (style !== 'SCALP' && strat !== 'manna_scalper') return false;
+
+    const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.updated_at || trade.created_at;
+    if (exitTs) {
+        const td = getETTradingDayAndSession(exitTs);
+        if (td && td.tradingDay < cutoffDay) return true;
+    }
+
+    const sigTs = trade.time_signaled || trade.created_at;
+    if (sigTs) {
+        const td = getETTradingDayAndSession(sigTs);
+        if (td && td.tradingDay < cutoffDay) return true;
+    }
+
+    return false;
+}
+
 export function getForexReopenTime(now: Date = new Date()): Date {
     const temp = new Date(now.getTime());
     temp.setMinutes(0, 0, 0);
