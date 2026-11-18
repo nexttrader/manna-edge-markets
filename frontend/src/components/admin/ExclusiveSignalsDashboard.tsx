@@ -4,7 +4,7 @@ import { type EdgeSetup } from '../../types';
 import { formatETTime } from '../../utils/time';
 import { SetupChartModal } from '../SetupChartModal';
 import { ExpandableCalendar } from '../ExpandableCalendar';
-import { isWeekendTrade } from '../../utils/rAccounting';
+import { isHiddenCalendarMonthTrade, isWeekendTrade } from '../../utils/rAccounting';
 
 // Phase color map
 const PHASE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -600,7 +600,7 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
   } = useExclusiveSignals();
 
   const outcomes = React.useMemo(
-    () => (rawOutcomes || []).filter((o) => !isWeekendTrade(o)),
+    () => (rawOutcomes || []).filter((o) => !isWeekendTrade(o) && !isHiddenCalendarMonthTrade(o)),
     [rawOutcomes]
   );
   const historySignals = React.useMemo(

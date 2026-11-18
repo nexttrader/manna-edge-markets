@@ -339,3 +339,28 @@ export function isPreCutoffScalpTrade(
 
   return false;
 }
+
+export const HIDDEN_CALENDAR_YEAR = '2026';
+export const HIDDEN_CALENDAR_MONTHS: ReadonlySet<string> = new Set(['08', '09', '10']);
+
+/**
+ * Returns true if a trade's ET calendar trading day falls in August, September, or
+ * October 2026 (`2026-08`, `2026-09`, `2026-10`). Used to remove those months from
+ * the calendar UI while keeping all underlying records saved on the backend.
+ */
+export function isHiddenCalendarMonthTrade(trade: WeekendCheckableTrade): boolean {
+  const exitTs =
+    trade.time_exited ||
+    trade.execution_time ||
+    trade.resolved_at ||
+    trade.created_at ||
+    trade.time_signaled;
+  if (!exitTs) return false;
+
+  const { tradingDay } = getETTradingDayAndSession(exitTs);
+  if (!tradingDay || tradingDay.length < 7) return false;
+
+  const year = tradingDay.slice(0, 4);
+  const month = tradingDay.slice(5, 7);
+  return year === HIDDEN_CALENDAR_YEAR && HIDDEN_CALENDAR_MONTHS.has(month);
+}
