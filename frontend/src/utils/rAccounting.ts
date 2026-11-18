@@ -170,3 +170,133 @@ export function useFeesToggle(): [boolean, () => void] {
 
   return [includeFees, toggleFees];
 }
+
+export type SessionType = 'asia' | 'london' | 'ny_am' | 'ny_pm';
+
+const ET_PARTS_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+function getETDateParts(date: Date) {
+  const parts = ET_PARTS_FORMATTER.formatToParts(date);
+  const getVal = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  return {
+    year: parseInt(getVal('year'), 10),
+    month: parseInt(getVal('month'), 10),
+    day: parseInt(getVal('day'), 10),
+    weekday: getVal('weekday'),
+    hour: parseInt(getVal('hour'), 10) % 24,
+    minute: parseInt(getVal('minute'), 10),
+  };
+}
+
+/**
+ * Maps a timestamp to its America/New_York Trading Day (YYYY-MM-DD) and Killzone session.
+ * Hours >= 20:00 ET roll forward into the next calendar day's Asia session.
+ */
+export function getETTradingDayAndSession(timeStr: string): {
+  tradingDay: string;
+  weekdayNum: number;
+  isWeekend: boolean;
+  session: SessionType;
+} {
+  const exitTime = new Date(timeStr);
+  if (Number.isNaN(exitTime.getTime())) {
+    return { tradingDay: '', weekdayNum: -1, isWeekend: false, session: 'ny_am' };
+  }
+
+  try {
+    const { year, month, day, hour } = getETDateParts(exitTime);
+    const tradingDayDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+    let session: SessionType;
+    if (hour >= 20) {
+      session = 'asia';
+      tradingDayDate.setUTCDate(tradingDayDate.getUTCDate() + 1);
+    } else if (hour < 2) {
+      session = 'asia';
+    } else if (hour >= 2 && hour < 8) {
+      session = 'london';
+    } else if (hour >= 8 && hour < 14) {
+      session = 'ny_am';
+    } else {
+      session = 'ny_pm';
+    }
+
+    const tYear = tradingDayDate.getUTCFullYear();
+    const tMonth = String(tradingDayDate.getUTCMonth() + 1).padStart(2, '0');
+    const tDay = String(tradingDayDate.getUTCDate()).padStart(2, '0');
+    const weekdayNum = tradingDayDate.getUTCDay();
+
+    return {
+      tradingDay: `${tYear}-${tMonth}-${tDay}`,
+      weekdayNum,
+      isWeekend: weekdayNum === 0 || weekdayNum === 6,
+      session,
+    };
+  } catch {
+    const isoDate = exitTime.toISOString().split('T')[0];
+    const weekdayNum = exitTime.getUTCDay();
+    return {
+      tradingDay: isoDate,
+      weekdayNum,
+      isWeekend: weekdayNum === 0 || weekdayNum === 6,
+      session: 'ny_am',
+    };
+  }
+}
+
+export function isWeekendMarketClosed(
+  market: string | undefined,
+  timeStr: string | null | undefined
+): boolean {
+  if (!timeStr) return false;
+  const dt = new Date(timeStr);
+  if (Number.isNaN(dt.getTime())) return false;
+  const { weekday, hour } = getETDateParts(dt);
+  const isFx = (market || '').toLowerCase() === 'forex';
+  if (weekday === 'Fri' && hour >= 17) return true;
+  if (weekday === 'Sat') return true;
+  if (weekday === 'Sun' && hour < (isFx ? 17 : 18)) return true;
+  return false;
+}
+
+export interface WeekendCheckableTrade extends TradeLike {
+  time_exited?: string;
+  execution_time?: string;
+  resolved_at?: string;
+  time_entered?: string;
+  entry_triggered_at?: string;
+  time_signaled?: string;
+  created_at?: string;
+}
+
+/**
+ * Returns true if the trade belongs to Saturday/Sunday on the calendar or was
+ * signaled, entered, or exited during weekend market-closed hours.
+ */
+export function isWeekendTrade(trade: WeekendCheckableTrade): boolean {
+  const market = getTradeMarketCategory(trade);
+
+  const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.created_at;
+  if (exitTs) {
+    const td = getETTradingDayAndSession(exitTs);
+    if (td.isWeekend) return true;
+    if (isWeekendMarketClosed(market, exitTs)) return true;
+  }
+
+  const signalTs = trade.time_signaled || trade.created_at;
+  if (signalTs && isWeekendMarketClosed(market, signalTs)) return true;
+
+  const entryTs = trade.time_entered || trade.entry_triggered_at;
+  if (entryTs && isWeekendMarketClosed(market, entryTs)) return true;
+
+  return false;
+}

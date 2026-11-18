@@ -6,7 +6,7 @@ import type { AssetEdgeScorecard, EdgeBiasLabel } from '../edge-finder/edge-find
 import { getInstrumentDecimals } from './stop-loss-rules';
 import { Bias, Candle } from './types';
 import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails } from './yahoo-provider';
-import { getCurrentKillzone, isMarketOpen, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, isTradingSessionActive, isWeekendTrade, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
 
 export interface EdgeFinderConfluenceDecision {
   approved: boolean;
@@ -879,11 +879,21 @@ function getEvaluationCandleTf(row: Pick<TrackedMtfSetupRow, 'trading_style' | '
 async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: string): Promise<TrackedMtfSetupRow[]> {
   if (rows.length === 0) return [];
 
+  const evalDate = new Date(nowIso);
+  const enforceSessionWindow = process.env.NODE_ENV !== 'test';
+  const rowsToEvaluate = enforceSessionWindow
+    ? rows.filter((r) => isTradingSessionActive(r.market === 'forex' ? 'forex' : 'futures', evalDate))
+    : rows;
+
+  if (rowsToEvaluate.length === 0) {
+    return rows;
+  }
+
   // Deduplicate quote + candle fetches by instrument and candle TF
   const quoteCache = new Map<string, LiveQuoteDetails | null>();
   const candleCache = new Map<string, Candle[]>();
 
-  const uniqueInstruments = Array.from(new Set(rows.map((r) => r.instrument)));
+  const uniqueInstruments = Array.from(new Set(rowsToEvaluate.map((r) => r.instrument)));
   await Promise.all(
     uniqueInstruments.map(async (inst) => {
       const q = await getLiveQuoteDetails(inst).catch(() => null);
@@ -892,7 +902,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
   );
 
   const uniqueCandleKeys = new Map<string, { instrument: string; tf: '1m' | '5m' | '15m' }>();
-  for (const r of rows) {
+  for (const r of rowsToEvaluate) {
     const tf = getEvaluationCandleTf(r);
     uniqueCandleKeys.set(`${r.instrument}::${tf}`, { instrument: r.instrument, tf });
   }
@@ -905,9 +915,9 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
     })
   );
 
-  const updatedRows: TrackedMtfSetupRow[] = [];
+  const evaluatedById = new Map<string, TrackedMtfSetupRow>();
 
-  for (const row of rows) {
+  for (const row of rowsToEvaluate) {
     const quote = quoteCache.get(row.instrument) ?? null;
     const tf = getEvaluationCandleTf(row);
     const candles = candleCache.get(`${row.instrument}::${tf}`) || [];
@@ -918,7 +928,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
       await persistEvaluatedRow(row.id, evalRes, nowIso);
     }
 
-    updatedRows.push({
+    evaluatedById.set(row.id, {
       ...row,
       signal_state: evalRes.signal_state,
       stop: evalRes.stop,
@@ -939,7 +949,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
     });
   }
 
-  return updatedRows;
+  return rows.map((row) => evaluatedById.get(row.id) ?? row);
 }
 
 function rowToMtfSetup(row: TrackedMtfSetupRow): MtfStyleSetup {
@@ -1083,7 +1093,12 @@ export async function syncMtfSetupsAndGetLiveBoard(
   }
 
   // 2. Dedupe / Supersede / Insert new candidates (matching Intraday dedupeAndSelect rules)
+  const nowDate = new Date(nowIso);
+  const enforceSessionWindow = process.env.NODE_ENV !== 'test';
   for (const c of candidates) {
+    if (enforceSessionWindow && !isTradingSessionActive(c.market === 'forex' ? 'forex' : 'futures', nowDate)) {
+      continue;
+    }
     const existing = stillOpenByInst.get(c.instrument);
 
     if (existing) {
@@ -1243,7 +1258,9 @@ export async function syncMtfSetupsAndGetLiveBoard(
         [swingMode]
       );
 
-  const pastSetups = pastRows.map(rowToMtfSetup);
+  const pastSetups = pastRows
+    .filter((r) => !isWeekendTrade(r))
+    .map(rowToMtfSetup);
 
   return {
     setups: activeAndPending,
@@ -1258,7 +1275,8 @@ export async function syncMtfSetupsAndGetLiveBoard(
  */
 export async function syncOpenMtfLifecycle(forceCheck = false): Promise<void> {
   if (isSyncingLifecycle) return;
-  if (!forceCheck && !isMarketOpen()) return;
+  const allowBypassInTest = forceCheck && process.env.NODE_ENV === 'test';
+  if (!allowBypassInTest && !isTradingSessionActive('both')) return;
   isSyncingLifecycle = true;
   try {
     await ensureMtfTrackerTable();
@@ -1279,7 +1297,7 @@ export function startMtfLifecycleLoop(intervalMs = 15_000): void {
   lifecycleInterval = setInterval(() => {
     void syncOpenMtfLifecycle(false);
   }, intervalMs);
-  void syncOpenMtfLifecycle(true);
+  void syncOpenMtfLifecycle(false);
 }
 
 export function stopMtfLifecycleLoop(): void {
@@ -1325,11 +1343,19 @@ export function getMtfRowBlendedR(r: TrackedMtfSetupRow): number {
  */
 export async function getMtfCalendarOutcomes(): Promise<any[]> {
   await ensureMtfTrackerTable();
-  const rows = await queryDb<TrackedMtfSetupRow>(
+  const rawRows = await queryDb<TrackedMtfSetupRow>(
     `SELECT * FROM mtf_style_setups
      WHERE signal_state IN ('resolved', 'runner', 'tp1_hit', 'tp2_hit', 'stopped', 'expired')
      ORDER BY COALESCE(resolved_at, updated_at, created_at) DESC`
   );
+
+  const rows = rawRows.filter((r) => !isWeekendTrade({
+    market: r.market,
+    instrument: r.instrument,
+    time_signaled: r.created_at,
+    time_entered: r.entry_triggered_at || r.filled_at,
+    time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
+  }));
 
   return rows.map((r) => {
     const mappedOutcomeType =
@@ -1425,9 +1451,17 @@ export async function getTradingStyleComparisonReport(): Promise<{
 }> {
   await ensureMtfTrackerTable();
 
-  const mtfRows = await queryDb<TrackedMtfSetupRow>(
+  const rawMtfRows = await queryDb<TrackedMtfSetupRow>(
     `SELECT * FROM mtf_style_setups ORDER BY created_at DESC LIMIT 500`
   );
+
+  const mtfRows = rawMtfRows.filter((r) => !isWeekendTrade({
+    market: r.market,
+    instrument: r.instrument,
+    time_signaled: r.created_at,
+    time_entered: r.entry_triggered_at || r.filled_at,
+    time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
+  }));
 
   const normalizedMtfRows = mtfRows.map((r) => ({
     ...r,
@@ -1488,12 +1522,12 @@ export async function getTradingStyleComparisonReport(): Promise<{
 
   // Intraday stats from existing edge_setups + forex_edge_setups + outcomes (read-only)
   const [futuresSetups, forexSetups, outcomes] = await Promise.all([
-    queryDb<any>(`SELECT id, signal_state, conviction_score, r_multiple_1, r_multiple_2 FROM edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT id, signal_state, conviction_score, r_multiple_1, r_multiple_2 FROM forex_edge_setups WHERE superseded = 0`),
-    queryDb<any>(`SELECT setup_id, outcome_type, was_runner, realized_pl FROM outcomes`)
+    queryDb<any>(`SELECT id, instrument, market, signal_state, conviction_score, r_multiple_1, r_multiple_2, created_at, entry_triggered_at, resolved_at FROM edge_setups WHERE superseded = 0`),
+    queryDb<any>(`SELECT id, instrument, market, signal_state, conviction_score, r_multiple_1, r_multiple_2, created_at, entry_triggered_at, resolved_at FROM forex_edge_setups WHERE superseded = 0`),
+    queryDb<any>(`SELECT setup_id, setup_market, outcome_type, was_runner, realized_pl, execution_time, created_at FROM outcomes`)
   ]);
 
-  const allIntraday = [...futuresSetups, ...forexSetups];
+  const allIntraday = [...futuresSetups, ...forexSetups].filter((s) => !isWeekendTrade(s));
   const setupMap = new Map<string, any>();
   for (const s of allIntraday) setupMap.set(String(s.id), s);
 
@@ -1504,6 +1538,16 @@ export async function getTradingStyleComparisonReport(): Promise<{
 
   for (const o of outcomes) {
     const parent = setupMap.get(String(o.setup_id));
+    if (isWeekendTrade({
+      ...o,
+      instrument: parent?.instrument,
+      market: parent?.market || o.setup_market,
+      time_signaled: parent?.created_at,
+      time_entered: parent?.entry_triggered_at,
+      time_exited: parent?.resolved_at || o.execution_time || o.created_at
+    })) {
+      continue;
+    }
     const typeStr = String(o.outcome_type || '').toLowerCase();
     const tradeR = computeBlendedRealizedR({
       outcomeType: o.outcome_type,

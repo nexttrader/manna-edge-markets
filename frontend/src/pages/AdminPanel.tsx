@@ -21,7 +21,7 @@ import { ExpandableCalendar } from '../components/ExpandableCalendar';
 import { SetupChartModal } from '../components/SetupChartModal';
 import { TelegramResendModal } from '../components/TelegramResendModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
-import { getEffectiveRealizedR, estimateTradeFeeR, useFeesToggle } from '../utils/rAccounting';
+import { getEffectiveRealizedR, estimateTradeFeeR, isWeekendTrade, useFeesToggle } from '../utils/rAccounting';
 import type { EdgeSetup } from '../types';
 
 function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
@@ -683,7 +683,7 @@ export const AdminPanel: React.FC = () => {
   const summary = analytics?.summary;
   const strategies = analytics?.strategies || [];
   const killzones = analytics?.killzones;
-  const recentOutcomes = analytics?.recentOutcomes || [];
+  const recentOutcomes = (analytics?.recentOutcomes || []).filter((o: any) => !isWeekendTrade(o));
   const computeStrategyFeeR = (stratId: string | 'all', totalTradesCount: number) => {
     const matching = stratId === 'all'
       ? recentOutcomes

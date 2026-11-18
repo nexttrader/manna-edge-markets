@@ -1,5 +1,5 @@
 import cron = require('node-cron');
-import { mapTimestampToKillzone, KillzoneInfo } from './killzone-mapper';
+import { mapTimestampToKillzone, isTradingSessionActive, KillzoneInfo } from './killzone-mapper';
 import { Killzone } from '../discovery/types';
 import { autoGenerateSessionPerformanceReports } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
@@ -25,6 +25,10 @@ export function startScheduler(
     boundaries.forEach(b => {
         const task = cron.schedule(b.cron, async () => {
             const now = new Date();
+            if (!isTradingSessionActive('both', now)) {
+                console.log(`⏸️ Skipping Killzone START boundary cron for ${b.expected}: Market is closed or in weekend pre-Asia window (${now.toISOString()})`);
+                return;
+            }
             const kzInfo = mapTimestampToKillzone(now);
             console.log(`⏱️ Killzone START boundary cron triggered for ${b.expected} at ${now.toISOString()}`);
             
@@ -55,6 +59,9 @@ export function startScheduler(
     forexSessionBoundaries.forEach(b => {
         const task = cron.schedule(b.cron, async () => {
             const now = new Date();
+            if (!isTradingSessionActive('forex', now)) {
+                return;
+            }
             const kzInfo = mapTimestampToKillzone(now);
             console.log(`⏱️ Forex Session (+5m post-open) boundary cron triggered for ${b.expected} (${b.label}) at ${now.toISOString()}`);
             
@@ -77,6 +84,9 @@ export function startScheduler(
     // ONLY scans assets that currently have an active pending signal ('awaiting_entry')
     const continuousActiveScanTask = cron.schedule('1,16,31,46 * * * *', async () => {
         const now = new Date();
+        if (!isTradingSessionActive('both', now)) {
+            return;
+        }
         const kzInfo = mapTimestampToKillzone(now);
         if (onContinuousActiveScan && kzInfo) {
             try {
@@ -102,6 +112,9 @@ export function startScheduler(
     midpoints.forEach(m => {
         const task = cron.schedule(m.cron, async () => {
             const now = new Date();
+            if (!isTradingSessionActive('both', now)) {
+                return;
+            }
             const kzInfo = mapTimestampToKillzone(now);
             console.log(`⏳ Killzone MIDPOINT boundary cron triggered for ${m.expected} (${m.label}) at ${now.toISOString()}`);
             
@@ -134,6 +147,11 @@ export function startScheduler(
     preScanAudits.forEach(audit => {
         const task = cron.schedule(audit.cron, async () => {
             const now = new Date();
+            // Skip Saturday audits and Sunday pre-London/NY audits; allow Sunday 19:30 ET pre-Asia audit
+            const isPreAsiaSun = audit.targetSession === 'asia' && isTradingSessionActive('both', new Date(now.getTime() + 45 * 60 * 1000));
+            if (!isTradingSessionActive('both', now) && !isPreAsiaSun) {
+                return;
+            }
             console.log(`📋 30-Minute Pre-Scan Signal Audit triggered for ${audit.targetSession.toUpperCase()} (${audit.label}) at ${now.toISOString()}`);
             try {
                 await signalAuditService.runScheduledPreScanAudit(audit.targetSession);

@@ -8,7 +8,7 @@ import { initializeDatabase } from './db/database';
 import { saveSignalsSnapshot } from './db/signal-snapshot-restore';
 import * as queries from './db/queries';
 import { startScheduler, stopScheduler } from './scheduler/scheduler';
-import { getCurrentKillzone, getNextKillzoneBoundary, isForexMarketOpen, isFuturesMarketOpen } from './scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary, isTradingSessionActive } from './scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from './discovery/unified-discovery';
 import { executePublishRun } from './publish-gate/publish-gate';
 import { lifecycleSync } from './lifecycle/lifecycle-sync';
@@ -154,7 +154,7 @@ async function startServer() {
                 logger.info({ killzone: kzInfo.killzone }, 'Killzone start boundary triggered for Futures');
                 try {
                     const now = new Date();
-                    const isFuturesOpen = isFuturesMarketOpen(now);
+                    const isFuturesOpen = isTradingSessionActive('futures', now);
                     if (!isFuturesOpen) {
                         logger.info('Skipping Killzone start scan: Futures market is closed.');
                         return;
@@ -182,7 +182,7 @@ async function startServer() {
                 logger.info({ killzone: kzInfo.killzone, boundaryET: kzInfo.boundaryET }, '⚡ Pre-news Forex boundary triggered due to high-impact news');
                 try {
                     const now = new Date();
-                    const isForexOpen = isForexMarketOpen(now);
+                    const isForexOpen = isTradingSessionActive('forex', now);
                     if (!isForexOpen) {
                         logger.info('Skipping early Forex scan: Forex market is closed.');
                         return;
@@ -202,7 +202,7 @@ async function startServer() {
                 logger.info({ killzone: kzInfo.killzone }, '⏱️ Forex post-open (+5m) session boundary triggered');
                 try {
                     const now = new Date();
-                    const isForexOpen = isForexMarketOpen(now);
+                    const isForexOpen = isTradingSessionActive('forex', now);
                     if (!isForexOpen) {
                         logger.info('Skipping Forex post-open scan: Forex market is closed.');
                         return;
@@ -249,8 +249,8 @@ async function startServer() {
             async (kzInfo) => {
                 const now = new Date();
                 try {
-                    const forexOpen = isForexMarketOpen(now);
-                    const futuresOpen = isFuturesMarketOpen(now);
+                    const forexOpen = isTradingSessionActive('forex', now);
+                    const futuresOpen = isTradingSessionActive('futures', now);
                     if (!forexOpen && !futuresOpen) return;
 
                     // Fetch active pending setups across markets

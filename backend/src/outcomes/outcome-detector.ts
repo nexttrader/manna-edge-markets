@@ -4,7 +4,7 @@ import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../dis
 import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
-import { isMarketOpen } from '../scheduler/killzone-mapper';
+import { isTradingSessionActive } from '../scheduler/killzone-mapper';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 
 const logger = createLogger('OutcomeDetector');
@@ -16,7 +16,7 @@ export class OutcomeDetector {
   start(intervalMs: number = 15000): void {
     if (this.interval) return;
     this.interval = setInterval(() => this.tick(), intervalMs);
-    this.evaluateAllSetups(true).catch(err => {
+    this.evaluateAllSetups(false).catch(err => {
       logger.error({ err }, 'Startup OutcomeDetector evaluation failed');
     });
     logger.info(`OutcomeDetector started with interval ${intervalMs}ms`);
@@ -31,8 +31,8 @@ export class OutcomeDetector {
   }
   
   private async tick(): Promise<void> {
-    if (!isMarketOpen()) {
-      logger.debug('Skipping OutcomeDetector tick: Market is closed for the weekend');
+    if (!isTradingSessionActive('both')) {
+      logger.debug('Skipping OutcomeDetector tick: Market is closed or in weekend rollover window');
       return;
     }
     await this.evaluateAllSetups(false);
@@ -45,7 +45,9 @@ export class OutcomeDetector {
     }
     this.isEvaluating = true;
     try {
-      if (!forceCheck && !isMarketOpen()) {
+      const now = new Date();
+      const allowBypassInTest = forceCheck && process.env.NODE_ENV === 'test';
+      if (!allowBypassInTest && !isTradingSessionActive('both', now)) {
         return;
       }
 
@@ -75,6 +77,10 @@ export class OutcomeDetector {
       const activeSetups = await queries.getSetupsByState('active');
       
       for (const setup of activeSetups) {
+        const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+        if (!allowBypassInTest && !isTradingSessionActive(setupMarket, now)) {
+          continue;
+        }
         // Pre-check: Sync state if an outcome already exists for this setup
         const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
         if (existingOutcomes.length > 0) {
@@ -280,6 +286,10 @@ export class OutcomeDetector {
       const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
       
       for (const setup of runnerSetups) {
+        const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+        if (!allowBypassInTest && !isTradingSessionActive(setupMarket, now)) {
+          continue;
+        }
         let runnerStart = (setup as any).entryAt || setup.entry_triggered_at || setup.created_at;
         try {
           const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;

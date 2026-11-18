@@ -15,7 +15,10 @@ import {
   estimateTradeFeeR,
   getEffectiveRealizedR,
   getTradeStyleCategory,
+  getETTradingDayAndSession,
+  isWeekendTrade,
   useFeesToggle,
+  type SessionType,
   type TradingStyleFilter,
 } from '../utils/rAccounting';
 import './ExpandableCalendar.css';
@@ -138,9 +141,6 @@ function getOutcomeMarket(trade: Outcome): 'forex' | 'futures' {
   return (trade.instrument && trade.instrument.includes('/')) ? 'forex' : 'futures';
 }
 
-// Session definitions matching backend mapTimestampToKillzone
-type SessionType = 'asia' | 'london' | 'ny_am' | 'ny_pm';
-
 interface DaySessionData {
   trades: Outcome[];
   totalR: number;
@@ -156,69 +156,6 @@ interface DayData {
   sessions: Record<SessionType, DaySessionData>;
   hasActivity: boolean;
   macroEvents: MacroCalendarEvent[];
-}
-
-/**
- * Robust helper to map an outcome's exit time to a NY ET Trading Day and Session.
- * Since sessions span across midnight:
- * - Asia: 20:00 - 02:00 ET (20:00 of Day N-1 to 02:00 of Day N maps to Trading Day N)
- * - London: 02:00 - 08:00 ET of Day N maps to Trading Day N
- * - NY AM: 08:00 - 14:00 ET of Day N maps to Trading Day N
- * - NY PM: 14:00 - 20:00 ET of Day N maps to Trading Day N
- */
-function getTradingDayAndSession(timeStr: string): { tradingDay: string; session: SessionType } {
-  const exitTime = new Date(timeStr);
-  
-  // Format to America/New_York parts
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    hour12: false
-  });
-  
-  try {
-    const parts = formatter.formatToParts(exitTime);
-    const year = parts.find(p => p.type === 'year')!.value;
-    const month = parts.find(p => p.type === 'month')!.value;
-    const day = parts.find(p => p.type === 'day')!.value;
-    const hour = parseInt(parts.find(p => p.type === 'hour')!.value, 10);
-    
-    let session: SessionType;
-    let tradingDayDate = new Date(`${year}-${month}-${day}T12:00:00`); // Noon base to avoid offset drift
-    
-    if (hour >= 20) {
-      session = 'asia';
-      // Concludes in next day's session
-      tradingDayDate.setDate(tradingDayDate.getDate() + 1);
-    } else if (hour < 2) {
-      session = 'asia';
-    } else if (hour >= 2 && hour < 8) {
-      session = 'london';
-    } else if (hour >= 8 && hour < 14) {
-      session = 'ny_am';
-    } else {
-      session = 'ny_pm';
-    }
-    
-    const tYear = tradingDayDate.getFullYear();
-    const tMonth = String(tradingDayDate.getMonth() + 1).padStart(2, '0');
-    const tDay = String(tradingDayDate.getDate()).padStart(2, '0');
-    
-    return {
-      tradingDay: `${tYear}-${tMonth}-${tDay}`,
-      session
-    };
-  } catch (e) {
-    // Fallback if parsing fails
-    const isoDate = exitTime.toISOString().split('T')[0];
-    return {
-      tradingDay: isoDate,
-      session: 'ny_am'
-    };
-  }
 }
 
 export function ExpandableCalendar({
@@ -313,13 +250,14 @@ export function ExpandableCalendar({
     return stratId === strategyFilter;
   };
 
-  // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes
+  // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes (excluding Saturday/Sunday weekend trades)
   const { combinedOutcomes, styleCounts } = useMemo(() => {
     const taggedIntraday = outcomes.map(o => ({
       ...o,
       trading_style: o.trading_style || 'INTRADAY',
     }));
-    const merged: Outcome[] = enableStyleToggle ? [...taggedIntraday, ...mtfOutcomes] : taggedIntraday;
+    const rawMerged: Outcome[] = enableStyleToggle ? [...taggedIntraday, ...mtfOutcomes] : taggedIntraday;
+    const merged: Outcome[] = rawMerged.filter(o => !isWeekendTrade(o));
     const counts = { intraday: 0, scalp: 0, swing: 0, all: 0 };
 
     merged.forEach(o => {
@@ -392,7 +330,8 @@ export function ExpandableCalendar({
       const timeToUse = o.time_exited || o.execution_time || o.created_at;
       if (!timeToUse) return;
 
-      const { tradingDay, session } = getTradingDayAndSession(timeToUse);
+      const { tradingDay, isWeekend, session } = getETTradingDayAndSession(timeToUse);
+      if (!tradingDay || isWeekend) return;
       
       if (!grouped[tradingDay]) {
         grouped[tradingDay] = {

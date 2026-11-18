@@ -4,6 +4,7 @@ import { type EdgeSetup } from '../../types';
 import { formatETTime } from '../../utils/time';
 import { SetupChartModal } from '../SetupChartModal';
 import { ExpandableCalendar } from '../ExpandableCalendar';
+import { isWeekendTrade } from '../../utils/rAccounting';
 
 // Phase color map
 const PHASE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -577,8 +578,8 @@ const ExclusiveSignalCard: React.FC<{ signal: EdgeSetup; onDismiss: (id: string)
 export const ExclusiveSignalsDashboard: React.FC = () => {
   const {
     signals,
-    historySignals,
-    outcomes,
+    historySignals: rawHistorySignals,
+    outcomes: rawOutcomes,
     telemetry,
     analytics,
     phaseCount,
@@ -597,6 +598,15 @@ export const ExclusiveSignalsDashboard: React.FC = () => {
     togglingContinuousScan,
     setContinuousScan
   } = useExclusiveSignals();
+
+  const outcomes = React.useMemo(
+    () => (rawOutcomes || []).filter((o) => !isWeekendTrade(o)),
+    [rawOutcomes]
+  );
+  const historySignals = React.useMemo(
+    () => (rawHistorySignals || []).filter((s) => !isWeekendTrade(s)),
+    [rawHistorySignals]
+  );
 
   const [activeSection, setActiveSection] = useState<'live' | 'runners' | 'calendar' | 'telemetry' | 'analytics' | 'history' | 'export'>('live');
   const [scanningMarket, setScanningMarket] = useState<'both' | 'forex' | 'futures'>('both');

@@ -3,7 +3,7 @@ import * as queries from '../db/queries';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun } from '../publish-gate/publish-gate';
 import { createLogger } from '../telemetry/logger';
-import { isForexMarketOpen, isFuturesMarketOpen } from './killzone-mapper';
+import { isTradingSessionActive } from './killzone-mapper';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 
 const logger = createLogger('midpoint-scanner');
@@ -23,18 +23,20 @@ export async function processKillzoneMidpointScan(
     forexCount: number;
     result?: any;
 }> {
-    // 1. Force evaluation of all active setups to ensure resolved/TP/SL states are fresh & synced
-    try {
-        await outcomeDetector.evaluateAllSetups(true);
-    } catch (err) {
-        logger.warn({ err }, 'Outcome detector pre-scan evaluation encountered an error');
+    const isForexOpen = isTradingSessionActive('forex', timestamp);
+    const isFuturesOpen = isTradingSessionActive('futures', timestamp);
+
+    // 1. Force evaluation of all active setups ONLY when at least one market is in an active trading session
+    if (isForexOpen || isFuturesOpen) {
+        try {
+            await outcomeDetector.evaluateAllSetups(false);
+        } catch (err) {
+            logger.warn({ err }, 'Outcome detector pre-scan evaluation encountered an error');
+        }
     }
 
     const futuresSetups = await queries.getActiveSetups('futures');
     const forexSetups = await queries.getActiveSetups('forex');
-
-    const isForexOpen = isForexMarketOpen(timestamp);
-    const isFuturesOpen = isFuturesMarketOpen(timestamp);
 
     const futuresCount = futuresSetups.length;
     const forexCount = forexSetups.length;

@@ -6,7 +6,7 @@ import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
 import { revalidateSetup } from '../publish-gate/revalidation';
 import { hawkeyeService } from '../hawkeye/hawkeye-service';
-import { isMarketOpen, mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
+import { isTradingSessionActive, mapTimestampToKillzone, getCurrentKillzone } from '../scheduler/killzone-mapper';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 
 const logger = createLogger('LifecycleSync');
@@ -30,14 +30,19 @@ export class LifecycleSync {
   
   private async tick(): Promise<void> {
     try {
-      if (!isMarketOpen()) {
-        logger.debug('Skipping LifecycleSync tick: Market is closed for the weekend');
+      const now = new Date();
+      if (!isTradingSessionActive('both', now)) {
+        logger.debug('Skipping LifecycleSync tick: Market is closed or in weekend rollover window');
         return;
       }
 
       const setups = await queries.getSetupsByState('awaiting_entry');
       
       for (const setup of setups) {
+        const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+        if (!isTradingSessionActive(setupMarket, now)) {
+          continue;
+        }
         const quote = await getLiveQuoteDetails(setup.instrument);
         const currentPrice = quote?.price || await getLiveCurrentPrice(setup.instrument);
         

@@ -4,10 +4,11 @@ import fs from 'fs';
 import * as queries from '../db/queries';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
 import { metrics } from '../telemetry/metrics';
-import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen, isForexMarketOpen, isFuturesMarketOpen, getForexReopenTime, getFuturesReopenTime } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, getNextKillzoneBoundary, isMarketOpen, isForexMarketOpen, isFuturesMarketOpen, getForexReopenTime, getFuturesReopenTime, isTradingSessionActive, isWeekendTrade } from '../scheduler/killzone-mapper';
 import { discoverUnifiedSetups } from '../discovery/unified-discovery';
 import { executePublishRun, publishEvents } from '../publish-gate/publish-gate';
 import { queryDb } from '../db/database';
+import { purgeWeekendTradesFromDb, type WeekendCleanupResult } from '../db/weekend-cleanup';
 import { v4 as uuidv4 } from 'uuid';
 import { generateReportMetrics } from '../analytics/report-generator';
 import { signalAuditService } from '../analytics/signal-audit-service';
@@ -940,7 +941,11 @@ router.get('/publish-runs', async (req: Request, res: Response) => {
   }
 });
 
-async function performRetroactiveRestoration(): Promise<{ deletedOutcomesCount: number; restoredSetupsCount: number }> {
+async function performRetroactiveRestoration(): Promise<{
+  deletedOutcomesCount: number;
+  restoredSetupsCount: number;
+  weekendCleanup: WeekendCleanupResult;
+}> {
   const now = new Date().toISOString();
 
   // 1. Identify and delete all false premature outcomes that were created for setups that were NEVER filled (entry_triggered_at IS NULL)
@@ -999,14 +1004,33 @@ async function performRetroactiveRestoration(): Promise<{ deletedOutcomesCount: 
   await queryDb(`UPDATE edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
   await queryDb(`UPDATE forex_edge_setups SET signal_state = 'resolved', tradable = 0, resolved_at = COALESCE(resolved_at, ?) WHERE entry_triggered_at IS NOT NULL AND signal_state IN ('active', 'runner', 'awaiting_entry') AND id IN (SELECT setup_id FROM outcomes)`, [now]);
 
-  // 5. Run outcome-detector evaluation on active/runner setups only
-  await outcomeDetector.evaluateAllSetups(true);
+  // 5. Purge any Saturday/Sunday or weekend-closed-market trades across all tables
+  const weekendCleanup = await purgeWeekendTradesFromDb();
+
+  // 6. Run outcome-detector evaluation on active/runner setups only when session is active
+  if (isTradingSessionActive('both')) {
+    await outcomeDetector.evaluateAllSetups(false);
+  }
 
   return {
-    deletedOutcomesCount: (deletedRes as any)?.changes || 0,
-    restoredSetupsCount: 0
+    deletedOutcomesCount: ((deletedRes as any)?.changes || 0) + weekendCleanup.outcomesRemoved,
+    restoredSetupsCount: 0,
+    weekendCleanup
   };
 }
+
+router.post('/clean-weekend-trades', async (_req: Request, res: Response) => {
+  try {
+    const cleanup = await purgeWeekendTradesFromDb();
+    res.json({
+      success: true,
+      message: `Removed ${cleanup.totalRemoved} weekend trade record(s) across calendars and database.`,
+      cleanup
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Weekend trade cleanup failed', details: error instanceof Error ? error.message : String(error) });
+  }
+});
 
 router.post('/retroactive-clean', async (_req: Request, res: Response) => {
   try {
@@ -1037,7 +1061,9 @@ router.post('/retroactive-restore', async (_req: Request, res: Response) => {
 
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
-    await outcomeDetector.evaluateAllSetups(true);
+    if (isTradingSessionActive('both')) {
+      await outcomeDetector.evaluateAllSetups(false);
+    }
     const now = new Date();
     const selectedStrategy = req.query.strategy_id as string | undefined;
     const role = (req.query.role as string) || 'admin';
@@ -1083,7 +1109,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
     // We will do filtering in-memory to ensure hiddenStrategyIds and asset visibility are properly applied
     let allFutures = await queryDb(futuresQuery);
     let allForex = await queryDb(forexQuery);
-    let allOutcomes = await queryDb(outcomesQuery);
+    let allOutcomes = (await queryDb(outcomesQuery)).filter((o: any) => !isWeekendTrade(o));
 
     if (role !== 'super_admin') {
       allFutures = allFutures.filter((s: any) => isStrategyVisible(s.strategy_id, hiddenStrategyIds) && !disabledAssets.includes(s.instrument));
@@ -1292,7 +1318,8 @@ router.get('/analytics', async (req: Request, res: Response) => {
       if (dd > maxDrawdownR) maxDrawdownR = dd;
 
       totalRealizedR += tradeR;
-      if (o.setup_market === 'forex') forexR += tradeR;
+      const isFxOutcome = (o.setup_market || o.market || '').toLowerCase() === 'forex' || Boolean(o.instrument && String(o.instrument).includes('/'));
+      if (isFxOutcome) forexR += tradeR;
       else futuresR += tradeR;
 
       const inst = o.instrument || 'OTHER';
@@ -1937,6 +1964,7 @@ router.get('/analytics/export-csv', async (req: Request, res: Response) => {
     }));
 
     const outcomes = outcomesEnriched.filter(o => {
+      if (isWeekendTrade(o)) return false;
       if (audience === 'public' || audience === 'client') {
         return o.target_audience === 'public' || o.target_audience === 'both' || !o.target_audience;
       }
@@ -2733,6 +2761,16 @@ router.get('/analytics/strategies', async (req: Request, res: Response) => {
         parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market || 'futures');
         // Retry opposite market
         if (!parentSetup) parentSetup = await queries.getSetupById(outcome.setup_id, outcome.setup_market === 'forex' ? 'futures' : 'forex');
+      }
+      if (isWeekendTrade({
+        ...outcome,
+        instrument: parentSetup?.instrument,
+        market: parentSetup?.market || outcome.setup_market,
+        time_signaled: parentSetup?.created_at,
+        time_entered: parentSetup?.entry_triggered_at,
+        time_exited: parentSetup?.resolved_at || outcome.execution_time || outcome.created_at
+      })) {
+        continue;
       }
       const stratId = outcome.strategy_id || parentSetup?.strategy_id || 'sentinel_v2';
       

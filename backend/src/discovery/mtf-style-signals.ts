@@ -13,6 +13,7 @@ import {
   buildEdgeFinderSnapshot,
   type AssetEdgeScorecard
 } from '../edge-finder/edge-finder-service';
+import { isTradingSessionActive } from '../scheduler/killzone-mapper';
 
 export { evaluateEdgeFinderConfluence, type EdgeFinderConfluenceDecision };
 
@@ -443,11 +444,16 @@ export async function getMtfStyleSignals(
     }
     const hasEdgeData = edgeByInst.size > 0;
 
+    const now = new Date();
+    const enforceSessionWindow = process.env.NODE_ENV !== 'test';
+    const canScanFutures = !enforceSessionWindow || isTradingSessionActive('futures', now);
+    const canScanForex = !enforceSessionWindow || isTradingSessionActive('forex', now);
+
     let discoveredCandidates: MtfStyleSetup[] = [];
-    if (shouldDiscover) {
+    if (shouldDiscover && (canScanFutures || canScanForex)) {
       const targets: Array<{ instrument: string; market: 'futures' | 'forex' }> = [
-        ...FUTURES_INSTRUMENTS.map((instrument) => ({ instrument, market: 'futures' as const })),
-        ...FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const }))
+        ...(canScanFutures ? FUTURES_INSTRUMENTS.map((instrument) => ({ instrument, market: 'futures' as const })) : []),
+        ...(canScanForex ? FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const })) : [])
       ];
 
       const settled = await Promise.allSettled(

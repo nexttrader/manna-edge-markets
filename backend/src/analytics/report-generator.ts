@@ -1,6 +1,7 @@
 import { queryDb } from '../db/database';
 import * as queries from '../db/queries';
 import { computeBlendedRealizedR } from './r-accounting';
+import { isWeekendTrade } from '../scheduler/killzone-mapper';
 
 export interface ReportSummary {
   periodType: 'daily' | 'weekly' | 'monthly' | 'session';
@@ -77,6 +78,17 @@ export async function generateReportMetrics(
     let setup = await queries.getSetupById(o.setup_id, o.setup_market || 'futures');
     if (!setup) {
       setup = await queries.getSetupById(o.setup_id, o.setup_market === 'forex' ? 'futures' : 'forex');
+    }
+
+    if (isWeekendTrade({
+      ...o,
+      instrument: setup?.instrument,
+      market: setup?.market || o.setup_market,
+      time_signaled: setup?.created_at,
+      time_entered: setup?.entry_triggered_at,
+      time_exited: setup?.resolved_at || o.execution_time || o.created_at
+    })) {
+      continue;
     }
 
     // Filter by session if periodType === 'session' and sessionName is provided and not 'all'

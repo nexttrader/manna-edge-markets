@@ -2,7 +2,7 @@ import cron = require('node-cron');
 import { strategyRegistry } from '../discovery/strategies/strategy-registry';
 import { getUnifiedMarketBiases } from '../discovery/bias-engine';
 import { FUTURES_INSTRUMENTS, FOREX_INSTRUMENTS } from '../discovery/mock-data';
-import { mapTimestampToKillzone, isForexMarketOpen, isFuturesMarketOpen } from './killzone-mapper';
+import { mapTimestampToKillzone, isTradingSessionActive } from './killzone-mapper';
 import { queryDb } from '../db/database';
 import { createLogger } from '../telemetry/logger';
 import { getLiveQuoteDetails, getLiveCurrentPrice, getLiveCandles } from '../discovery/yahoo-provider';
@@ -87,6 +87,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
   if (isEvaluatingOutcomes) {
     return { evaluated: 0, resolved: 0 };
   }
+  const evalNow = new Date();
+  if (!isTradingSessionActive('both', evalNow)) {
+    return { evaluated: 0, resolved: 0 };
+  }
   isEvaluatingOutcomes = true;
   let evaluated = 0;
   let resolved = 0;
@@ -103,6 +107,10 @@ export async function evaluateEliteFractalOutcomes(): Promise<{ evaluated: numbe
     evaluated = activeSetups.length;
 
     for (const setup of activeSetups) {
+      const setupMarket: 'forex' | 'futures' = (setup.market === 'forex' || setup.instrument?.includes('/')) ? 'forex' : 'futures';
+      if (!isTradingSessionActive(setupMarket, evalNow)) {
+        continue;
+      }
       // Auto-heal any lingering awaiting_entry setups to active with market execution
       if (setup.signal_state === 'awaiting_entry') {
         const fillTime = setup.created_at || new Date().toISOString();
@@ -473,13 +481,12 @@ export async function runEliteFractalScanCycle(): Promise<{ scanned: number; cre
     const allBiases = await getUnifiedMarketBiases(allInstruments);
 
     const marketsToScan: Array<'futures' | 'forex'> = [];
-    if (isFuturesMarketOpen(now)) marketsToScan.push('futures');
-    if (isForexMarketOpen(now)) marketsToScan.push('forex');
+    if (isTradingSessionActive('futures', now)) marketsToScan.push('futures');
+    if (isTradingSessionActive('forex', now)) marketsToScan.push('forex');
 
-    // Always scan both during live hours — if both markets closed (rare), still attempt
-    // so telemetry data is kept fresh for the dashboard
     if (marketsToScan.length === 0) {
-      marketsToScan.push('forex', 'futures');
+      logger.info('EliteFractal: Markets closed or in Sunday pre-Asia rollover window — skipping scan cycle.');
+      return { scanned: 0, created: 0 };
     }
 
     for (const market of marketsToScan) {

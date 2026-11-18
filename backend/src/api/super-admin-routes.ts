@@ -5,7 +5,7 @@ import fs from 'fs';
 import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { circuitBreaker } from '../publish-gate/circuit-breaker';
-import { isMarketOpen, getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
+import { isMarketOpen, isTradingSessionActive, isWeekendTrade, getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { getAllUsers, addUser, updateUserTier, updateUserPassword, updateUserFull } from '../db/user-store';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { signalAuditService } from '../analytics/signal-audit-service';
@@ -1231,14 +1231,29 @@ async function calculateStrategyComparisonData(filters?: {
   assetVisibility?: string;
   instrument?: string;
 }) {
-  await outcomeDetector.evaluateAllSetups(true);
+  if (isTradingSessionActive('both')) {
+    await outcomeDetector.evaluateAllSetups(false);
+  }
 
   const registeredStrategies = await queries.getStrategySettings('super_admin');
   const disabledAssets = await queries.getDisabledDisplayAssets();
   const futuresSetups = await queryDb<any>(`SELECT * FROM edge_setups`);
   const forexSetups = await queryDb<any>(`SELECT * FROM forex_edge_setups`);
-  const allSetups = [...futuresSetups, ...forexSetups];
-  const outcomes = await queryDb<any>(`SELECT * FROM outcomes ORDER BY created_at DESC`);
+  const allSetups = [...futuresSetups, ...forexSetups].filter(s => !isWeekendTrade(s));
+  const rawOutcomes = await queryDb<any>(`SELECT * FROM outcomes ORDER BY created_at DESC`);
+  const setupLookup = new Map<string, any>();
+  [...futuresSetups, ...forexSetups].forEach(s => setupLookup.set(s.id, s));
+  const outcomes = rawOutcomes.filter(o => {
+    const parent = setupLookup.get(o.setup_id);
+    return !isWeekendTrade({
+      ...o,
+      instrument: parent?.instrument,
+      market: parent?.market || o.setup_market,
+      time_signaled: parent?.created_at,
+      time_entered: parent?.entry_triggered_at,
+      time_exited: parent?.resolved_at || o.execution_time || o.created_at
+    });
+  });
 
   // Apply time filter
   const now = Date.now();
@@ -2240,7 +2255,14 @@ router.get('/exclusive-signals/history', verifySuperAdmin, async (req: Request, 
 
     sql += ` ORDER BY COALESCE(resolved_at, created_at) DESC LIMIT 100`;
 
-    const rows = await queryDb<any>(sql, params);
+    const rawRows = await queryDb<any>(sql, params);
+    const rows = rawRows.filter((s: any) => !isWeekendTrade({
+      instrument: s.instrument,
+      market: s.market,
+      time_signaled: s.created_at,
+      time_entered: s.entry_triggered_at,
+      time_exited: s.resolved_at || s.created_at
+    }));
     return res.json({ success: true, signals: rows, resetAt, count: rows.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -2266,6 +2288,15 @@ router.get('/exclusive-signals/outcomes', verifySuperAdmin, async (req: Request,
 
     const rawRows = await queryDb<any>(sql, params);
     const rows = rawRows.filter((s: any) => {
+      if (isWeekendTrade({
+        instrument: s.instrument,
+        market: s.market,
+        time_signaled: s.created_at,
+        time_entered: s.entry_triggered_at,
+        time_exited: s.resolved_at || s.created_at
+      })) {
+        return false;
+      }
       if (!market || market === 'all') return true;
       const isFx = s.market === 'forex' || s.instrument?.includes('/');
       return market === 'forex' ? isFx : !isFx;
@@ -2372,7 +2403,14 @@ router.get('/exclusive-signals/export', verifySuperAdmin, async (req: Request, r
     }
     sql += ` ORDER BY created_at DESC LIMIT 2000`;
 
-    const rows = await queryDb<any>(sql, params);
+    const rawExportRows = await queryDb<any>(sql, params);
+    const rows = rawExportRows.filter((s: any) => !isWeekendTrade({
+      instrument: s.instrument,
+      market: s.market,
+      time_signaled: s.created_at,
+      time_entered: s.entry_triggered_at,
+      time_exited: s.resolved_at || s.created_at
+    }));
 
     let csv = 'Trade ID,Instrument,Market,Direction,Killzone,Signal Time (UTC),Entry Time (UTC),Exit Time (UTC),Entry Price,Initial Stop,Final Stop,TP1 (2R),TP2 (3R),Exit Price,Outcome Type,Realized R,MAE (R),MFE (R),Duration (Min),Conviction (%),H1 POI,M15 Level,M1 OCs,Status\n';
 
@@ -2473,7 +2511,16 @@ router.get('/exclusive-signals/analytics', verifySuperAdmin, async (req: Request
     }
     sql += ` ORDER BY created_at DESC LIMIT 500`;
 
-    const allSignals = await queryDb<any>(sql, params);
+    const rawAllSignals = await queryDb<any>(sql, params);
+    const allSignals = rawAllSignals.filter((s: any) => !isWeekendTrade({
+      instrument: s.instrument,
+      market: s.market,
+      time_signaled: s.created_at,
+      time_entered: s.entry_triggered_at,
+      time_exited: (s.signal_state === 'resolved' || s.signal_state === 'invalidated')
+        ? (s.resolved_at || s.created_at)
+        : undefined
+    }));
 
     const isForex = (s: any) => s.market === 'forex' || s.instrument?.includes('/');
     const forexSignals = allSignals.filter(isForex);
