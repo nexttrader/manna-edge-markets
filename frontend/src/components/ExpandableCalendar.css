@@ -162,6 +162,11 @@
   background: linear-gradient(180deg, rgba(232, 121, 249, 0.08) 0%, rgba(255, 255, 255, 0.02) 55%);
 }
 
+.calendar-day-cell.has-macro-event.macro-election {
+  border-top: 2px solid rgba(251, 113, 133, 0.75);
+  background: linear-gradient(180deg, rgba(251, 113, 133, 0.08) 0%, rgba(255, 255, 255, 0.02) 55%);
+}
+
 .calendar-day-cell.today.has-macro-event {
   border-color: var(--kdt-gold, #ffd700);
 }
@@ -218,6 +223,12 @@
   color: #e879f9;
   background: rgba(232, 121, 249, 0.16);
   border: 1px solid rgba(232, 121, 249, 0.55);
+}
+
+.day-macro-badge.macro-election {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.16);
+  border: 1px solid rgba(251, 113, 133, 0.55);
 }
 
 /* Macro Legend & Month Catalyst Strip */
@@ -352,6 +363,7 @@ html[data-theme="light"] .asset-perf-trigger-btn:hover {
 .macro-month-chip.macro-cpi .macro-chip-type { color: #fb923c; font-weight: 900; }
 .macro-month-chip.macro-nfp .macro-chip-type { color: #38bdf8; font-weight: 900; }
 .macro-month-chip.macro-fomc .macro-chip-type { color: #e879f9; font-weight: 900; }
+.macro-month-chip.macro-election .macro-chip-type { color: #fb7185; font-weight: 900; }
 
 .macro-month-chip.active {
   border-color: var(--kdt-gold, #ffd700);
@@ -542,6 +554,11 @@ html[data-theme="light"] .asset-perf-trigger-btn:hover {
 .drawer-macro-item.macro-fomc {
   border-left: 3px solid #e879f9;
   background: rgba(232, 121, 249, 0.06);
+}
+
+.drawer-macro-item.macro-election {
+  border-left: 3px solid #fb7185;
+  background: rgba(251, 113, 133, 0.06);
 }
 
 .drawer-macro-item-head {

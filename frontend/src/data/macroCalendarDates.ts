@@ -1,4 +1,4 @@
-export type MacroEventType = 'CPI' | 'NFP' | 'FOMC';
+export type MacroEventType = 'CPI' | 'NFP' | 'FOMC' | 'ELECTION';
 
 export interface MacroCalendarEvent {
   dateStr: string; // YYYY-MM-DD (NY calendar date)
@@ -36,6 +36,21 @@ const FOMC_META = {
   title: 'FOMC Rate Decision & Statement',
   timeET: '02:00 PM ET',
   impactNote: 'Federal Reserve policy announcement (14:00 ET) & Chair press conference (14:30 ET) — high two-sided volatility across all markets.',
+};
+
+const ELECTION_META = {
+  type: 'ELECTION' as const,
+  label: 'ELECTION',
+  title: 'US Election Day',
+  timeET: 'All Day ET',
+  impactNote: 'US federal/general Election Day — elevated headline risk, positioning shifts, and overnight/post-election repricing across US indices (NQ/ES/YM), yields, gold, and USD pairs.',
+};
+
+const MACRO_META_BY_TYPE: Record<MacroEventType, typeof CPI_META | typeof NFP_META | typeof FOMC_META | typeof ELECTION_META> = {
+  CPI: CPI_META,
+  NFP: NFP_META,
+  FOMC: FOMC_META,
+  ELECTION: ELECTION_META,
 };
 
 // Official US BLS CPI release dates (2025–2027)
@@ -94,6 +109,14 @@ const FOMC_DATES: readonly { dateStr: string; hasSep: boolean }[] = [
   { dateStr: '2027-11-17', hasSep: false },
 ];
 
+// Official US General Election Days (Tuesday next after the first Monday in November, 2024–2027)
+const ELECTION_DATES: readonly { dateStr: string; title: string }[] = [
+  { dateStr: '2024-11-05', title: 'US Presidential & General Election Day' },
+  { dateStr: '2025-11-04', title: 'US Off-Year General Election Day' },
+  { dateStr: '2026-11-03', title: 'US Midterm General Election Day' },
+  { dateStr: '2027-11-02', title: 'US Off-Year General Election Day' },
+];
+
 export const STATIC_MACRO_EVENTS_BY_DATE: Record<string, MacroCalendarEvent[]> = (() => {
   const map: Record<string, MacroCalendarEvent[]> = {};
   const add = (ev: MacroCalendarEvent) => {
@@ -115,6 +138,13 @@ export const STATIC_MACRO_EVENTS_BY_DATE: Record<string, MacroCalendarEvent[]> =
       title: hasSep
         ? 'FOMC Rate Decision, Statement & Dot Plot (SEP)'
         : FOMC_META.title,
+    });
+  }
+  for (const { dateStr, title } of ELECTION_DATES) {
+    add({
+      dateStr,
+      ...ELECTION_META,
+      title,
     });
   }
 
@@ -219,8 +249,7 @@ export function buildMacroEventsMap(
     const dateStr = formatIsoToNYDateStr(raw.eventTime);
     if (!dateStr) continue;
 
-    const baseMeta =
-      type === 'CPI' ? CPI_META : type === 'NFP' ? NFP_META : FOMC_META;
+    const baseMeta = MACRO_META_BY_TYPE[type];
     const existingList = (merged[dateStr] ??= []);
     const existing = existingList.find((item) => item.type === type);
     const liveTime = formatIsoToNYTimeLabel(raw.eventTime);
