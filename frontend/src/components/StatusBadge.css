@@ -51,3 +51,42 @@
   color: var(--blue);
   border: 1px solid rgba(68, 138, 255, 0.3);
 }
+
+/* Light Mode Contrast Overrides */
+html[data-theme="light"] .status-active {
+  background-color: rgba(5, 150, 105, 0.12);
+  color: #065f46;
+  border-color: rgba(5, 150, 105, 0.38);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .status-runner {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: rgba(180, 83, 9, 0.42);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .status-awaiting {
+  background-color: rgba(217, 119, 6, 0.14);
+  color: #92400e;
+  border-color: rgba(180, 83, 9, 0.4);
+}
+
+html[data-theme="light"] .status-invalidated {
+  background-color: rgba(220, 38, 38, 0.11);
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.38);
+}
+
+html[data-theme="light"] .status-superseded {
+  background-color: #f1f5f9;
+  color: #475569;
+  border-color: rgba(100, 116, 139, 0.35);
+}
+
+html[data-theme="light"] .status-resolved {
+  background-color: #e0f2fe;
+  color: #075985;
+  border-color: rgba(3, 105, 161, 0.38);
+}

@@ -574,10 +574,10 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
             <span className="text-green">Feed active — receiving real-time I-Feed price ticks.</span>
           ) : (
             <div>
-              <div style={{ color: '#F59E0B', fontWeight: 700, marginBottom: 4 }}>
+              <div className="sc-feed-note-warn">
                 Showing 15-minute delayed Y-Feed market data while I-Feed syncs.
               </div>
-              <div style={{ color: '#B8AFCE' }}>
+              <div className="sc-feed-note-sub">
                 Discovery, entry detection, and invalidation remain real-time and unaffected.
                 {setup.ibkr_price ? ` Last I-Feed print: ${setup.ibkr_price}` : ''}
               </div>
