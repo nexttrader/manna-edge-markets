@@ -1226,6 +1226,25 @@ export async function syncMtfSetupsAndGetLiveBoard(
     if (insertedRows.length > 0) {
       stillOpenByInst.set(c.instrument, insertedRows[0]);
     }
+
+    if (process.env.NODE_ENV !== 'test') {
+      const sc = edgeScorecards?.get((c.instrument || '').toUpperCase()) || null;
+      import('../edge-finder/confluence-analytics')
+        .then(({ captureLiveSignalConfluence }) =>
+          captureLiveSignalConfluence({
+            setupId: c.id,
+            sourceTable: 'mtf_style_setups',
+            instrument: c.instrument,
+            market: c.market,
+            tradingStyle: c.trading_style,
+            strategyId: c.strategy_id,
+            bias: c.bias,
+            createdAt: c.created_at || nowIso,
+            scorecard: sc
+          })
+        )
+        .catch(() => {});
+    }
   }
 
   // 3. Read final live board + recent history for this style & swingMode

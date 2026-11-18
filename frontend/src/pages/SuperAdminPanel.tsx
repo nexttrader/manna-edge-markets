@@ -5,6 +5,7 @@ import '../components/admin/ui/AdminDesignSystem.css';
 import { AdminHeader } from '../components/admin/ui/AdminHeader';
 import type { AdminTabConfig } from '../components/admin/ui/AdminHeader';
 import { EdgeFinderRolloutCard } from '../components/edge-finder/EdgeFinderRolloutCard';
+import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 import { AdminLandingTiles } from '../components/admin/ui/AdminLandingTiles';
 import { AdminCommandCenter } from '../components/admin/ui/AdminCommandCenter';
 import { useAuth } from '../context/AuthContext';
@@ -23,7 +24,7 @@ export const SuperAdminPanel: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialActiveTab = (searchParams.get('tab') as any) || 'overview';
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'exclusive_signals' | 'notifications'>(initialActiveTab);
+  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'confluence_tracker' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'exclusive_signals' | 'notifications'>(initialActiveTab);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
 
   const handleSelectTab = (tab: string) => {
@@ -713,6 +714,7 @@ export const SuperAdminPanel: React.FC = () => {
     { id: 'overview', label: 'Mission Control', icon: '🎛️' },
     { id: 'assets', label: 'Asset & Signal Visibility', icon: '🎯', color: '#6366f1' },
     { id: 'strategy_comparison', label: 'Strategy Analytics', icon: '⚔️', color: '#ffab00' },
+    { id: 'confluence_tracker', label: 'Confluence Lab', icon: '🧭', color: '#00e676' },
     { id: 'sentinel', label: 'Manna Elite Tuning', icon: '🤖', count: sentinelSetups.length, color: '#ce93d8' },
     { id: 'roster', label: 'User & Admin Roster', icon: '👥', count: roster.length, color: '#b388ff' },
     { id: 'notifications', label: 'Notification Governance', icon: '📡', color: '#29b6f6' },
@@ -2951,6 +2953,11 @@ export const SuperAdminPanel: React.FC = () => {
         {/* TAB: Strategy Analytics & LLM Export */}
         {activeTab === 'strategy_comparison' && (
           <StrategyComparisonDashboard />
+        )}
+
+        {/* TAB: EdgeFinder Signal Card Confluence Performance & Mathematical Proof Lab */}
+        {activeTab === 'confluence_tracker' && (
+          <ConfluencePerformanceTracker />
         )}
 
         {/* TAB 6: Admin Audit Log */}

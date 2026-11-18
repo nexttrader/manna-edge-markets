@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useEdgeFinderAccess } from '../../hooks/useEdgeFinder';
+import { useConfluenceAnalyticsAccess, useEdgeFinderAccess } from '../../hooks/useEdgeFinder';
 
 export const EdgeFinderRolloutCard: React.FC = () => {
   const { isSuperAdmin, rollout, updatingRollout, updateRollout } = useEdgeFinderAccess();
+  const {
+    rollout: confluenceRollout,
+    updatingRollout: updatingConfluenceRollout,
+    updateRollout: updateConfluenceRollout
+  } = useConfluenceAnalyticsAccess();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   if (!isSuperAdmin) return null;
@@ -12,10 +17,21 @@ export const EdgeFinderRolloutCard: React.FC = () => {
     try {
       const next = await updateRollout({ [target]: !rollout[target] });
       const who = target === 'visibleToAdmins' ? 'Admins' : 'All Clients';
-      setStatusMessage(`${who} access switched ${next[target] ? 'ON' : 'OFF'}.`);
+      setStatusMessage(`EdgeFinder Pro ${who} access switched ${next[target] ? 'ON' : 'OFF'}.`);
       window.setTimeout(() => setStatusMessage(null), 3500);
     } catch (err: any) {
       setStatusMessage(err?.message || 'Failed to update EdgeFinder rollout');
+    }
+  };
+
+  const handleConfluenceToggle = async (target: 'visibleToAdmins' | 'visibleToTraders') => {
+    try {
+      const next = await updateConfluenceRollout({ [target]: !confluenceRollout[target] });
+      const who = target === 'visibleToAdmins' ? 'Admins' : 'All Clients';
+      setStatusMessage(`Signal Confluence Lab ${who} access switched ${next[target] ? 'ON' : 'OFF'}.`);
+      window.setTimeout(() => setStatusMessage(null), 3500);
+    } catch (err: any) {
+      setStatusMessage(err?.message || 'Failed to update Confluence Tracker visibility');
     }
   };
 
@@ -112,6 +128,80 @@ export const EdgeFinderRolloutCard: React.FC = () => {
           ✓ {statusMessage}
         </div>
       )}
+
+      {/* Independent Rollout Control for Signal Card Confluence Performance & Mathematical Proof Lab */}
+      <div
+        style={{
+          marginTop: '14px',
+          paddingTop: '14px',
+          borderTop: '1px solid rgba(201, 168, 76, 0.25)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ color: '#f3e8ff', fontWeight: 800, fontSize: '0.86rem' }}>
+              📊 Signal Card Confluence Performance Lab (Agrees vs Counter Macro Bias)
+            </span>
+            <span style={{
+              fontSize: '0.68rem',
+              padding: '2px 7px',
+              borderRadius: '999px',
+              background: 'rgba(0, 230, 118, 0.14)',
+              border: '1px solid rgba(0, 230, 118, 0.4)',
+              color: '#69f0ae',
+              fontWeight: 700
+            }}>
+              SUPER ADMIN: ALWAYS ON
+            </span>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#b7aad6' }}>
+            Independent visibility gate for the Signal Confluence tracker &amp; November historical mathematical proof lab.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            disabled={updatingConfluenceRollout}
+            onClick={() => handleConfluenceToggle('visibleToAdmins')}
+            style={{
+              padding: '7px 13px',
+              borderRadius: '8px',
+              cursor: updatingConfluenceRollout ? 'wait' : 'pointer',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              border: confluenceRollout.visibleToAdmins ? '1px solid #00e676' : '1px solid rgba(255, 82, 82, 0.55)',
+              background: confluenceRollout.visibleToAdmins ? 'rgba(0, 230, 118, 0.16)' : 'rgba(255, 82, 82, 0.12)',
+              color: confluenceRollout.visibleToAdmins ? '#69f0ae' : '#ff8a80'
+            }}
+          >
+            {confluenceRollout.visibleToAdmins ? '👁️ Tracker Admins: ON' : '🔒 Turn ON Tracker for Admins'}
+          </button>
+
+          <button
+            type="button"
+            disabled={updatingConfluenceRollout}
+            onClick={() => handleConfluenceToggle('visibleToTraders')}
+            style={{
+              padding: '7px 13px',
+              borderRadius: '8px',
+              cursor: updatingConfluenceRollout ? 'wait' : 'pointer',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              border: confluenceRollout.visibleToTraders ? '1px solid #00e5ff' : '1px solid rgba(255, 82, 82, 0.55)',
+              background: confluenceRollout.visibleToTraders ? 'rgba(0, 229, 255, 0.16)' : 'rgba(255, 82, 82, 0.12)',
+              color: confluenceRollout.visibleToTraders ? '#80d8ff' : '#ff8a80'
+            }}
+          >
+            {confluenceRollout.visibleToTraders ? '🌐 Tracker Clients: ON' : '🔒 Turn ON Tracker for Clients'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

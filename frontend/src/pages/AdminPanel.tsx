@@ -23,6 +23,8 @@ import { TelegramResendModal } from '../components/TelegramResendModal';
 import { formatTelegramTradeId } from '../utils/tradeId';
 import { getEffectiveRealizedR, estimateTradeFeeR, isWeekendTrade, useFeesToggle } from '../utils/rAccounting';
 import type { EdgeSetup } from '../types';
+import { useConfluenceAnalyticsAccess } from '../hooks/useEdgeFinder';
+import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 
 function convertOutcomeToReviewSetup(trade: any): EdgeSetup {
   const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
@@ -244,6 +246,7 @@ export const AdminPanel: React.FC = () => {
   const [strategyFilter, setStrategyFilter] = useState<'all' | 'sentinel_v2' | 'manna_snd'>('all');
   const [includeFees, toggleFees] = useFeesToggle();
   const { analytics, refetch: refetchAnalytics } = useAnalytics(strategyFilter);
+  const { canAccessConfluenceAnalytics } = useConfluenceAnalyticsAccess();
 
   const handleDeleteArchive = async (archiveId: string, archiveName: string) => {
     if (!window.confirm(`⚠️ Are you sure you want to PERMANENTLY DELETE archive dataset '${archiveName}' (${archiveId})?\n\nThis action cannot be undone.`)) {
@@ -1481,6 +1484,12 @@ export const AdminPanel: React.FC = () => {
         />
 
         <MetricsPanel />
+
+        {canAccessConfluenceAnalytics && (
+          <div style={{ margin: '18px 0' }}>
+            <ConfluencePerformanceTracker />
+          </div>
+        )}
 
         {/* Strategy Performance Matrix Comparison Cards */}
         <div className="strategy-matrix-container font-mono">

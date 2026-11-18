@@ -30,11 +30,13 @@ import { SessionScanCountdown } from '../components/SessionScanCountdown';
 import { ResearchBanner } from '../components/ResearchBanner';
 import { useTaggedSignals } from '../hooks/useTaggedSignals';
 import {
+  useConfluenceAnalyticsAccess,
   useEdgeFinderAccess,
   useEdgeFinderData,
   findEdgeFinderScorecard,
   computeSignalEdgeConfluence,
 } from '../hooks/useEdgeFinder';
+import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 import { useStrategies } from '../hooks/useAdmin';
 import {
   type DashboardStyleTab,
@@ -74,7 +76,9 @@ export const Dashboard: React.FC = () => {
   const { watchlistIds, toggleWatchlist, isWatchlisted } = useWatchlist();
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { canAccessConfluenceAnalytics } = useConfluenceAnalyticsAccess();
   const { snapshot: edgeSnapshot } = useEdgeFinderData(canAccessEdgeFinder);
+  const [showConfluenceLab, setShowConfluenceLab] = useState(false);
   const { strategies: visibleStrategies } = useStrategies();
 
   const [styleTab, setStyleTab] = useState<DashboardStyleTab>('intraday');
@@ -278,6 +282,39 @@ export const Dashboard: React.FC = () => {
                 </span>
               </Link>
             )}
+            {canAccessConfluenceAnalytics && (
+              <button
+                type="button"
+                onClick={() => setShowConfluenceLab((prev) => !prev)}
+                className="dashboard-edgefinder-cta"
+                style={{ width: '100%', textAlign: 'left', cursor: 'pointer', borderColor: showConfluenceLab ? '#00e676' : undefined }}
+                aria-expanded={showConfluenceLab}
+              >
+                <span className="dashboard-ef-cta-left">
+                  <span className="dashboard-ef-cta-icon" aria-hidden="true">📊</span>
+                  <span className="dashboard-ef-cta-copy">
+                    <span className="dashboard-ef-cta-title-row">
+                      <span className="dashboard-ef-cta-title font-mono">CONFLUENCE PERFORMANCE LAB</span>
+                      <span className="dashboard-ef-cta-pill font-mono" style={{ borderColor: 'rgba(0, 230, 118, 0.5)', color: '#69f0ae' }}>
+                        MATHEMATICAL PROOF
+                      </span>
+                    </span>
+                    <span className="dashboard-ef-cta-sub">
+                      Compare Strong Confluence (3/3 TF), EdgeFinder Agrees, Partial &amp; Counter Macro Bias win rates + November historical audit
+                    </span>
+                  </span>
+                </span>
+                <span className="dashboard-ef-cta-action font-mono">
+                  {showConfluenceLab ? 'HIDE LAB ▲' : 'OPEN LAB ▾'}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {!showMaintenanceLock && canAccessConfluenceAnalytics && showConfluenceLab && (
+          <div style={{ marginBottom: '18px' }}>
+            <ConfluencePerformanceTracker compact />
           </div>
         )}
 

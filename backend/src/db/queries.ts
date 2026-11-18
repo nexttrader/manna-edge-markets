@@ -81,6 +81,24 @@ export async function insertSetup(setup: EdgeSetup, market: string): Promise<voi
         const active = await getAllActiveSetups();
         await saveSignalsSnapshot(active);
     } catch {}
+
+    // Persist live EdgeFinder Signal Card Confluence classification at signal creation
+    if (process.env.NODE_ENV !== 'test') {
+        import('../edge-finder/confluence-analytics')
+            .then(({ captureLiveSignalConfluence }) =>
+                captureLiveSignalConfluence({
+                    setupId: setup.id,
+                    sourceTable: table as 'edge_setups' | 'forex_edge_setups',
+                    instrument: setup.instrument,
+                    market: market || setup.market || 'futures',
+                    tradingStyle: 'INTRADAY',
+                    strategyId: setup.strategy_id || 'sentinel_v2',
+                    bias: setup.bias || 'long',
+                    createdAt: setup.created_at || new Date().toISOString()
+                })
+            )
+            .catch(() => {});
+    }
 }
 
 

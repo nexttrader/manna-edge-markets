@@ -23,14 +23,17 @@ import {
   type TimeframeEdgeProfile,
   type TraderHorizon,
   resolveEdgeFinderInstrument,
+  useConfluenceAnalyticsAccess,
   useEdgeFinderAccess,
   useEdgeFinderData
 } from '../hooks/useEdgeFinder';
+import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 import './EdgeFinderPage.css';
 
 type WorkspaceTab =
   | 'scanner'
   | 'scorecard'
+  | 'confluence_perf'
   | 'gold'
   | 'carry'
   | 'cot'
@@ -109,6 +112,7 @@ const HORIZON_OPTIONS: Array<{
 const TAB_ITEMS: Array<{ id: WorkspaceTab; label: string; icon: string }> = [
   { id: 'scanner', label: 'Top Setups & Matrix', icon: '📊' },
   { id: 'scorecard', label: 'Asset Scorecard', icon: '🎯' },
+  { id: 'confluence_perf', label: 'Confluence Performance Lab', icon: '🧭' },
   { id: 'gold', label: 'Gold Scorecard', icon: '🥇' },
   { id: 'carry', label: 'Carry / Roll / Funding', icon: '💱' },
   { id: 'cot', label: 'COT Smart Money', icon: '🏦' },
@@ -223,6 +227,12 @@ export const EdgeFinderPage: React.FC = () => {
     updatingRollout,
     updateRollout
   } = useEdgeFinderAccess();
+  const { canAccessConfluenceAnalytics } = useConfluenceAnalyticsAccess();
+
+  const visibleTabs = useMemo(
+    () => TAB_ITEMS.filter((t) => t.id !== 'confluence_perf' || canAccessConfluenceAnalytics),
+    [canAccessConfluenceAnalytics]
+  );
 
   const {
     snapshot,
@@ -316,14 +326,14 @@ export const EdgeFinderPage: React.FC = () => {
 
   const handleTabKeyDown = (idx: number, e: React.KeyboardEvent) => {
     let targetIdx = idx;
-    if (e.key === 'ArrowRight') targetIdx = (idx + 1) % TAB_ITEMS.length;
-    else if (e.key === 'ArrowLeft') targetIdx = (idx - 1 + TAB_ITEMS.length) % TAB_ITEMS.length;
+    if (e.key === 'ArrowRight') targetIdx = (idx + 1) % visibleTabs.length;
+    else if (e.key === 'ArrowLeft') targetIdx = (idx - 1 + visibleTabs.length) % visibleTabs.length;
     else if (e.key === 'Home') targetIdx = 0;
-    else if (e.key === 'End') targetIdx = TAB_ITEMS.length - 1;
+    else if (e.key === 'End') targetIdx = visibleTabs.length - 1;
     else return;
 
     e.preventDefault();
-    const targetTab = TAB_ITEMS[targetIdx];
+    const targetTab = visibleTabs[targetIdx];
     setActiveTab(targetTab.id);
     tabRefs.current[targetIdx]?.focus();
   };
@@ -918,7 +928,7 @@ export const EdgeFinderPage: React.FC = () => {
             {/* Primary Navigation Tabs (Single Row — modern-web-guidance) */}
             <nav aria-label="EdgeFinder Analysis Views">
               <div role="tablist" aria-label="EdgeFinder Modules" className="ef-tablist">
-                {TAB_ITEMS.map((tab, idx) => {
+                {visibleTabs.map((tab, idx) => {
                   const selected = activeTab === tab.id;
                   return (
                     <button
@@ -2968,6 +2978,18 @@ export const EdgeFinderPage: React.FC = () => {
                 className="ef-tabpanel"
               >
                 <EdgeFinderKbExplorer />
+              </div>
+            )}
+
+            {/* TAB 8: SIGNAL CONFLUENCE PERFORMANCE LAB */}
+            {activeTab === 'confluence_perf' && canAccessConfluenceAnalytics && (
+              <div
+                role="tabpanel"
+                id="panel-confluence_perf"
+                aria-labelledby="tab-confluence_perf"
+                className="ef-tabpanel"
+              >
+                <ConfluencePerformanceTracker />
               </div>
             )}
           </>

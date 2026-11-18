@@ -617,6 +617,423 @@ export function useEdgeFinderAccess() {
   };
 }
 
+export type ConfluenceCategoryKey =
+  | 'STRONG_CONFLUENCE'
+  | 'EDGEFINDER_AGREES'
+  | 'PARTIAL_CONFLUENCE'
+  | 'EDGEFINDER_NEUTRAL'
+  | 'COUNTER_MACRO_BIAS';
+
+export interface ConfluenceCategoryStats {
+  categoryKey: string;
+  label: string;
+  badgeText: string;
+  description: string;
+  agreesGroup: 'AGREES_FULL_OR_PART' | 'NEUTRAL' | 'COUNTER' | 'BENCHMARK';
+  totalSignals: number;
+  awaitingEntry: number;
+  activeTrades: number;
+  invalidatedSignals: number;
+  supersededSignals: number;
+  filledTrades: number;
+  resolvedTrades: number;
+  fillRatePct: number;
+  wins: number;
+  losses: number;
+  breakevens: number;
+  tp1Hits: number;
+  tp2Hits: number;
+  winRatePct: number;
+  wilson95CiLowPct: number;
+  wilson95CiHighPct: number;
+  totalRealizedR: number;
+  expectancyR: number;
+  expectancy95CiLowR: number;
+  expectancy95CiHighR: number;
+  stdDevR: number;
+  avgWinR: number;
+  avgLossR: number;
+  payoffRatio: number;
+  profitFactor: number;
+  breakEvenWinRatePct: number;
+  edgeOverBreakEvenPct: number;
+  maxDrawdownR: number;
+  oneSampleTStat: number | null;
+  oneSamplePValueOneSided: number | null;
+  oneSamplePValueTwoSided: number | null;
+  statisticallySignificantPositiveR: boolean;
+  verdict: 'PROVEN_POSITIVE_EDGE' | 'DIRECTIONAL_POSITIVE' | 'NEGATIVE_OR_UNPROVEN' | 'INSUFFICIENT_SAMPLE';
+  equityCurve: Array<{
+    index: number;
+    date: string;
+    instrument: string;
+    rVal: number;
+    cumulativeR: number;
+  }>;
+}
+
+export interface ConfluenceHeadToHeadProof {
+  id: string;
+  title: string;
+  groupAKey: string;
+  groupALabel: string;
+  groupBKey: string;
+  groupBLabel: string;
+  nA: number;
+  nB: number;
+  winRateAPct: number;
+  winRateBPct: number;
+  winRateDeltaPct: number;
+  expectancyAR: number;
+  expectancyBR: number;
+  expectancyDeltaR: number;
+  totalRA: number;
+  totalRB: number;
+  twoPropZStat: number | null;
+  twoPropPValue: number | null;
+  fisherExactPValue: number | null;
+  welchTStat: number | null;
+  welchDf: number | null;
+  welchPValue: number | null;
+  cohensD: number | null;
+  verdict: 'MATHEMATICALLY_PROVEN' | 'DIRECTIONAL_OUTPERFORMANCE' | 'NO_SIGNIFICANT_DIFFERENCE' | 'INSUFFICIENT_SAMPLE';
+  proofStatement: string;
+}
+
+export interface TrackedConfluenceSignalRow {
+  setupId: string;
+  sourceTable: 'edge_setups' | 'forex_edge_setups' | 'mtf_style_setups';
+  instrument: string;
+  resolvedInstrument: string;
+  market: string;
+  tradingStyle: 'INTRADAY' | 'SCALP' | 'SWING';
+  strategyId: string;
+  bias: string;
+  killzoneOrigin: string;
+  convictionScore: number;
+  signalState: string;
+  outcomeType: string | null;
+  isResolved: boolean;
+  isWin: boolean;
+  isLoss: boolean;
+  isBreakeven: boolean;
+  realizedR: number | null;
+  categoryKey: ConfluenceCategoryKey;
+  badgeText: string;
+  confluenceState: EdgeConfluenceState;
+  agreesWithEdgeFinder: boolean;
+  scalpScore: number;
+  intradayScore: number;
+  swingScore: number;
+  totalScore: number;
+  biasLabel: string;
+  matchingHorizons: string[];
+  opposingHorizons: string[];
+  summaryText: string;
+  provenance: 'LIVE_CAPTURED' | 'HISTORICAL_RECONSTRUCTED';
+  createdAt: string;
+  entryTriggeredAt: string | null;
+  resolvedAt: string | null;
+}
+
+export interface ConfluencePerformanceReport {
+  generatedAt: string;
+  filters: {
+    period: string;
+    fromIso: string | null;
+    untilIso: string | null;
+    style: string;
+    market: string;
+    strategyId: string;
+  };
+  provenanceSummary: {
+    totalTrackedSignals: number;
+    liveCapturedCount: number;
+    historicalReconstructedCount: number;
+    unclassifiedCount: number;
+  };
+  categories: ConfluenceCategoryStats[];
+  pooledGroups: {
+    allSignals: ConfluenceCategoryStats;
+    agreesFullOrPart: ConfluenceCategoryStats;
+    nonAligned: ConfluenceCategoryStats;
+  };
+  comparisons: ConfluenceHeadToHeadProof[];
+  styleBreakdown: Array<{
+    style: 'INTRADAY' | 'SCALP' | 'SWING';
+    agreesResolved: number;
+    agreesWinRatePct: number;
+    agreesTotalR: number;
+    agreesExpectancyR: number;
+    counterResolved: number;
+    counterWinRatePct: number;
+    counterTotalR: number;
+    counterExpectancyR: number;
+  }>;
+  signals: TrackedConfluenceSignalRow[];
+}
+
+export interface ConfluenceAnalyticsFilters {
+  period?: string;
+  month?: string;
+  style?: string;
+  market?: string;
+  strategyId?: string;
+}
+
+const CONFLUENCE_ROLLOUT_SYNC_EVENT = 'edge-finder-confluence-rollout-updated';
+const confluenceAccessCacheByRole = new Map<string, CachedAccessEntry>();
+const confluenceAccessInflightByRole = new Map<string, Promise<CachedAccessEntry | null>>();
+
+export function useConfluenceAnalyticsAccess() {
+  const { user, originalAdmin, effectiveRole: authEffectiveRole } = useAuth();
+  const effectiveRole = user ? authEffectiveRole : 'guest';
+
+  const isSuperAdmin = effectiveRole === 'super_admin';
+  const isAdmin = effectiveRole === 'admin';
+
+  const cachedInit = confluenceAccessCacheByRole.get(effectiveRole);
+  const [rollout, setRollout] = useState<EdgeFinderRollout>(cachedInit?.rollout || DEFAULT_ROLLOUT);
+  const [canAccessConfluenceAnalytics, setCanAccessConfluenceAnalytics] = useState<boolean>(
+    cachedInit ? cachedInit.canAccess : effectiveRole === 'super_admin'
+  );
+  const [loading, setLoading] = useState<boolean>(!cachedInit);
+  const [updatingRollout, setUpdatingRollout] = useState<boolean>(false);
+
+  const buildHeaders = useCallback(() => ({
+    'Content-Type': 'application/json',
+    'x-user-role': effectiveRole,
+    'x-user-email': user?.email || originalAdmin?.email || ''
+  }), [effectiveRole, user?.email, originalAdmin?.email]);
+
+  const fetchAccessStatus = useCallback(async (force = false) => {
+    const cached = confluenceAccessCacheByRole.get(effectiveRole);
+    if (!force && cached && Date.now() - cached.ts < ACCESS_CACHE_TTL_MS) {
+      setRollout(cached.rollout);
+      setCanAccessConfluenceAnalytics(cached.canAccess);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      let inflight = !force ? confluenceAccessInflightByRole.get(effectiveRole) : undefined;
+      if (!inflight) {
+        inflight = (async () => {
+          const res = await fetch(
+            `${API_BASE}/api/edge-finder/confluence-analytics/access-status?role=${encodeURIComponent(effectiveRole)}`,
+            { headers: buildHeaders() }
+          );
+          if (!res.ok) return null;
+          const data = await res.json();
+          const nextRollout: EdgeFinderRollout = data?.rollout || DEFAULT_ROLLOUT;
+          const nextCanAccess =
+            typeof data?.canAccess === 'boolean'
+              ? data.canAccess
+              : computeRoleAccess(effectiveRole, nextRollout);
+          const entry: CachedAccessEntry = {
+            rollout: nextRollout,
+            canAccess: nextCanAccess,
+            ts: Date.now()
+          };
+          confluenceAccessCacheByRole.set(effectiveRole, entry);
+          return entry;
+        })().finally(() => {
+          confluenceAccessInflightByRole.delete(effectiveRole);
+        });
+        confluenceAccessInflightByRole.set(effectiveRole, inflight);
+      }
+
+      const entry = await inflight;
+      if (entry) {
+        setRollout(entry.rollout);
+        setCanAccessConfluenceAnalytics(entry.canAccess);
+      }
+    } catch {
+      setCanAccessConfluenceAnalytics(effectiveRole === 'super_admin');
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveRole, buildHeaders]);
+
+  useEffect(() => {
+    const cached = confluenceAccessCacheByRole.get(effectiveRole);
+    if (cached && Date.now() - cached.ts < ACCESS_CACHE_TTL_MS) {
+      setRollout(cached.rollout);
+      setCanAccessConfluenceAnalytics(cached.canAccess);
+      setLoading(false);
+    } else {
+      setCanAccessConfluenceAnalytics(effectiveRole === 'super_admin');
+      setLoading(true);
+    }
+    void fetchAccessStatus(false);
+
+    const onSyncEvent = (evt: Event) => {
+      const detail = (evt as CustomEvent<EdgeFinderRollout>).detail;
+      if (detail) {
+        const nextCan = computeRoleAccess(effectiveRole, detail);
+        confluenceAccessCacheByRole.set(effectiveRole, {
+          rollout: detail,
+          canAccess: nextCan,
+          ts: Date.now()
+        });
+        setRollout(detail);
+        setCanAccessConfluenceAnalytics(nextCan);
+      } else {
+        void fetchAccessStatus(true);
+      }
+    };
+
+    window.addEventListener(CONFLUENCE_ROLLOUT_SYNC_EVENT, onSyncEvent);
+    const interval = window.setInterval(() => void fetchAccessStatus(false), 30_000);
+    return () => {
+      window.removeEventListener(CONFLUENCE_ROLLOUT_SYNC_EVENT, onSyncEvent);
+      window.clearInterval(interval);
+    };
+  }, [effectiveRole, fetchAccessStatus]);
+
+  const updateRollout = useCallback(
+    async (patch: Partial<Pick<EdgeFinderRollout, 'visibleToAdmins' | 'visibleToTraders'>>) => {
+      setUpdatingRollout(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/edge-finder/confluence-analytics/rollout`, {
+          method: 'POST',
+          headers: buildHeaders(),
+          body: JSON.stringify(patch)
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || 'Failed to update Confluence Analytics visibility');
+        }
+        const updatedRollout = data.rollout as EdgeFinderRollout;
+        confluenceAccessCacheByRole.clear();
+        confluenceAccessCacheByRole.set(effectiveRole, {
+          rollout: updatedRollout,
+          canAccess: computeRoleAccess(effectiveRole, updatedRollout),
+          ts: Date.now()
+        });
+        setRollout(updatedRollout);
+        window.dispatchEvent(new CustomEvent(CONFLUENCE_ROLLOUT_SYNC_EVENT, { detail: updatedRollout }));
+        return updatedRollout;
+      } finally {
+        setUpdatingRollout(false);
+      }
+    },
+    [buildHeaders, effectiveRole]
+  );
+
+  return {
+    canAccessConfluenceAnalytics,
+    loading,
+    updatingRollout,
+    rollout,
+    effectiveRole,
+    isSuperAdmin,
+    isAdmin,
+    updateRollout,
+    refetchAccess: () => fetchAccessStatus(true)
+  };
+}
+
+export function useConfluencePerformanceReport(
+  enabled: boolean,
+  filters: ConfluenceAnalyticsFilters
+) {
+  const { user, originalAdmin, effectiveRole: authEffectiveRole } = useAuth();
+  const effectiveRole = user ? authEffectiveRole : 'guest';
+  const [report, setReport] = useState<ConfluencePerformanceReport | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [backfilling, setBackfilling] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const buildHeaders = useCallback(() => ({
+    'Content-Type': 'application/json',
+    'x-user-role': effectiveRole,
+    'x-user-email': user?.email || originalAdmin?.email || ''
+  }), [effectiveRole, user?.email, originalAdmin?.email]);
+
+  const fetchReport = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('role', effectiveRole);
+      if (filters.period) params.set('period', filters.period);
+      if (filters.month) params.set('month', filters.month);
+      if (filters.style) params.set('style', filters.style);
+      if (filters.market) params.set('market', filters.market);
+      if (filters.strategyId) params.set('strategy_id', filters.strategyId);
+
+      const res = await fetch(
+        `${API_BASE}/api/edge-finder/confluence-analytics/report?${params.toString()}`,
+        { headers: buildHeaders() }
+      );
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to load confluence performance report');
+      }
+      setReport(data.report);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to load confluence analytics');
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled, effectiveRole, filters.period, filters.month, filters.style, filters.market, filters.strategyId, buildHeaders]);
+
+  useEffect(() => {
+    void fetchReport();
+  }, [fetchReport]);
+
+  const runBackfill = useCallback(
+    async (forceRecompute = false) => {
+      if (!enabled) return null;
+      setBackfilling(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/edge-finder/confluence-analytics/backfill`, {
+          method: 'POST',
+          headers: buildHeaders(),
+          body: JSON.stringify({
+            period: filters.period || 'november_2026',
+            month: filters.month,
+            style: filters.style || 'all',
+            market: filters.market || 'all',
+            strategyId: filters.strategyId || 'all',
+            forceRecompute
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || 'Historical reconstruction failed');
+        }
+        if (data.report) setReport(data.report);
+        return data.backfillResult as { processed: number; reconstructed: number; skippedExisting: number };
+      } catch (err: any) {
+        setError(err?.message || 'Historical reconstruction failed');
+        return null;
+      } finally {
+        setBackfilling(false);
+      }
+    },
+    [enabled, buildHeaders, filters.period, filters.month, filters.style, filters.market, filters.strategyId]
+  );
+
+  const csvExportUrl = `${API_BASE}/api/edge-finder/confluence-analytics/export-csv?role=${encodeURIComponent(effectiveRole)}&period=${encodeURIComponent(filters.period || 'november_2026')}${filters.month ? `&month=${encodeURIComponent(filters.month)}` : ''}&style=${encodeURIComponent(filters.style || 'all')}&market=${encodeURIComponent(filters.market || 'all')}&strategy_id=${encodeURIComponent(filters.strategyId || 'all')}`;
+
+  return {
+    report,
+    loading,
+    backfilling,
+    error,
+    refresh: fetchReport,
+    runBackfill,
+    csvExportUrl
+  };
+}
+
 export function useEdgeFinderData(enabled = true) {
   const { user, originalAdmin, effectiveRole: authEffectiveRole } = useAuth();
   const effectiveRole = user ? authEffectiveRole : 'guest';

@@ -422,6 +422,7 @@ export interface EdgeFinderSnapshot {
 }
 
 const ROLLOUT_KEY = 'edge_finder_rollout';
+const CONFLUENCE_ROLLOUT_KEY = 'edge_finder_confluence_analytics_rollout';
 const MACRO_OVERRIDES_KEY = 'edge_finder_macro_overrides';
 const SNAPSHOT_FILE = path.join(process.cwd(), 'edge_finder_settings_snapshot.json');
 const CFTC_ENDPOINT = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
@@ -1426,7 +1427,11 @@ function roundTo(val: number, decimals = 2): number {
   return Math.round(val * factor) / factor;
 }
 
-function readDiskSnapshot(): { rollout?: EdgeFinderRollout; macroOverrides?: Partial<Record<EconomyCode, Partial<MacroEconomyData>>> } {
+function readDiskSnapshot(): {
+  rollout?: EdgeFinderRollout;
+  confluenceAnalyticsRollout?: EdgeFinderRollout;
+  macroOverrides?: Partial<Record<EconomyCode, Partial<MacroEconomyData>>>;
+} {
   if (isTestEnv()) return {};
   try {
     if (fs.existsSync(SNAPSHOT_FILE)) {
@@ -1438,7 +1443,11 @@ function readDiskSnapshot(): { rollout?: EdgeFinderRollout; macroOverrides?: Par
   return {};
 }
 
-function writeDiskSnapshot(patch: { rollout?: EdgeFinderRollout; macroOverrides?: Partial<Record<EconomyCode, Partial<MacroEconomyData>>> }): void {
+function writeDiskSnapshot(patch: {
+  rollout?: EdgeFinderRollout;
+  confluenceAnalyticsRollout?: EdgeFinderRollout;
+  macroOverrides?: Partial<Record<EconomyCode, Partial<MacroEconomyData>>>;
+}): void {
   if (isTestEnv()) return;
   try {
     const existing = readDiskSnapshot();
@@ -1524,6 +1533,100 @@ export function canRoleAccessEdgeFinder(role: string | undefined | null, rollout
   if (normalized === 'admin') return rollout.visibleToAdmins === true;
   if (normalized === 'trader') return rollout.visibleToTraders === true;
   return false;
+}
+
+export async function getConfluenceAnalyticsRollout(): Promise<EdgeFinderRollout> {
+  const dbVal = await readSettingJson<EdgeFinderRollout>(CONFLUENCE_ROLLOUT_KEY);
+  if (dbVal && typeof dbVal.visibleToAdmins === 'boolean' && typeof dbVal.visibleToTraders === 'boolean') {
+    return dbVal;
+  }
+  const disk = readDiskSnapshot();
+  if (disk.confluenceAnalyticsRollout) {
+    return disk.confluenceAnalyticsRollout;
+  }
+  return {
+    visibleToAdmins: false,
+    visibleToTraders: false,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'system'
+  };
+}
+
+export async function updateConfluenceAnalyticsRollout(
+  patch: Partial<Pick<EdgeFinderRollout, 'visibleToAdmins' | 'visibleToTraders'>>,
+  updatedBy = 'super_admin'
+): Promise<EdgeFinderRollout> {
+  const current = await getConfluenceAnalyticsRollout();
+  const next: EdgeFinderRollout = {
+    visibleToAdmins: typeof patch.visibleToAdmins === 'boolean' ? patch.visibleToAdmins : current.visibleToAdmins,
+    visibleToTraders: typeof patch.visibleToTraders === 'boolean' ? patch.visibleToTraders : current.visibleToTraders,
+    updatedAt: new Date().toISOString(),
+    updatedBy
+  };
+  await writeSettingJson(CONFLUENCE_ROLLOUT_KEY, next);
+  writeDiskSnapshot({ confluenceAnalyticsRollout: next });
+  return next;
+}
+
+export function canRoleAccessConfluenceAnalytics(
+  role: string | undefined | null,
+  rollout: EdgeFinderRollout
+): boolean {
+  const normalized = (role || '').toLowerCase().trim();
+  if (normalized === 'super_admin') return true;
+  if (normalized === 'admin') return rollout.visibleToAdmins === true;
+  if (normalized === 'trader') return rollout.visibleToTraders === true;
+  return false;
+}
+
+const BACKEND_SYMBOL_ALIAS_MAP: Record<string, string> = {
+  EURUSD: 'EUR/USD', GBPUSD: 'GBP/USD', USDJPY: 'USD/JPY', AUDUSD: 'AUD/USD',
+  USDCAD: 'USD/CAD', USDCHF: 'USD/CHF', NZDUSD: 'NZD/USD', EURGBP: 'EUR/GBP',
+  EURJPY: 'EUR/JPY', EURAUD: 'EUR/AUD', EURCAD: 'EUR/CAD', EURCHF: 'EUR/CHF',
+  EURNZD: 'EUR/NZD', GBPJPY: 'GBP/JPY', GBPAUD: 'GBP/AUD', GBPCAD: 'GBP/CAD',
+  GBPCHF: 'GBP/CHF', GBPNZD: 'GBP/NZD', AUDJPY: 'AUD/JPY', AUDCAD: 'AUD/CAD',
+  AUDCHF: 'AUD/CHF', AUDNZD: 'AUD/NZD', CADJPY: 'CAD/JPY', CADCHF: 'CAD/CHF',
+  CHFJPY: 'CHF/JPY', NZDJPY: 'NZD/JPY', NZDCAD: 'NZD/CAD', NZDCHF: 'NZD/CHF',
+  ES: 'ES', 'ES=F': 'ES', 'ES1!': 'ES', MES: 'ES', 'MES1!': 'ES', SPX: 'ES', US500: 'ES',
+  NQ: 'NQ', 'NQ=F': 'NQ', 'NQ1!': 'NQ', MNQ: 'NQ', 'MNQ1!': 'NQ', NDX: 'NQ', NAS100: 'NQ', US100: 'NQ',
+  YM: 'YM', 'YM=F': 'YM', 'YM1!': 'YM', MYM: 'YM', US30: 'YM', DJ30: 'YM',
+  RTY: 'RTY', 'RTY=F': 'RTY', 'RTY1!': 'RTY', M2K: 'RTY', US2000: 'RTY',
+  NKD: 'NKD', 'NKD=F': 'NKD', JP225: 'NKD', NIKKEI: 'NKD',
+  GC: 'GC', 'GC=F': 'GC', 'GC1!': 'GC', MGC: 'GC', XAUUSD: 'GC', 'XAU/USD': 'GC', GOLD: 'GC',
+  SI: 'SI', 'SI=F': 'SI', 'SI1!': 'SI', SIL: 'SI', XAGUSD: 'SI', 'XAG/USD': 'SI', SILVER: 'SI',
+  HG: 'HG', 'HG=F': 'HG', COPPER: 'HG', PL: 'PL', 'PL=F': 'PL', PA: 'PA', 'PA=F': 'PA',
+  CL: 'CL', 'CL=F': 'CL', 'CL1!': 'CL', MCL: 'CL', USOIL: 'CL', WTI: 'CL',
+  BZ: 'BZ', 'BZ=F': 'BZ', UKOIL: 'BZ', BRENT: 'BZ',
+  NG: 'NG', 'NG=F': 'NG', NATGAS: 'NG',
+  ZN: 'ZN', 'ZN=F': 'ZN', US10Y: 'ZN', ZB: 'ZB', 'ZB=F': 'ZB', US30Y: 'ZB',
+  ZC: 'ZC', 'ZC=F': 'ZC', ZS: 'ZS', 'ZS=F': 'ZS', ZW: 'ZW', 'ZW=F': 'ZW',
+  BTC: 'BTC/USD', BTCUSD: 'BTC/USD', 'BTC-USD': 'BTC/USD', 'BTC/USD': 'BTC/USD',
+  ETH: 'ETH/USD', ETHUSD: 'ETH/USD', 'ETH-USD': 'ETH/USD', 'ETH/USD': 'ETH/USD',
+  SOL: 'SOL/USD', SOLUSD: 'SOL/USD', 'SOL-USD': 'SOL/USD', 'SOL/USD': 'SOL/USD',
+  XRP: 'XRP/USD', XRPUSD: 'XRP/USD', 'XRP-USD': 'XRP/USD', 'XRP/USD': 'XRP/USD'
+};
+
+export function resolveEdgeFinderInstrument(rawInstrument: string): string {
+  const clean = (rawInstrument || '').trim().toUpperCase().replace(/=X$/i, '');
+  if (!clean) return 'EUR/USD';
+  if (BACKEND_SYMBOL_ALIAS_MAP[clean]) return BACKEND_SYMBOL_ALIAS_MAP[clean];
+  if (clean.includes('/')) return clean;
+  if (/^[A-Z]{6}$/.test(clean)) return `${clean.slice(0, 3)}/${clean.slice(3, 6)}`;
+  return clean;
+}
+
+export function findEdgeFinderScorecard(
+  rawInstrument: string,
+  scorecards: AssetEdgeScorecard[] | undefined | null
+): AssetEdgeScorecard | null {
+  if (!scorecards || scorecards.length === 0) return null;
+  const resolved = resolveEdgeFinderInstrument(rawInstrument);
+  const direct = scorecards.find((sc) => sc.instrument.toUpperCase() === resolved);
+  if (direct) return direct;
+  const normalizedRaw = resolved.replace(/[^A-Z0-9]/g, '');
+  return (
+    scorecards.find((sc) => sc.instrument.toUpperCase().replace(/[^A-Z0-9]/g, '') === normalizedRaw) || null
+  );
 }
 
 function computeEconomicScore(econ: MacroEconomyData): number {
@@ -4266,4 +4369,367 @@ export function clearEdgeFinderCaches(): void {
   for (const k of Object.keys(intradayMarketCache)) {
     delete intradayMarketCache[k];
   }
+  historicalCandleCache.clear();
+}
+
+const historicalCandleCache = new Map<
+  string,
+  { fetchedAt: number; daily: Candle[]; intraday15m: Candle[]; intraday1h: Candle[]; monthlyReturns10Y: number[]; monthlyWinRate10Y: number[] }
+>();
+
+export interface HistoricalScorecardRequest {
+  key: string;
+  instrument: string;
+  timestampIso: string;
+  bias: string;
+  convictionScore?: number;
+  killzoneOrigin?: string;
+}
+
+export interface HistoricalScorecardResult {
+  scorecard: AssetEdgeScorecard;
+  dataSource: 'LIVE_15M_H1_H4' | 'HISTORICAL_1H' | 'DAILY_DERIVED';
+}
+
+async function fetchHistoricalAssetCandles(asset: AssetDefinition, earliestSignalMs: number) {
+  const cached = historicalCandleCache.get(asset.instrument);
+  if (cached && Date.now() - cached.fetchedAt < 10 * 60_000) {
+    return cached;
+  }
+
+  const yahooSym = YAHOO_SYMBOL_MAP[asset.instrument];
+  let daily: Candle[] = [];
+  let intraday15m: Candle[] = [];
+  let intraday1h: Candle[] = [];
+
+  if (yahooSym) {
+    const start150d = new Date(Math.min(Date.now() - 150 * 86_400_000, earliestSignalMs - 90 * 86_400_000));
+    const max15mLookback = Date.now() - 57 * 86_400_000;
+    const start15m = new Date(Math.max(max15mLookback, earliestSignalMs - 7 * 86_400_000));
+    const need1hFallback = earliestSignalMs < max15mLookback;
+    const start1h = new Date(Math.min(Date.now() - 180 * 86_400_000, earliestSignalMs - 14 * 86_400_000));
+
+    const [dailyChart, m15Chart, h1Chart] = await Promise.all([
+      runYahooLimited(() => yahooClient.chart(yahooSym, { period1: start150d, interval: '1d' }), 12_000).catch(() => null),
+      runYahooLimited(() => yahooClient.chart(yahooSym, { period1: start15m, interval: '15m' }), 12_000).catch(() => null),
+      need1hFallback
+        ? runYahooLimited(() => yahooClient.chart(yahooSym, { period1: start1h, interval: '1h' }), 12_000).catch(() => null)
+        : Promise.resolve(null)
+    ]);
+
+    const parseQuotes = (quotes: any[]): Candle[] =>
+      (quotes || [])
+        .filter((q) => q && q.open != null && q.high != null && q.low != null && q.close != null && q.date)
+        .map((q) => ({
+          open: roundTo(q.open, asset.decimals),
+          high: roundTo(q.high, asset.decimals),
+          low: roundTo(q.low, asset.decimals),
+          close: roundTo(q.close, asset.decimals),
+          volume: q.volume || 0,
+          timestamp: new Date(q.date).toISOString()
+        }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    daily = parseQuotes(dailyChart?.quotes || []);
+    intraday15m = parseQuotes(m15Chart?.quotes || []);
+    if (h1Chart?.quotes) {
+      intraday1h = parseQuotes(h1Chart.quotes);
+    }
+  }
+
+  const seasonal = await fetchYahooMonthlySeasonality(asset).catch(() => ({
+    monthlyReturns10Y: new Array(12).fill(0),
+    monthlyWinRate10Y: new Array(12).fill(50)
+  }));
+
+  const entry = {
+    fetchedAt: Date.now(),
+    daily,
+    intraday15m,
+    intraday1h,
+    monthlyReturns10Y: seasonal.monthlyReturns10Y,
+    monthlyWinRate10Y: seasonal.monthlyWinRate10Y
+  };
+  historicalCandleCache.set(asset.instrument, entry);
+  return entry;
+}
+
+/**
+ * Reconstructs strictly causal (zero look-ahead) point-in-time EdgeFinder scorecards
+ * for historical signals using candles, CFTC COT reports, macro policy, and 10Y seasonality
+ * sliced strictly <= each signal's creation timestamp.
+ */
+export async function reconstructHistoricalScorecardsAtTimestamps(
+  requests: HistoricalScorecardRequest[]
+): Promise<Map<string, HistoricalScorecardResult>> {
+  const results = new Map<string, HistoricalScorecardResult>();
+  if (!requests || requests.length === 0) return results;
+
+  const allEvents = newsEngine.getAllEvents();
+  const [liveCot, macroRes] = await Promise.all([
+    fetchLiveCftcCot(),
+    getMacroEconomies(allEvents)
+  ]);
+
+  const econByCode = macroRes.economies.reduce((acc, e) => {
+    acc[e.currency] = e;
+    return acc;
+  }, {} as Record<EconomyCode, MacroEconomyData>);
+
+  // Group requests by resolved EdgeFinder asset
+  const byInstrument = new Map<string, { asset: AssetDefinition; items: HistoricalScorecardRequest[]; minMs: number }>();
+  for (const req of requests) {
+    const resolved = resolveEdgeFinderInstrument(req.instrument);
+    const asset = EDGE_FINDER_ASSETS.find(
+      (a) => a.instrument.toUpperCase() === resolved || a.instrument.toUpperCase().replace(/[^A-Z0-9]/g, '') === resolved.replace(/[^A-Z0-9]/g, '')
+    );
+    if (!asset) continue;
+    const tsMs = new Date(req.timestampIso).getTime();
+    if (!Number.isFinite(tsMs)) continue;
+    const existing = byInstrument.get(asset.instrument);
+    if (!existing) {
+      byInstrument.set(asset.instrument, { asset, items: [req], minMs: tsMs });
+    } else {
+      existing.items.push(req);
+      if (tsMs < existing.minMs) existing.minMs = tsMs;
+    }
+  }
+
+  const assetGroups = Array.from(byInstrument.values());
+  await mapWithConcurrency(assetGroups, 8, async (group) => {
+    const { asset, items, minMs } = group;
+    const histData = await fetchHistoricalAssetCandles(asset, minMs);
+    const { cot: baseCot, retailSentiment: baseRetail, weeklySeries } = buildCotAndRetailFromLive(asset, liveCot);
+    const baseSeasonality = deriveSeasonality(asset, histData.monthlyReturns10Y, histData.monthlyWinRate10Y);
+
+    for (const item of items) {
+      const targetMs = new Date(item.timestampIso).getTime();
+      const targetDateStr = item.timestampIso.slice(0, 10);
+
+      // Strictly causal candle slicing <= signal timestamp
+      const candles = histData.daily.filter((c) => c.timestamp.slice(0, 10) <= targetDateStr);
+      const candles15m = histData.intraday15m.filter((c) => new Date(c.timestamp).getTime() <= targetMs);
+      const candles1h = histData.intraday1h.filter((c) => new Date(c.timestamp).getTime() <= targetMs);
+
+      const closes = candles.map((c) => c.close);
+      const last15mClose = candles15m.length > 0 ? candles15m[candles15m.length - 1].close : null;
+      const last1hClose = candles1h.length > 0 ? candles1h[candles1h.length - 1].close : null;
+      const currentPrice = last15mClose ?? last1hClose ?? closes[closes.length - 1] ?? 0;
+
+      const ema5 = closes.length > 0 ? roundTo(calcEma(closes, Math.min(5, closes.length)), asset.decimals) : 0;
+      const ema20 = closes.length > 0 ? roundTo(calcEma(closes, Math.min(20, closes.length)), asset.decimals) : 0;
+      const ema50 = closes.length > 0 ? roundTo(calcEma(closes, Math.min(50, closes.length)), asset.decimals) : 0;
+      const rsi14 = closes.length > 14 ? calcRsi(closes, 14) : 50;
+      const atr14 = candles.length > 1 ? roundTo(calcAtr(candles, 14), asset.decimals) : 0;
+      const atrPct = currentPrice > 0 ? roundTo((atr14 / currentPrice) * 100, 2) : 0;
+      const high30d = candles.length > 0 ? roundTo(Math.max(...candles.slice(-30).map((c) => c.high)), asset.decimals) : currentPrice;
+      const low30d = candles.length > 0 ? roundTo(Math.min(...candles.slice(-30).map((c) => c.low)), asset.decimals) : currentPrice;
+      const distanceFromEma20Pct = ema20 > 0 ? roundTo(((currentPrice - ema20) / ema20) * 100, 2) : 0;
+
+      const close5Ago = closes.length >= 6 ? closes[closes.length - 6] : closes[0] || currentPrice;
+      const close20Ago = closes.length >= 21 ? closes[closes.length - 21] : closes[0] || currentPrice;
+      const close22Ago = closes.length >= 23 ? closes[closes.length - 23] : closes[0] || currentPrice;
+      const return5dPct = close5Ago > 0 ? roundTo(((currentPrice - close5Ago) / close5Ago) * 100, 2) : 0;
+      const return20dPct = close20Ago > 0 ? roundTo(((currentPrice - close20Ago) / close20Ago) * 100, 2) : 0;
+      const returnMonthlyPct = close22Ago > 0 ? ((currentPrice - close22Ago) / close22Ago) * 100 : return20dPct;
+
+      const latestCandle = candles[candles.length - 1];
+      const todayRange = latestCandle ? Math.max(latestCandle.high - latestCandle.low, 0) : 0;
+      const dayRangePctOfAtr = atr14 > 0 ? roundTo((todayRange / atr14) * 100, 1) : 0;
+      const recent30 = candles.slice(-30);
+      const trList30 = recent30.slice(1).map((c, rIdx) => {
+        const prevC = recent30[rIdx].close;
+        return Math.max(c.high - c.low, Math.abs(c.high - prevC), Math.abs(c.low - prevC));
+      });
+      const trUnderOrEq = trList30.filter((tr) => tr <= todayRange).length;
+      const volatilityPercentile30d = trList30.length > 0 ? Math.round((trUnderOrEq / trList30.length) * 100) : 50;
+
+      const d5Sig: 'Bullish' | 'Bearish' | 'Flat' =
+        return5dPct >= 0.25 && currentPrice > ema5 ? 'Bullish' : return5dPct <= -0.25 && currentPrice < ema5 ? 'Bearish' : 'Flat';
+      const d20Sig: 'Bullish' | 'Bearish' | 'Flat' =
+        currentPrice > ema20 && return20dPct >= 0.4 ? 'Bullish' : currentPrice < ema20 && return20dPct <= -0.4 ? 'Bearish' : 'Flat';
+      const d50Sig: 'Bullish' | 'Bearish' | 'Flat' =
+        currentPrice > ema50 && ema20 > ema50 ? 'Bullish' : currentPrice < ema50 && ema20 < ema50 ? 'Bearish' : 'Flat';
+      const monthlySig: 'Bullish' | 'Bearish' | 'Flat' =
+        returnMonthlyPct >= 0.5 && currentPrice > ema50 ? 'Bullish' : returnMonthlyPct <= -0.5 && currentPrice < ema50 ? 'Bearish' : 'Flat';
+
+      const trendScoreRaw: -1 | 0 | 1 =
+        currentPrice > 0 && currentPrice > ema20 && ema20 >= ema50 ? 1 :
+        currentPrice > 0 && currentPrice < ema20 && ema20 <= ema50 ? -1 : 0;
+      const trendDirection: AssetEdgeScorecard['technical']['trendDirection'] =
+        trendScoreRaw === 1 ? 'Bullish' : trendScoreRaw === -1 ? 'Bearish' : 'Ranging';
+
+      // Point-in-time intraday metrics (15m preferred, 1h fallback if signal >57d old, else daily)
+      let intraday = computeIntradayMetrics(candles15m, currentPrice, trendDirection, rsi14, return5dPct);
+      let dataSource: HistoricalScorecardResult['dataSource'] =
+        intraday.intradaySource === 'LIVE_15M_H1_H4' ? 'LIVE_15M_H1_H4' : 'DAILY_DERIVED';
+      if (intraday.intradaySource !== 'LIVE_15M_H1_H4' && candles1h.length >= 16 && currentPrice > 0) {
+        const h1Closes = candles1h.map((c) => c.close);
+        const h1Fast = calcEma(h1Closes, Math.min(20, h1Closes.length));
+        const h1Slow = calcEma(h1Closes, Math.min(50, h1Closes.length));
+        const h1Sig = emaTrendSignal(currentPrice, h1Fast, h1Slow);
+        const h4Candles = aggregateCandles(candles1h, 4);
+        const h4Closes = h4Candles.map((c) => c.close);
+        const h4Fast = calcEma(h4Closes, Math.min(12, Math.max(2, h4Closes.length)));
+        const h4Slow = calcEma(h4Closes, Math.min(26, Math.max(3, h4Closes.length)));
+        const h4Sig = h4Closes.length >= 6 ? emaTrendSignal(currentPrice, h4Fast, h4Slow) : h1Sig;
+        const c1h = h1Closes.length >= 2 ? h1Closes[h1Closes.length - 2] : h1Closes[0];
+        const c4h = h1Closes.length >= 5 ? h1Closes[h1Closes.length - 5] : h1Closes[0];
+        intraday = {
+          m15Sig: h1Sig,
+          h1Sig,
+          h4Sig,
+          rsi14M15: calcRsi(h1Closes, Math.min(14, Math.max(2, h1Closes.length - 1))),
+          rsi14H1: calcRsi(h1Closes, Math.min(14, Math.max(2, h1Closes.length - 1))),
+          rsi14H4: h4Closes.length >= 5 ? calcRsi(h4Closes, Math.min(14, h4Closes.length - 1)) : 50,
+          return1hPct: c1h > 0 ? roundTo(((currentPrice - c1h) / c1h) * 100, 2) : 0,
+          return4hPct: c4h > 0 ? roundTo(((currentPrice - c4h) / c4h) * 100, 2) : 0,
+          intradaySource: 'DAILY_DERIVED'
+        };
+        dataSource = 'HISTORICAL_1H';
+      }
+
+      // Causal CFTC COT & Retail Contrarian as of targetDateStr
+      const cotHist = cotSignalsForDate(weeklySeries, targetDateStr, baseCot.cotScore * 1.5, baseRetail.sentimentScore * 1.0);
+      const histCotScore: -1 | 0 | 1 = cotHist.cot > 0 ? 1 : cotHist.cot < 0 ? -1 : 0;
+      const histRetailScore: -1 | 0 | 1 = cotHist.retail > 0 ? 1 : cotHist.retail < 0 ? -1 : 0;
+      const cot: CotPositioningRecord = { ...baseCot, cotScore: histCotScore };
+      const retailSentiment: RetailSentimentRecord = { ...baseRetail, sentimentScore: histRetailScore };
+
+      // Point-in-time month seasonality
+      const targetMonthIdx = new Date(item.timestampIso).getUTCMonth();
+      const monthAvg = histData.monthlyReturns10Y[targetMonthIdx] ?? baseSeasonality.currentMonthAvgReturn;
+      const monthWr = histData.monthlyWinRate10Y[targetMonthIdx] ?? baseSeasonality.currentMonthWinRate;
+      const seasonalityScore: -1 | 0 | 1 = monthAvg >= 0.35 && monthWr >= 55 ? 1 : monthAvg <= -0.35 && monthWr <= 45 ? -1 : 0;
+      const seasonality: SeasonalityRecord = {
+        ...baseSeasonality,
+        currentMonthIndex: targetMonthIdx,
+        currentMonthAvgReturn: monthAvg,
+        currentMonthWinRate: monthWr,
+        seasonalityScore
+      };
+
+      const { factors: macroFactors, tugOfWar } = buildMacroTugOfWar(asset, econByCode, cot, trendDirection);
+
+      const synthSetup: EdgeSetup = {
+        id: item.key,
+        instrument: asset.instrument,
+        market: asset.assetClass === 'forex' ? 'forex' : 'futures',
+        created_at: item.timestampIso,
+        killzone_origin: item.killzoneOrigin || 'NY_AM',
+        bias: (item.bias || 'long').toLowerCase() === 'short' ? 'short' : 'long',
+        entry_zone_low: currentPrice,
+        entry_zone_high: currentPrice,
+        entry_zone_mid: currentPrice,
+        stop: currentPrice,
+        tp1: currentPrice,
+        signal_state: 'active',
+        superseded: 0,
+        tradable: 1,
+        conviction_score: item.convictionScore ?? 80
+      };
+
+      const preMannaScore =
+        cotHist.cot +
+        cotHist.retail +
+        seasonalityScore * 0.75 +
+        trendScoreRaw * 1.25 +
+        macroFactors.reduce((s, f) => s + f.signal * f.weight, 0);
+
+      const { signal: mannaSignal, killzoneAlignment } = computeKillzoneAlignment(
+        asset.instrument,
+        [synthSetup],
+        preMannaScore
+      );
+
+      const factors: FactorBreakdownItem[] = [
+        { key: 'cot', label: 'COT Smart Money', category: 'Sentiment', signal: histCotScore, weight: 1.5, contribution: roundTo(cotHist.cot, 2), detail: `COT ${targetDateStr}` },
+        { key: 'retailSentiment', label: 'Retail Contrarian', category: 'Sentiment', signal: histRetailScore, weight: 1.0, contribution: roundTo(cotHist.retail, 2), detail: `Retail ${targetDateStr}` },
+        { key: 'seasonality', label: '10Y Live Seasonality', category: 'Statistical', signal: seasonalityScore, weight: 0.75, contribution: roundTo(seasonalityScore * 0.75, 2), detail: `Month ${targetMonthIdx + 1}` },
+        { key: 'trend', label: 'Daily EMA & RSI Trend', category: 'Technical', signal: trendScoreRaw, weight: 1.25, contribution: roundTo(trendScoreRaw * 1.25, 2), detail: trendDirection },
+        ...macroFactors.map((mf) => ({ ...mf, contribution: roundTo(mf.signal * mf.weight, 2) })),
+        { key: 'mannaKillzone', label: 'Manna Killzone Order-Flow', category: 'Manna Flow', signal: mannaSignal, weight: 0.75, contribution: roundTo(mannaSignal * 0.75, 2), detail: 'Signal active' }
+      ];
+
+      const totalScore = roundTo(clamp(factors.reduce((s, f) => s + f.contribution, 0), -10, 10), 2);
+      const fundamentalScore = roundTo(macroFactors.reduce((s, f) => s + f.signal * f.weight, 0), 2);
+
+      const { timeframes, timeframeConfluence } = buildTimeframeProfiles({
+        asset,
+        swingScore: totalScore,
+        fundamentalScore,
+        trendScoreRaw,
+        mannaSignal,
+        cot,
+        retailSentiment,
+        seasonality,
+        killzoneAlignment,
+        m15Sig: intraday.m15Sig,
+        h1Sig: intraday.h1Sig,
+        h4Sig: intraday.h4Sig,
+        d5Sig,
+        d20Sig,
+        d50Sig,
+        monthlySig,
+        rsi14M15: intraday.rsi14M15,
+        rsi14H1: intraday.rsi14H1,
+        rsi14D1: rsi14,
+        return1hPct: intraday.return1hPct,
+        return4hPct: intraday.return4hPct,
+        atrPct,
+        dayRangePctOfAtr
+      });
+
+      const allTfs = [intraday.m15Sig, intraday.h1Sig, intraday.h4Sig, d5Sig, d20Sig, d50Sig, monthlySig];
+      const alignedCount = Math.max(
+        allTfs.filter((t) => t === 'Bullish').length,
+        allTfs.filter((t) => t === 'Bearish').length
+      );
+
+      const scorecard: AssetEdgeScorecard = {
+        instrument: asset.instrument,
+        displayName: asset.displayName,
+        assetClass: asset.assetClass,
+        category: asset.category,
+        baseCurrency: asset.baseCurrency,
+        quoteCurrency: asset.quoteCurrency,
+        currentPrice,
+        dailyChangePct: 0,
+        priceSource: 'LIVE',
+        totalScore,
+        biasLabel: classifyBiasLabel(totalScore),
+        timeframes,
+        timeframeConfluence,
+        cotScore: cotHist.cot,
+        retailScore: cotHist.retail,
+        seasonalityScore: roundTo(seasonalityScore * 0.75, 2),
+        trendScore: roundTo(trendScoreRaw * 1.25, 2),
+        fundamentalScore,
+        mannaFlowScore: roundTo(mannaSignal * 0.75, 2),
+        factors,
+        tugOfWar,
+        technical: {
+          ema5, ema20, ema50, rsi14,
+          rsi14M15: intraday.rsi14M15, rsi14H1: intraday.rsi14H1, rsi14H4: intraday.rsi14H4,
+          atr14, atrPct, high30d, low30d, trendDirection, distanceFromEma20Pct,
+          dayRangePctOfAtr, volatilityPercentile30d,
+          return1hPct: intraday.return1hPct, return4hPct: intraday.return4hPct, return5dPct, return20dPct,
+          intradaySource: intraday.intradaySource,
+          mtfAlignment: {
+            m15: intraday.m15Sig, h1: intraday.h1Sig, h4: intraday.h4Sig,
+            d5: d5Sig, d20: d20Sig, d50: d50Sig, monthly: monthlySig, alignedCount
+          }
+        },
+        cot,
+        retailSentiment,
+        seasonality,
+        killzoneAlignment,
+        historicalSeries: []
+      };
+
+      results.set(item.key, { scorecard, dataSource });
+    }
+  });
+
+  return results;
 }
