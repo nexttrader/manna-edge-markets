@@ -42,30 +42,38 @@ export function getTradeMarketCategory(trade: TradeLike): 'forex' | 'futures' {
   return trade.instrument && trade.instrument.includes('/') ? 'forex' : 'futures';
 }
 
+export type ExitProfile = '80_20' | 'all_2r' | 'all_3r';
+
+const EXIT_PROFILE_WEIGHTS: Record<ExitProfile, { w1: number; w2: number }> = {
+  '80_20': { w1: 0.8, w2: 0.2 },
+  all_2r: { w1: 1.0, w2: 0.0 },
+  all_3r: { w1: 0.0, w2: 1.0 },
+};
+
 /**
- * Canonical 80/20 Partial Scale-Out Accounting:
- * - TP1 hit (80% at r1, 20% runner stopped at BE 0R) => 0.80 * r1 (+1.60R at 2R)
- * - TP2 hit (80% at r1, 20% runner closed at r2)     => 0.80 * r1 + 0.20 * r2 (+2.20R at 2R/3R)
- * - Break Even (non-runner)                          => 0.00R
- * - Stop Loss                                        => -1.00R
+ * Computes realized R under the selected exit profile:
+ * - '80_20' (canonical): 80% closed at r1 (2R), 20% runner closed at r2 (3R) or BE (0R)
+ * - 'all_2r': 100% closed at r1 (2R) on any TP1/TP2 win
+ * - 'all_3r': 100% held for r2 (3R); TP1-only trades close at BE (0R)
  */
-export function getAccurateRealizedR(trade: TradeLike): number {
+export function getAccurateRealizedR(trade: TradeLike, exitProfile: ExitProfile = '80_20'): number {
   const ot = String(trade.outcome_type || trade.outcomeType || trade.invalidation_reason || '').toLowerCase();
   const r1 = trade.r_multiple_1 && Number(trade.r_multiple_1) > 0 ? Number(trade.r_multiple_1) : 2.0;
   const r2 = trade.r_multiple_2 && Number(trade.r_multiple_2) > 0 ? Number(trade.r_multiple_2) : 3.0;
+  const { w1, w2 } = EXIT_PROFILE_WEIGHTS[exitProfile];
 
   if (ot.includes('tp2')) {
-    return Number((0.80 * r1 + 0.20 * r2).toFixed(2));
+    return Number((w1 * r1 + w2 * r2).toFixed(2));
   }
   if (ot.includes('tp1') || ot === 'tp' || ot.includes('tp_hit')) {
-    return Number((0.80 * r1).toFixed(2));
+    return Number((w1 * r1).toFixed(2));
   }
   if (ot.includes('sl') || ot.includes('stop')) {
     return -1.0;
   }
   if (ot.includes('be') || ot.includes('breakeven')) {
     if (Boolean(trade.was_runner)) {
-      return Number((0.80 * r1).toFixed(2));
+      return Number((w1 * r1).toFixed(2));
     }
     return 0.0;
   }
@@ -138,8 +146,12 @@ export function estimateTradeFeeR(trade: TradeLike): number {
   return style === 'scalp' ? 0.03 : style === 'swing' ? 0.006 : 0.015;
 }
 
-export function getEffectiveRealizedR(trade: TradeLike, includeFees: boolean): number {
-  const grossR = getAccurateRealizedR(trade);
+export function getEffectiveRealizedR(
+  trade: TradeLike,
+  includeFees: boolean,
+  exitProfile: ExitProfile = '80_20'
+): number {
+  const grossR = getAccurateRealizedR(trade, exitProfile);
   if (!includeFees) return grossR;
   const feeR = estimateTradeFeeR(trade);
   return Number((grossR - feeR).toFixed(2));

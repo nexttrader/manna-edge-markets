@@ -19,6 +19,7 @@ import {
   isPreCutoffScalpTrade,
   isWeekendTrade,
   useFeesToggle,
+  type ExitProfile,
   type SessionType,
   type TradingStyleFilter,
 } from '../utils/rAccounting';
@@ -71,7 +72,29 @@ interface Outcome {
   metadata?: any;
 }
 
-function convertOutcomeToSetup(trade: Outcome, includeFees: boolean): EdgeSetup {
+const EXIT_PROFILE_OPTIONS: Array<{ id: ExitProfile; label: string; title: string }> = [
+  {
+    id: 'all_2r',
+    label: '🎯 All 2R',
+    title: 'Simulate closing 100% of every TP1/TP2 winner at 2R (TP1)',
+  },
+  {
+    id: '80_20',
+    label: '⚖️ 80/20',
+    title: 'Live scale-out rule: 80% off at 2R (TP1) + 20% runner to 3R (TP2) or BE',
+  },
+  {
+    id: 'all_3r',
+    label: '🚀 All 3R',
+    title: 'Simulate holding 100% for 3R (TP2); TP1-only trades close at 0R BE',
+  },
+];
+
+function convertOutcomeToSetup(
+  trade: Outcome,
+  includeFees: boolean,
+  exitProfile: ExitProfile = '80_20'
+): EdgeSetup {
   const entryPrice = trade.entry_price || trade.entry_price_executed || trade.entry_price_recorded || trade.entry_zone_mid || trade.execution_price || 0;
   const initialStop = trade.initial_stop || trade.stop || 0;
   const currentStop = trade.stop || initialStop;
@@ -81,7 +104,7 @@ function convertOutcomeToSetup(trade: Outcome, includeFees: boolean): EdgeSetup 
     trade.outcome_type?.includes('sl') ? initialStop :
     trade.outcome_type?.includes('be') ? entryPrice : undefined
   );
-  const calculatedR = getEffectiveRealizedR(trade, includeFees);
+  const calculatedR = getEffectiveRealizedR(trade, includeFees, exitProfile);
 
   return {
     id: trade.setup_id || trade.id,
@@ -172,6 +195,7 @@ export function ExpandableCalendar({
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [internalMarketFilter, setInternalMarketFilter] = useState<'all' | 'forex' | 'futures'>(propsMarketFilter || 'all');
   const [styleFilter, setStyleFilter] = useState<TradingStyleFilter>('intraday');
+  const [exitProfile, setExitProfile] = useState<ExitProfile>('80_20');
   const [internalIncludeFees, toggleInternalFees] = useFeesToggle();
   const activeIncludeFees = propsIncludeFees !== undefined ? propsIncludeFees : internalIncludeFees;
   const handleToggleFees = propsOnToggleFees || toggleInternalFees;
@@ -280,38 +304,61 @@ export function ExpandableCalendar({
     return true;
   };
 
-  // 1. Calculate overall Forex vs Futures realized R splits (respecting Style + Fees toggle)
-  const { totalFuturesR, totalForexR, totalCombinedR, totalFeesR, forexCount, futuresCount } = useMemo(() => {
+  // 1. Calculate overall Forex vs Futures realized R splits (respecting Style, Exit Profile + Fees toggle)
+  const {
+    totalFuturesR,
+    totalForexR,
+    totalCombinedR,
+    baselineDeltaR,
+    totalFeesR,
+    forexCount,
+    futuresCount,
+  } = useMemo(() => {
     let fut = 0;
     let fx = 0;
+    let baseFut = 0;
+    let baseFx = 0;
     let feesSum = 0;
     let fCount = 0;
     let futCount = 0;
     combinedOutcomes.forEach(o => {
       if (!matchesActiveStyleAndStrategy(o)) return;
       const feeR = estimateTradeFeeR(o);
-      const r = getEffectiveRealizedR(o, activeIncludeFees);
+      const r = getEffectiveRealizedR(o, activeIncludeFees, exitProfile);
+      const baseR = getEffectiveRealizedR(o, activeIncludeFees, '80_20');
       const mkt = getOutcomeMarket(o);
       if (mkt === 'forex') {
         fx += r;
+        baseFx += baseR;
         fCount++;
       } else {
         fut += r;
+        baseFut += baseR;
         futCount++;
       }
       if (currentMarketFilter === 'all' || mkt === currentMarketFilter) {
         feesSum += feeR;
       }
     });
+    const activeTotal =
+      currentMarketFilter === 'forex' ? fx : currentMarketFilter === 'futures' ? fut : fut + fx;
+    const baseTotal =
+      currentMarketFilter === 'forex'
+        ? baseFx
+        : currentMarketFilter === 'futures'
+        ? baseFut
+        : baseFut + baseFx;
+
     return {
       totalFuturesR: fut,
       totalForexR: fx,
       totalCombinedR: fut + fx,
+      baselineDeltaR: Number((activeTotal - baseTotal).toFixed(2)),
       totalFeesR: feesSum,
       forexCount: fCount,
       futuresCount: futCount
     };
-  }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter]);
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter, exitProfile]);
 
   // 2. Filter outcomes by the selected style, strategy and market, mapping them to trading days and sessions
   const processedOutcomes = useMemo(() => {
@@ -368,7 +415,7 @@ export function ExpandableCalendar({
 
       (['asia', 'london', 'ny_am', 'ny_pm'] as SessionType[]).forEach((sk) => {
         daySessions[sk].forEach((t) => {
-          const r = getEffectiveRealizedR(t, activeIncludeFees);
+          const r = getEffectiveRealizedR(t, activeIncludeFees, exitProfile);
           months[monthIdx].netR += r;
           months[monthIdx].trades += 1;
           yrTotal += r;
@@ -386,7 +433,7 @@ export function ExpandableCalendar({
       yearTotalR: Number(yrTotal.toFixed(2)),
       yearTradesCount: yrCount,
     };
-  }, [processedOutcomes, currentYear, activeIncludeFees]);
+  }, [processedOutcomes, currentYear, activeIncludeFees, exitProfile]);
 
   // 3. Generate Calendar Month Grid Cells
   const calendarCells = useMemo(() => {
@@ -444,7 +491,7 @@ export function ExpandableCalendar({
         Object.keys(dayTradingData).forEach((sKey) => {
           const session = sKey as SessionType;
           const trades = dayTradingData[session];
-          const sessionTotalR = trades.reduce((acc, t) => acc + getEffectiveRealizedR(t, activeIncludeFees), 0);
+          const sessionTotalR = trades.reduce((acc, t) => acc + getEffectiveRealizedR(t, activeIncludeFees, exitProfile), 0);
           sessionsData[session] = {
             trades,
             totalR: sessionTotalR
@@ -452,7 +499,7 @@ export function ExpandableCalendar({
           dayTotalR += sessionTotalR;
           trades.forEach(t => {
             dayTradesCount++;
-            const r = getEffectiveRealizedR(t, activeIncludeFees);
+            const r = getEffectiveRealizedR(t, activeIncludeFees, exitProfile);
             const mkt = getOutcomeMarket(t);
             if (mkt === 'forex') {
               dayForexR += r;
@@ -507,7 +554,7 @@ export function ExpandableCalendar({
     }
 
     return cells;
-  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter, activeIncludeFees, macroEventsByDate]);
+  }, [currentYear, currentMonth, processedOutcomes, currentMarketFilter, activeIncludeFees, exitProfile, macroEventsByDate]);
 
   const monthMacroDays = useMemo(
     () => calendarCells.filter((c) => c.isCurrentMonth && c.macroEvents.length > 0),
@@ -545,7 +592,7 @@ export function ExpandableCalendar({
         ...selectedDayData.sessions.ny_pm.trades
       ];
       allTrades.forEach(t => {
-        const r = getEffectiveRealizedR(t, activeIncludeFees);
+        const r = getEffectiveRealizedR(t, activeIncludeFees, exitProfile);
         const mkt = getOutcomeMarket(t);
         if (mkt === 'forex') {
           fx += r;
@@ -555,7 +602,7 @@ export function ExpandableCalendar({
       });
     }
     return { dayFuturesR: fut, dayForexR: fx };
-  }, [selectedDayData, activeIncludeFees]);
+  }, [selectedDayData, activeIncludeFees, exitProfile]);
 
   const handleDayClick = (cell: DayData) => {
     if (!cell.isCurrentMonth) return;
@@ -567,6 +614,46 @@ export function ExpandableCalendar({
   };
 
   const weekdayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+  const renderExitProfileToggle = (stopPropagation = false) => (
+    <div
+      className="calendar-exit-toggle"
+      role="group"
+      aria-label="Exit target simulation"
+      onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
+    >
+      {EXIT_PROFILE_OPTIONS.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          className="calendar-exit-btn"
+          data-profile={opt.id}
+          aria-pressed={exitProfile === opt.id}
+          title={opt.title}
+          onClick={() => setExitProfile(opt.id)}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderBaselineDelta = () => {
+    if (exitProfile === '80_20') return null;
+    const modeLabel = exitProfile === 'all_2r' ? 'All 2R' : 'All 3R';
+    return (
+      <>
+        <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+        <span className="calendar-sim-badge">
+          SIM ({modeLabel}):{' '}
+          <strong className={getPnlClass(baselineDeltaR)}>
+            {formatPNLString(baselineDeltaR)} ({formatCurrency(baselineDeltaR)})
+          </strong>{' '}
+          vs 80/20
+        </span>
+      </>
+    );
+  };
 
   // Render Minimized State
   if (!isExpanded) {
@@ -641,6 +728,7 @@ export function ExpandableCalendar({
                 >
                   💸 Fees: {activeIncludeFees ? 'ON' : 'OFF'}
                 </button>
+                {renderExitProfileToggle(true)}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
                 {currentMarketFilter === 'all' ? (
@@ -663,6 +751,7 @@ export function ExpandableCalendar({
                     <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
                   </>
                 )}
+                {renderBaselineDelta()}
                 {activeIncludeFees && totalFeesR > 0 && (
                   <>
                     <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
@@ -730,6 +819,7 @@ export function ExpandableCalendar({
                   <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
                 </>
               )}
+              {renderBaselineDelta()}
               {activeIncludeFees && totalFeesR > 0 && (
                 <>
                   <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
@@ -856,6 +946,8 @@ export function ExpandableCalendar({
           >
             💸 Fees: {activeIncludeFees ? 'ON' : 'OFF'}
           </button>
+
+          {renderExitProfileToggle(false)}
 
           {/* Risk unit size selection */}
           <div className="risk-input-group">
@@ -1096,11 +1188,18 @@ export function ExpandableCalendar({
                   <div className="session-trades-list">
                     {hasActivity ? (
                       sessionData.trades.map((trade) => {
-                        const isWin = trade.outcome_type?.includes('tp');
+                        const isTp2 = Boolean(trade.outcome_type?.includes('tp2'));
+                        const isTpWinner = Boolean(
+                          trade.outcome_type?.includes('tp') ||
+                            (trade.outcome_type?.includes('be') && trade.was_runner)
+                        );
+                        const isWin = isTpWinner;
                         const isLoss = trade.outcome_type?.includes('sl');
-                        const grossR = getAccurateRealizedR(trade);
+                        const r1Val = trade.r_multiple_1 && Number(trade.r_multiple_1) > 0 ? Number(trade.r_multiple_1) : 2;
+                        const r2Val = trade.r_multiple_2 && Number(trade.r_multiple_2) > 0 ? Number(trade.r_multiple_2) : 3;
+                        const grossR = getAccurateRealizedR(trade, exitProfile);
                         const feeR = estimateTradeFeeR(trade);
-                        const tradeR = getEffectiveRealizedR(trade, activeIncludeFees);
+                        const tradeR = getEffectiveRealizedR(trade, activeIncludeFees, exitProfile);
                         const tradePnlClass = getPnlClass(tradeR);
                         const tradeStyle = getTradeStyleCategory(trade);
                         const telegramId = formatTelegramTradeId({ id: trade.setup_id || trade.id, instrument: trade.instrument });
@@ -1119,7 +1218,7 @@ export function ExpandableCalendar({
                           <div 
                             key={trade.id} 
                             className="session-trade-item"
-                            onClick={() => setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees))}
+                            onClick={() => setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees, exitProfile))}
                             title="Click to review trade audit and open chart view"
                           >
                             <div className="trade-item-header">
@@ -1227,12 +1326,24 @@ export function ExpandableCalendar({
                             </div>
 
                             {isWin && (
-                              <div style={{ fontSize: '0.67rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(167,139,250,0.25)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>⚡ 80/20 Scale-Out:</span>
+                              <div style={{ fontSize: '0.67rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(167,139,250,0.25)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                <span>
+                                  {exitProfile === 'all_2r'
+                                    ? '🎯 All 2R Sim:'
+                                    : exitProfile === 'all_3r'
+                                    ? '🚀 All 3R Sim:'
+                                    : '⚡ 80/20 Scale-Out:'}
+                                </span>
                                 <strong>
-                                  {trade.outcome_type?.includes('tp2') 
-                                    ? `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ ${trade.r_multiple_2 || 3}R (+${((trade.r_multiple_2 || 3) * 0.2).toFixed(2)}R) = +${(((trade.r_multiple_1 || 2) * 0.8) + ((trade.r_multiple_2 || 3) * 0.2)).toFixed(2)}R`
-                                    : `80% @ ${trade.r_multiple_1 || 2}R (+${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R) + 20% @ BE (+0.00R) = +${((trade.r_multiple_1 || 2) * 0.8).toFixed(2)}R`}
+                                  {exitProfile === 'all_2r'
+                                    ? `100% @ ${r1Val}R (+${r1Val.toFixed(2)}R)`
+                                    : exitProfile === 'all_3r'
+                                    ? isTp2
+                                      ? `100% @ ${r2Val}R (+${r2Val.toFixed(2)}R)`
+                                      : `100% @ BE (+0.00R) — hit ${r1Val}R, missed ${r2Val}R`
+                                    : isTp2
+                                    ? `80% @ ${r1Val}R (+${(r1Val * 0.8).toFixed(2)}R) + 20% @ ${r2Val}R (+${(r2Val * 0.2).toFixed(2)}R) = +${((r1Val * 0.8) + (r2Val * 0.2)).toFixed(2)}R`
+                                    : `80% @ ${r1Val}R (+${(r1Val * 0.8).toFixed(2)}R) + 20% @ BE (+0.00R) = +${(r1Val * 0.8).toFixed(2)}R`}
                                 </strong>
                               </div>
                             )}
@@ -1250,7 +1361,7 @@ export function ExpandableCalendar({
                               className="trade-review-btn font-mono"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees));
+                                setSelectedReviewSetup(convertOutcomeToSetup(trade, activeIncludeFees, exitProfile));
                               }}
                             >
                               📊 Review Trade & Chart View
