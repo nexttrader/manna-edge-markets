@@ -3,6 +3,7 @@ import { type EdgeSetup } from '../types';
 import { useVoice } from '../context/VoiceContext';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
+import { fetchActiveSetupsDeduped, invalidateActiveSetupsCache } from '../utils/activeSetupsClient';
 
 export function useSetups() {
   const [setups, setSetups] = useState<EdgeSetup[]>([]);
@@ -16,31 +17,66 @@ export function useSetups() {
   const knownSetupIdsRef = useRef<Set<string>>(new Set());
   const isInitialFetchRef = useRef<boolean>(true);
   const lastRoleRef = useRef<string>(effectiveRole);
+  const isFetchingActiveRef = useRef<boolean>(false);
+  const isFetchingRunnersRef = useRef<boolean>(false);
 
   if (lastRoleRef.current !== effectiveRole) {
     lastRoleRef.current = effectiveRole;
     isInitialFetchRef.current = true;
     knownSetupIdsRef.current.clear();
+    invalidateActiveSetupsCache();
   }
 
-  const fetchSetups = useCallback(async () => {
+  const fetchSetups = useCallback(async (force = false) => {
     if (!user || !user.email) {
       setSetups([]);
       setRunnerSetups([]);
+      setAllRunnerSetups([]);
       setLoading(false);
       setError('Authentication required');
       return;
     }
 
-    try {
-      const role = effectiveRole || user.role || 'trader';
-      const email = encodeURIComponent(user.email);
-      const res = await fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`);
-      if (!res.ok) throw new Error('Failed to fetch setups');
-      const data = await res.json();
-      const currentList: EdgeSetup[] = Array.isArray(data.setups) ? data.setups : [];
+    const role = effectiveRole || user.role || 'trader';
+    const email = encodeURIComponent(user.email);
 
-      // Fetch active runners across Intraday AND Scalping/Swing desks in parallel
+    const activeTask = (async () => {
+      if (!force && isFetchingActiveRef.current) return;
+      isFetchingActiveRef.current = true;
+      try {
+        const res = await fetchActiveSetupsDeduped(role, user.email, force);
+        if (!res.ok) throw new Error('Failed to fetch setups');
+        const currentList: EdgeSetup[] = Array.isArray(res.data?.setups) ? res.data.setups : [];
+
+        // Check for newly discovered signals
+        if (!isInitialFetchRef.current && currentList.length > 0) {
+          currentList.forEach(setup => {
+            if (!knownSetupIdsRef.current.has(setup.id)) {
+              const biasStr = (setup.bias || 'long').toUpperCase();
+              const inst = setup.instrument || 'Asset';
+              speak(`New ${biasStr} signal discovered for ${inst}.`);
+            }
+          });
+        }
+
+        // Update known set
+        currentList.forEach(s => knownSetupIdsRef.current.add(s.id));
+        isInitialFetchRef.current = false;
+
+        setSetups(currentList);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+        setSetups([]);
+      } finally {
+        isFetchingActiveRef.current = false;
+        setLoading(false);
+      }
+    })();
+
+    const runnersTask = (async () => {
+      if (!force && isFetchingRunnersRef.current) return;
+      isFetchingRunnersRef.current = true;
       try {
         const [runnersRes, mtfRunnersRes] = await Promise.all([
           fetch(`${API_BASE}/api/accelerate/runner-setups?role=${role}&email=${email}`),
@@ -76,38 +112,21 @@ export function useSetups() {
         setAllRunnerSetups(merged);
       } catch (rErr) {
         console.warn('Failed to fetch runner setups:', rErr);
+      } finally {
+        isFetchingRunnersRef.current = false;
       }
+    })();
 
-      // Check for newly discovered signals
-      if (!isInitialFetchRef.current && currentList.length > 0) {
-        currentList.forEach(setup => {
-          if (!knownSetupIdsRef.current.has(setup.id)) {
-            const biasStr = (setup.bias || 'long').toUpperCase();
-            const inst = setup.instrument || 'Asset';
-            speak(`New ${biasStr} signal discovered for ${inst}.`);
-          }
-        });
-      }
-
-      // Update known set
-      currentList.forEach(s => knownSetupIdsRef.current.add(s.id));
-      isInitialFetchRef.current = false;
-
-      setSetups(currentList);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setSetups([]);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([activeTask, runnersTask]);
   }, [speak, user, effectiveRole]);
 
+  const refetch = useCallback(() => fetchSetups(true), [fetchSetups]);
+
   useEffect(() => {
-    fetchSetups();
-    const interval = setInterval(fetchSetups, 3000);
+    void fetchSetups(false);
+    const interval = setInterval(() => void fetchSetups(false), 3000);
     return () => clearInterval(interval);
   }, [fetchSetups]);
 
-  return { setups: Array.isArray(setups) ? setups : [], runnerSetups, allRunnerSetups, loading, error, refetch: fetchSetups };
+  return { setups: Array.isArray(setups) ? setups : [], runnerSetups, allRunnerSetups, loading, error, refetch };
 }

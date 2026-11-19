@@ -3,7 +3,7 @@ import * as queries from '../db/queries';
 import { queryDb } from '../db/database';
 import { getCurrentKillzone, getNextKillzoneBoundary } from '../scheduler/killzone-mapper';
 import { earlyScanService } from '../scheduler/early-scan-service';
-import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails, prefetchLiveQuotes } from '../discovery/yahoo-provider';
 import { calculateAssetMatrix } from '../analytics/decision-matrix';
 import { outcomeDetector } from '../outcomes/outcome-detector';
 import { getIBKRGatewayStatus } from '../discovery/ib-provider';
@@ -28,6 +28,20 @@ async function getIbkrPriceInfo(instrument: string): Promise<{ ibkrPrice: number
     // ignore
   }
   return { ibkrPrice: null, isIbkrFresh: false };
+}
+
+async function prefetchIbkrPriceInfoMap(
+  instruments: string[]
+): Promise<Map<string, { ibkrPrice: number | null; isIbkrFresh: boolean }>> {
+  const map = new Map<string, { ibkrPrice: number | null; isIbkrFresh: boolean }>();
+  const uniqueFutures = Array.from(new Set(instruments.filter((i) => i && !i.includes('/'))));
+  if (uniqueFutures.length === 0) return map;
+  await Promise.all(
+    uniqueFutures.map(async (inst) => {
+      map.set(inst, await getIbkrPriceInfo(inst));
+    })
+  );
+  return map;
 }
 
 function isStrategyVisible(rawStrategyId: string | undefined, hiddenIds: string[]): boolean {
@@ -85,23 +99,19 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       });
     }
 
-    await outcomeDetector.evaluateAllSetups(true);
+    outcomeDetector.triggerBackgroundEvaluation();
     const market = (req.query.market as string) || 'all';
-    let rawSetups;
-    if (market === 'all') {
-      rawSetups = await queries.getAllActiveSetups();
-    } else {
-      rawSetups = await queries.getActiveSetups(market);
-    }
+    const [initialRawSetups, allOutcomes, hiddenIds, disabledAssets] = await Promise.all([
+      market === 'all' ? queries.getAllActiveSetups() : queries.getActiveSetups(market),
+      queryDb(`SELECT setup_id FROM outcomes`),
+      queries.getHiddenStrategyIdsForRole(role, email),
+      queries.getDisabledDisplayAssets()
+    ]);
 
-    const allOutcomes = await queryDb(`SELECT setup_id FROM outcomes`);
     const resolvedIds = new Set(allOutcomes.map((o: any) => String(o.setup_id)));
-
-    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    const disabledAssets = await queries.getDisabledDisplayAssets();
-
     const assetVisibility = (req.query.asset_visibility || req.query.asset_filter || 'all').toString();
 
+    let rawSetups = initialRawSetups;
     if (role === 'super_admin') {
       rawSetups = rawSetups.filter(s => !resolvedIds.has(String(s.id)));
       if (assetVisibility === 'displayed_only') {
@@ -113,11 +123,25 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
       rawSetups = rawSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenIds) && !resolvedIds.has(String(s.id)) && !disabledAssets.includes(s.instrument));
     }
 
+    const uniqueInstruments = Array.from(new Set(rawSetups.map((s: any) => s.instrument).filter(Boolean)));
+    const uniqueStrategies = Array.from(new Set(rawSetups.map((s: any) => s.strategy_id || 'sentinel_v2')));
+    const halvedFloorMap = new Map<string, boolean>();
+
+    const [, ibkrMap] = await Promise.all([
+      prefetchLiveQuotes(uniqueInstruments),
+      prefetchIbkrPriceInfoMap(uniqueInstruments),
+      Promise.all(
+        uniqueStrategies.map(async (stratId) => {
+          halvedFloorMap.set(stratId, await queries.isHalvedFloorTp1BeEnabled(stratId));
+        })
+      )
+    ]);
+
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const isAssetDisplayEnabled = !disabledAssets.includes(setup.instrument);
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
-        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = ibkrMap.get(setup.instrument) || { ibkrPrice: null, isIbkrFresh: false };
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         let initialStop = setup.initial_stop;
 
@@ -152,7 +176,8 @@ router.get('/accelerate/active-setups', async (req: Request, res: Response) => {
           }
         }
 
-        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'sentinel_v2');
+        const stratKey = setup.strategy_id || 'sentinel_v2';
+        const isTp1BeOnly = halvedFloorMap.get(stratKey) ?? false;
         const beThreshold = setup.strategy_id === 'sentinel_v2' ? 1.5 : 1.0;
         const isEarlyBeEligible = !isTp1BeOnly && (unrealizedR !== undefined && unrealizedR >= beThreshold);
 
@@ -288,7 +313,11 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Authentication required. Please sign in to view live signals.', setups: [] });
     }
 
-    let rawSetups = await queries.getSetupsByState('runner');
+    let [rawSetups, hiddenIds, disabledAssets] = await Promise.all([
+      queries.getSetupsByState('runner'),
+      queries.getHiddenStrategyIdsForRole(role, email),
+      queries.getDisabledDisplayAssets()
+    ]);
 
     // Auto-resolve any runners older than 5 days
     const nowMs = Date.now();
@@ -318,19 +347,22 @@ router.get('/accelerate/runner-setups', async (req: Request, res: Response) => {
 
     rawSetups = activeRunners;
 
-    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    const disabledAssets = await queries.getDisabledDisplayAssets();
-
     if (role !== 'super_admin') {
       rawSetups = rawSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenIds) && !disabledAssets.includes(s.instrument));
     } else {
       rawSetups = rawSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenIds));
     }
 
+    const uniqueInstruments = Array.from(new Set(rawSetups.map((s: any) => s.instrument).filter(Boolean)));
+    const [, ibkrMap] = await Promise.all([
+      prefetchLiveQuotes(uniqueInstruments),
+      prefetchIbkrPriceInfoMap(uniqueInstruments)
+    ]);
+
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
-        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = ibkrMap.get(setup.instrument) || { ibkrPrice: null, isIbkrFresh: false };
         const entryPrice = setup.entry_price_recorded || setup.entry_zone_mid;
         let initialStop = setup.initial_stop || setup.stop;
         const risk = Math.abs(entryPrice - initialStop);
@@ -436,26 +468,29 @@ router.get('/accelerate/decision-matrix', async (req: Request, res: Response) =>
     const role = (req.query.role as string) || 'trader';
     const email = (req.query.email as string) || (req.query.userEmail as string) || '';
     
-    let rawSetups;
-    if (market === 'all') {
-      rawSetups = await queries.getAllActiveSetups();
-    } else {
-      rawSetups = await queries.getActiveSetups(market);
-    }
+    let [rawSetups, hiddenIds, disabledAssets] = await Promise.all([
+      market === 'all' ? queries.getAllActiveSetups() : queries.getActiveSetups(market),
+      queries.getHiddenStrategyIdsForRole(role, email),
+      queries.getDisabledDisplayAssets()
+    ]);
 
-    const hiddenIds = await queries.getHiddenStrategyIdsForRole(role, email);
-    const disabledAssets = await queries.getDisabledDisplayAssets();
     if (role !== 'super_admin') {
       rawSetups = rawSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenIds) && !disabledAssets.includes(s.instrument));
     } else {
       rawSetups = rawSetups.filter(s => isStrategyVisible(s.strategy_id, hiddenIds));
     }
 
+    const uniqueInstruments = Array.from(new Set(rawSetups.map((s: any) => s.instrument).filter(Boolean)));
+    const [, ibkrMap] = await Promise.all([
+      prefetchLiveQuotes(uniqueInstruments),
+      prefetchIbkrPriceInfoMap(uniqueInstruments)
+    ]);
+
     const priceMap: Record<string, number> = {};
     const enrichedSetups = await Promise.all(
       rawSetups.map(async (setup: any) => {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
-        const { ibkrPrice, isIbkrFresh } = await getIbkrPriceInfo(setup.instrument);
+        const { ibkrPrice, isIbkrFresh } = ibkrMap.get(setup.instrument) || { ibkrPrice: null, isIbkrFresh: false };
         if (currentPrice) {
           priceMap[setup.instrument] = currentPrice;
         }

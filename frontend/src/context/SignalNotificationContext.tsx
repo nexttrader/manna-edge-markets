@@ -4,6 +4,7 @@ import { useVoice } from './VoiceContext';
 import { useAuth } from './AuthContext';
 import { API_BASE } from '../config';
 import { translateRationaleToPlainEnglish, translateInvalidationToPlainEnglish } from '../utils/plainLanguage';
+import { fetchActiveSetupsDeduped } from '../utils/activeSetupsClient';
 
 export interface SignalToastItem {
   id: string;
@@ -67,6 +68,7 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
 
   const prevSetupsRef = useRef<Map<string, EdgeSetup>>(new Map());
   const isInitialLoad = useRef(true);
+  const isFetchingRef = useRef(false);
   const announcedBERef = useRef<Set<string>>((() => {
     try {
       const saved = localStorage.getItem('manna_announced_be');
@@ -129,18 +131,25 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
   }, [addActivityLog]);
 
   const fetchSetups = useCallback(async () => {
+    if (!user?.email) {
+      isInitialLoad.current = true;
+      prevSetupsRef.current.clear();
+      return;
+    }
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       // Fetch both active AND recent past setups so exit/invalidation/replacement events are detected reliably!
       const role = effectiveRole || user?.role || 'trader';
-      const email = encodeURIComponent(user?.email || '');
+      const email = encodeURIComponent(user.email);
       const [activeRes, pastRes] = await Promise.all([
-        fetch(`${API_BASE}/api/accelerate/active-setups?role=${role}&email=${email}`),
+        fetchActiveSetupsDeduped(role, user.email),
         fetch(`${API_BASE}/api/accelerate/past-setups?limit=20&role=${role}&email=${email}`)
       ]);
 
       if (!activeRes.ok) return;
 
-      const activeData = await activeRes.json();
+      const activeData = activeRes.data || {};
       const pastData = pastRes.ok ? await pastRes.json() : { setups: [] };
 
       const activeList: EdgeSetup[] = activeData.setups || [];
@@ -386,8 +395,10 @@ export const SignalNotificationProvider: React.FC<{ children: React.ReactNode }>
       }
 
       prevSetupsRef.current = newMap;
-    } catch {}
-  }, [speak, addToast]);
+    } catch {} finally {
+      isFetchingRef.current = false;
+    }
+  }, [speak, addToast, user?.email, user?.role, effectiveRole]);
 
   useEffect(() => {
     fetchSetups();

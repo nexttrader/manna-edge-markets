@@ -3,7 +3,7 @@ import { FOREX_INSTRUMENTS, FUTURES_INSTRUMENTS } from './mock-data';
 import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from './scoring';
 import { getInstrumentDecimals, getTimeframeStopDistance } from './stop-loss-rules';
 import { Bias, Candle } from './types';
-import { aggregateToFourHourCandles, getLiveCandles, getLiveCurrentPrice, getLiveQuoteDetails } from './yahoo-provider';
+import { aggregateToFourHourCandles, getLiveCandles, getLiveQuoteDetails, prefetchLiveQuotes } from './yahoo-provider';
 import {
   evaluateEdgeFinderConfluence,
   syncMtfSetupsAndGetLiveBoard,
@@ -164,11 +164,10 @@ async function buildSetupForInstrument(
   const entryLabel =
     style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';
 
-  const [rawContext, rawEntry, quote, fallbackPrice] = await Promise.all([
+  const [rawContext, rawEntry, quote] = await Promise.all([
     getLiveCandles(instrument, contextTfCode, contextTfCode === '4h' ? 120 : 60),
     getLiveCandles(instrument, entryTfCode, entryTfCode === '4h' ? 120 : 60),
-    getLiveQuoteDetails(instrument).catch(() => null),
-    getLiveCurrentPrice(instrument).catch(() => 0)
+    getLiveQuoteDetails(instrument).catch(() => null)
   ]);
 
   const contextCandles = contextTfCode === '4h' ? aggregateToFourHourCandles(rawContext) : rawContext;
@@ -180,7 +179,7 @@ async function buildSetupForInstrument(
 
   const currentPrice = (quote?.price && quote.price > 0)
     ? quote.price
-    : (fallbackPrice > 0 ? fallbackPrice : entryCandles[entryCandles.length - 1].close);
+    : entryCandles[entryCandles.length - 1].close;
   if (!currentPrice || currentPrice <= 0) return null;
 
   const currentBid = quote?.bid && quote.bid > 0 ? quote.bid : currentPrice;
@@ -456,6 +455,8 @@ export async function getMtfStyleSignals(
         ...(canScanForex ? FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const })) : [])
       ];
 
+      await prefetchLiveQuotes(targets.map((t) => t.instrument));
+
       const settled = await Promise.allSettled(
         targets.map((t) =>
           buildSetupForInstrument(
@@ -505,4 +506,52 @@ export async function getMtfStyleSignals(
 
   inflightRequests.set(cacheKey, promise);
   return promise;
+}
+
+let mtfWarmupInitTimer: NodeJS.Timeout | null = null;
+let mtfScalpWarmupTimer: NodeJS.Timeout | null = null;
+let mtfSwingWarmupTimer: NodeJS.Timeout | null = null;
+
+function runMtfWarmupCycle(style: TradingStyleMode, swingMode: SwingPairMode = 'd1_h4'): void {
+  const now = new Date();
+  if (!isTradingSessionActive('futures', now) && !isTradingSessionActive('forex', now)) return;
+  const cacheKey = style === 'scalp' ? 'scalp' : `swing:${swingMode}`;
+  if (inflightRequests.has(cacheKey)) return;
+  void getMtfStyleSignals(style, swingMode, true).catch(() => {});
+}
+
+export function startMtfDiscoveryWarmup(): void {
+  if (process.env.NODE_ENV === 'test') return;
+  if (mtfWarmupInitTimer || mtfScalpWarmupTimer || mtfSwingWarmupTimer) return;
+
+  mtfWarmupInitTimer = setTimeout(() => {
+    mtfWarmupInitTimer = null;
+    runMtfWarmupCycle('scalp', 'd1_h4');
+    runMtfWarmupCycle('swing', 'd1_h4');
+    runMtfWarmupCycle('swing', 'h4_h1');
+  }, 4_000);
+
+  mtfScalpWarmupTimer = setInterval(() => {
+    runMtfWarmupCycle('scalp', 'd1_h4');
+  }, 55_000);
+
+  mtfSwingWarmupTimer = setInterval(() => {
+    runMtfWarmupCycle('swing', 'd1_h4');
+    runMtfWarmupCycle('swing', 'h4_h1');
+  }, 110_000);
+}
+
+export function stopMtfDiscoveryWarmup(): void {
+  if (mtfWarmupInitTimer) {
+    clearTimeout(mtfWarmupInitTimer);
+    mtfWarmupInitTimer = null;
+  }
+  if (mtfScalpWarmupTimer) {
+    clearInterval(mtfScalpWarmupTimer);
+    mtfScalpWarmupTimer = null;
+  }
+  if (mtfSwingWarmupTimer) {
+    clearInterval(mtfSwingWarmupTimer);
+    mtfSwingWarmupTimer = null;
+  }
 }

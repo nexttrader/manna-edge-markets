@@ -1,6 +1,7 @@
-import { getDb } from '../db/database';
+import { queryDb } from '../db/database';
 import * as queries from '../db/queries';
-import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails, prefetchLiveQuotes } from '../discovery/yahoo-provider';
+import { Candle } from '../discovery/types';
 import { calculateTradeExcursion } from '../analytics/candle-excursion-service';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
@@ -12,6 +13,14 @@ const logger = createLogger('OutcomeDetector');
 export class OutcomeDetector {
   private interval: NodeJS.Timeout | null = null;
   private isEvaluating = false;
+  private lastEvaluatedAt = 0;
+
+  public triggerBackgroundEvaluation(): void {
+    if (this.isEvaluating) return;
+    if (Date.now() - this.lastEvaluatedAt < 10_000) return;
+    if (!isTradingSessionActive('both')) return;
+    void this.evaluateAllSetups(false);
+  }
   
   start(intervalMs: number = 15000): void {
     if (this.interval) return;
@@ -51,17 +60,33 @@ export class OutcomeDetector {
         return;
       }
 
+      const [pendingSetups, activeSetups, runnerSetups, existingOutcomeRows] = await Promise.all([
+        queries.getSetupsByState('awaiting_entry'),
+        queries.getSetupsByState('active'),
+        queries.getSetupsByState('runner'),
+        queryDb<{ setup_id: string; outcome_type: string; created_at: string }>(
+          `SELECT setup_id, outcome_type, created_at FROM outcomes`
+        ).catch(() => [] as Array<{ setup_id: string; outcome_type: string; created_at: string }>)
+      ]);
+
+      const outcomesBySetupId = new Map<string, Array<{ setup_id: string; outcome_type: string; created_at: string }>>();
+      for (const row of existingOutcomeRows) {
+        const key = String(row.setup_id);
+        const list = outcomesBySetupId.get(key) || [];
+        list.push(row);
+        outcomesBySetupId.set(key, list);
+      }
+
       // 1. PROCESS AWAITING_ENTRY SETUPS — STATE-SYNC ONLY
       // OutcomeDetector must NOT evaluate TP/SL/BE for setups that have never been
       // entered. Doing so caused trades to open and close in the same 15-second tick,
       // appearing as "instantly resolved" or "closed at break even" with 0–1 bar held.
       // Entry fills are the exclusive responsibility of LifecycleSync. Once a setup
       // transitions to 'active', the block below (section 2) handles outcome detection.
-      const pendingSetups = await queries.getSetupsByState('awaiting_entry');
       for (const setup of pendingSetups) {
         // Pre-check only: if an outcome already exists (e.g. from a previous run or
         // manual intervention), sync the setup state to 'resolved' so it doesn't linger.
-        const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
+        const existingOutcomes = outcomesBySetupId.get(String(setup.id)) || [];
         if (existingOutcomes.length > 0) {
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
             tradable: 0,
@@ -73,16 +98,14 @@ export class OutcomeDetector {
         // Do NOT evaluate price against TP/SL/BE here. No outcome creation for pending setups.
       }
 
-      // 2. PROCESS ACTIVE SETUPS
-      const activeSetups = await queries.getSetupsByState('active');
-      
+      // Partition active setups needing live evaluation vs already having outcomes
+      const activeToEvaluate: typeof activeSetups = [];
       for (const setup of activeSetups) {
         const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
         if (!allowBypassInTest && !isTradingSessionActive(setupMarket, now)) {
           continue;
         }
-        // Pre-check: Sync state if an outcome already exists for this setup
-        const existingOutcomes = await queries.getOutcomesBySetup(setup.id);
+        const existingOutcomes = outcomesBySetupId.get(String(setup.id)) || [];
         if (existingOutcomes.length > 0) {
           await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
             tradable: 0,
@@ -91,7 +114,75 @@ export class OutcomeDetector {
           });
           continue;
         }
+        activeToEvaluate.push(setup);
+      }
 
+      // Partition runner setups (check 5-day expiry first so we don't fetch market data for expired ones)
+      const nowMs = Date.now();
+      const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+      const runnersToEvaluate: typeof runnerSetups = [];
+      for (const setup of runnerSetups) {
+        const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
+        if (!allowBypassInTest && !isTradingSessionActive(setupMarket, now)) {
+          continue;
+        }
+        let runnerStart = (setup as any).entryAt || setup.entry_triggered_at || setup.created_at;
+        try {
+          const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
+          if (meta?.runner_started_at) runnerStart = meta.runner_started_at;
+        } catch {}
+
+        const startMs = runnerStart ? new Date(runnerStart).getTime() : 0;
+        const isExpired = startMs > 0 && (nowMs - startMs) >= FIVE_DAYS_MS;
+
+        if (isExpired) {
+          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
+            tradable: 0,
+            resolved_at: new Date().toISOString(),
+            invalidation_reason: 'runner_closed_5d'
+          });
+
+          logger.info({ setupId: setup.id, instrument: setup.instrument, durationDays: ((nowMs - startMs) / (24 * 3600 * 1000)).toFixed(1) }, 'Runner auto-closed after 5 days duration. Initial 2R TP1 log retained.');
+          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: setup.r_multiple_1 || 2.0 } });
+          continue;
+        }
+        runnersToEvaluate.push(setup);
+      }
+
+      // Batch-prefetch quotes, 1m candles, and strategy halved-floor settings once for all active & runner instruments
+      const uniqueInstruments = Array.from(
+        new Set([
+          ...activeToEvaluate.map((s) => s.instrument),
+          ...runnersToEvaluate.map((s) => s.instrument)
+        ].filter(Boolean))
+      );
+      const uniqueStrategies = Array.from(
+        new Set(activeToEvaluate.map((s) => s.strategy_id || 'sentinel_v2'))
+      );
+
+      const candles1mMap = new Map<string, Candle[]>();
+      const halvedFloorMap = new Map<string, boolean>();
+
+      if (uniqueInstruments.length > 0) {
+        await Promise.all([
+          prefetchLiveQuotes(uniqueInstruments),
+          Promise.allSettled(
+            uniqueInstruments.map(async (inst) => {
+              const candles = await getLiveCandles(inst, '1m', 5).catch(() => []);
+              candles1mMap.set(inst, candles);
+            })
+          ),
+          Promise.allSettled(
+            uniqueStrategies.map(async (stratId) => {
+              const enabled = await queries.isHalvedFloorTp1BeEnabled(stratId);
+              halvedFloorMap.set(stratId, enabled);
+            })
+          )
+        ]);
+      }
+
+      // 2. PROCESS ACTIVE SETUPS
+      for (const setup of activeToEvaluate) {
         const quote = await getLiveQuoteDetails(setup.instrument);
         let currentPrice = quote?.price || await getLiveCurrentPrice(setup.instrument);
         if (!currentPrice || currentPrice <= 0) {
@@ -106,7 +197,7 @@ export class OutcomeDetector {
         let maxHigh = currentBid;
         let minLow = currentBid;
         try {
-          const candles = await getLiveCandles(setup.instrument, '1m', 5);
+          const candles = candles1mMap.get(setup.instrument) || [];
           const entryTimeMs = setup.entry_triggered_at ? new Date(setup.entry_triggered_at).getTime() : 0;
           if (candles && candles.length > 0) {
             const postEntryCandles = entryTimeMs > 0
@@ -143,7 +234,8 @@ export class OutcomeDetector {
         
         // Institutional BE rule: Soften early BE threshold from 1.0R to 1.5R for Sentinel V2 (or TP1-only if enabled)
         // to prevent choking trades on normal pullbacks
-        const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled(setup.strategy_id || 'sentinel_v2');
+        const stratKey = setup.strategy_id || 'sentinel_v2';
+        const isTp1BeOnly = halvedFloorMap.get(stratKey) ?? await queries.isHalvedFloorTp1BeEnabled(stratKey);
         const beThreshold = setup.strategy_id === 'sentinel_v2' ? 1.5 : 1.0;
         const beCriteriaReached = !isTp1BeOnly && (maxR >= beThreshold);
         if (!setup.is_breakeven && beCriteriaReached) {
@@ -281,43 +373,14 @@ export class OutcomeDetector {
       }
 
       // 3. PROCESS RUNNER SETUPS (Auto-close after 5 days duration)
-      const runnerSetups = await queries.getSetupsByState('runner');
-      const nowMs = Date.now();
-      const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
-      
-      for (const setup of runnerSetups) {
-        const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
-        if (!allowBypassInTest && !isTradingSessionActive(setupMarket, now)) {
-          continue;
-        }
-        let runnerStart = (setup as any).entryAt || setup.entry_triggered_at || setup.created_at;
-        try {
-          const meta = typeof setup.metadata === 'string' ? JSON.parse(setup.metadata) : setup.metadata;
-          if (meta?.runner_started_at) runnerStart = meta.runner_started_at;
-        } catch {}
-
-        const startMs = runnerStart ? new Date(runnerStart).getTime() : 0;
-        const isExpired = startMs > 0 && (nowMs - startMs) >= FIVE_DAYS_MS;
-
-        if (isExpired) {
-          await queries.updateSetupState(setup.id, setup.market || 'futures', 'resolved', {
-            tradable: 0,
-            resolved_at: new Date().toISOString(),
-            invalidation_reason: 'runner_closed_5d'
-          });
-          
-          logger.info({ setupId: setup.id, instrument: setup.instrument, durationDays: ((nowMs - startMs) / (24 * 3600 * 1000)).toFixed(1) }, 'Runner auto-closed after 5 days duration. Initial 2R TP1 log retained.');
-          publishEvents.emit('setup_resolved', { setup, outcome: { setup_id: setup.id, outcome_type: 'tp1_hit', realized_pl: setup.r_multiple_1 || 2.0 } });
-          continue;
-        }
-
+      for (const setup of runnersToEvaluate) {
         const currentPrice = await getLiveCurrentPrice(setup.instrument);
         if (!currentPrice || currentPrice <= 0) continue;
         
         let maxHigh = currentPrice;
         let minLow = currentPrice;
         try {
-          const candles = await getLiveCandles(setup.instrument, '1m', 5);
+          const candles = candles1mMap.get(setup.instrument) || [];
           if (candles && candles.length > 0) {
             maxHigh = Math.max(currentPrice, ...candles.map(c => c.high));
             minLow = Math.min(currentPrice, ...candles.map(c => c.low));
@@ -414,6 +477,7 @@ export class OutcomeDetector {
     } catch (err) {
       logger.error({ err }, 'Error during OutcomeDetector evaluateAllSetups');
     } finally {
+      this.lastEvaluatedAt = Date.now();
       this.isEvaluating = false;
     }
   }

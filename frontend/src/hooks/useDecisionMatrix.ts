@@ -44,11 +44,20 @@ export function useDecisionMatrix() {
   const [error, setError] = useState<string | null>(null);
   const { user, effectiveRole } = useAuth();
   const prevTopIdRef = useRef<string | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
 
   const fetchMatrix = useCallback(async () => {
+    if (!user?.email) {
+      setMatrix([]);
+      setTopFocus(null);
+      setLoading(false);
+      return;
+    }
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const role = effectiveRole || user?.role || 'trader';
-      const email = encodeURIComponent(user?.email || '');
+      const email = encodeURIComponent(user.email);
       const res = await fetch(`${API_BASE}/api/accelerate/decision-matrix?role=${role}&email=${email}`);
       if (!res.ok) throw new Error('Failed to fetch decision matrix');
       
@@ -67,6 +76,7 @@ export function useDecisionMatrix() {
       console.warn('Using client-side fallback decision matrix evaluation:', err);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   }, [user, effectiveRole]);

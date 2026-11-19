@@ -4,6 +4,9 @@ import { createLogger } from '../telemetry/logger';
 import { queryDb } from '../db/database';
 import { getTwelveDataCandles, getTwelveDataPrice } from './twelvedata-provider';
 import { getCtraderCandles, getCtraderLivePrice, getCtraderQuoteDetails } from './ctrader-provider';
+import { deriveBidAsk, QuoteDetails } from './spread-helper';
+
+export type LiveQuoteDetails = QuoteDetails;
 
 const logger = createLogger('YahooProvider');
 
@@ -39,22 +42,50 @@ const PRICE_CACHE_TTL_MS = 15 * 1000;  // 15s cache for fast live price updates
 
 const candleCache = new Map<string, CacheEntry<Candle[]>>();
 const priceCache = new Map<string, CacheEntry<number>>();
+const quoteCache = new Map<string, CacheEntry<LiveQuoteDetails>>();
 
 // In-flight deduplication to prevent cache stampedes
 const inFlightCandles = new Map<string, Promise<Candle[]>>();
 const inFlightPrices = new Map<string, Promise<number>>();
+const inFlightQuotes = new Map<string, Promise<LiveQuoteDetails | null>>();
 
-// Rate limiting to prevent 429 Too Many Requests
-let lastYahooRequestTime = 0;
-const YAHOO_MIN_DELAY_MS = 1500; // 1.5s delay between outbound Yahoo requests
+// Concurrency semaphore + dispatch spacing to avoid Yahoo 429s without serializing requests
+const MAX_CONCURRENT_YAHOO = 6;
+const YAHOO_DISPATCH_SPACING_MS = 100;
+const YAHOO_TIMEOUT_MS = 8_000;
+let yahooActiveCount = 0;
+let lastYahooDispatchAt = 0;
+const yahooWaitQueue: Array<() => void> = [];
 
-async function acquireYahooRateLimit() {
-    const now = Date.now();
-    const timeSinceLast = now - lastYahooRequestTime;
-    if (timeSinceLast < YAHOO_MIN_DELAY_MS) {
-        await new Promise(r => setTimeout(r, YAHOO_MIN_DELAY_MS - timeSinceLast));
+async function runYahooLimited<T>(fn: () => Promise<T>, timeoutMs = YAHOO_TIMEOUT_MS): Promise<T> {
+    if (yahooActiveCount >= MAX_CONCURRENT_YAHOO) {
+        await new Promise<void>((resolve) => yahooWaitQueue.push(resolve));
     }
-    lastYahooRequestTime = Date.now();
+    yahooActiveCount += 1;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+        const now = Date.now();
+        const elapsed = now - lastYahooDispatchAt;
+        if (elapsed < YAHOO_DISPATCH_SPACING_MS) {
+            const waitMs = YAHOO_DISPATCH_SPACING_MS - elapsed;
+            lastYahooDispatchAt = now + waitMs;
+            await new Promise((r) => setTimeout(r, waitMs));
+        } else {
+            lastYahooDispatchAt = now;
+        }
+
+        return await Promise.race([
+            fn(),
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`Yahoo request timed out after ${timeoutMs}ms`)), timeoutMs);
+            })
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+        yahooActiveCount -= 1;
+        const next = yahooWaitQueue.shift();
+        if (next) next();
+    }
 }
 
 /**
@@ -152,20 +183,20 @@ export async function getLiveCandles(
 
     const fetchPromise = (async () => {
         try {
-            await acquireYahooRateLimit();
-            const now = new Date();
             const lookbackDays = timeframe === '1m' ? 1 : (timeframe === '5m' || timeframe === '15m') ? 30 : timeframe === '1h' ? 120 : timeframe === '4h' ? 365 : 1825;
-            const period1 = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
             const intervalStr = (timeframe === '4h' ? '1h' : timeframe === '1d' ? '1d' : timeframe);
             const rangeStr = lookbackDays <= 1 ? '1d' : lookbackDays <= 5 ? '5d' : lookbackDays <= 30 ? '1mo' : lookbackDays <= 90 ? '3mo' : '1y';
 
             const url = `https://query2.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=${intervalStr}&range=${rangeStr}`;
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await runYahooLimited(() =>
+                fetch(url, {
+                    signal: AbortSignal.timeout(YAHOO_TIMEOUT_MS),
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                })
+            );
 
             if (!response.ok) {
                 throw new Error(`Yahoo HTTP ${response.status} ${response.statusText}`);
@@ -228,89 +259,173 @@ export async function getLiveCandles(
     return candles.slice(-count);
 }
 
-export async function getLiveCurrentPrice(instrument: string): Promise<number> {
-    const isForex = instrument.includes('/');
-
-    // 1. Primary Forex Feed: IC Markets (cTrader Open API)
-    // Instant sub-second price ticks from in-memory WebSocket cache.
-    if (isForex) {
-        const ctPrice = getCtraderLivePrice(instrument);
-        if (ctPrice > 0) {
-            return ctPrice;
-        }
-    }
-
-    // 2. Check if IBKR is configured as the active provider (futures only)
-    if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
-        try {
-            const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
-            if (rows && rows.length > 0) {
-                const lastUpdate = new Date(rows[0].updated_at).getTime();
-                const now = Date.now();
-                // If the price was updated less than 30 seconds ago, consider it valid and fresh
-                if (now - lastUpdate < 30 * 1000) {
-                    return rows[0].price;
-                }
-                logger.warn({ instrument, lastUpdate: rows[0].updated_at }, 'IBKR price in database is stale (>30s). Falling back to Yahoo.');
-            } else {
-                logger.warn({ instrument }, 'No IBKR price found in database. Falling back to Yahoo.');
-            }
-        } catch (err: any) {
-            logger.error({ instrument, err: err.message }, 'Failed to query instrument_prices from DB. Falling back to Yahoo.');
-        }
-    }
-
-    const yahooSymbol = SYMBOL_MAP[instrument];
-
-    const cached = priceCache.get(instrument);
-    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
-        return cached.data;
-    }
-
-    if (!yahooSymbol) return 0;
-
-    if (inFlightPrices.has(instrument)) {
-        return inFlightPrices.get(instrument)!;
-    }
-
-    const fetchPromise = (async () => {
-        try {
-            await acquireYahooRateLimit();
-            const quote: any = await yahooFinance.quote(yahooSymbol).catch(() => null);
-            const price = quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.bid ?? quote?.ask;
-            if (price !== undefined && price !== null && price > 0) {
-                const numPrice = Number(price.toFixed(5));
-                priceCache.set(instrument, { data: numPrice, timestamp: Date.now() });
-                return numPrice;
-            }
-            
-            const candles = await getLiveCandles(instrument, '1m', 2);
-            if (candles.length > 0) {
-                const cPrice = candles[candles.length - 1].close;
-                priceCache.set(instrument, { data: cPrice, timestamp: Date.now() });
-                return cPrice;
-            }
-            return 0;
-        } catch (err: any) {
-            logger.error({ instrument, message: err.message }, 'Failed to fetch live price from Yahoo');
-            const candles = await getLiveCandles(instrument, '1m', 2);
-            if (candles.length > 0) {
-                const cPrice = candles[candles.length - 1].close;
-                return cPrice;
-            }
-            return 0;
-        } finally {
-            inFlightPrices.delete(instrument);
-        }
-    })();
-
-    inFlightPrices.set(instrument, fetchPromise);
-    return fetchPromise;
+function cacheQuoteDetails(instrument: string, details: LiveQuoteDetails): void {
+    const now = Date.now();
+    priceCache.set(instrument, { data: details.price, timestamp: now });
+    quoteCache.set(instrument, { data: details, timestamp: now });
 }
 
-import { deriveBidAsk, QuoteDetails } from './spread-helper';
+function extractYahooQuoteDetails(instrument: string, quote: any): LiveQuoteDetails | null {
+    const rawPrice = quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.bid ?? quote?.ask;
+    if (typeof rawPrice !== 'number' || !Number.isFinite(rawPrice) || rawPrice <= 0) {
+        return null;
+    }
+    const numPrice = Number(rawPrice.toFixed(5));
+    const rawBid = typeof quote?.bid === 'number' && quote.bid > 0 ? quote.bid : undefined;
+    const rawAsk = typeof quote?.ask === 'number' && quote.ask > 0 ? quote.ask : undefined;
+    return deriveBidAsk(numPrice, instrument, rawBid, rawAsk);
+}
 
-export type LiveQuoteDetails = QuoteDetails;
+/**
+ * Batch-fetches live quotes for a list of instruments in a single Yahoo request
+ * (skipping instruments already served by cTrader, fresh 15s cache, or fresh IBKR DB ticks).
+ */
+export async function prefetchLiveQuotes(instruments: string[]): Promise<void> {
+    const unique = Array.from(new Set(instruments.filter(Boolean)));
+    if (unique.length === 0) return;
+
+    const now = Date.now();
+    const existingPromises: Array<Promise<LiveQuoteDetails | null>> = [];
+    const needLookup: string[] = [];
+
+    for (const inst of unique) {
+        const isForex = inst.includes('/');
+        if (isForex) {
+            const ctQuote = getCtraderQuoteDetails(inst);
+            if (ctQuote && ctQuote.price > 0) continue;
+        }
+
+        const cachedQuote = quoteCache.get(inst);
+        if (cachedQuote && now - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) continue;
+
+        const inFlight = inFlightQuotes.get(inst);
+        if (inFlight) {
+            existingPromises.push(inFlight);
+            continue;
+        }
+
+        if (SYMBOL_MAP[inst] || (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex)) {
+            needLookup.push(inst);
+        }
+    }
+
+    if (needLookup.length === 0) {
+        if (existingPromises.length > 0) {
+            await Promise.allSettled(existingPromises);
+        }
+        return;
+    }
+
+    // Batch-check IBKR DB prices if configured
+    const remainingForYahoo: string[] = [];
+    if (process.env.MARKET_DATA_PROVIDER === 'ibkr') {
+        const nonForex = needLookup.filter((inst) => !inst.includes('/'));
+        const forexList = needLookup.filter((inst) => inst.includes('/'));
+        remainingForYahoo.push(...forexList);
+
+        if (nonForex.length > 0) {
+            try {
+                const placeholders = nonForex.map(() => '?').join(', ');
+                const rows = await queryDb<{ instrument: string; price: number; updated_at: string }>(
+                    `SELECT instrument, price, updated_at FROM instrument_prices WHERE instrument IN (${placeholders})`,
+                    nonForex
+                );
+                const freshSet = new Set<string>();
+                for (const row of rows || []) {
+                    const lastUpdate = new Date(row.updated_at).getTime();
+                    const p = Number(row.price);
+                    if (Date.now() - lastUpdate < 30 * 1000 && Number.isFinite(p) && p > 0) {
+                        cacheQuoteDetails(row.instrument, deriveBidAsk(Number(p.toFixed(5)), row.instrument));
+                        freshSet.add(row.instrument);
+                    }
+                }
+                for (const inst of nonForex) {
+                    if (!freshSet.has(inst) && SYMBOL_MAP[inst]) {
+                        remainingForYahoo.push(inst);
+                    }
+                }
+            } catch (err: any) {
+                logger.error({ err: err.message }, 'Failed batch IBKR instrument_prices lookup; falling back to Yahoo');
+                for (const inst of nonForex) {
+                    if (SYMBOL_MAP[inst]) remainingForYahoo.push(inst);
+                }
+            }
+        }
+    } else {
+        for (const inst of needLookup) {
+            if (SYMBOL_MAP[inst]) remainingForYahoo.push(inst);
+        }
+    }
+
+    const batchInsts = remainingForYahoo.filter((inst) => !inFlightQuotes.has(inst));
+    if (batchInsts.length > 0) {
+        const yahooToInsts = new Map<string, string[]>();
+        for (const inst of batchInsts) {
+            const ySym = SYMBOL_MAP[inst];
+            if (!ySym) continue;
+            const key = ySym.toUpperCase();
+            const list = yahooToInsts.get(key) || [];
+            list.push(inst);
+            yahooToInsts.set(key, list);
+        }
+        const uniqueYahooSyms = Array.from(new Set(batchInsts.map((i) => SYMBOL_MAP[i]).filter(Boolean)));
+
+        const resolvers = new Map<string, (val: LiveQuoteDetails | null) => void>();
+        const batchPromises: Array<Promise<LiveQuoteDetails | null>> = [];
+        for (const inst of batchInsts) {
+            let resolveFn!: (val: LiveQuoteDetails | null) => void;
+            const p = new Promise<LiveQuoteDetails | null>((resolve) => {
+                resolveFn = resolve;
+            });
+            resolvers.set(inst, resolveFn);
+            inFlightQuotes.set(inst, p);
+            batchPromises.push(p);
+        }
+
+        try {
+            const rawQuotes: any = await runYahooLimited(() =>
+                yahooFinance.quote(uniqueYahooSyms, {}, { validateResult: false })
+            ).catch(() => null);
+
+            const quoteList: any[] = Array.isArray(rawQuotes)
+                ? rawQuotes
+                : rawQuotes
+                    ? [rawQuotes]
+                    : [];
+
+            const quotesBySymbol = new Map<string, any>();
+            for (const q of quoteList) {
+                if (q && typeof q.symbol === 'string') {
+                    quotesBySymbol.set(q.symbol.toUpperCase(), q);
+                }
+            }
+
+            for (const inst of batchInsts) {
+                const ySym = SYMBOL_MAP[inst]?.toUpperCase();
+                const q = ySym ? quotesBySymbol.get(ySym) : null;
+                const details = q ? extractYahooQuoteDetails(inst, q) : null;
+                if (details) {
+                    cacheQuoteDetails(inst, details);
+                }
+                resolvers.get(inst)?.(details);
+            }
+        } catch (err: any) {
+            logger.warn({ err: err.message, count: uniqueYahooSyms.length }, 'Batch Yahoo quote prefetch failed');
+            for (const inst of batchInsts) {
+                resolvers.get(inst)?.(null);
+            }
+        } finally {
+            for (const inst of batchInsts) {
+                inFlightQuotes.delete(inst);
+            }
+        }
+        existingPromises.push(...batchPromises);
+    }
+
+    if (existingPromises.length > 0) {
+        await Promise.allSettled(existingPromises);
+    }
+}
 
 export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuoteDetails | null> {
     const isForex = instrument.includes('/');
@@ -324,26 +439,108 @@ export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuote
         }
     }
 
-    const price = await getLiveCurrentPrice(instrument);
-    if (!price || price <= 0) return null;
+    // 2. Short-TTL fresh quote cache (15s)
+    const cachedQuote = quoteCache.get(instrument);
+    if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
+        return cachedQuote.data;
+    }
 
-    let bid = 0;
-    let ask = 0;
+    // 3. Coalesce onto existing in-flight quote request
+    const existingInFlight = inFlightQuotes.get(instrument);
+    if (existingInFlight) {
+        return existingInFlight;
+    }
 
-    const yahooSymbol = SYMBOL_MAP[instrument];
-    if (yahooSymbol) {
+    // 4. Check if IBKR is configured as the active provider (futures only)
+    if (process.env.MARKET_DATA_PROVIDER === 'ibkr' && !isForex) {
         try {
-            await acquireYahooRateLimit();
-            const quote: any = await yahooFinance.quote(yahooSymbol).catch(() => null);
-            if (quote?.bid && quote?.ask && quote.bid > 0 && quote.ask > 0) {
-                bid = quote.bid;
-                ask = quote.ask;
+            const rows = await queryDb('SELECT price, updated_at FROM instrument_prices WHERE instrument = ?', [instrument]);
+            if (rows && rows.length > 0) {
+                const lastUpdate = new Date(rows[0].updated_at).getTime();
+                if (Date.now() - lastUpdate < 30 * 1000 && Number(rows[0].price) > 0) {
+                    const numPrice = Number(Number(rows[0].price).toFixed(5));
+                    const details = deriveBidAsk(numPrice, instrument);
+                    cacheQuoteDetails(instrument, details);
+                    return details;
+                }
+                logger.warn({ instrument, lastUpdate: rows[0].updated_at }, 'IBKR price in database is stale (>30s). Falling back to Yahoo.');
+            } else {
+                logger.warn({ instrument }, 'No IBKR price found in database. Falling back to Yahoo.');
             }
-        } catch {
-            // Fall back to spread model
+        } catch (err: any) {
+            logger.error({ instrument, err: err.message }, 'Failed to query instrument_prices from DB. Falling back to Yahoo.');
         }
     }
 
-    return deriveBidAsk(price, instrument, bid > 0 ? bid : undefined, ask > 0 ? ask : undefined);
+    const yahooSymbol = SYMBOL_MAP[instrument];
+    if (!yahooSymbol) return null;
+
+    const fetchPromise = (async (): Promise<LiveQuoteDetails | null> => {
+        try {
+            const quote: any = await runYahooLimited(() =>
+                yahooFinance.quote(yahooSymbol, {}, { validateResult: false })
+            ).catch(() => null);
+            const details = quote ? extractYahooQuoteDetails(instrument, quote) : null;
+            if (details) {
+                cacheQuoteDetails(instrument, details);
+                return details;
+            }
+
+            const candles = await getLiveCandles(instrument, '1m', 2);
+            if (candles.length > 0) {
+                const cPrice = candles[candles.length - 1].close;
+                if (cPrice > 0) {
+                    const fallbackDetails = deriveBidAsk(cPrice, instrument);
+                    cacheQuoteDetails(instrument, fallbackDetails);
+                    return fallbackDetails;
+                }
+            }
+            return null;
+        } catch (err: any) {
+            logger.error({ instrument, message: err.message }, 'Failed to fetch live quote from Yahoo');
+            return null;
+        } finally {
+            inFlightQuotes.delete(instrument);
+        }
+    })();
+
+    inFlightQuotes.set(instrument, fetchPromise);
+    return fetchPromise;
+}
+
+export async function getLiveCurrentPrice(instrument: string): Promise<number> {
+    const isForex = instrument.includes('/');
+
+    // 1. Primary Forex Feed: IC Markets (cTrader Open API)
+    // Instant sub-second price ticks from in-memory WebSocket cache.
+    if (isForex) {
+        const ctPrice = getCtraderLivePrice(instrument);
+        if (ctPrice > 0) {
+            return ctPrice;
+        }
+    }
+
+    const cached = priceCache.get(instrument);
+    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
+        return cached.data;
+    }
+
+    const cachedQuote = quoteCache.get(instrument);
+    if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
+        return cachedQuote.data.price;
+    }
+
+    if (inFlightPrices.has(instrument)) {
+        return inFlightPrices.get(instrument)!;
+    }
+
+    const fetchPromise = getLiveQuoteDetails(instrument)
+        .then((q) => q?.price ?? 0)
+        .finally(() => {
+            inFlightPrices.delete(instrument);
+        });
+
+    inFlightPrices.set(instrument, fetchPromise);
+    return fetchPromise;
 }
 

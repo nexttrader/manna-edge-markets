@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config';
 import { useAuth } from '../context/AuthContext';
 import type { EdgeSetup } from '../types';
@@ -54,6 +54,7 @@ export function useMtfStyleSetups(
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const inFlightTokensRef = useRef<Map<string, symbol>>(new Map());
 
   // Immediately reflect cached tab data (or reset while loading) when switching styleTab / swingMode
   useEffect(() => {
@@ -89,10 +90,16 @@ export function useMtfStyleSetups(
       return;
     }
 
+    if (!force && inFlightTokensRef.current.has(cacheKey)) {
+      return;
+    }
+
     if (!cached) {
       setLoading(true);
     }
     setError(null);
+    const token = Symbol(cacheKey);
+    inFlightTokensRef.current.set(cacheKey, token);
     try {
       const qs = new URLSearchParams({
         style: styleTab,
@@ -126,6 +133,9 @@ export function useMtfStyleSetups(
     } catch (err: any) {
       setError(err?.message || 'Unable to load multi-timeframe setups');
     } finally {
+      if (inFlightTokensRef.current.get(cacheKey) === token) {
+        inFlightTokensRef.current.delete(cacheKey);
+      }
       setLoading(false);
     }
   }, [isMtf, styleTab, swingMode, cacheKey, effectiveRole]);

@@ -1,6 +1,7 @@
 import { getDb } from '../db/database';
 import * as queries from '../db/queries';
-import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails } from '../discovery/yahoo-provider';
+import { getLiveCurrentPrice, getLiveCandles, getLiveQuoteDetails, prefetchLiveQuotes } from '../discovery/yahoo-provider';
+import { Candle } from '../discovery/types';
 import { computeATR } from '../discovery/atr';
 import { createLogger } from '../telemetry/logger';
 import { publishEvents } from '../publish-gate/publish-gate';
@@ -13,6 +14,7 @@ const logger = createLogger('LifecycleSync');
 
 export class LifecycleSync {
   private interval: NodeJS.Timeout | null = null;
+  private isTicking = false;
   
   start(intervalMs: number = 15000): void {
     if (this.interval) return;
@@ -29,6 +31,11 @@ export class LifecycleSync {
   }
   
   private async tick(): Promise<void> {
+    if (this.isTicking) {
+      logger.debug('Skipping LifecycleSync tick: previous tick still running');
+      return;
+    }
+    this.isTicking = true;
     try {
       const now = new Date();
       if (!isTradingSessionActive('both', now)) {
@@ -37,12 +44,33 @@ export class LifecycleSync {
       }
 
       const setups = await queries.getSetupsByState('awaiting_entry');
-      
-      for (const setup of setups) {
+      const eligibleSetups = setups.filter((setup) => {
         const setupMarket: 'forex' | 'futures' = (setup.market || '').toLowerCase() === 'forex' ? 'forex' : 'futures';
-        if (!isTradingSessionActive(setupMarket, now)) {
-          continue;
-        }
+        return isTradingSessionActive(setupMarket, now);
+      });
+      if (eligibleSetups.length === 0) return;
+
+      const uniqueInstruments = Array.from(new Set(eligibleSetups.map((s) => s.instrument).filter(Boolean)));
+      const candles1mMap = new Map<string, Candle[]>();
+      const candles15mMap = new Map<string, Candle[]>();
+
+      await Promise.all([
+        prefetchLiveQuotes(uniqueInstruments),
+        Promise.allSettled(
+          uniqueInstruments.map(async (inst) => {
+            const c1m = await getLiveCandles(inst, '1m', 15);
+            candles1mMap.set(inst, c1m);
+          })
+        ),
+        Promise.allSettled(
+          uniqueInstruments.map(async (inst) => {
+            const c15m = await getLiveCandles(inst, '15m', 20);
+            candles15mMap.set(inst, c15m);
+          })
+        )
+      ]);
+      
+      for (const setup of eligibleSetups) {
         const quote = await getLiveQuoteDetails(setup.instrument);
         const currentPrice = quote?.price || await getLiveCurrentPrice(setup.instrument);
         
@@ -59,34 +87,26 @@ export class LifecycleSync {
         const createdTimeMs = new Date(setup.created_at).getTime();
         let maxHigh = currentBid;
         let minLow = currentBid;
-        try {
-          const candles1m = await getLiveCandles(setup.instrument, '1m', 15);
-          if (candles1m && candles1m.length > 0) {
-            // Filter ONLY candles that opened strictly AFTER this setup was created.
-            const postCreationCandles = candles1m.filter(c => {
-              const candleTime = new Date(c.timestamp).getTime();
-              return candleTime >= createdTimeMs;
-            });
+        const candles1m = candles1mMap.get(setup.instrument);
+        if (candles1m && candles1m.length > 0) {
+          // Filter ONLY candles that opened strictly AFTER this setup was created.
+          const postCreationCandles = candles1m.filter(c => {
+            const candleTime = new Date(c.timestamp).getTime();
+            return candleTime >= createdTimeMs;
+          });
 
-            if (postCreationCandles.length > 0) {
-              maxHigh = Math.max(currentBid, ...postCreationCandles.map(c => c.high));
-              minLow = Math.min(currentBid, ...postCreationCandles.map(c => c.low));
-            }
+          if (postCreationCandles.length > 0) {
+            maxHigh = Math.max(currentBid, ...postCreationCandles.map(c => c.high));
+            minLow = Math.min(currentBid, ...postCreationCandles.map(c => c.low));
           }
-        } catch (e) {
-          logger.warn({ instrument: setup.instrument }, 'Failed to fetch 1m candles for wick entry detection');
         }
 
         const isForex = (setup.market || '').toLowerCase() === 'forex';
         const defaultAtr = isForex ? 0.0020 : 3.0;
         let atr14 = defaultAtr;
-        try {
-          const candles15m = await getLiveCandles(setup.instrument, '15m', 20);
-          if (candles15m && candles15m.length >= 14) {
-            atr14 = computeATR(candles15m, 14);
-          }
-        } catch (e) {
-          logger.warn({ instrument: setup.instrument }, 'Failed to fetch 15m candles for ATR calculation');
+        const candles15m = candles15mMap.get(setup.instrument);
+        if (candles15m && candles15m.length >= 14) {
+          atr14 = computeATR(candles15m, 14);
         }
 
         const isLong = (setup.bias || 'long').toLowerCase() === 'long';
@@ -129,6 +149,7 @@ export class LifecycleSync {
           let entryPriorityScore = 0;
           try {
             const rawActiveSetups = await queries.getAllActiveSetups();
+            await prefetchLiveQuotes(rawActiveSetups.map((s) => s.instrument));
             const priceMap: Record<string, number> = {};
             const enriched = await Promise.all(
               rawActiveSetups.map(async (s) => {
@@ -208,6 +229,8 @@ export class LifecycleSync {
       }
     } catch (err) {
       logger.error({ err }, 'Error during LifecycleSync tick');
+    } finally {
+      this.isTicking = false;
     }
   }
 }

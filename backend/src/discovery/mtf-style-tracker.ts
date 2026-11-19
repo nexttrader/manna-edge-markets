@@ -5,7 +5,7 @@ import type { MtfStyleSetup, SwingPairMode, TradingStyleMode } from './mtf-style
 import type { AssetEdgeScorecard, EdgeBiasLabel } from '../edge-finder/edge-finder-service';
 import { getInstrumentDecimals } from './stop-loss-rules';
 import { Bias, Candle } from './types';
-import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails } from './yahoo-provider';
+import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails, prefetchLiveQuotes } from './yahoo-provider';
 import { getCurrentKillzone, isPreCutoffScalpTrade, isTradingSessionActive, isWeekendTrade, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
 
 export interface EdgeFinderConfluenceDecision {
@@ -202,6 +202,7 @@ const SWING_RUNNER_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
 let tableEnsured = false;
 let lifecycleInterval: NodeJS.Timeout | null = null;
 let isSyncingLifecycle = false;
+let lastLifecycleSyncAt = 0;
 
 export async function ensureMtfTrackerTable(): Promise<void> {
   if (tableEnsured) return;
@@ -876,6 +877,33 @@ function getEvaluationCandleTf(row: Pick<TrackedMtfSetupRow, 'trading_style' | '
   return '15m';
 }
 
+async function overlayLiveQuotesOnRows(rows: TrackedMtfSetupRow[]): Promise<TrackedMtfSetupRow[]> {
+  if (rows.length === 0) return rows;
+  const uniqueInstruments = Array.from(new Set(rows.map((r) => r.instrument).filter(Boolean)));
+  if (uniqueInstruments.length === 0) return rows;
+
+  await prefetchLiveQuotes(uniqueInstruments);
+  const quoteMap = new Map<string, LiveQuoteDetails | null>();
+  await Promise.all(
+    uniqueInstruments.map(async (inst) => {
+      const q = await getLiveQuoteDetails(inst).catch(() => null);
+      quoteMap.set(inst, q);
+    })
+  );
+
+  return rows.map((row) => {
+    const q = quoteMap.get(row.instrument);
+    if (!q || !q.price || q.price <= 0) return row;
+    const market = row.market === 'forex' ? 'forex' : 'futures';
+    const decimals = getInstrumentDecimals(row.instrument, market);
+    const livePrice = Number(q.price.toFixed(decimals));
+    return {
+      ...row,
+      last_price: livePrice
+    };
+  });
+}
+
 async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: string): Promise<TrackedMtfSetupRow[]> {
   if (rows.length === 0) return [];
 
@@ -886,6 +914,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
     : rows;
 
   if (rowsToEvaluate.length === 0) {
+    lastLifecycleSyncAt = Date.now();
     return rows;
   }
 
@@ -894,6 +923,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
   const candleCache = new Map<string, Candle[]>();
 
   const uniqueInstruments = Array.from(new Set(rowsToEvaluate.map((r) => r.instrument)));
+  await prefetchLiveQuotes(uniqueInstruments);
   await Promise.all(
     uniqueInstruments.map(async (inst) => {
       const q = await getLiveQuoteDetails(inst).catch(() => null);
@@ -949,6 +979,7 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
     });
   }
 
+  lastLifecycleSyncAt = Date.now();
   return rows.map((row) => evaluatedById.get(row.id) ?? row);
 }
 
@@ -1065,7 +1096,14 @@ export async function syncMtfSetupsAndGetLiveBoard(
         [swingMode]
       );
 
-  const evaluatedOpen = await evaluateAndPersistOpenRows(openRowsRaw, nowIso);
+  const shouldUseFastQuoteOverlay =
+    candidates.length === 0 &&
+    process.env.NODE_ENV !== 'test' &&
+    Date.now() - lastLifecycleSyncAt < 20_000;
+
+  const evaluatedOpen = shouldUseFastQuoteOverlay
+    ? await overlayLiveQuotesOnRows(openRowsRaw)
+    : await evaluateAndPersistOpenRows(openRowsRaw, nowIso);
   const stillOpenByInst = new Map<string, TrackedMtfSetupRow>();
   for (const r of evaluatedOpen) {
     if (OPEN_MTF_STATES.includes(r.signal_state)) {
@@ -1302,7 +1340,10 @@ export async function syncOpenMtfLifecycle(forceCheck = false): Promise<void> {
     const openRows = await queryDb<TrackedMtfSetupRow>(
       `SELECT * FROM mtf_style_setups WHERE signal_state IN ('awaiting_entry', 'active', 'runner')`
     );
-    if (openRows.length === 0) return;
+    if (openRows.length === 0) {
+      lastLifecycleSyncAt = Date.now();
+      return;
+    }
     await evaluateAndPersistOpenRows(openRows, new Date().toISOString());
   } catch (err: any) {
     console.warn('[MTF-TRACKER] Background lifecycle sync failed:', err?.message);
@@ -1652,8 +1693,21 @@ export async function getAllMtfRunners(): Promise<MtfStyleSetup[]> {
      ORDER BY COALESCE(entry_triggered_at, created_at) DESC`
   );
   if (rows.length === 0) return [];
-  const evaluated = await evaluateAndPersistOpenRows(rows, new Date().toISOString());
-  return evaluated
+
+  if (process.env.NODE_ENV === 'test') {
+    const evaluated = await evaluateAndPersistOpenRows(rows, new Date().toISOString());
+    return evaluated
+      .filter((r) => r.signal_state === 'runner')
+      .map(rowToMtfSetup)
+      .sort((a, b) => (b.conviction_score || 0) - (a.conviction_score || 0));
+  }
+
+  const withLiveQuotes = await overlayLiveQuotesOnRows(rows);
+  if (Date.now() - lastLifecycleSyncAt > 15_000) {
+    void syncOpenMtfLifecycle(false);
+  }
+
+  return withLiveQuotes
     .filter((r) => r.signal_state === 'runner')
     .map(rowToMtfSetup)
     .sort((a, b) => (b.conviction_score || 0) - (a.conviction_score || 0));

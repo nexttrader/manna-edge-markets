@@ -1367,9 +1367,12 @@ let macroExternalCache: CachedLiveMacro | null = null;
 let macroInternalsCache: { fetchedAt: number; data: MacroInternalsData } | null = null;
 let smartMoneyCache: { fetchedAt: number; data: SmartMoneyData } | null = null;
 let snapshotCache: { data: EdgeFinderSnapshot; cachedAt: number } | null = null;
+let inFlightSnapshot: Promise<EdgeFinderSnapshot> | null = null;
+let backgroundRefreshTimer: NodeJS.Timeout | null = null;
 
 const SNAPSHOT_TTL_MS = 60_000;
-const INTRADAY_MARKET_TTL_MS = 60_000;
+const SNAPSHOT_SWR_MAX_AGE_MS = 120_000;
+const INTRADAY_MARKET_TTL_MS = 45_000;
 const DAILY_MARKET_TTL_MS = 120_000;
 const COT_TTL_MS = 30 * 60_000;
 const MACRO_INTERNALS_TTL_MS = 5 * 60_000;
@@ -3951,17 +3954,7 @@ function buildTimeframeProfiles(params: {
   };
 }
 
-export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<EdgeFinderSnapshot> {
-  if (!forceRefresh && snapshotCache && Date.now() - snapshotCache.cachedAt < SNAPSHOT_TTL_MS) {
-    return {
-      ...snapshotCache.data,
-      syncStatus: {
-        ...snapshotCache.data.syncStatus,
-        cacheAgeSeconds: Math.round((Date.now() - snapshotCache.cachedAt) / 1000)
-      }
-    };
-  }
-
+async function executeEdgeFinderSnapshotBuild(): Promise<EdgeFinderSnapshot> {
   const allEvents = newsEngine.getAllEvents();
   const upcomingHighImpact = newsEngine.getUpcomingHighImpactEvents().slice(0, 14);
   const calendarStatus = newsEngine.getCalendarStatus();
@@ -4354,8 +4347,69 @@ export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<Edg
   return snapshot;
 }
 
+function runEdgeFinderSnapshotBuild(): Promise<EdgeFinderSnapshot> {
+  const buildPromise = executeEdgeFinderSnapshotBuild().finally(() => {
+    if (inFlightSnapshot === buildPromise) {
+      inFlightSnapshot = null;
+    }
+  });
+  inFlightSnapshot = buildPromise;
+  return buildPromise;
+}
+
+export async function buildEdgeFinderSnapshot(forceRefresh = false): Promise<EdgeFinderSnapshot> {
+  if (!forceRefresh && snapshotCache) {
+    const ageMs = Date.now() - snapshotCache.cachedAt;
+    if (ageMs < SNAPSHOT_TTL_MS) {
+      return {
+        ...snapshotCache.data,
+        syncStatus: {
+          ...snapshotCache.data.syncStatus,
+          cacheAgeSeconds: Math.round(ageMs / 1000)
+        }
+      };
+    }
+    if (ageMs < SNAPSHOT_SWR_MAX_AGE_MS && !isTestEnv()) {
+      if (!inFlightSnapshot) {
+        void runEdgeFinderSnapshotBuild().catch(() => {});
+      }
+      return {
+        ...snapshotCache.data,
+        syncStatus: {
+          ...snapshotCache.data.syncStatus,
+          cacheAgeSeconds: Math.round(ageMs / 1000)
+        }
+      };
+    }
+  }
+
+  if (!forceRefresh && inFlightSnapshot) {
+    return inFlightSnapshot;
+  }
+
+  return runEdgeFinderSnapshotBuild();
+}
+
+export function startEdgeFinderBackgroundRefresh(intervalMs = 50_000): void {
+  if (isTestEnv() || backgroundRefreshTimer) return;
+  void buildEdgeFinderSnapshot(false).catch(() => {});
+  backgroundRefreshTimer = setInterval(() => {
+    if (!inFlightSnapshot) {
+      void runEdgeFinderSnapshotBuild().catch(() => {});
+    }
+  }, intervalMs);
+}
+
+export function stopEdgeFinderBackgroundRefresh(): void {
+  if (backgroundRefreshTimer) {
+    clearInterval(backgroundRefreshTimer);
+    backgroundRefreshTimer = null;
+  }
+}
+
 export function clearEdgeFinderCaches(): void {
   snapshotCache = null;
+  inFlightSnapshot = null;
   cotCache = null;
   macroExternalCache = null;
   macroInternalsCache = null;
