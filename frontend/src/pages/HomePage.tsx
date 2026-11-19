@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { KillzoneClock } from '../components/KillzoneClock';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { type DashboardStyleTab, useMtfPreview } from '../hooks/useMtfSignals';
+import { useRecordWall } from '../hooks/useRecordWall';
 import './HomePage.css';
 
 interface MarketTickerItem {
@@ -72,6 +73,7 @@ export const HomePage: React.FC = () => {
   const { user, logout } = useAuth();
   const [previewTab, setPreviewTab] = useState<DashboardStyleTab>('intraday');
   const mtfPreview = useMtfPreview();
+  const { isAvailable: hasRecordWall } = useRecordWall();
 
   const activePreviewData = (() => {
     if (previewTab === 'scalp') {
@@ -153,6 +155,11 @@ export const HomePage: React.FC = () => {
 
           <div className="nav-actions">
             <ThemeToggle />
+            {hasRecordWall && (
+              <Link to="/record-wall" className="btn-nav-outline" style={{ borderColor: '#00e5ff', color: '#00e5ff' }}>
+                🏛️ Verified Record Wall
+              </Link>
+            )}
             {user ? (
               <div className="user-badge-box">
                 <span className="user-role-tag">{user.role.toUpperCase()}</span>

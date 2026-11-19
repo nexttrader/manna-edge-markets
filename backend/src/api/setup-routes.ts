@@ -591,4 +591,70 @@ router.get('/scan-status', async (_req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// PUBLIC / CLIENT VERIFIED RECORD WALL ROUTES
+// ============================================================================
+
+router.get('/record-wall', async (req: Request, res: Response) => {
+  try {
+    const { getPublicRecordWall } = await import('../analytics/daily-ledger-service');
+    const day = req.query.day ? String(req.query.day) : undefined;
+    const market = (req.query.market ? String(req.query.market) : 'all') as 'all' | 'futures' | 'forex';
+    const style = (req.query.style ? String(req.query.style) : 'all') as 'all' | 'intraday' | 'scalp' | 'swing';
+    const status = req.query.status ? String(req.query.status) : 'all';
+
+    const wall = await getPublicRecordWall({ day, market, style, status });
+    return res.json({ success: true, ...wall });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+router.get('/record-wall/:day/export', async (req: Request, res: Response) => {
+  try {
+    const day = String(req.params.day || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD day parameter is required' });
+    }
+    const { getPublicRecordWallDay, formatDailyLedgerCsv } = await import('../analytics/daily-ledger-service');
+    const market = (req.query.market ? String(req.query.market) : 'all') as 'all' | 'futures' | 'forex';
+    const style = (req.query.style ? String(req.query.style) : 'all') as 'all' | 'intraday' | 'scalp' | 'swing';
+    const status = req.query.status ? String(req.query.status) : 'all';
+
+    const result = await getPublicRecordWallDay(day, { market, style, status });
+    if (!result.enabled || !result.published || !result.ledger) {
+      return res.status(404).json({ success: false, error: 'Published record wall day not found or disabled' });
+    }
+
+    const csv = formatDailyLedgerCsv(result.ledger);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="manna-verified-record-${day}.csv"`);
+    return res.send(csv);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+router.get('/record-wall/:day', async (req: Request, res: Response) => {
+  try {
+    const day = String(req.params.day || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD day parameter is required' });
+    }
+    const { getPublicRecordWallDay } = await import('../analytics/daily-ledger-service');
+    const market = (req.query.market ? String(req.query.market) : 'all') as 'all' | 'futures' | 'forex';
+    const style = (req.query.style ? String(req.query.style) : 'all') as 'all' | 'intraday' | 'scalp' | 'swing';
+    const status = req.query.status ? String(req.query.status) : 'all';
+
+    const result = await getPublicRecordWallDay(day, { market, style, status });
+    if (!result.enabled || !result.published || !result.ledger) {
+      return res.status(404).json({ success: false, error: 'Published record wall day not found or disabled' });
+    }
+
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
 export default router;

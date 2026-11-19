@@ -2821,6 +2821,142 @@ router.post('/edge-finder/rollout', verifySuperAdmin, async (req: Request, res: 
   }
 });
 
+// ============================================================================
+// DAILY PUBLISHED TRADE LEDGER & VERIFIED RECORD WALL GOVERNANCE
+// ============================================================================
+
+router.get('/daily-ledger/days', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(365, Math.max(1, Number(req.query.limit || 90)));
+    const { getDailyLedgerDays } = await import('../analytics/daily-ledger-service');
+    const data = await getDailyLedgerDays(limit);
+    return res.json({ success: true, ...data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/daily-ledger/wall-config', verifySuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { getRecordWallGlobalConfig } = await import('../analytics/daily-ledger-service');
+    const config = await getRecordWallGlobalConfig();
+    return res.json({ success: true, config });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/daily-ledger/wall-config', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'enabled boolean is required' });
+    }
+    const email = (req.headers['x-user-email'] || 'super_admin').toString().toLowerCase().trim();
+    const { setRecordWallGlobalConfig } = await import('../analytics/daily-ledger-service');
+    const config = await setRecordWallGlobalConfig(enabled, email);
+    try {
+      await queryDb(
+        `INSERT INTO admin_audit_logs (id, admin_email, admin_role, action, target_user_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), email, 'super_admin', 'TOGGLE_RECORD_WALL', 'record_wall', JSON.stringify(config), new Date().toISOString()]
+      );
+    } catch {
+      // ignore if audit schema differs
+    }
+    return res.json({ success: true, config });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/daily-ledger/export', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { getDailyTradeLedger, formatDailyLedgerCsv } = await import('../analytics/daily-ledger-service');
+    const day = req.query.day ? String(req.query.day) : undefined;
+    const market = (req.query.market ? String(req.query.market) : 'all') as 'all' | 'futures' | 'forex';
+    const style = (req.query.style ? String(req.query.style) : 'all') as 'all' | 'intraday' | 'scalp' | 'swing';
+    const status = req.query.status ? String(req.query.status) : 'all';
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const format = String(req.query.format || 'csv').toLowerCase();
+
+    const ledger = await getDailyTradeLedger({ day, market, style, status, search });
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="manna-daily-ledger-${ledger.tradingDay}.json"`);
+      return res.send(JSON.stringify(ledger, null, 2));
+    }
+
+    const csv = formatDailyLedgerCsv(ledger);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="manna-daily-ledger-${ledger.tradingDay}.csv"`);
+    return res.send(csv);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/daily-ledger', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { getDailyTradeLedger } = await import('../analytics/daily-ledger-service');
+    const day = req.query.day ? String(req.query.day) : undefined;
+    const market = (req.query.market ? String(req.query.market) : 'all') as 'all' | 'futures' | 'forex';
+    const style = (req.query.style ? String(req.query.style) : 'all') as 'all' | 'intraday' | 'scalp' | 'swing';
+    const status = req.query.status ? String(req.query.status) : 'all';
+    const search = req.query.search ? String(req.query.search) : undefined;
+
+    const ledger = await getDailyTradeLedger({ day, market, style, status, search });
+    return res.json({ success: true, ...ledger });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/daily-ledger/publish', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { day, title, adminNotes } = req.body || {};
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(String(day))) {
+      return res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD trading day is required' });
+    }
+    const email = (req.headers['x-user-email'] || 'super_admin').toString().toLowerCase().trim();
+    const { publishDayToRecordWall } = await import('../analytics/daily-ledger-service');
+    const result = await publishDayToRecordWall({ day: String(day), adminEmail: email, title, adminNotes });
+    try {
+      await queryDb(
+        `INSERT INTO admin_audit_logs (id, admin_email, admin_role, action, target_user_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), email, 'super_admin', 'PUBLISH_RECORD_WALL_DAY', String(day), JSON.stringify({ title, totalPublished: result.summary.totalPublished, realizedR: result.summary.totalRealizedR }), new Date().toISOString()]
+      );
+    } catch {
+      // ignore if audit schema differs
+    }
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/daily-ledger/unpublish', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { day } = req.body || {};
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(String(day))) {
+      return res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD trading day is required' });
+    }
+    const email = (req.headers['x-user-email'] || 'super_admin').toString().toLowerCase().trim();
+    const { unpublishDayFromRecordWall } = await import('../analytics/daily-ledger-service');
+    const publication = await unpublishDayFromRecordWall(String(day), email);
+    try {
+      await queryDb(
+        `INSERT INTO admin_audit_logs (id, admin_email, admin_role, action, target_user_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), email, 'super_admin', 'UNPUBLISH_RECORD_WALL_DAY', String(day), JSON.stringify(publication), new Date().toISOString()]
+      );
+    } catch {
+      // ignore if audit schema differs
+    }
+    return res.json({ success: true, publication });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
 
 

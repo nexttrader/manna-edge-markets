@@ -9,6 +9,7 @@ import {
 } from '../scoring';
 
 import { getInstrumentDecimals, getLogicalStopDistance, getTimeframeStopDistance } from '../stop-loss-rules';
+import { getInstrumentSpread } from '../spread-helper';
 import * as queries from '../../db/queries';
 
 export interface MannaSndTimeframeConfig {
@@ -30,6 +31,7 @@ interface Zone {
   formation: 'Rally-Base-Rally' | 'Drop-Base-Rally' | 'Rally-Base-Drop' | 'Drop-Base-Drop' | 'Swing-Pivot-Demand' | 'Swing-Pivot-Supply';
   proximal: number; // Entry boundary (Limit Order level)
   distal: number;   // Stop Loss boundary
+  bodyProximal?: number; // Body proximal level preserved for diagnostics when wick proximal is used
   timestamp?: string; // Base candle timestamp
 }
 
@@ -85,7 +87,12 @@ export class MannaSndStrategy implements IStrategyEngine {
    * Formations: RBR (Rally-Base-Rally), DBR (Drop-Base-Rally), RBD (Rally-Base-Drop), DBD (Drop-Base-Drop).
    * Imbalance rule: Leg-Out departure (single candle or consecutive series of same-colour candles) > 1.0x Base Range.
    */
-  private findZonesWithIndex(candles: Candle[], minDepartureAtrMultiple: number = 0, atr: number = 0): (Zone & { index: number })[] {
+  private findZonesWithIndex(
+    candles: Candle[],
+    minDepartureAtrMultiple: number = 0,
+    atr: number = 0,
+    proximalMode: 'body' | 'wick' = 'body'
+  ): (Zone & { index: number })[] {
     const zones: (Zone & { index: number })[] = [];
     if (candles.length < 5) return zones;
 
@@ -133,13 +140,15 @@ export class MannaSndStrategy implements IStrategyEngine {
             else if (prevType === 'leg_down') formation = 'Drop-Base-Rally';
 
             if (formation) {
-              const proximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
+              const bodyProximal = Math.max(...baseCandles.map(c => Math.max(c.open, c.close)));
+              const proximal = proximalMode === 'wick' ? baseHigh : bodyProximal;
               const distal = baseLow;
               zones.push({
                 type: 'demand',
                 formation,
                 proximal,
                 distal,
+                bodyProximal,
                 timestamp: baseTime,
                 index: i + baseCount
               });
@@ -169,13 +178,15 @@ export class MannaSndStrategy implements IStrategyEngine {
             else if (prevType === 'leg_down') formation = 'Drop-Base-Drop';
 
             if (formation) {
-              const proximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
+              const bodyProximal = Math.min(...baseCandles.map(c => Math.min(c.open, c.close)));
+              const proximal = proximalMode === 'wick' ? baseLow : bodyProximal;
               const distal = baseHigh;
               zones.push({
                 type: 'supply',
                 formation,
                 proximal,
                 distal,
+                bodyProximal,
                 timestamp: baseTime,
                 index: i + baseCount
               });
@@ -186,6 +197,86 @@ export class MannaSndStrategy implements IStrategyEngine {
     }
 
     return zones;
+  }
+
+  /**
+   * Computes stop, TP1/TP2 (2R/3R), rounded boundaries, and TP1 progress fraction for a candidate zone.
+   */
+  private buildSetupLevels(params: {
+    zone: Zone;
+    isLong: boolean;
+    instrument: string;
+    market: 'futures' | 'forex';
+    atr14: number;
+    levelTf: '5m' | '15m' | '1h' | '4h';
+    isHalvedFloor: boolean;
+    isParameterized: boolean;
+    currentPrice: number;
+    spreadPad?: number;
+  }) {
+    const {
+      zone,
+      isLong,
+      instrument,
+      market,
+      atr14,
+      levelTf,
+      isHalvedFloor,
+      isParameterized,
+      currentPrice,
+      spreadPad = 0,
+    } = params;
+
+    const entry_zone_mid = zone.proximal + (isLong ? spreadPad : 0);
+    const isJpy = instrument.includes('JPY');
+    const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
+    const rawStop = isLong ? zone.distal - distalBuffer : zone.distal + distalBuffer;
+    const rawRisk = Math.abs(isLong ? entry_zone_mid - rawStop : rawStop - entry_zone_mid);
+    const risk = levelTf === '15m'
+      ? getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor)
+      : getTimeframeStopDistance(instrument, atr14, rawRisk, market, levelTf);
+    const stop = isLong ? entry_zone_mid - risk : entry_zone_mid + risk;
+    if (risk <= 0) return null;
+
+    // Derive TPs from rounded stop/entry so displayed TP1/TP2 strictly match 2R/3R
+    const decimals = isParameterized
+      ? getInstrumentDecimals(instrument, market)
+      : (market === 'futures' ? 2 : 5);
+    const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
+    const roundedStop = Number(stop.toFixed(decimals));
+    const publishedRisk = Math.abs(roundedEntry - roundedStop);
+    if (isParameterized && publishedRisk <= 0) return null;
+
+    const tp1 = isLong ? roundedEntry + (publishedRisk * 2.0) : roundedEntry - (publishedRisk * 2.0);
+    const tp2 = isLong ? roundedEntry + (publishedRisk * 3.0) : roundedEntry - (publishedRisk * 3.0);
+    const roundedTp1 = Number(tp1.toFixed(decimals));
+    const roundedTp2 = Number(tp2.toFixed(decimals));
+
+    const ez_mid = roundedEntry;
+    const ez_low = isLong ? Number(zone.distal.toFixed(decimals)) : roundedEntry;
+    const ez_high = isLong ? roundedEntry : Number(zone.distal.toFixed(decimals));
+
+    const distToTp1 = isLong ? (roundedTp1 - roundedEntry) : (roundedEntry - roundedTp1);
+    const progressToTp1 = distToTp1 > 0
+      ? (isLong ? (currentPrice - roundedEntry) / distToTp1 : (roundedEntry - currentPrice) / distToTp1)
+      : 0;
+
+    return {
+      zone,
+      entry_zone_mid,
+      stop,
+      tp1,
+      tp2,
+      decimals,
+      roundedEntry,
+      roundedStop,
+      roundedTp1,
+      roundedTp2,
+      ez_mid,
+      ez_low,
+      ez_high,
+      progressToTp1,
+    };
   }
 
   private findZones(candles: Candle[], minDepartureAtrMultiple: number = 0, atr: number = 0): Zone[] {
@@ -456,7 +547,9 @@ export class MannaSndStrategy implements IStrategyEngine {
         const atr14 = computeATR(candlesLtf, 14);
         if (isParameterized && (!atr14 || atr14 <= 0)) continue;
 
-        const currentPrice = await fetchPrice(instrument);
+        const currentPrice = tfConfig?.priceFetcher
+          ? await tfConfig.priceFetcher(instrument)
+          : await getLiveCurrentPrice(instrument, true);
         if (!currentPrice || currentPrice <= 0) continue;
 
         // 1. Evaluate HTF Curve Location & LTF Trend
@@ -552,38 +645,130 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         // If neither an open-curve LTF zone nor a nested LTF zone in the HTF area qualifies, skip this session
         if (!selectedZone) continue;
-        const zone: Zone = selectedZone;
 
         const bias: Bias = isLong ? 'long' : 'short';
-        const entry_zone_mid = zone.proximal;
-        const isJpy = instrument.includes('JPY');
-        const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
-        const rawStop = isLong ? zone.distal - distalBuffer : zone.distal + distalBuffer;
-        const rawRisk = Math.abs(isLong ? entry_zone_mid - rawStop : rawStop - entry_zone_mid);
-        const risk = ltf === '15m'
-          ? getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor)
-          : getTimeframeStopDistance(instrument, atr14, rawRisk, market, ltf);
-        const stop = isLong ? entry_zone_mid - risk : entry_zone_mid + risk;
-        if (risk <= 0) continue;
+        const initialLevels = this.buildSetupLevels({
+          zone: selectedZone,
+          isLong,
+          instrument,
+          market,
+          atr14,
+          levelTf: ltf,
+          isHalvedFloor,
+          isParameterized,
+          currentPrice,
+          spreadPad: 0,
+        });
+        if (!initialLevels) continue;
 
-        // Use decimals early so TPs are derived from the same rounded stop that gets published,
-        // guaranteeing that displayed TP1 = entry ± 2×(entry - stop) and TP2 = entry ± 3×(entry - stop)
-        const decimals = isParameterized
-          ? getInstrumentDecimals(instrument, market)
-          : (market === 'futures' ? 2 : 5);
-        const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
-        const roundedStop = Number(stop.toFixed(decimals));
-        const publishedRisk = Math.abs(roundedEntry - roundedStop);
-        if (isParameterized && publishedRisk <= 0) continue;
+        let activeLevels = initialLevels;
+        let effectiveLtfLabel = ltfLabel;
+        let nested5mUpgrade = false;
+        let appliedSpreadPad = 0;
 
-        const tp1 = isLong ? roundedEntry + (publishedRisk * 2.0) : roundedEntry - (publishedRisk * 2.0);
-        const tp2 = isLong ? roundedEntry + (publishedRisk * 3.0) : roundedEntry - (publishedRisk * 3.0);
-        const roundedTp1 = Number(tp1.toFixed(decimals));
-        const roundedTp2 = Number(tp2.toFixed(decimals));
+        // Option A (T4): Protect close 15M zones (< 0.50 progress to TP1).
+        // When price has already moved >= 50% of the way to TP1 on 15M, upgrade to a fresher closed 5M SnD zone
+        // using wick proximal (+ broker spread on Longs so Ask fills reach the institutional level).
+        if (ltf === '15m' && initialLevels.progressToTp1 >= 0.50) {
+          try {
+            const raw5m = await fetchCandles(instrument, '5m', 60);
+            const last5mTs = raw5m.length > 0 ? Date.parse(raw5m[raw5m.length - 1].timestamp) : NaN;
+            const isLast5mForming = Number.isFinite(last5mTs)
+              && (Date.now() - last5mTs) >= 0
+              && (Date.now() - last5mTs) < 5 * 60 * 1000;
+            const closed5m = (isLast5mForming ? raw5m.slice(0, -1) : raw5m).slice(-60);
 
-        const ez_mid = Number(zone.proximal.toFixed(decimals));
-        const ez_low = isLong ? Number(zone.distal.toFixed(decimals)) : Number(zone.proximal.toFixed(decimals));
-        const ez_high = isLong ? Number(zone.proximal.toFixed(decimals)) : Number(zone.distal.toFixed(decimals));
+            if (closed5m.length >= 10) {
+              const ltf5mZones = this.findZonesWithIndex(closed5m, 0, 0, 'wick');
+              const spreadPad = isLong ? getInstrumentSpread(instrument) : 0;
+
+              let candidate5mZone: Zone | null = null;
+              if (isLong) {
+                const demand5m = ltf5mZones.filter(z =>
+                  z.type === 'demand' &&
+                  (z.proximal + spreadPad) <= currentPrice &&
+                  (z.proximal + spreadPad) > selectedZone!.proximal &&
+                  z.distal >= htfDemand.distal &&
+                  (z.proximal + spreadPad) <= htfSupply.proximal &&
+                  this.isFreshZone(z, closed5m, z.index)
+                );
+                if (demand5m.length > 0) {
+                  candidate5mZone = demand5m.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demand5m[0]);
+                }
+              } else {
+                const supply5m = ltf5mZones.filter(z =>
+                  z.type === 'supply' &&
+                  z.proximal >= currentPrice &&
+                  z.proximal < selectedZone!.proximal &&
+                  z.distal <= htfSupply.distal &&
+                  z.proximal >= htfDemand.proximal &&
+                  this.isFreshZone(z, closed5m, z.index)
+                );
+                if (supply5m.length > 0) {
+                  candidate5mZone = supply5m.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supply5m[0]);
+                }
+              }
+
+              if (candidate5mZone) {
+                const upgradedLevels = this.buildSetupLevels({
+                  zone: candidate5mZone,
+                  isLong,
+                  instrument,
+                  market,
+                  atr14,
+                  levelTf: '15m', // Preserve 15M ATR & institutional stop floors to prevent 5m stop-out compression
+                  isHalvedFloor,
+                  isParameterized,
+                  currentPrice,
+                  spreadPad,
+                });
+
+                if (upgradedLevels) {
+                  const withinBounds = isLong
+                    ? (upgradedLevels.ez_low >= htfDemand.distal
+                      && upgradedLevels.ez_high <= htfSupply.proximal
+                      && currentPrice > upgradedLevels.stop
+                      && currentPrice < upgradedLevels.tp1
+                      && (currentPrice - upgradedLevels.ez_high) <= (atr14 * 6))
+                    : (upgradedLevels.ez_high <= htfSupply.distal
+                      && upgradedLevels.ez_low >= htfDemand.proximal
+                      && currentPrice < upgradedLevels.stop
+                      && currentPrice > upgradedLevels.tp1
+                      && (upgradedLevels.ez_low - currentPrice) <= (atr14 * 6));
+
+                  if (withinBounds) {
+                    activeLevels = upgradedLevels;
+                    effectiveLtfLabel = '5M';
+                    nested5mUpgrade = true;
+                    appliedSpreadPad = spreadPad;
+                  }
+                }
+              }
+            }
+          } catch (err5m) {
+            console.warn(`[Manna SnD] 5M continuation upgrade skipped for ${instrument}:`, err5m);
+          }
+        }
+
+        // Pre-publish extended-move gate (T4): drop 15M setups still > 55% of the way to TP1
+        if (ltf === '15m' && activeLevels.progressToTp1 > 0.55) continue;
+
+        const {
+          zone,
+          entry_zone_mid,
+          stop,
+          tp1,
+          tp2,
+          decimals,
+          roundedEntry,
+          roundedStop,
+          roundedTp1,
+          roundedTp2,
+          ez_mid,
+          ez_low,
+          ez_high,
+          progressToTp1,
+        } = activeLevels;
 
         // Enforce: Entry Zone MUST sit strictly BETWEEN HTF Demand floor and HTF Supply ceiling
         if (isLong) {
@@ -627,9 +812,10 @@ export class MannaSndStrategy implements IStrategyEngine {
         const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
 
         const stylePrefix = tfConfig?.tradingStyle ? ` · ${tfConfig.tradingStyle}` : '';
+        const upgradeTag = nested5mUpgrade ? ' [5M CONTINUATION]' : '';
         const selection_rationale = isParameterized
-          ? `[MANNA SND${stylePrefix}] Curve: ${curveLocation.toUpperCase()} | ${ltfLabel} Trend: ${trendLtf.toUpperCase()}. Imbalance Zone (${zone.formation}) inside ${htfLabel} ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${roundedEntry.toFixed(decimals)}), SL beyond Distal line (${roundedStop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`
-          : `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trendLtf.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+          ? `[MANNA SND${stylePrefix}]${upgradeTag} Curve: ${curveLocation.toUpperCase()} | ${ltfLabel} Trend: ${trendLtf.toUpperCase()}. Imbalance Zone (${zone.formation}) inside ${htfLabel} ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${roundedEntry.toFixed(decimals)}), SL beyond Distal line (${roundedStop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`
+          : `[MANNA SND]${upgradeTag} Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trendLtf.toUpperCase()}. ${effectiveLtfLabel} Imbalance Zone (${zone.formation}) inside 1H ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${roundedEntry.toFixed(decimals)}), SL beyond Distal line (${roundedStop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
 
         const metadataObj: Record<string, any> = {
           source: tfConfig?.sourceTag || (isParameterized ? 'mtf_manna_snd' : `yahoo_finance_${market}`),
@@ -637,10 +823,18 @@ export class MannaSndStrategy implements IStrategyEngine {
           ...(tfConfig?.tradingStyle ? { trading_style: tfConfig.tradingStyle } : {}),
           atr14,
           htf: htfLabel,
-          ltf: ltfLabel,
+          ltf: effectiveLtfLabel,
+          zone_timeframe: effectiveLtfLabel,
+          nested_5m_upgrade: nested5mUpgrade,
+          progress_to_tp1_pct: Number((progressToTp1 * 100).toFixed(1)),
+          ...(nested5mUpgrade ? {
+            parent_15m_proximal: Number(selectedZone.proximal.toFixed(decimals)),
+            parent_15m_distal: Number(selectedZone.distal.toFixed(decimals)),
+            spread_pad_applied: Number(appliedSpreadPad.toFixed(decimals)),
+          } : {}),
           ...(isParameterized ? {
             context_tf: htfLabel,
-            entry_tf: ltfLabel,
+            entry_tf: effectiveLtfLabel,
             order_type: bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT',
             trendLtf,
           } : {}),

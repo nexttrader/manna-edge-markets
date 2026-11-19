@@ -427,7 +427,7 @@ export async function prefetchLiveQuotes(instruments: string[]): Promise<void> {
     }
 }
 
-export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuoteDetails | null> {
+export async function getLiveQuoteDetails(instrument: string, bypassCache = false): Promise<LiveQuoteDetails | null> {
     const isForex = instrument.includes('/');
 
     // 1. Primary Forex Feed: IC Markets (cTrader Open API)
@@ -439,16 +439,20 @@ export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuote
         }
     }
 
-    // 2. Short-TTL fresh quote cache (15s)
-    const cachedQuote = quoteCache.get(instrument);
-    if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
-        return cachedQuote.data;
+    // 2. Short-TTL fresh quote cache (15s) — skipped when publish-gate / discovery requires a fresh tick
+    if (!bypassCache) {
+        const cachedQuote = quoteCache.get(instrument);
+        if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
+            return cachedQuote.data;
+        }
     }
 
     // 3. Coalesce onto existing in-flight quote request
-    const existingInFlight = inFlightQuotes.get(instrument);
-    if (existingInFlight) {
-        return existingInFlight;
+    if (!bypassCache) {
+        const existingInFlight = inFlightQuotes.get(instrument);
+        if (existingInFlight) {
+            return existingInFlight;
+        }
     }
 
     // 4. Check if IBKR is configured as the active provider (futures only)
@@ -508,7 +512,7 @@ export async function getLiveQuoteDetails(instrument: string): Promise<LiveQuote
     return fetchPromise;
 }
 
-export async function getLiveCurrentPrice(instrument: string): Promise<number> {
+export async function getLiveCurrentPrice(instrument: string, bypassCache = false): Promise<number> {
     const isForex = instrument.includes('/');
 
     // 1. Primary Forex Feed: IC Markets (cTrader Open API)
@@ -520,27 +524,31 @@ export async function getLiveCurrentPrice(instrument: string): Promise<number> {
         }
     }
 
-    const cached = priceCache.get(instrument);
-    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
-        return cached.data;
+    if (!bypassCache) {
+        const cached = priceCache.get(instrument);
+        if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL_MS) {
+            return cached.data;
+        }
+
+        const cachedQuote = quoteCache.get(instrument);
+        if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
+            return cachedQuote.data.price;
+        }
+
+        if (inFlightPrices.has(instrument)) {
+            return inFlightPrices.get(instrument)!;
+        }
     }
 
-    const cachedQuote = quoteCache.get(instrument);
-    if (cachedQuote && Date.now() - cachedQuote.timestamp < PRICE_CACHE_TTL_MS) {
-        return cachedQuote.data.price;
-    }
-
-    if (inFlightPrices.has(instrument)) {
-        return inFlightPrices.get(instrument)!;
-    }
-
-    const fetchPromise = getLiveQuoteDetails(instrument)
+    const fetchPromise = getLiveQuoteDetails(instrument, bypassCache)
         .then((q) => q?.price ?? 0)
         .finally(() => {
             inFlightPrices.delete(instrument);
         });
 
-    inFlightPrices.set(instrument, fetchPromise);
+    if (!bypassCache) {
+        inFlightPrices.set(instrument, fetchPromise);
+    }
     return fetchPromise;
 }
 

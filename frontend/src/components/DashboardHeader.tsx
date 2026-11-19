@@ -17,12 +17,14 @@ import { UserInboxBanner } from './UserInboxBanner';
 import { API_BASE } from '../config';
 import { type EdgeSetup } from '../types';
 import { useEdgeFinderAccess } from '../hooks/useEdgeFinder';
+import { useRecordWall } from '../hooks/useRecordWall';
 import { RoleViewSwitcher } from './RoleViewSwitcher';
 
 export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [] }) => {
   const navigate = useNavigate();
   const { user, logout, elevateToSuperAdmin, isImpersonating, effectiveRole } = useAuth();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
+  const { isAvailable: hasRecordWall } = useRecordWall();
   const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin';
   const isSuperAdmin = effectiveRole === 'super_admin' && !isImpersonating;
   const { voiceEnabled, toggleVoice, testVoice } = useVoice();
@@ -175,6 +177,12 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
             {canAccessEdgeFinder && (
               <Link to="/edge-finder" className={`nav-link nav-link-gold ${location.pathname === '/edge-finder' ? 'active' : ''}`}>
                 EdgeFinder
+              </Link>
+            )}
+
+            {(hasRecordWall || isSuperAdmin) && (
+              <Link to="/record-wall" className={`nav-link ${location.pathname === '/record-wall' ? 'active' : ''}`} style={{ color: '#00e5ff' }}>
+                Record Wall
               </Link>
             )}
 
@@ -415,6 +423,17 @@ export const DashboardHeader: React.FC<{ setups?: EdgeSetup[] }> = ({ setups = [
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   🧭 Manna EdgeFinder Pro
+                </Link>
+              )}
+
+              {(hasRecordWall || isSuperAdmin) && (
+                <Link 
+                  to="/record-wall" 
+                  className={`mobile-nav-item ${location.pathname === '/record-wall' ? 'active' : ''}`}
+                  style={{ color: '#00e5ff' }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  🏛️ Verified Record Wall
                 </Link>
               )}
 

@@ -7,6 +7,7 @@ import { AdminPanel } from './pages/AdminPanel';
 import { SuperAdminPanel } from './pages/SuperAdminPanel';
 import { SetupDetail } from './pages/SetupDetail';
 import { EdgeFinderPage } from './pages/EdgeFinderPage';
+import { RecordWallPage } from './pages/RecordWallPage';
 import { useAuth } from './context/AuthContext';
 import { useEdgeFinderAccess } from './hooks/useEdgeFinder';
 import { MaintenanceProvider } from './context/MaintenanceContext';
@@ -187,6 +188,7 @@ function App() {
         />
         <Route path="/super-admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="/vault-7729" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/record-wall" element={<RecordWallPage />} />
         <Route 
           path="/edge-finder" 
           element={

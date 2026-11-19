@@ -17,6 +17,7 @@ import { TradingStyleComparisonCard } from '../components/admin/TradingStyleComp
 import { AssetControlHub } from '../components/admin/AssetControlHub';
 import { formatETDate, formatETTime } from '../utils/time';
 import { ExclusiveSignalsDashboard } from '../components/admin/ExclusiveSignalsDashboard';
+import { DailyTradeLedgerPanel } from '../components/admin/DailyTradeLedgerPanel';
 
 export const SuperAdminPanel: React.FC = () => {
   const { user, logout } = useAuth();
@@ -24,7 +25,7 @@ export const SuperAdminPanel: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialActiveTab = (searchParams.get('tab') as any) || 'overview';
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'confluence_tracker' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'exclusive_signals' | 'notifications'>(initialActiveTab);
+  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'sentinel' | 'strategy_comparison' | 'confluence_tracker' | 'roster' | 'marketing' | 'heatmap' | 'governance' | 'strategies' | 'admin_audit' | 'health' | 'client_accuracy' | 'exclusive_signals' | 'notifications' | 'daily_ledger'>(initialActiveTab);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
 
   const handleSelectTab = (tab: string) => {
@@ -712,6 +713,7 @@ export const SuperAdminPanel: React.FC = () => {
 
   const superAdminTabsConfig: AdminTabConfig[] = [
     { id: 'overview', label: 'Mission Control', icon: '🎛️' },
+    { id: 'daily_ledger', label: 'Daily Ledger & Record Wall', icon: '📜', color: '#00e5ff' },
     { id: 'assets', label: 'Asset & Signal Visibility', icon: '🎯', color: '#6366f1' },
     { id: 'strategy_comparison', label: 'Strategy Analytics', icon: '⚔️', color: '#ffab00' },
     { id: 'confluence_tracker', label: 'Confluence Lab', icon: '🧭', color: '#00e676' },
@@ -3228,6 +3230,9 @@ export const SuperAdminPanel: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* TAB: Daily Published Trade Ledger & Verified Record Wall */}
+        {activeTab === 'daily_ledger' && <DailyTradeLedgerPanel />}
       </main>
 
       {/* User Activity Audit Modal */}

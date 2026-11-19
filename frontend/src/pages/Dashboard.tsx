@@ -35,6 +35,7 @@ import {
 } from '../hooks/useEdgeFinder';
 import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 import { useStrategies } from '../hooks/useAdmin';
+import { useRecordWall } from '../hooks/useRecordWall';
 import {
   type DashboardStyleTab,
   type SwingPairMode,
@@ -74,6 +75,7 @@ export const Dashboard: React.FC = () => {
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
   const { canAccessConfluenceAnalytics } = useConfluenceAnalyticsAccess();
+  const { isAvailable: hasRecordWall, data: recordWallData } = useRecordWall();
   const [showConfluenceLab, setShowConfluenceLab] = useState(false);
   const { strategies: visibleStrategies } = useStrategies();
 
@@ -287,6 +289,31 @@ export const Dashboard: React.FC = () => {
                   {showConfluenceLab ? 'HIDE LAB ▲' : 'OPEN LAB ▾'}
                 </span>
               </button>
+            )}
+            {hasRecordWall && (
+              <Link
+                to="/record-wall"
+                className="dashboard-edgefinder-cta"
+                style={{ borderColor: 'rgba(0, 229, 255, 0.4)' }}
+              >
+                <span className="dashboard-ef-cta-left">
+                  <span className="dashboard-ef-cta-icon" aria-hidden="true">🏛️</span>
+                  <span className="dashboard-ef-cta-copy">
+                    <span className="dashboard-ef-cta-title-row">
+                      <span className="dashboard-ef-cta-title font-mono">VERIFIED TRADE RECORD WALL</span>
+                      <span className="dashboard-ef-cta-pill font-mono" style={{ borderColor: 'rgba(0, 229, 255, 0.5)', color: '#00e5ff' }}>
+                        {recordWallData?.publishedDayCount ?? 0} VERIFIED DAYS
+                      </span>
+                    </span>
+                    <span className="dashboard-ef-cta-sub">
+                      Daily audited list of all published trades, realized R outcomes, and superseded signals — downloadable CSV ledger
+                    </span>
+                  </span>
+                </span>
+                <span className="dashboard-ef-cta-action font-mono" style={{ color: '#00e5ff' }}>
+                  VIEW RECORD WALL <span className="dashboard-ef-cta-arrow" aria-hidden="true">→</span>
+                </span>
+              </Link>
             )}
           </div>
         )}

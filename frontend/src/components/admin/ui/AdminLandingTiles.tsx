@@ -665,6 +665,37 @@ export const AdminLandingTiles: React.FC<AdminLandingTilesProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Tile: Daily Published Ledger & Record Wall */}
+          <div
+            className="console-tile vault-card"
+            style={{ '--tile-accent': '#00e5ff', '--tile-glow': 'rgba(0, 229, 255, 0.15)' } as React.CSSProperties}
+            onClick={() => onNavigateTab('daily_ledger')}
+          >
+            <div>
+              <div className="console-tile-top font-mono">
+                <div className="console-tile-icon-wrap" style={{ borderColor: '#00e5ff' }}>📜</div>
+                <div className="console-tile-tag-wrap">
+                  <span className="console-tile-category">LEDGER &amp; WALL</span>
+                  <span className="console-tile-stat-badge">CSV / Public Wall</span>
+                </div>
+              </div>
+              <div className="console-tile-body" style={{ marginTop: '14px' }}>
+                <h3 className="console-tile-title">
+                  <span>Daily Trade Ledger &amp; Record Wall</span>
+                  <span>→</span>
+                </h3>
+                <p className="console-tile-desc">
+                  Daily audit of all published trades, outcomes, and superseded signals with CSV/JSON downloads and one-click Record Wall publishing.
+                </p>
+              </div>
+            </div>
+            <div className="console-tile-footer font-mono">
+              <button type="button" className="console-tile-launch-btn" style={{ color: '#00e5ff' }}>
+                Open Daily Ledger →
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

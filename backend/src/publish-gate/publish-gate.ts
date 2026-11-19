@@ -156,7 +156,7 @@ export async function executePublishRun(
           s => s.instrument === instrument && (s.strategy_id || 'sentinel_v2') === strategyId
         ) || null;
         
-        const currentPrice = await getLiveCurrentPrice(instrument);
+        const currentPrice = await getLiveCurrentPrice(instrument, true);
         const candles = await getLiveCandles(instrument, '15m', 20);
         const atr14 = candles.length > 0 ? computeATR(candles, 14) : 3.0;
         
