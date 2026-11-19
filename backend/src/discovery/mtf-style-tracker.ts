@@ -10,7 +10,7 @@ import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails, prefetchLiveQuot
 import {
   getCurrentKillzone,
   getETTradingDayAndSession,
-  isPreCutoffScalpTrade,
+  isPreCutoffMtfTrade,
   isTradingSessionActive,
   isWeekendTrade,
   mapTimestampToKillzone
@@ -1532,7 +1532,7 @@ export async function syncMtfSetupsAndGetLiveBoard(
       );
 
   const pastSetups = pastRows
-    .filter((r) => !isWeekendTrade(r) && !isPreCutoffScalpTrade(r))
+    .filter((r) => !isWeekendTrade(r) && !isPreCutoffMtfTrade(r))
     .map(rowToMtfSetup);
 
   return {
@@ -1636,7 +1636,7 @@ export async function getMtfCalendarOutcomes(): Promise<any[]> {
       time_entered: r.entry_triggered_at || r.filled_at,
       time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
     };
-    return !isWeekendTrade(candidate) && !isPreCutoffScalpTrade(candidate);
+    return !isWeekendTrade(candidate) && !isPreCutoffMtfTrade(candidate);
   });
 
   return rows.map((r) => {
@@ -1748,7 +1748,7 @@ export async function getTradingStyleComparisonReport(): Promise<{
       time_entered: r.entry_triggered_at || r.filled_at,
       time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
     };
-    return !isWeekendTrade(candidate) && !isPreCutoffScalpTrade(candidate);
+    return !isWeekendTrade(candidate) && !isPreCutoffMtfTrade(candidate);
   });
 
   const normalizedMtfRows = mtfRows.map((r) => ({

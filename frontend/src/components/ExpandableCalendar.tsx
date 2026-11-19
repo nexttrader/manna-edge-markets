@@ -18,7 +18,7 @@ import {
   getTradeStyleCategory,
   getETTradingDayAndSession,
   isHiddenCalendarMonthTrade,
-  isPreCutoffScalpTrade,
+  isPreCutoffMtfTrade,
   isWeekendTrade,
   useFeesToggle,
   type ExitProfile,
@@ -279,7 +279,7 @@ export function ExpandableCalendar({
   };
 
   // Combine core Intraday outcomes with resolved/runner Scalp & Swing outcomes
-  // (excluding weekend trades, pre-alignment Scalping records before 2026-11-19T16:15Z, and Aug-Oct 2026 calendar display)
+  // (excluding weekend trades, pre-alignment Scalping & Swing records before 2026-11-19T16:15Z, and Aug-Oct 2026 calendar display)
   const { combinedOutcomes, styleCounts } = useMemo(() => {
     const taggedIntraday = outcomes.map(o => ({
       ...o,
@@ -287,7 +287,7 @@ export function ExpandableCalendar({
     }));
     const rawMerged: Outcome[] = enableStyleToggle ? [...taggedIntraday, ...mtfOutcomes] : taggedIntraday;
     const merged: Outcome[] = rawMerged.filter(
-      o => !isWeekendTrade(o) && !isPreCutoffScalpTrade(o) && !isHiddenCalendarMonthTrade(o)
+      o => !isWeekendTrade(o) && !isPreCutoffMtfTrade(o) && !isHiddenCalendarMonthTrade(o)
     );
     const counts = { intraday: 0, scalp: 0, swing: 0, all: 0 };
 

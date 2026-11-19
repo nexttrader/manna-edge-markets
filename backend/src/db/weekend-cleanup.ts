@@ -1,7 +1,9 @@
 import { queryDb } from './database';
 import {
+  isPreCutoffMtfTrade,
   isPreCutoffScalpTrade,
   isWeekendTrade,
+  MTF_ALIGNMENT_START_ISO,
   SCALP_TRACKING_START_ISO
 } from '../scheduler/killzone-mapper';
 
@@ -146,26 +148,40 @@ export async function purgeWeekendTradesFromDb(): Promise<WeekendCleanupResult> 
   };
 }
 
-/**
- * Removes all historical Scalping (`SCALP` / `manna_scalper`) trade records before
- * `SCALP_TRACKING_START_ISO` (`2026-11-19T16:15:00.000Z`) or with legacy
- * pre-alignment `mtf_isolated_desk` metadata while keeping post-alignment Manna SnD
- * Scalping trades intact.
- */
-export async function purgePreCutoffScalpTradesFromDb(
-  cutoff: string = SCALP_TRACKING_START_ISO
-): Promise<{ scalpMtfRemoved: number; scalpOutcomesRemoved: number }> {
+export interface PreCutoffMtfCleanupResult {
+  scalpMtfRemoved: number;
+  swingMtfRemoved: number;
+  mtfRemoved: number;
+  scalpOutcomesRemoved: number;
+  swingOutcomesRemoved: number;
+  totalRemoved: number;
+}
+
+async function purgePreCutoffRows(
+  cutoff: string,
+  includeSwing: boolean
+): Promise<PreCutoffMtfCleanupResult> {
   let scalpMtfRemoved = 0;
+  let swingMtfRemoved = 0;
   let scalpOutcomesRemoved = 0;
+  let swingOutcomesRemoved = 0;
+
+  const predicate = includeSwing ? isPreCutoffMtfTrade : isPreCutoffScalpTrade;
+  const mtfWhere = includeSwing
+    ? `WHERE trading_style IN ('SCALP', 'SWING') OR strategy_id IN ('manna_scalper', 'manna_swing')`
+    : `WHERE trading_style = 'SCALP' OR strategy_id = 'manna_scalper'`;
+  const outcomesWhere = includeSwing
+    ? `WHERE strategy_id IN ('manna_scalper', 'manna_swing')`
+    : `WHERE strategy_id = 'manna_scalper'`;
 
   try {
-    const mtfScalpRows = await queryDb<any>(
+    const mtfRows = await queryDb<any>(
       `SELECT id, trading_style, strategy_id, created_at, updated_at, resolved_at, filled_at, signal_state, metadata
        FROM mtf_style_setups
-       WHERE trading_style = 'SCALP' OR strategy_id = 'manna_scalper'`
+       ${mtfWhere}`
     );
-    for (const r of mtfScalpRows) {
-      if (isPreCutoffScalpTrade({
+    for (const r of mtfRows) {
+      if (predicate({
         trading_style: r.trading_style,
         strategy_id: r.strategy_id,
         metadata: r.metadata,
@@ -178,7 +194,9 @@ export async function purgePreCutoffScalpTradesFromDb(
         } catch {
           // Table may not exist yet
         }
-        scalpMtfRemoved++;
+        const isSwing = String(r.trading_style || '').toUpperCase() === 'SWING' || String(r.strategy_id || '').toLowerCase() === 'manna_swing';
+        if (isSwing) swingMtfRemoved++;
+        else scalpMtfRemoved++;
       }
     }
   } catch {
@@ -186,28 +204,65 @@ export async function purgePreCutoffScalpTradesFromDb(
   }
 
   try {
-    const legacyScalpOutcomes = await queryDb<any>(
-      `SELECT id, setup_id, strategy_id, execution_time, created_at FROM outcomes WHERE strategy_id = 'manna_scalper'`
+    const legacyOutcomes = await queryDb<any>(
+      `SELECT id, setup_id, strategy_id, execution_time, created_at FROM outcomes ${outcomesWhere}`
     );
-    for (const o of legacyScalpOutcomes) {
-      if (isPreCutoffScalpTrade({
+    for (const o of legacyOutcomes) {
+      if (predicate({
         strategy_id: o.strategy_id,
         time_signaled: o.created_at,
         time_exited: o.execution_time || o.created_at
       }, cutoff)) {
         await queryDb(`DELETE FROM outcomes WHERE id = ?`, [o.id]);
-        scalpOutcomesRemoved++;
+        if (String(o.strategy_id || '').toLowerCase() === 'manna_swing') swingOutcomesRemoved++;
+        else scalpOutcomesRemoved++;
       }
     }
   } catch {
     // Table may not exist yet
   }
 
-  if (scalpMtfRemoved + scalpOutcomesRemoved > 0) {
+  const mtfRemoved = scalpMtfRemoved + swingMtfRemoved;
+  const totalRemoved = mtfRemoved + scalpOutcomesRemoved + swingOutcomesRemoved;
+  if (totalRemoved > 0) {
     console.log(
-      `🧹 Purged pre-${cutoff} Scalping records: mtf_style_setups=${scalpMtfRemoved}, outcomes=${scalpOutcomesRemoved}`
+      `🧹 Purged pre-${cutoff} MTF records: scalpMtf=${scalpMtfRemoved}, swingMtf=${swingMtfRemoved}, scalpOutcomes=${scalpOutcomesRemoved}, swingOutcomes=${swingOutcomesRemoved}`
     );
   }
 
-  return { scalpMtfRemoved, scalpOutcomesRemoved };
+  return {
+    scalpMtfRemoved,
+    swingMtfRemoved,
+    mtfRemoved,
+    scalpOutcomesRemoved,
+    swingOutcomesRemoved,
+    totalRemoved
+  };
+}
+
+/**
+ * Removes historical Scalping (`SCALP` / `manna_scalper`) and Swing (`SWING` / `manna_swing`)
+ * trade records before `MTF_ALIGNMENT_START_ISO` (`2026-11-19T16:15:00.000Z`) or with legacy
+ * pre-alignment `mtf_isolated_desk` metadata, while leaving Intraday records untouched.
+ */
+export async function purgePreCutoffMtfTradesFromDb(
+  cutoff: string = MTF_ALIGNMENT_START_ISO
+): Promise<PreCutoffMtfCleanupResult> {
+  return purgePreCutoffRows(cutoff, true);
+}
+
+/**
+ * Removes historical Scalping (`SCALP` / `manna_scalper`) trade records before
+ * `SCALP_TRACKING_START_ISO` (`2026-11-19T16:15:00.000Z`) or with legacy
+ * pre-alignment `mtf_isolated_desk` metadata while keeping post-alignment Manna SnD
+ * Scalping trades intact.
+ */
+export async function purgePreCutoffScalpTradesFromDb(
+  cutoff: string = SCALP_TRACKING_START_ISO
+): Promise<{ scalpMtfRemoved: number; scalpOutcomesRemoved: number }> {
+  const res = await purgePreCutoffRows(cutoff, false);
+  return {
+    scalpMtfRemoved: res.scalpMtfRemoved,
+    scalpOutcomesRemoved: res.scalpOutcomesRemoved
+  };
 }

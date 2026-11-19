@@ -13,12 +13,17 @@ import {
   getETTradingDayAndSession,
   isForexMarketOpen,
   isFuturesMarketOpen,
+  isPreCutoffMtfTrade,
   isPreCutoffScalpTrade,
   isTradingSessionActive,
   isWeekendTrade,
   mapTimestampToKillzone,
 } from '../scheduler/killzone-mapper';
-import { purgePreCutoffScalpTradesFromDb, purgeWeekendTradesFromDb } from '../db/weekend-cleanup';
+import {
+  purgePreCutoffMtfTradesFromDb,
+  purgePreCutoffScalpTradesFromDb,
+  purgeWeekendTradesFromDb,
+} from '../db/weekend-cleanup';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 
 async function runTests() {
@@ -229,9 +234,9 @@ async function runTests() {
 
   console.log('✅ Test 4: Weekend DB cleanup & recomputed results verified');
 
-  // 5. Pre-Manna-SnD-alignment Scalping trade purge (keeps Swing & post-2026-11-19T16:15Z Manna SnD Scalping)
+  // 5. Pre-Manna-SnD-alignment Scalping & Swing trade purge (keeps post-2026-11-19T16:15Z Manna SnD & all Intraday)
   assert.strictEqual(
-    isPreCutoffScalpTrade({
+    isPreCutoffMtfTrade({
       trading_style: 'SCALP',
       strategy_id: 'manna_scalper',
       time_signaled: '2026-11-18T14:00:00Z',
@@ -241,7 +246,7 @@ async function runTests() {
     '2026-11-18 Scalping trade must be flagged'
   );
   assert.strictEqual(
-    isPreCutoffScalpTrade({
+    isPreCutoffMtfTrade({
       trading_style: 'SCALP',
       strategy_id: 'manna_scalper',
       time_signaled: '2026-11-19T14:00:00Z',
@@ -249,6 +254,27 @@ async function runTests() {
     }),
     true,
     'Pre-alignment 2026-11-19T14:00Z Scalping trade must be flagged'
+  );
+  assert.strictEqual(
+    isPreCutoffMtfTrade({
+      trading_style: 'SWING',
+      strategy_id: 'manna_swing',
+      time_signaled: '2026-11-16T23:24:00Z',
+      time_exited: '2026-11-19T09:14:00Z',
+    }),
+    true,
+    'Pre-alignment Swing trade (Nov 16–19 before 16:15Z) must be flagged'
+  );
+  assert.strictEqual(
+    isPreCutoffMtfTrade({
+      trading_style: 'SWING',
+      strategy_id: 'manna_swing',
+      metadata: JSON.stringify({ source: 'mtf_isolated_desk' }),
+      time_signaled: '2026-11-19T16:30:00Z',
+      time_exited: '2026-11-19T16:45:00Z',
+    }),
+    true,
+    'Legacy mtf_isolated_desk Swing trade must be flagged regardless of timestamp'
   );
   assert.strictEqual(
     isPreCutoffScalpTrade({
@@ -259,10 +285,10 @@ async function runTests() {
       time_exited: '2026-11-19T16:45:00Z',
     }),
     true,
-    'Legacy mtf_isolated_desk Scalping trade must be flagged regardless of timestamp'
+    'Legacy mtf_isolated_desk Scalping trade must be flagged by isPreCutoffScalpTrade'
   );
   assert.strictEqual(
-    isPreCutoffScalpTrade({
+    isPreCutoffMtfTrade({
       trading_style: 'SCALP',
       strategy_id: 'manna_scalper',
       metadata: JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }),
@@ -273,17 +299,37 @@ async function runTests() {
     'Post-alignment Manna SnD Scalping trade must be preserved'
   );
   assert.strictEqual(
-    isPreCutoffScalpTrade({
+    isPreCutoffMtfTrade({
       trading_style: 'SWING',
       strategy_id: 'manna_swing',
-      time_signaled: '2026-10-12T14:00:00Z',
-      time_exited: '2026-10-12T16:00:00Z',
+      metadata: JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }),
+      time_signaled: '2026-11-19T16:25:00Z',
+      time_exited: '2026-11-19T18:00:00Z',
     }),
     false,
-    'Swing trades before cutoff must NOT be flagged'
+    'Post-alignment Manna SnD Swing trade must be preserved'
+  );
+  assert.strictEqual(
+    isPreCutoffMtfTrade({
+      trading_style: 'INTRADAY',
+      strategy_id: 'manna_snd',
+      time_signaled: '2026-10-09T13:00:00Z',
+      time_exited: '2026-10-09T16:00:00Z',
+    }),
+    false,
+    'Intraday trades before cutoff must NEVER be flagged'
+  );
+  assert.strictEqual(
+    isPreCutoffMtfTrade({
+      strategy_id: 'sentinel_v2',
+      time_signaled: '2026-11-18T13:00:00Z',
+      time_exited: '2026-11-18T16:00:00Z',
+    }),
+    false,
+    'Intraday sentinel_v2 trades must NEVER be flagged'
   );
 
-  // Add pre-alignment 2026-11-19T14:00Z scalp, legacy mtf_isolated_desk scalp, post-alignment Manna SnD scalp, and historical SWING trade
+  // Add pre-alignment SCALP, legacy mtf_isolated_desk SCALP, pre-alignment SWING, plus post-alignment Manna SnD SCALP & SWING
   await queryDb(
     `INSERT INTO mtf_style_setups (id, trading_style, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, metadata, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -295,25 +341,43 @@ async function runTests() {
     ['mtf_scalp_legacy_meta', 'SCALP', '15M', '5M', 'NQ', 'futures', 'long', 21000, 21005, 21002, 20980, 21046, 21068, 'resolved', 'sl_hit', -1.0, '2026-11-19T16:20:00Z', '2026-11-19T16:35:00Z', JSON.stringify({ source: 'mtf_isolated_desk' }), '2026-11-19T16:18:00Z', '2026-11-19T16:35:00Z']
   );
   await queryDb(
+    `INSERT INTO mtf_style_setups (id, trading_style, swing_mode, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['mtf_swing_pre_old', 'SWING', 'd1_h4', '1D', '4H', 'EUR/USD', 'forex', 'long', 1.08, 1.081, 1.0805, 1.077, 1.0875, 1.091, 'resolved', 'tp1_hit', 1.6, '2026-11-16T23:30:00Z', '2026-11-18T10:00:00Z', JSON.stringify({ source: 'mtf_isolated_desk' }), '2026-11-16T23:24:00Z', '2026-11-18T10:00:00Z']
+  );
+  await queryDb(
+    `INSERT INTO mtf_style_setups (id, trading_style, swing_mode, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['mtf_swing_pre_today', 'SWING', 'h4_h1', '4H', '1H', 'EUR/GBP', 'forex', 'short', 0.8342, 0.8345, 0.8343, 0.8365, 0.8299, 0.8277, 'resolved', 'sl_hit', -1.0, '2026-11-17T08:00:00Z', '2026-11-19T09:14:00Z', JSON.stringify({ source: 'mtf_isolated_desk' }), '2026-11-16T23:24:00Z', '2026-11-19T09:14:00Z']
+  );
+  await queryDb(
     `INSERT INTO mtf_style_setups (id, trading_style, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, metadata, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ['mtf_scalp_post_aligned', 'SCALP', '15M', '5M', 'ES', 'futures', 'long', 5910, 5912, 5911, 5905, 5923, 5929, 'resolved', 'tp1_hit', 1.6, '2026-11-19T16:28:00Z', '2026-11-19T16:50:00Z', JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }), '2026-11-19T16:25:00Z', '2026-11-19T16:50:00Z']
   );
   await queryDb(
-    `INSERT INTO mtf_style_setups (id, trading_style, swing_mode, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['mtf_swing_old', 'SWING', 'd1_h4', '1D', '4H', 'EUR/USD', 'forex', 'long', 1.08, 1.081, 1.0805, 1.077, 1.0875, 1.091, 'resolved', 'tp1_hit', 1.6, '2026-10-12T14:00:00Z', '2026-10-13T10:00:00Z', '2026-10-12T13:00:00Z', '2026-10-13T10:00:00Z']
+    `INSERT INTO mtf_style_setups (id, trading_style, swing_mode, context_tf, entry_tf, instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid, stop, tp1, tp2, signal_state, outcome_type, realized_r, entry_triggered_at, resolved_at, metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['mtf_swing_post_aligned', 'SWING', 'd1_h4', '1D', '4H', 'GBP/USD', 'forex', 'long', 1.2600, 1.2610, 1.2605, 1.2560, 1.2695, 1.2740, 'resolved', 'tp1_hit', 1.6, '2026-11-19T16:30:00Z', '2026-11-19T18:00:00Z', JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }), '2026-11-19T16:25:00Z', '2026-11-19T18:00:00Z']
   );
 
-  const scalpCleanup = await purgePreCutoffScalpTradesFromDb();
-  assert.strictEqual(scalpCleanup.scalpMtfRemoved, 3, 'Should remove all 3 pre-alignment SCALP trades (mtf_valid, mtf_scalp_pre_today, mtf_scalp_legacy_meta)');
-  const mtfAfterScalpCleanup = await queryDb<any>(`SELECT id FROM mtf_style_setups ORDER BY id`);
+  // Also test purgePreCutoffScalpTradesFromDb backward-compat keeps working for SCALP-only
+  const scalpOnlyCleanup = await purgePreCutoffScalpTradesFromDb();
+  assert.strictEqual(scalpOnlyCleanup.scalpMtfRemoved, 3, 'Should remove 3 pre-alignment SCALP rows (mtf_valid, mtf_scalp_pre_today, mtf_scalp_legacy_meta)');
+
+  const mtfCleanup = await purgePreCutoffMtfTradesFromDb();
+  assert.strictEqual(mtfCleanup.swingMtfRemoved, 2, 'Should remove both pre-alignment SWING rows (mtf_swing_pre_old, mtf_swing_pre_today)');
+  const mtfAfterCleanup = await queryDb<any>(`SELECT id FROM mtf_style_setups ORDER BY id`);
   assert.deepStrictEqual(
-    mtfAfterScalpCleanup.map((r: any) => r.id),
-    ['mtf_scalp_post_aligned', 'mtf_swing_old'],
-    'Must preserve post-alignment Manna SnD SCALP trade and historical SWING trade'
+    mtfAfterCleanup.map((r: any) => r.id),
+    ['mtf_scalp_post_aligned', 'mtf_swing_post_aligned'],
+    'Must preserve post-alignment Manna SnD SCALP & SWING trades'
   );
-  console.log('✅ Test 5: Pre-alignment Scalping purge & post-alignment Manna SnD preservation verified');
+  const intradayAfterCleanup = await queryDb<any>(`SELECT id FROM edge_setups`);
+  assert.strictEqual(intradayAfterCleanup.length, 1, 'Intraday setup must remain untouched');
+  const intradayOutcomesAfterCleanup = await queryDb<any>(`SELECT id FROM outcomes`);
+  assert.strictEqual(intradayOutcomesAfterCleanup.length, 1, 'Intraday outcome must remain untouched');
+  console.log('✅ Test 5: Pre-alignment Scalping & Swing purge + post-alignment & Intraday preservation verified');
   console.log('\n🎉 ALL WEEKEND TRADE GUARD TESTS PASSED!');
 }
 

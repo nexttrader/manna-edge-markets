@@ -316,18 +316,9 @@ export function isWeekendTrade(trade: WeekendCheckableTrade): boolean {
 
 export const SCALP_TRACKING_START_DAY = '2026-11-19';
 export const SCALP_TRACKING_START_ISO = '2026-11-19T16:15:00.000Z';
+export const MTF_ALIGNMENT_START_ISO = SCALP_TRACKING_START_ISO;
 
-/**
- * Excludes historical Scalping trade records before the Manna SnD parameter
- * alignment cutoff (`2026-11-19T16:15:00.000Z`) or with legacy pre-alignment
- * `mtf_isolated_desk` metadata, allowing Scalping calendar tracking cleanly onwards.
- */
-export function isPreCutoffScalpTrade(
-  trade: WeekendCheckableTrade,
-  cutoff: string = SCALP_TRACKING_START_ISO
-): boolean {
-  if (getTradeStyleCategory(trade) !== 'scalp') return false;
-
+function matchesPreCutoffMtfRule(trade: WeekendCheckableTrade, cutoff: string): boolean {
   if (trade.metadata) {
     const metaStr = typeof trade.metadata === 'string'
       ? trade.metadata
@@ -369,6 +360,33 @@ export function isPreCutoffScalpTrade(
   }
 
   return false;
+}
+
+/**
+ * Excludes historical Scalping and Swing trade records before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or with legacy pre-alignment
+ * `mtf_isolated_desk` metadata. Never excludes Intraday trades.
+ */
+export function isPreCutoffMtfTrade(
+  trade: WeekendCheckableTrade,
+  cutoff: string = MTF_ALIGNMENT_START_ISO
+): boolean {
+  const style = getTradeStyleCategory(trade);
+  if (style !== 'scalp' && style !== 'swing') return false;
+  return matchesPreCutoffMtfRule(trade, cutoff);
+}
+
+/**
+ * Excludes historical Scalping trade records before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or with legacy pre-alignment
+ * `mtf_isolated_desk` metadata, allowing Scalping calendar tracking cleanly onwards.
+ */
+export function isPreCutoffScalpTrade(
+  trade: WeekendCheckableTrade,
+  cutoff: string = SCALP_TRACKING_START_ISO
+): boolean {
+  if (getTradeStyleCategory(trade) !== 'scalp') return false;
+  return matchesPreCutoffMtfRule(trade, cutoff);
 }
 
 export const HIDDEN_CALENDAR_YEAR = '2026';

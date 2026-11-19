@@ -306,14 +306,9 @@ export function isWeekendTrade(trade: {
 
 export const SCALP_TRACKING_START_DAY = '2026-11-19';
 export const SCALP_TRACKING_START_ISO = '2026-11-19T16:15:00.000Z';
+export const MTF_ALIGNMENT_START_ISO = SCALP_TRACKING_START_ISO;
 
-/**
- * Returns true if a Scalping trade belongs to before the Manna SnD parameter
- * alignment cutoff (`2026-11-19T16:15:00.000Z`) or carries legacy pre-alignment
- * `mtf_isolated_desk` metadata, so historical pre-alignment scalp records are
- * excluded while live Manna SnD Scalping tracking runs cleanly onwards.
- */
-export function isPreCutoffScalpTrade(trade: {
+export interface PreCutoffTradeLike {
     trading_style?: string | null;
     strategy_id?: string | null;
     metadata?: string | Record<string, any> | null;
@@ -323,11 +318,9 @@ export function isPreCutoffScalpTrade(trade: {
     updated_at?: string | null;
     time_signaled?: string | null;
     created_at?: string | null;
-}, cutoff: string = SCALP_TRACKING_START_ISO): boolean {
-    const style = (trade.trading_style || '').toUpperCase();
-    const strat = (trade.strategy_id || '').toLowerCase();
-    if (style !== 'SCALP' && strat !== 'manna_scalper') return false;
+}
 
+function matchesPreCutoffTimestampOrLegacyMeta(trade: PreCutoffTradeLike, cutoff: string): boolean {
     if (trade.metadata) {
         const metaStr = typeof trade.metadata === 'string'
             ? trade.metadata
@@ -368,6 +361,41 @@ export function isPreCutoffScalpTrade(trade: {
     }
 
     return false;
+}
+
+/**
+ * Returns true if a Scalping or Swing trade belongs to before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or carries legacy pre-alignment
+ * `mtf_isolated_desk` metadata. Never flags Intraday strategies (`manna_snd`, `sentinel_v2`, etc.).
+ */
+export function isPreCutoffMtfTrade(
+    trade: PreCutoffTradeLike,
+    cutoff: string = MTF_ALIGNMENT_START_ISO
+): boolean {
+    const style = (trade.trading_style || '').toUpperCase();
+    const strat = (trade.strategy_id || '').toLowerCase();
+    const isScalp = style === 'SCALP' || strat === 'manna_scalper';
+    const isSwing = style === 'SWING' || strat === 'manna_swing';
+    if (!isScalp && !isSwing) return false;
+
+    return matchesPreCutoffTimestampOrLegacyMeta(trade, cutoff);
+}
+
+/**
+ * Returns true if a Scalping trade belongs to before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or carries legacy pre-alignment
+ * `mtf_isolated_desk` metadata, so historical pre-alignment scalp records are
+ * excluded while live Manna SnD Scalping tracking runs cleanly onwards.
+ */
+export function isPreCutoffScalpTrade(
+    trade: PreCutoffTradeLike,
+    cutoff: string = SCALP_TRACKING_START_ISO
+): boolean {
+    const style = (trade.trading_style || '').toUpperCase();
+    const strat = (trade.strategy_id || '').toLowerCase();
+    if (style !== 'SCALP' && strat !== 'manna_scalper') return false;
+
+    return matchesPreCutoffTimestampOrLegacyMeta(trade, cutoff);
 }
 
 export function getForexReopenTime(now: Date = new Date()): Date {
