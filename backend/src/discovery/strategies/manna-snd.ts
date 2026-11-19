@@ -1,22 +1,27 @@
 import { IStrategyEngine, StrategyMeta } from './strategy-interface';
 import { CandidateSetup, KillzoneInfo, Bias, Candle } from '../types';
-import { getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
+import { aggregateToFourHourCandles, getLiveCandles, getLiveCurrentPrice } from '../yahoo-provider';
 import { computeATR } from '../atr';
 import { 
-  computeConvictionScore,
   computeMannaSndConvictionScore,
   computeLiquidityScore, 
-  computeRMultiple,
-  computeKillzoneTimingScore,
-  computeMultiTimeframeScore,
-  computeLiquidityMagnetScore,
-  computeFVGScore,
-  computeRelativeStrengthScore,
-  computeNewsProximityModifier
+  computeRMultiple
 } from '../scoring';
 
-import { getLogicalStopDistance } from '../stop-loss-rules';
+import { getInstrumentDecimals, getLogicalStopDistance, getTimeframeStopDistance } from '../stop-loss-rules';
 import * as queries from '../../db/queries';
+
+export interface MannaSndTimeframeConfig {
+  htf: '15m' | '1h' | '4h' | '1d';
+  ltf: '5m' | '15m' | '1h' | '4h';
+  htfLabel?: string;
+  ltfLabel?: string;
+  strategyId?: string;
+  tradingStyle?: 'SCALP' | 'INTRADAY' | 'SWING';
+  sourceTag?: string;
+  candleFetcher?: (instrument: string, tf: '1m' | '5m' | '15m' | '1h' | '4h' | '1d', count: number) => Promise<Candle[]>;
+  priceFetcher?: (instrument: string) => Promise<number>;
+}
 
 type CandleType = 'base' | 'leg_up' | 'leg_down';
 
@@ -409,8 +414,29 @@ export class MannaSndStrategy implements IStrategyEngine {
     instruments: string[],
     preCalculatedBiases: Record<string, Bias>
   ): Promise<CandidateSetup[]> {
+    return this.evaluateSetupsForTimeframes(killzone, runId, market, instruments, preCalculatedBiases);
+  }
+
+  public async evaluateSetupsForTimeframes(
+    killzone: KillzoneInfo,
+    runId: string,
+    market: 'futures' | 'forex',
+    instruments: string[],
+    preCalculatedBiases: Record<string, Bias>,
+    tfConfig?: MannaSndTimeframeConfig
+  ): Promise<CandidateSetup[]> {
     const candidates: CandidateSetup[] = [];
     const isHalvedFloor = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
+
+    const isParameterized = Boolean(tfConfig);
+    const htf = tfConfig?.htf || '1h';
+    const ltf = tfConfig?.ltf || '15m';
+    const htfLabel = (tfConfig?.htfLabel || htf).toUpperCase();
+    const ltfLabel = (tfConfig?.ltfLabel || ltf).toUpperCase();
+    const strategyId = tfConfig?.strategyId || this.meta.id;
+    const fetchCandles = tfConfig?.candleFetcher || getLiveCandles;
+    const fetchPrice = tfConfig?.priceFetcher || getLiveCurrentPrice;
+    const minCandles = isParameterized ? 15 : 10;
 
     for (const instrument of instruments) {
       try {
@@ -421,23 +447,27 @@ export class MannaSndStrategy implements IStrategyEngine {
           continue;
         }
 
-        const candles15m = await getLiveCandles(instrument, '15m', 50);
-        const candles1h = await getLiveCandles(instrument, '1h', 120);
-        if (candles15m.length < 10 || candles1h.length < 10) continue;
+        const rawLtf = await fetchCandles(instrument, ltf, ltf === '4h' ? 120 : 50);
+        const rawHtf = await fetchCandles(instrument, htf, 120);
+        const candlesLtf = (ltf === '4h' ? aggregateToFourHourCandles(rawLtf) : rawLtf).slice(-50);
+        const candlesHtf = (htf === '4h' ? aggregateToFourHourCandles(rawHtf) : rawHtf).slice(-120);
+        if (candlesLtf.length < minCandles || candlesHtf.length < minCandles) continue;
 
-        const atr14 = computeATR(candles15m, 14);
-        const currentPrice = await getLiveCurrentPrice(instrument);
+        const atr14 = computeATR(candlesLtf, 14);
+        if (isParameterized && (!atr14 || atr14 <= 0)) continue;
+
+        const currentPrice = await fetchPrice(instrument);
         if (!currentPrice || currentPrice <= 0) continue;
 
-        // 1. Evaluate HTF Curve Location & 15M Trend
-        const curveInfo = this.getCurveLocation(currentPrice, candles1h, atr14);
+        // 1. Evaluate HTF Curve Location & LTF Trend
+        const curveInfo = this.getCurveLocation(currentPrice, candlesHtf, atr14);
         const curveLocation = curveInfo.location;
         const selectedHtfZone = curveInfo.htfZone;
         const htfDemand = curveInfo.htfDemand;
         const htfSupply = curveInfo.htfSupply;
-        const trend15m = this.get15mTrend(candles15m);
+        const trendLtf = this.get15mTrend(candlesLtf);
 
-        // Enforce: Current Price & 15M Trend MUST be strictly inside the 1H HTF Curve Channel
+        // Enforce: Current Price & LTF Trend MUST be strictly inside the HTF Curve Channel
         if (currentPrice < htfDemand.distal || currentPrice > htfSupply.distal) {
           continue;
         }
@@ -447,327 +477,217 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         if (preCalculatedBiases && preCalculatedBiases[instrument]) {
           allowedAction = preCalculatedBiases[instrument] === 'long' ? 'BUY' : 'SELL';
-        } else if (curveLocation === 'low' && (trend15m === 'up' || trend15m === 'sideways')) {
+        } else if (curveLocation === 'low' && (trendLtf === 'up' || trendLtf === 'sideways')) {
           allowedAction = 'BUY';
-        } else if (curveLocation === 'high' && (trend15m === 'down' || trend15m === 'sideways')) {
+        } else if (curveLocation === 'high' && (trendLtf === 'down' || trendLtf === 'sideways')) {
           allowedAction = 'SELL';
-        } else if (curveLocation === 'middle' && trend15m === 'up') {
+        } else if (curveLocation === 'middle' && trendLtf === 'up') {
           allowedAction = 'BUY';
-        } else if (curveLocation === 'middle' && trend15m === 'down') {
+        } else if (curveLocation === 'middle' && trendLtf === 'down') {
           allowedAction = 'SELL';
         } else {
-          // Middle curve + Sideways: Check recent 15M price momentum
-          const recent15m = candles15m.slice(-10);
-          const firstClose = recent15m[0].close;
+          // Middle curve + Sideways: Check recent LTF price momentum
+          const recentLtf = candlesLtf.slice(-10);
+          const firstClose = recentLtf[0].close;
           allowedAction = currentPrice >= firstClose ? 'BUY' : 'SELL';
         }
 
-        // 3. Search for 15M Imbalance Zone (STRICTLY BETWEEN 1H DEMAND & 1H SUPPLY CURVES)
+        // 3. Search for LTF Imbalance Zone (STRICTLY BETWEEN HTF DEMAND & HTF SUPPLY CURVES)
         // Enforce institutional imbalance: Leg-Out departure > 1.0x Base Range
-        const m15Zones = this.findZonesWithIndex(candles15m);
+        const ltfZones = this.findZonesWithIndex(candlesLtf);
+        const isLong = allowedAction === 'BUY';
 
-        if (allowedAction === 'BUY') {
-          // 15M Entry Zone MUST sit strictly BETWEEN 1H Demand distal and 1H Supply proximal boundaries
+        let selectedZone: Zone | null = null;
+        if (isLong) {
+          // LTF Entry Zone MUST sit strictly BETWEEN HTF Demand distal and HTF Supply proximal boundaries
           // and MUST be fresh (no subsequent candles cutting through proximal line)
-          const demandInCurve = m15Zones.filter(z => 
-            z.type === 'demand' && 
+          const demandInCurve = ltfZones.filter(z =>
+            z.type === 'demand' &&
             z.proximal <= currentPrice &&
             z.distal >= htfDemand.distal &&
             z.proximal <= htfSupply.proximal &&
-            this.isFreshZone(z, candles15m, z.index)
+            this.isFreshZone(z, candlesLtf, z.index)
           );
 
-          // 15M Entry Zone Selection:
-          // 1. Primary: Look for fresh 15M demand zone in open curve
-          let selectedZone: Zone | null = null;
           if (demandInCurve.length > 0) {
             selectedZone = demandInCurve.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, demandInCurve[0]);
           } else {
-            // 2. 1H Fallback Refinement: Search for a 15M demand zone nested INSIDE the 1H demand area [htfDemand.distal, htfDemand.proximal]
-            const nested15mDemand = m15Zones.filter(z =>
+            // HTF Fallback Refinement: Search for an LTF demand zone nested INSIDE the HTF demand area [htfDemand.distal, htfDemand.proximal]
+            const nestedDemand = ltfZones.filter(z =>
               z.type === 'demand' &&
               z.proximal <= currentPrice &&
               z.distal >= htfDemand.distal &&
               z.proximal <= htfDemand.proximal
             );
-            if (nested15mDemand.length > 0) {
-              selectedZone = nested15mDemand.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, nested15mDemand[0]);
+            if (nestedDemand.length > 0) {
+              selectedZone = nestedDemand.reduce((closest, z) => z.proximal > closest.proximal ? z : closest, nestedDemand[0]);
             }
           }
-
-          // If neither an open-curve 15M zone nor a nested 15M zone in the 1H demand area qualifies, skip this session
-          if (!selectedZone) continue;
-          const zone: Zone = selectedZone;
-
-          const bias: Bias = 'long';
-          const entry_zone_mid = zone.proximal;
-          const isJpy = instrument.includes('JPY');
-          const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
-          const rawStop = zone.distal - distalBuffer;
-          const rawRisk = Math.abs(entry_zone_mid - rawStop);
-          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor);
-          const stop = entry_zone_mid - risk;
-          if (risk <= 0) continue;
-
-          // Use decimals early so TPs are derived from the same rounded stop that gets published,
-          // guaranteeing that displayed TP1 = entry + 2×(entry - stop) and TP2 = entry + 3×(entry - stop)
-          const decimals = market === 'futures' ? 2 : 5;
-          const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
-          const roundedStop  = Number(stop.toFixed(decimals));
-          const publishedRisk = Math.abs(roundedEntry - roundedStop);
-
-          const tp1 = roundedEntry + (publishedRisk * 2.0); // 2:1 Minimum RR
-          const tp2 = roundedEntry + (publishedRisk * 3.0); // 3:1 RR
-
-          const ez_mid = Number(zone.proximal.toFixed(decimals));
-          const ez_low = Number(zone.distal.toFixed(decimals));
-          const ez_high = Number(zone.proximal.toFixed(decimals));
-
-          // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
-          if (ez_low < htfDemand.distal || ez_high > htfSupply.proximal) continue;
-
-          // Discard setup if current market price has breached Stop Loss, already reached TP1, or is excessively displaced (> 6x ATR)
-          if (currentPrice <= stop || currentPrice >= tp1 || (currentPrice - ez_high) > (atr14 * 6)) continue;
-
-          const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
-          const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
-
-          const supportResistanceStrength = curveLocation === 'low' ? 0.96 : curveLocation === 'middle' ? 0.85 : 0.70;
-          const structureAlignment = trend15m === 'up' ? 0.95 : trend15m === 'sideways' ? 0.86 : 0.72;
-          const lastVol = candles15m[candles15m.length - 1].volume;
-          const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
-          const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
-          const zoneWidth = Math.abs(zone.proximal - zone.distal);
-          const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
-
-          // 6 New Institutional Factors
-          const now = new Date();
-          const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
-          const killzoneTiming = computeKillzoneTimingScore(hourET);
-          const multiTimeframeAlignment = computeMultiTimeframeScore(candles1h, candles15m, bias);
-          const liquidityPoolMagnet = computeLiquidityMagnetScore(candles15m, tp1, bias);
-          const fvgDisbalance = computeFVGScore(candles15m, bias);
-          const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
-          const newsProximityModifier = computeNewsProximityModifier(now);
-
-          const conviction_score = computeMannaSndConvictionScore({
-            curveLocation,
-            trend15m,
-            bias,
-            instrument,
-            market,
-            hourET,
-            formation: zone.formation,
-            tp1,
-            candles1h,
-            candles15m,
-            now
-          });
-
-          const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
-          const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
-
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Demand Curve. Limit Buy at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
-
-          candidates.push({
-            instrument,
-            market,
-            created_by_run: runId,
-            killzone_origin: killzone.killzone,
-            killzone_origin_at: killzone.boundaryUTC,
-            bias,
-            entry_zone_low: ez_low,
-            entry_zone_high: ez_high,
-            entry_zone_mid: ez_mid,
-            stop: Number(stop.toFixed(decimals)),
-            tp1: Number(tp1.toFixed(decimals)),
-            tp2: Number(tp2.toFixed(decimals)),
-            r_multiple_1,
-            r_multiple_2,
-            conviction_score,
-            liquidity_score,
-            strategy_id: this.meta.id,
-            strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({
-              source: `yahoo_finance_${market}`,
-              atr14,
-              htf: '1H',
-              ltf: '15M',
-              selection_rationale,
-              strategy_name: this.meta.name,
-              curveLocation,
-              trend15m,
-              formation: zone.formation,
-              htf_demand_proximal: htfDemand?.proximal ? Number(htfDemand.proximal.toFixed(decimals)) : undefined,
-              htf_demand_distal: htfDemand?.distal ? Number(htfDemand.distal.toFixed(decimals)) : undefined,
-              htf_demand_formation: htfDemand?.formation,
-              htf_demand_base_time: htfDemand?.timestamp,
-              htf_supply_proximal: htfSupply?.proximal ? Number(htfSupply.proximal.toFixed(decimals)) : undefined,
-              htf_supply_distal: htfSupply?.distal ? Number(htfSupply.distal.toFixed(decimals)) : undefined,
-              htf_supply_formation: htfSupply?.formation,
-              htf_supply_base_time: htfSupply?.timestamp,
-              htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
-              htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
-              htf_curve_type: selectedHtfZone?.type || 'demand',
-              htf_curve_base_time: selectedHtfZone?.timestamp,
-              entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
-              entry_zone_distal: Number(zone.distal.toFixed(decimals)),
-              entry_zone_formation: zone.formation,
-              entry_zone_base_time: zone.timestamp
-            })
-          });
-        } else if (allowedAction === 'SELL') {
-          // 15M Entry Zone MUST sit strictly BETWEEN 1H Supply distal and 1H Demand proximal boundaries
+        } else {
+          // LTF Entry Zone MUST sit strictly BETWEEN HTF Supply distal and HTF Demand proximal boundaries
           // and MUST be fresh (no subsequent candles cutting through proximal line)
-          const supplyInCurve = m15Zones.filter(z => 
-            z.type === 'supply' && 
+          const supplyInCurve = ltfZones.filter(z =>
+            z.type === 'supply' &&
             z.proximal >= currentPrice &&
             z.distal <= htfSupply.distal &&
             z.proximal >= htfDemand.proximal &&
-            this.isFreshZone(z, candles15m, z.index)
+            this.isFreshZone(z, candlesLtf, z.index)
           );
 
-          // 15M Entry Zone Selection:
-          // 1. Primary: Look for fresh 15M supply zone in open curve
-          let selectedZone: Zone | null = null;
           if (supplyInCurve.length > 0) {
             selectedZone = supplyInCurve.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, supplyInCurve[0]);
           } else {
-            // 2. 1H Fallback Refinement: Search for a 15M supply zone nested INSIDE the 1H supply area [htfSupply.proximal, htfSupply.distal]
-            const nested15mSupply = m15Zones.filter(z =>
+            // HTF Fallback Refinement: Search for an LTF supply zone nested INSIDE the HTF supply area [htfSupply.proximal, htfSupply.distal]
+            const nestedSupply = ltfZones.filter(z =>
               z.type === 'supply' &&
               z.proximal >= currentPrice &&
               z.proximal >= htfSupply.proximal &&
               z.distal <= htfSupply.distal
             );
-            if (nested15mSupply.length > 0) {
-              selectedZone = nested15mSupply.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, nested15mSupply[0]);
+            if (nestedSupply.length > 0) {
+              selectedZone = nestedSupply.reduce((closest, z) => z.proximal < closest.proximal ? z : closest, nestedSupply[0]);
             }
           }
-
-          // If neither an open-curve 15M zone nor a nested 15M zone in the 1H supply area qualifies, skip this session
-          if (!selectedZone) continue;
-          const zone: Zone = selectedZone;
-
-          const bias: Bias = 'short';
-          const entry_zone_mid = zone.proximal;
-          const isJpy = instrument.includes('JPY');
-          const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
-          const rawStop = zone.distal + distalBuffer;
-          const rawRisk = Math.abs(rawStop - entry_zone_mid);
-          const risk = getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor);
-          const stop = entry_zone_mid + risk;
-          if (risk <= 0) continue;
-
-          // Use decimals early so TPs are derived from the same rounded stop that gets published,
-          // guaranteeing that displayed TP1 = entry - 2×(stop - entry) and TP2 = entry - 3×(stop - entry)
-          const decimals = market === 'futures' ? 2 : 5;
-          const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
-          const roundedStop  = Number(stop.toFixed(decimals));
-          const publishedRisk = Math.abs(roundedStop - roundedEntry);
-
-          const tp1 = roundedEntry - (publishedRisk * 2.0); // 2:1 Minimum RR
-          const tp2 = roundedEntry - (publishedRisk * 3.0); // 3:1 RR
-
-          const r_multiple_1 = computeRMultiple(entry_zone_mid, tp1, stop, bias);
-          const r_multiple_2 = computeRMultiple(entry_zone_mid, tp2, stop, bias);
-
-          const supportResistanceStrength = curveLocation === 'high' ? 0.96 : curveLocation === 'middle' ? 0.85 : 0.70;
-          const structureAlignment = trend15m === 'down' ? 0.95 : trend15m === 'sideways' ? 0.86 : 0.72;
-          const lastVol = candles15m[candles15m.length - 1].volume;
-          const avgVol = candles15m.reduce((acc, c) => acc + c.volume, 0) / candles15m.length;
-          const volumeProfile = avgVol > 0 ? Math.min(0.98, Math.max(0.65, lastVol / avgVol)) : 0.85;
-          const zoneWidth = Math.abs(zone.proximal - zone.distal);
-          const atrAlignment = atr14 > 0 ? Math.min(0.98, Math.max(0.70, 0.92 - Math.abs((zoneWidth / atr14) - 0.5) * 0.3)) : 0.88;
-
-          // 6 New Institutional Factors
-          const now = new Date();
-          const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
-          const killzoneTiming = computeKillzoneTimingScore(hourET);
-          const multiTimeframeAlignment = computeMultiTimeframeScore(candles1h, candles15m, bias);
-          const liquidityPoolMagnet = computeLiquidityMagnetScore(candles15m, tp1, bias);
-          const fvgDisbalance = computeFVGScore(candles15m, bias);
-          const relativeStrength = computeRelativeStrengthScore(candles15m, bias);
-          const newsProximityModifier = computeNewsProximityModifier(now);
-
-          const conviction_score = computeMannaSndConvictionScore({
-            curveLocation,
-            trend15m,
-            bias,
-            instrument,
-            market,
-            hourET,
-            formation: zone.formation,
-            tp1,
-            candles1h,
-            candles15m,
-            now
-          });
-
-          const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
-          const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
-
-          const ez_mid = Number(zone.proximal.toFixed(decimals));
-          // For a SUPPLY zone: proximal = bottom of the zone (limit sell entry), distal = top (above proximal, zone ceiling/stop boundary)
-          const ez_low = Number(zone.proximal.toFixed(decimals));  // proximal = entry lower boundary
-          const ez_high = Number(zone.distal.toFixed(decimals));   // distal = zone top (above entry, near stop)
-
-          // Enforce: Entry Zone MUST sit strictly BETWEEN 1H Demand floor and 1H Supply ceiling
-          if (ez_high > htfSupply.distal || ez_low < htfDemand.proximal) continue;
-
-          // Discard setup if current market price has breached Stop Loss, already reached TP1, or is excessively displaced
-          if (currentPrice >= stop || currentPrice <= tp1 || (ez_low - currentPrice) > (atr14 * 6)) continue;
-
-          const selection_rationale = `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trend15m.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H Supply Curve. Limit Sell at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
-
-          candidates.push({
-            instrument,
-            market,
-            created_by_run: runId,
-            killzone_origin: killzone.killzone,
-            killzone_origin_at: killzone.boundaryUTC,
-            bias,
-            entry_zone_low: ez_low,   // proximal: limit sell boundary (lower edge of supply zone)
-            entry_zone_high: ez_high, // distal: upper edge of supply zone (stop reference)
-            entry_zone_mid: ez_mid,
-            stop: Number(stop.toFixed(decimals)),
-            tp1: Number(tp1.toFixed(decimals)),
-            tp2: Number(tp2.toFixed(decimals)),
-            r_multiple_1,
-            r_multiple_2,
-            conviction_score,
-            liquidity_score,
-            strategy_id: this.meta.id,
-            strategy_tier: this.meta.tier,
-            metadata: JSON.stringify({
-              source: `yahoo_finance_${market}`,
-              atr14,
-              htf: '1H',
-              ltf: '15M',
-              selection_rationale,
-              strategy_name: this.meta.name,
-              curveLocation,
-              trend15m,
-              formation: zone.formation,
-              htf_demand_proximal: htfDemand?.proximal ? Number(htfDemand.proximal.toFixed(decimals)) : undefined,
-              htf_demand_distal: htfDemand?.distal ? Number(htfDemand.distal.toFixed(decimals)) : undefined,
-              htf_demand_formation: htfDemand?.formation,
-              htf_demand_base_time: htfDemand?.timestamp,
-              htf_supply_proximal: htfSupply?.proximal ? Number(htfSupply.proximal.toFixed(decimals)) : undefined,
-              htf_supply_distal: htfSupply?.distal ? Number(htfSupply.distal.toFixed(decimals)) : undefined,
-              htf_supply_formation: htfSupply?.formation,
-              htf_supply_base_time: htfSupply?.timestamp,
-              htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
-              htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
-              htf_curve_type: selectedHtfZone?.type || 'supply',
-              htf_curve_base_time: selectedHtfZone?.timestamp,
-              entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
-              entry_zone_distal: Number(zone.distal.toFixed(decimals)),
-              entry_zone_formation: zone.formation,
-              entry_zone_base_time: zone.timestamp
-            })
-          });
         }
+
+        // If neither an open-curve LTF zone nor a nested LTF zone in the HTF area qualifies, skip this session
+        if (!selectedZone) continue;
+        const zone: Zone = selectedZone;
+
+        const bias: Bias = isLong ? 'long' : 'short';
+        const entry_zone_mid = zone.proximal;
+        const isJpy = instrument.includes('JPY');
+        const distalBuffer = market === 'futures' ? (atr14 * 0.4) : isJpy ? (atr14 * 0.40 + 0.03) : (atr14 * 0.25);
+        const rawStop = isLong ? zone.distal - distalBuffer : zone.distal + distalBuffer;
+        const rawRisk = Math.abs(isLong ? entry_zone_mid - rawStop : rawStop - entry_zone_mid);
+        const risk = ltf === '15m'
+          ? getLogicalStopDistance(instrument, atr14, rawRisk, market, isHalvedFloor)
+          : getTimeframeStopDistance(instrument, atr14, rawRisk, market, ltf);
+        const stop = isLong ? entry_zone_mid - risk : entry_zone_mid + risk;
+        if (risk <= 0) continue;
+
+        // Use decimals early so TPs are derived from the same rounded stop that gets published,
+        // guaranteeing that displayed TP1 = entry ± 2×(entry - stop) and TP2 = entry ± 3×(entry - stop)
+        const decimals = isParameterized
+          ? getInstrumentDecimals(instrument, market)
+          : (market === 'futures' ? 2 : 5);
+        const roundedEntry = Number(entry_zone_mid.toFixed(decimals));
+        const roundedStop = Number(stop.toFixed(decimals));
+        const publishedRisk = Math.abs(roundedEntry - roundedStop);
+        if (isParameterized && publishedRisk <= 0) continue;
+
+        const tp1 = isLong ? roundedEntry + (publishedRisk * 2.0) : roundedEntry - (publishedRisk * 2.0);
+        const tp2 = isLong ? roundedEntry + (publishedRisk * 3.0) : roundedEntry - (publishedRisk * 3.0);
+        const roundedTp1 = Number(tp1.toFixed(decimals));
+        const roundedTp2 = Number(tp2.toFixed(decimals));
+
+        const ez_mid = Number(zone.proximal.toFixed(decimals));
+        const ez_low = isLong ? Number(zone.distal.toFixed(decimals)) : Number(zone.proximal.toFixed(decimals));
+        const ez_high = isLong ? Number(zone.proximal.toFixed(decimals)) : Number(zone.distal.toFixed(decimals));
+
+        // Enforce: Entry Zone MUST sit strictly BETWEEN HTF Demand floor and HTF Supply ceiling
+        if (isLong) {
+          if (ez_low < htfDemand.distal || ez_high > htfSupply.proximal) continue;
+          if (currentPrice <= stop || currentPrice >= tp1 || (currentPrice - ez_high) > (atr14 * 6)) continue;
+        } else {
+          if (ez_high > htfSupply.distal || ez_low < htfDemand.proximal) continue;
+          if (currentPrice >= stop || currentPrice <= tp1 || (ez_low - currentPrice) > (atr14 * 6)) continue;
+        }
+
+        const r_multiple_1 = isParameterized
+          ? computeRMultiple(roundedEntry, roundedTp1, roundedStop, bias)
+          : computeRMultiple(entry_zone_mid, tp1, stop, bias);
+        const r_multiple_2 = isParameterized
+          ? computeRMultiple(roundedEntry, roundedTp2, roundedStop, bias)
+          : computeRMultiple(entry_zone_mid, tp2, stop, bias);
+
+        if (isParameterized && r_multiple_1 < 1.95) continue;
+
+        const lastVol = candlesLtf[candlesLtf.length - 1].volume;
+        const avgVol = candlesLtf.reduce((acc, c) => acc + c.volume, 0) / candlesLtf.length;
+
+        const now = new Date();
+        const hourET = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(now), 10);
+
+        const conviction_score = computeMannaSndConvictionScore({
+          curveLocation,
+          trend15m: trendLtf,
+          bias,
+          instrument,
+          market,
+          hourET,
+          formation: zone.formation,
+          tp1: roundedTp1,
+          candles1h: candlesHtf,
+          candles15m: candlesLtf,
+          now
+        });
+
+        const spread = currentPrice * (market === 'futures' ? 0.0001 : 0.0002);
+        const liquidity_score = computeLiquidityScore(lastVol, avgVol, spread);
+
+        const stylePrefix = tfConfig?.tradingStyle ? ` · ${tfConfig.tradingStyle}` : '';
+        const selection_rationale = isParameterized
+          ? `[MANNA SND${stylePrefix}] Curve: ${curveLocation.toUpperCase()} | ${ltfLabel} Trend: ${trendLtf.toUpperCase()}. Imbalance Zone (${zone.formation}) inside ${htfLabel} ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${roundedEntry.toFixed(decimals)}), SL beyond Distal line (${roundedStop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`
+          : `[MANNA SND] Curve: ${curveLocation.toUpperCase()} | 15M Trend: ${trendLtf.toUpperCase()}. Imbalance Zone (${zone.formation}) inside 1H ${isLong ? 'Demand' : 'Supply'} Curve. Limit ${isLong ? 'Buy' : 'Sell'} at Proximal line (${entry_zone_mid.toFixed(decimals)}), SL beyond Distal line (${stop.toFixed(decimals)}). ${r_multiple_1.toFixed(2)}R TP1 target.`;
+
+        const metadataObj: Record<string, any> = {
+          source: tfConfig?.sourceTag || (isParameterized ? 'mtf_manna_snd' : `yahoo_finance_${market}`),
+          ...(isParameterized ? { engine: 'manna_snd' } : {}),
+          ...(tfConfig?.tradingStyle ? { trading_style: tfConfig.tradingStyle } : {}),
+          atr14,
+          htf: htfLabel,
+          ltf: ltfLabel,
+          ...(isParameterized ? {
+            context_tf: htfLabel,
+            entry_tf: ltfLabel,
+            order_type: bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT',
+            trendLtf,
+          } : {}),
+          selection_rationale,
+          strategy_name: this.meta.name,
+          curveLocation,
+          trend15m: trendLtf,
+          formation: zone.formation,
+          htf_demand_proximal: htfDemand?.proximal ? Number(htfDemand.proximal.toFixed(decimals)) : undefined,
+          htf_demand_distal: htfDemand?.distal ? Number(htfDemand.distal.toFixed(decimals)) : undefined,
+          htf_demand_formation: htfDemand?.formation,
+          htf_demand_base_time: htfDemand?.timestamp,
+          htf_supply_proximal: htfSupply?.proximal ? Number(htfSupply.proximal.toFixed(decimals)) : undefined,
+          htf_supply_distal: htfSupply?.distal ? Number(htfSupply.distal.toFixed(decimals)) : undefined,
+          htf_supply_formation: htfSupply?.formation,
+          htf_supply_base_time: htfSupply?.timestamp,
+          htf_curve_proximal: selectedHtfZone?.proximal ? Number(selectedHtfZone.proximal.toFixed(decimals)) : undefined,
+          htf_curve_distal: selectedHtfZone?.distal ? Number(selectedHtfZone.distal.toFixed(decimals)) : undefined,
+          htf_curve_type: selectedHtfZone?.type || (isLong ? 'demand' : 'supply'),
+          htf_curve_base_time: selectedHtfZone?.timestamp,
+          entry_zone_proximal: Number(zone.proximal.toFixed(decimals)),
+          entry_zone_distal: Number(zone.distal.toFixed(decimals)),
+          entry_zone_formation: zone.formation,
+          entry_zone_base_time: zone.timestamp
+        };
+
+        candidates.push({
+          instrument,
+          market,
+          created_by_run: runId,
+          killzone_origin: killzone.killzone,
+          killzone_origin_at: killzone.boundaryUTC,
+          bias,
+          entry_zone_low: ez_low,
+          entry_zone_high: ez_high,
+          entry_zone_mid: ez_mid,
+          stop: roundedStop,
+          tp1: roundedTp1,
+          tp2: roundedTp2,
+          r_multiple_1,
+          r_multiple_2,
+          conviction_score,
+          liquidity_score,
+          strategy_id: strategyId,
+          strategy_tier: this.meta.tier,
+          metadata: JSON.stringify(metadataObj)
+        });
       } catch (err) {
         console.error(`[Manna SnD] Error evaluating ${instrument}:`, err);
       }

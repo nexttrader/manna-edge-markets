@@ -260,9 +260,9 @@ export const SetupCard: React.FC<SetupCardProps> = ({ setup, isWatchlisted = fal
     strategyId === 'manna_snd'
       ? 'MANNA SND'
       : strategyId === 'manna_scalper'
-        ? 'SCALPING (15M · 5M)'
+        ? 'MANNA SND · SCALP (15M · 5M)'
         : strategyId === 'manna_swing'
-          ? `SWING (${cardHtfLabel} · ${cardLtfLabel})`
+          ? `MANNA SND · SWING (${cardHtfLabel} · ${cardLtfLabel})`
           : 'MANNA ELITE V1.2';
 
   // Visual Trade Progress Ladder Calculation (0% Stop -> 33% Entry -> 70% TP1 -> 98% TP2)

@@ -1,5 +1,5 @@
 import { Bias, Candle } from './types';
-import { getLiveCandles } from './yahoo-provider';
+import { aggregateToFourHourCandles, getLiveCandles } from './yahoo-provider';
 import { computeATR } from './atr';
 
 export interface MarketStructureResult {
@@ -63,21 +63,33 @@ export function calculateRawStructureBias(candles1h: Candle[], candles15m: Candl
 /**
  * Unified Intermarket Correlation Synchronization
  * Ensures Equity Indices (ES, NQ, YM), Metals (GC, SI), and Dollar Pairs (EUR/USD, GBP/USD, USD/JPY)
- * share a single unified source of truth directional bias.
+ * share a single unified source of truth directional bias across any (HTF, LTF) timeframe pair.
  */
-export async function getUnifiedMarketBiases(instruments: string[]): Promise<Record<string, Bias>> {
+export async function getUnifiedMarketBiasesForTimeframes(
+  instruments: string[],
+  htf: '15m' | '1h' | '4h' | '1d' = '1h',
+  ltf: '5m' | '15m' | '1h' | '4h' = '15m'
+): Promise<Record<string, Bias>> {
   const rawBiases: Record<string, Bias> = {};
+
+  const fetchBiasPair = async (inst: string): Promise<Bias> => {
+    try {
+      const [rawLtf, rawHtf] = await Promise.all([
+        getLiveCandles(inst, ltf, ltf === '4h' ? 120 : 50),
+        getLiveCandles(inst, htf, htf === '4h' ? 120 : 24)
+      ]);
+      const candlesLtf = (ltf === '4h' ? aggregateToFourHourCandles(rawLtf) : rawLtf).slice(-50);
+      const candlesHtf = (htf === '4h' ? aggregateToFourHourCandles(rawHtf) : rawHtf).slice(-24);
+      const result = calculateRawStructureBias(candlesHtf, candlesLtf);
+      return result.bias;
+    } catch {
+      return 'long';
+    }
+  };
 
   // Fetch candles for all requested instruments
   for (const inst of instruments) {
-    try {
-      const candles15m = await getLiveCandles(inst, '15m', 50);
-      const candles1h = await getLiveCandles(inst, '1h', 24);
-      const result = calculateRawStructureBias(candles1h, candles15m);
-      rawBiases[inst] = result.bias;
-    } catch {
-      rawBiases[inst] = 'long';
-    }
+    rawBiases[inst] = await fetchBiasPair(inst);
   }
 
   const unifiedBiases: Record<string, Bias> = { ...rawBiases };
@@ -87,14 +99,7 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
   const hasIndexPairs = instruments.some(inst => INDEX_GROUP.includes(inst.toUpperCase()));
   if (hasIndexPairs) {
     if (!rawBiases['ES']) {
-      try {
-        const candles15m = await getLiveCandles('ES', '15m', 50);
-        const candles1h = await getLiveCandles('ES', '1h', 24);
-        const result = calculateRawStructureBias(candles1h, candles15m);
-        rawBiases['ES'] = result.bias;
-      } catch {
-        rawBiases['ES'] = 'long';
-      }
+      rawBiases['ES'] = await fetchBiasPair('ES');
     }
     const equityMarketIsBullish = rawBiases['ES'] === 'long';
     if (instruments.includes('ES')) unifiedBiases['ES'] = rawBiases['ES'];
@@ -115,14 +120,7 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
   const hasDollarPairs = instruments.some(inst => DOLLAR_GROUP.includes(inst.toUpperCase()));
   if (hasDollarPairs) {
     if (!rawBiases['EUR/USD']) {
-      try {
-        const candles15m = await getLiveCandles('EUR/USD', '15m', 50);
-        const candles1h = await getLiveCandles('EUR/USD', '1h', 24);
-        const result = calculateRawStructureBias(candles1h, candles15m);
-        rawBiases['EUR/USD'] = result.bias;
-      } catch {
-        rawBiases['EUR/USD'] = 'long';
-      }
+      rawBiases['EUR/USD'] = await fetchBiasPair('EUR/USD');
     }
     const dollarStrengthIsBullish = rawBiases['EUR/USD'] === 'short'; // If EUR/USD is short, Dollar is bullish
     
@@ -136,4 +134,8 @@ export async function getUnifiedMarketBiases(instruments: string[]): Promise<Rec
   }
 
   return unifiedBiases;
+}
+
+export async function getUnifiedMarketBiases(instruments: string[]): Promise<Record<string, Bias>> {
+  return getUnifiedMarketBiasesForTimeframes(instruments, '1h', '15m');
 }

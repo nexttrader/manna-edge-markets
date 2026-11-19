@@ -304,37 +304,67 @@ export function isWeekendTrade(trade: {
     return false;
 }
 
-export const SCALP_TRACKING_START_DAY = '2026-11-18';
+export const SCALP_TRACKING_START_DAY = '2026-11-19';
+export const SCALP_TRACKING_START_ISO = '2026-11-19T16:15:00.000Z';
 
 /**
- * Returns true if a Scalping trade belongs to before the Scalper calendar reset date
- * (2026-11-18 ET trading day), so historical beta/dev scalp records are excluded
- * while live Scalping tracking runs cleanly from today onwards.
+ * Returns true if a Scalping trade belongs to before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or carries legacy pre-alignment
+ * `mtf_isolated_desk` metadata, so historical pre-alignment scalp records are
+ * excluded while live Manna SnD Scalping tracking runs cleanly onwards.
  */
 export function isPreCutoffScalpTrade(trade: {
     trading_style?: string | null;
     strategy_id?: string | null;
+    metadata?: string | Record<string, any> | null;
     time_exited?: string | null;
     execution_time?: string | null;
     resolved_at?: string | null;
     updated_at?: string | null;
     time_signaled?: string | null;
     created_at?: string | null;
-}, cutoffDay: string = SCALP_TRACKING_START_DAY): boolean {
+}, cutoff: string = SCALP_TRACKING_START_ISO): boolean {
     const style = (trade.trading_style || '').toUpperCase();
     const strat = (trade.strategy_id || '').toLowerCase();
     if (style !== 'SCALP' && strat !== 'manna_scalper') return false;
 
-    const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.updated_at || trade.created_at;
-    if (exitTs) {
-        const td = getETTradingDayAndSession(exitTs);
-        if (td && td.tradingDay < cutoffDay) return true;
+    if (trade.metadata) {
+        const metaStr = typeof trade.metadata === 'string'
+            ? trade.metadata
+            : JSON.stringify(trade.metadata);
+        if (
+            metaStr.includes('mtf_isolated_desk') &&
+            !metaStr.includes('"engine":"manna_snd"') &&
+            !metaStr.includes('mtf_manna_snd')
+        ) {
+            return true;
+        }
     }
 
+    const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.updated_at || trade.created_at;
     const sigTs = trade.time_signaled || trade.created_at;
-    if (sigTs) {
-        const td = getETTradingDayAndSession(sigTs);
-        if (td && td.tradingDay < cutoffDay) return true;
+
+    if (cutoff.includes('T')) {
+        const cutoffMs = new Date(cutoff).getTime();
+        if (Number.isFinite(cutoffMs)) {
+            if (exitTs) {
+                const exitMs = new Date(exitTs).getTime();
+                if (Number.isFinite(exitMs) && exitMs < cutoffMs) return true;
+            }
+            if (sigTs) {
+                const sigMs = new Date(sigTs).getTime();
+                if (Number.isFinite(sigMs) && sigMs < cutoffMs) return true;
+            }
+        }
+    } else {
+        if (exitTs) {
+            const td = getETTradingDayAndSession(exitTs);
+            if (td && td.tradingDay < cutoff) return true;
+        }
+        if (sigTs) {
+            const td = getETTradingDayAndSession(sigTs);
+            if (td && td.tradingDay < cutoff) return true;
+        }
     }
 
     return false;

@@ -1,5 +1,9 @@
 import { queryDb } from './database';
-import { isPreCutoffScalpTrade, isWeekendTrade, SCALP_TRACKING_START_DAY } from '../scheduler/killzone-mapper';
+import {
+  isPreCutoffScalpTrade,
+  isWeekendTrade,
+  SCALP_TRACKING_START_ISO
+} from '../scheduler/killzone-mapper';
 
 export interface WeekendCleanupResult {
   outcomesRemoved: number;
@@ -144,17 +148,19 @@ export async function purgeWeekendTradesFromDb(): Promise<WeekendCleanupResult> 
 
 /**
  * Removes all historical Scalping (`SCALP` / `manna_scalper`) trade records before
- * `SCALP_TRACKING_START_DAY` (2026-11-18 ET) while keeping Scalping trades from today onwards.
+ * `SCALP_TRACKING_START_ISO` (`2026-11-19T16:15:00.000Z`) or with legacy
+ * pre-alignment `mtf_isolated_desk` metadata while keeping post-alignment Manna SnD
+ * Scalping trades intact.
  */
 export async function purgePreCutoffScalpTradesFromDb(
-  cutoffDay: string = SCALP_TRACKING_START_DAY
+  cutoff: string = SCALP_TRACKING_START_ISO
 ): Promise<{ scalpMtfRemoved: number; scalpOutcomesRemoved: number }> {
   let scalpMtfRemoved = 0;
   let scalpOutcomesRemoved = 0;
 
   try {
     const mtfScalpRows = await queryDb<any>(
-      `SELECT id, trading_style, strategy_id, created_at, updated_at, resolved_at, filled_at, signal_state
+      `SELECT id, trading_style, strategy_id, created_at, updated_at, resolved_at, filled_at, signal_state, metadata
        FROM mtf_style_setups
        WHERE trading_style = 'SCALP' OR strategy_id = 'manna_scalper'`
     );
@@ -162,10 +168,16 @@ export async function purgePreCutoffScalpTradesFromDb(
       if (isPreCutoffScalpTrade({
         trading_style: r.trading_style,
         strategy_id: r.strategy_id,
+        metadata: r.metadata,
         time_signaled: r.created_at,
         time_exited: r.resolved_at || r.updated_at || r.filled_at || r.created_at
-      }, cutoffDay)) {
+      }, cutoff)) {
         await queryDb(`DELETE FROM mtf_style_setups WHERE id = ?`, [r.id]);
+        try {
+          await queryDb(`DELETE FROM signal_confluence_audit WHERE setup_id = ?`, [r.id]);
+        } catch {
+          // Table may not exist yet
+        }
         scalpMtfRemoved++;
       }
     }
@@ -182,7 +194,7 @@ export async function purgePreCutoffScalpTradesFromDb(
         strategy_id: o.strategy_id,
         time_signaled: o.created_at,
         time_exited: o.execution_time || o.created_at
-      }, cutoffDay)) {
+      }, cutoff)) {
         await queryDb(`DELETE FROM outcomes WHERE id = ?`, [o.id]);
         scalpOutcomesRemoved++;
       }
@@ -193,7 +205,7 @@ export async function purgePreCutoffScalpTradesFromDb(
 
   if (scalpMtfRemoved + scalpOutcomesRemoved > 0) {
     console.log(
-      `🧹 Purged pre-${cutoffDay} Scalping records: mtf_style_setups=${scalpMtfRemoved}, outcomes=${scalpOutcomesRemoved}`
+      `🧹 Purged pre-${cutoff} Scalping records: mtf_style_setups=${scalpMtfRemoved}, outcomes=${scalpOutcomesRemoved}`
     );
   }
 

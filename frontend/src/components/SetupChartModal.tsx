@@ -85,7 +85,9 @@ interface SndMetadata {
   entry_zone_formation?: string;
   curveLocation?: string;
   trend15m?: string;
+  trendLtf?: string;
   formation?: string;
+  engine?: string;
   htf?: string;
   ltf?: string;
   context_tf?: string;
@@ -534,7 +536,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
     return {};
   }, [setup.metadata]);
 
-  const { defaultEntryTf, entryTfLabel } = useMemo(
+  const { defaultEntryTf, entryTfLabel, contextTfLabel } = useMemo(
     () => getSetupTimeframeConfig(setup, metadata),
     [setup, metadata]
   );
@@ -667,13 +669,16 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
   const outcomePl = setup.realized_pl !== undefined ? setup.realized_pl : (outcomeR !== undefined ? outcomeR * 100 : undefined);
 
   const tradeTelegramId = formatTelegramTradeId(setup);
-  const isMannaSnd = setup.strategy_id === 'manna_snd';
+  const isMannaSnd =
+    setup.strategy_id === 'manna_snd' ||
+    metadata.engine === 'manna_snd' ||
+    Boolean(metadata.htf_demand_proximal || metadata.htf_supply_proximal);
 
   const htfProximal = parseNum(metadata.htf_curve_proximal);
   const htfDistal = parseNum(metadata.htf_curve_distal);
   const htfType = (metadata.htf_curve_type || (isLong ? 'demand' : 'supply')).toLowerCase();
   const curveLocation = metadata.curveLocation || (isLong ? 'low' : 'high');
-  const trend15m = metadata.trend15m || 'up';
+  const trend15m = metadata.trendLtf || metadata.trend15m || 'up';
   const formation = metadata.formation || metadata.entry_zone_formation || (isLong ? 'Rally-Base-Rally' : 'Drop-Base-Drop');
 
   const activeDemandProx = parseNum(metadata.htf_demand_proximal || (htfType === 'demand' ? htfProximal : (entryLow ? entryLow * 0.995 : 0)));
@@ -896,7 +901,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const dMax = formatPrice(Math.max(activeDemandProx, activeDemandDist), decimals);
         const form = metadata.htf_demand_formation ? ` · ${metadata.htf_demand_formation}` : '';
         drawZonePill(
-          `1H DEMAND${form} ${dMin}–${dMax}`,
+          `${contextTfLabel} DEMAND${form} ${dMin}–${dMax}`,
           startX + 8,
           topY + 4,
           isLight ? '#047857' : '#34d399',
@@ -948,7 +953,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
         const sMax = formatPrice(Math.max(activeSupplyProx, activeSupplyDist), decimals);
         const form = metadata.htf_supply_formation ? ` · ${metadata.htf_supply_formation}` : '';
         drawZonePill(
-          `1H SUPPLY${form} ${sMin}–${sMax}`,
+          `${contextTfLabel} SUPPLY${form} ${sMin}–${sMax}`,
           startX + 8,
           topY + 4,
           isLight ? '#b91c1c' : '#f87171',
@@ -1209,7 +1214,7 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
       }
     }
   }, [
-    isMannaSnd, entryLow, entryHigh, entryMid, entryTfLabel, timeframe,
+    isMannaSnd, entryLow, entryHigh, entryMid, entryTfLabel, contextTfLabel, timeframe,
     isLong, isResolved, isPending, metadata, actualEntryTimestamp, signalCreatedTimestamp,
     resolvedTimestamp, execPrice, exitPriceVal, theme, showBidAsk, serverQuote, selectedTz,
     decimals, activeDemandProx, activeDemandDist, activeDemandTime,
@@ -2379,29 +2384,29 @@ export const SetupChartModal: React.FC<SetupChartModalProps> = ({ setup, onClose
           <div className="manna-snd-legend-bar" aria-label="Manna SnD indicators">
             <span className="snd-badge">MANNA SND</span>
             <span className="snd-item curve">
-              <span className="snd-k">1H CURVE</span>
+              <span className="snd-k">{contextTfLabel} CURVE</span>
               <strong>{curveLocation.toUpperCase()}</strong>
             </span>
             {activeDemandProx > 0 && (
               <span className="snd-item demand">
                 <span className="snd-dot" aria-hidden="true" />
-                <span className="snd-k">1H DEMAND</span>
+                <span className="snd-k">{contextTfLabel} DEMAND</span>
                 <span>{formatPrice(activeDemandProx, decimals)} – {formatPrice(activeDemandDist, decimals)}</span>
               </span>
             )}
             {activeSupplyProx > 0 && (
               <span className="snd-item supply">
                 <span className="snd-dot" aria-hidden="true" />
-                <span className="snd-k">1H SUPPLY</span>
+                <span className="snd-k">{contextTfLabel} SUPPLY</span>
                 <span>{formatPrice(activeSupplyProx, decimals)} – {formatPrice(activeSupplyDist, decimals)}</span>
               </span>
             )}
             <span className="snd-item trend">
-              <span className="snd-k">15M TREND</span>
+              <span className="snd-k">{entryTfLabel} TREND</span>
               <strong>{trend15m.toUpperCase()}</strong>
             </span>
             <span className="snd-item zone">
-              <span className="snd-k">15M ZONE</span>
+              <span className="snd-k">{entryTfLabel} ZONE</span>
               <strong>{formation}</strong>
               <span className="snd-range">({formatPrice(entryLow, decimals)} – {formatPrice(entryHigh, decimals)})</span>
             </span>

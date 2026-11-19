@@ -1,4 +1,5 @@
 import { isPg, queryDb } from '../db/database';
+import * as queries from '../db/queries';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { computeATR } from './atr';
 import type { MtfStyleSetup, SwingPairMode, TradingStyleMode } from './mtf-style-signals';
@@ -6,7 +7,14 @@ import type { AssetEdgeScorecard, EdgeBiasLabel } from '../edge-finder/edge-find
 import { getInstrumentDecimals } from './stop-loss-rules';
 import { Bias, Candle } from './types';
 import { getLiveCandles, getLiveQuoteDetails, LiveQuoteDetails, prefetchLiveQuotes } from './yahoo-provider';
-import { getCurrentKillzone, isPreCutoffScalpTrade, isTradingSessionActive, isWeekendTrade, mapTimestampToKillzone } from '../scheduler/killzone-mapper';
+import {
+  getCurrentKillzone,
+  getETTradingDayAndSession,
+  isPreCutoffScalpTrade,
+  isTradingSessionActive,
+  isWeekendTrade,
+  mapTimestampToKillzone
+} from '../scheduler/killzone-mapper';
 
 export interface EdgeFinderConfluenceDecision {
   approved: boolean;
@@ -379,8 +387,8 @@ export interface LifecycleEvaluationResult {
 /**
  * Pure chronological lifecycle evaluator for Scalping & Swing setups.
  * Mirrors Intraday LifecycleSync + OutcomeDetector + Revalidation rules:
- * - awaiting_entry -> fills on limit price touch (Bid/Ask + post-creation candle wicks), OR invalidates if TP1/SL reached pre-entry.
- * - active -> moves stop to BE at +1.5R, moves to runner at TP1 (+2R), resolves at TP2 (+3R) or SL (-1R) or BE (0R).
+ * - awaiting_entry -> fills on limit price touch (Bid/Ask + post-creation candle wicks), OR invalidates if TP1/SL reached or displaced > 1.5x ATR pre-entry.
+ * - active -> moves stop to BE at +1.0R (unless tp1BeOnly is enabled), moves to runner at TP1 (+2R), resolves at TP2 (+3R) or SL (-1R) or BE (0R).
  * - runner -> resolves at TP2 (+3R) or BE stop (retains +2R TP1 win) or max runner age.
  */
 export function evaluateMtfRowLifecycle(
@@ -388,8 +396,11 @@ export function evaluateMtfRowLifecycle(
   quote: LiveQuoteDetails | null,
   candles: Candle[],
   atr14: number,
-  nowIso: string
+  nowIso: string,
+  options?: { tp1BeOnly?: boolean; beThresholdR?: number }
 ): LifecycleEvaluationResult {
+  const tp1BeOnly = options?.tp1BeOnly ?? false;
+  const beThresholdR = options?.beThresholdR ?? 1.0;
   const market = (row.market || (row.instrument.includes('/') ? 'forex' : 'futures')) as 'futures' | 'forex';
   const decimals = getInstrumentDecimals(row.instrument, market);
   const round = (v: number) => Number(v.toFixed(decimals));
@@ -476,6 +487,17 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
+        // Price opened already below demand zone — never assume a bounce filled safely before SL
+        if (cOpenAsk < zoneLow) {
+          if (cLowBid <= origStop) {
+            state = 'invalidated';
+            invalidationReason = 'stop_breached_pre_entry';
+            invalidationDetail = `Price (${round(cLowBid)}) breached SL ${origStop} below demand zone prior to entry`;
+            resolvedAt = c.timestamp;
+            break;
+          }
+          continue;
+        }
         if (cLowAsk > zoneHigh && cHighBid >= row.tp1) {
           state = 'invalidated';
           invalidationReason = 'target_reached_pre_entry';
@@ -483,11 +505,7 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
-        if (cLowAsk <= zoneHigh && cHighAsk >= zoneLow) {
-          // Only fill if candle traded inside the entry zone rather than opening past the zone near SL
-          if (cOpenAsk < zoneLow && cHighAsk < zoneLow) {
-            continue;
-          }
+        if (cOpenAsk >= zoneLow && cLowAsk <= zoneHigh && cHighAsk >= zoneLow) {
           const fill = round(Math.max(zoneLow, Math.min(cOpenAsk, zoneHigh)));
           if (fill <= origStop) {
             state = 'invalidated';
@@ -504,7 +522,7 @@ export function evaluateMtfRowLifecycle(
           stop = origStop;
           metadata = enrichMetadataWithEntrySession(metadata, c.timestamp);
 
-          // Conservative check: if the same entry bar also dumped through SL
+          // Conservative check: if the same entry bar also dumped through SL after valid fill
           if (cLowBid <= origStop) {
             state = 'resolved';
             outcomeType = 'sl_hit';
@@ -525,6 +543,17 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
+        // Price opened already above supply zone — never assume a drop filled safely before SL
+        if (cOpenBid > zoneHigh) {
+          if (cHighAsk >= origStop) {
+            state = 'invalidated';
+            invalidationReason = 'stop_breached_pre_entry';
+            invalidationDetail = `Price (${round(cHighAsk)}) breached SL ${origStop} above supply zone prior to entry`;
+            resolvedAt = c.timestamp;
+            break;
+          }
+          continue;
+        }
         if (cHighBid < zoneLow && cLowAsk <= row.tp1) {
           state = 'invalidated';
           invalidationReason = 'target_reached_pre_entry';
@@ -532,10 +561,7 @@ export function evaluateMtfRowLifecycle(
           resolvedAt = c.timestamp;
           break;
         }
-        if (cHighBid >= zoneLow && cLowBid <= zoneHigh) {
-          if (cOpenBid > zoneHigh && cLowBid > zoneHigh) {
-            continue;
-          }
+        if (cOpenBid <= zoneHigh && cHighBid >= zoneLow && cLowBid <= zoneHigh) {
           const fill = round(Math.min(zoneHigh, Math.max(cOpenBid, zoneLow)));
           if (fill >= origStop) {
             state = 'invalidated';
@@ -619,6 +645,15 @@ export function evaluateMtfRowLifecycle(
         realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
         continue;
       }
+
+      // 5. Pre-TP1 Break-Even (BE) protection (matches Intraday Manna SnD +1.0R rule unless tp1BeOnly is active)
+      if (!tp1BeOnly && !isBreakeven && initialRisk > 0) {
+        const barMaxProfit = isLong ? Math.max(0, cHighBid - entryPrice) : Math.max(0, entryPrice - cLowAsk);
+        if (barMaxProfit / initialRisk >= beThresholdR) {
+          isBreakeven = 1;
+          stop = round(entryPrice);
+        }
+      }
     } else if (state === 'runner') {
       const hitBe = isLong ? cLowBid <= stop : cHighAsk >= stop;
       const hitTp2 = isLong ? cHighBid >= row.tp2 : cLowAsk <= row.tp2;
@@ -667,10 +702,10 @@ export function evaluateMtfRowLifecycle(
           invalidationReason = 'stop_breached_pre_entry';
           invalidationDetail = `Live Bid (${round(currentBid)}) breached SL (${origStop}) before filling entry`;
           resolvedAt = nowIso;
-        } else if (atr14 > 0 && (zoneLow - currentBid) > 1.0 * atr14) {
+        } else if (atr14 > 0 && (zoneLow - currentBid) > 1.5 * atr14) {
           state = 'invalidated';
           invalidationReason = 'price_displaced';
-          invalidationDetail = `Price displaced > 1.0x ATR below zone (${zoneLow}) prior to entry`;
+          invalidationDetail = `Price displaced > 1.5x ATR below zone (${zoneLow}) prior to entry`;
           resolvedAt = nowIso;
         }
       } else {
@@ -691,10 +726,10 @@ export function evaluateMtfRowLifecycle(
           invalidationReason = 'stop_breached_pre_entry';
           invalidationDetail = `Live Ask (${round(currentAsk)}) breached SL (${origStop}) before filling entry`;
           resolvedAt = nowIso;
-        } else if (atr14 > 0 && (currentAsk - zoneHigh) > 1.0 * atr14) {
+        } else if (atr14 > 0 && (currentAsk - zoneHigh) > 1.5 * atr14) {
           state = 'invalidated';
           invalidationReason = 'price_displaced';
-          invalidationDetail = `Price displaced > 1.0x ATR above zone (${zoneHigh}) prior to entry`;
+          invalidationDetail = `Price displaced > 1.5x ATR above zone (${zoneHigh}) prior to entry`;
           resolvedAt = nowIso;
         }
       }
@@ -702,6 +737,11 @@ export function evaluateMtfRowLifecycle(
 
     if (state === 'active') {
       const entryPrice = entryPriceRecorded && entryPriceRecorded > 0 ? entryPriceRecorded : row.entry_zone_mid;
+      let liveRisk = Math.max(Math.abs(entryPrice - origStop), Math.abs(row.entry_zone_mid - origStop));
+      if (liveRisk < 1e-6 && row.tp1) {
+        liveRisk = Math.abs(row.tp1 - entryPrice) / r1;
+      }
+
       if (isLong) {
         if (currentBid >= row.tp2) {
           state = 'resolved';
@@ -718,14 +758,23 @@ export function evaluateMtfRowLifecycle(
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
           realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
-        } else if (currentBid <= stop) {
-          state = 'resolved';
-          outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
-          invalidationReason = outcomeType;
-          invalidationDetail = isBreakeven ? `BE stop (${round(stop)}) hit` : `Stop loss (${round(stop)}) hit`;
-          realizedR = isBreakeven ? 0.0 : -1.0;
-          executionPrice = isBreakeven ? round(entryPrice) : round(Math.min(currentBid, stop));
-          resolvedAt = nowIso;
+        } else {
+          if (!tp1BeOnly && !isBreakeven && liveRisk > 0) {
+            const liveProfit = Math.max(0, currentBid - entryPrice);
+            if (liveProfit / liveRisk >= beThresholdR) {
+              isBreakeven = 1;
+              stop = round(entryPrice);
+            }
+          }
+          if (currentBid <= stop) {
+            state = 'resolved';
+            outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
+            invalidationReason = outcomeType;
+            invalidationDetail = isBreakeven ? `BE stop (${round(stop)}) hit` : `Stop loss (${round(stop)}) hit`;
+            realizedR = isBreakeven ? 0.0 : -1.0;
+            executionPrice = isBreakeven ? round(entryPrice) : round(Math.min(currentBid, stop));
+            resolvedAt = nowIso;
+          }
         }
       } else {
         if (currentAsk <= row.tp2) {
@@ -743,14 +792,23 @@ export function evaluateMtfRowLifecycle(
           outcomeType = 'tp1_hit';
           invalidationReason = 'tp1_hit';
           realizedR = computeBlendedRealizedR({ outcomeType: 'tp1_hit', rMultiple1: r1, rMultiple2: r2 });
-        } else if (currentAsk >= stop) {
-          state = 'resolved';
-          outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
-          invalidationReason = outcomeType;
-          invalidationDetail = isBreakeven ? `BE stop (${round(stop)}) hit` : `Stop loss (${round(stop)}) hit`;
-          realizedR = isBreakeven ? 0.0 : -1.0;
-          executionPrice = isBreakeven ? round(entryPrice) : round(Math.max(currentAsk, stop));
-          resolvedAt = nowIso;
+        } else {
+          if (!tp1BeOnly && !isBreakeven && liveRisk > 0) {
+            const liveProfit = Math.max(0, entryPrice - currentAsk);
+            if (liveProfit / liveRisk >= beThresholdR) {
+              isBreakeven = 1;
+              stop = round(entryPrice);
+            }
+          }
+          if (currentAsk >= stop) {
+            state = 'resolved';
+            outcomeType = isBreakeven ? 'be_hit' : 'sl_hit';
+            invalidationReason = outcomeType;
+            invalidationDetail = isBreakeven ? `BE stop (${round(stop)}) hit` : `Stop loss (${round(stop)}) hit`;
+            realizedR = isBreakeven ? 0.0 : -1.0;
+            executionPrice = isBreakeven ? round(entryPrice) : round(Math.max(currentAsk, stop));
+            resolvedAt = nowIso;
+          }
         }
       }
     } else if (state === 'runner') {
@@ -799,8 +857,9 @@ export function evaluateMtfRowLifecycle(
   if (state === 'runner') {
     const startRef = entryTriggeredAt || row.created_at;
     const startMs = startRef ? new Date(startRef).getTime() : 0;
+    const evalNowMs = new Date(nowIso).getTime() || Date.now();
     const maxAge = row.trading_style === 'SCALP' ? SCALP_RUNNER_MAX_AGE_MS : SWING_RUNNER_MAX_AGE_MS;
-    if (startMs > 0 && Date.now() - startMs >= maxAge) {
+    if (startMs > 0 && evalNowMs - startMs >= maxAge) {
       state = 'resolved';
       outcomeType = 'tp1_hit';
       invalidationReason = 'runner_closed_max_age';
@@ -945,15 +1004,31 @@ async function evaluateAndPersistOpenRows(rows: TrackedMtfSetupRow[], nowIso: st
     })
   );
 
+  const isTp1BeOnly = await queries.isHalvedFloorTp1BeEnabled('manna_snd');
   const evaluatedById = new Map<string, TrackedMtfSetupRow>();
 
   for (const row of rowsToEvaluate) {
     const quote = quoteCache.get(row.instrument) ?? null;
     const tf = getEvaluationCandleTf(row);
     const candles = candleCache.get(`${row.instrument}::${tf}`) || [];
-    const atr14 = candles.length >= 15 ? computeATR(candles.slice(-30), 14) : 0;
+    let metaAtr = 0;
+    if (row.metadata) {
+      try {
+        const parsedMeta = JSON.parse(row.metadata);
+        if (Number.isFinite(Number(parsedMeta?.atr14)) && Number(parsedMeta.atr14) > 0) {
+          metaAtr = Number(parsedMeta.atr14);
+        }
+      } catch {
+        // Ignore unparseable metadata
+      }
+    }
+    const candleAtr = candles.length >= 15 ? computeATR(candles.slice(-30), 14) : 0;
+    const effectiveAtr = metaAtr > 0 ? metaAtr : candleAtr;
 
-    const evalRes = evaluateMtfRowLifecycle(row, quote, candles, atr14, nowIso);
+    const evalRes = evaluateMtfRowLifecycle(row, quote, candles, effectiveAtr, nowIso, {
+      tp1BeOnly: isTp1BeOnly,
+      beThresholdR: 1.0
+    });
     if (evalRes.changed) {
       await persistEvaluatedRow(row.id, evalRes, nowIso);
     }
@@ -1069,6 +1144,44 @@ function rowToMtfSetup(row: TrackedMtfSetupRow): MtfStyleSetup {
   };
 }
 
+const POSITIVE_DOLLAR_PAIRS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD'];
+const INVERSE_DOLLAR_PAIRS = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
+
+function deriveEurLeaderBiasFromRows(rows: Array<{ instrument: string; bias: string }>): Bias | null {
+  const openEur = rows.find((r) => (r.instrument || '').toUpperCase() === 'EUR/USD');
+  if (openEur) {
+    return String(openEur.bias).toLowerCase() === 'short' ? 'short' : 'long';
+  }
+  const openDollar = rows.find((r) =>
+    [...POSITIVE_DOLLAR_PAIRS, ...INVERSE_DOLLAR_PAIRS].includes((r.instrument || '').toUpperCase())
+  );
+  if (openDollar) {
+    const isInv = INVERSE_DOLLAR_PAIRS.includes((openDollar.instrument || '').toUpperCase());
+    const b: Bias = String(openDollar.bias).toLowerCase() === 'short' ? 'short' : 'long';
+    return isInv ? (b === 'long' ? 'short' : 'long') : b;
+  }
+  return null;
+}
+
+export async function getOpenMtfLeaderBias(
+  style: TradingStyleMode,
+  swingMode: SwingPairMode
+): Promise<Bias | null> {
+  await ensureMtfTrackerTable();
+  const tradingStyle = style === 'scalp' ? 'SCALP' : 'SWING';
+  const openForexRows = tradingStyle === 'SCALP'
+    ? await queryDb<{ instrument: string; bias: string }>(
+        `SELECT instrument, bias FROM mtf_style_setups
+         WHERE trading_style = 'SCALP' AND market = 'forex' AND signal_state IN ('awaiting_entry', 'active', 'runner')`
+      )
+    : await queryDb<{ instrument: string; bias: string }>(
+        `SELECT instrument, bias FROM mtf_style_setups
+         WHERE trading_style = 'SWING' AND swing_mode = ? AND market = 'forex' AND signal_state IN ('awaiting_entry', 'active', 'runner')`,
+        [swingMode]
+      );
+  return deriveEurLeaderBiasFromRows(openForexRows);
+}
+
 /**
  * Syncs newly discovered candidate setups against persistent `mtf_style_setups`,
  * evaluates open setups chronologically, supersedes stale pending zones when new
@@ -1078,7 +1191,8 @@ export async function syncMtfSetupsAndGetLiveBoard(
   style: TradingStyleMode,
   swingMode: SwingPairMode,
   candidates: MtfStyleSetup[],
-  edgeScorecards?: Map<string, AssetEdgeScorecard>
+  edgeScorecards?: Map<string, AssetEdgeScorecard>,
+  didDiscover = false
 ): Promise<MtfBoardResult> {
   await ensureMtfTrackerTable();
   const nowIso = new Date().toISOString();
@@ -1098,6 +1212,7 @@ export async function syncMtfSetupsAndGetLiveBoard(
 
   const shouldUseFastQuoteOverlay =
     candidates.length === 0 &&
+    !didDiscover &&
     process.env.NODE_ENV !== 'test' &&
     Date.now() - lastLifecycleSyncAt < 20_000;
 
@@ -1107,36 +1222,63 @@ export async function syncMtfSetupsAndGetLiveBoard(
   const stillOpenByInst = new Map<string, TrackedMtfSetupRow>();
   for (const r of evaluatedOpen) {
     if (OPEN_MTF_STATES.includes(r.signal_state)) {
-      if (edgeScorecards && edgeScorecards.size > 0) {
-        const sc = edgeScorecards.get((r.instrument || '').toUpperCase());
-        const efCheck = evaluateEdgeFinderConfluence(sc, style, (r.bias || 'long') as Bias);
-        const isLegacyPreGateActive =
-          r.signal_state === 'active' &&
-          (!r.metadata || !String(r.metadata).includes('edgefinder_confluence'));
-
-        // Clear un-entered pending zones OR pre-gate legacy active rows if EdgeFinder does not agree
-        if (!efCheck.approved && (r.signal_state === 'awaiting_entry' || isLegacyPreGateActive)) {
-          await queryDb(
-            `UPDATE mtf_style_setups
-             SET signal_state = 'invalidated', invalidation_reason = 'edgefinder_conflict',
-                 invalidation_detail = ?, resolved_at = ?, updated_at = ?
-             WHERE id = ?`,
-            [efCheck.reason, nowIso, nowIso, r.id]
-          );
-          continue;
-        }
+      // Clear legacy pre-alignment EMA pending zones once Manna SnD discovery runs (never touch active/runner trades)
+      if (
+        didDiscover &&
+        r.signal_state === 'awaiting_entry' &&
+        r.metadata &&
+        String(r.metadata).includes('"source":"mtf_isolated_desk"')
+      ) {
+        await queryDb(
+          `UPDATE mtf_style_setups
+           SET signal_state = 'invalidated', invalidation_reason = 'strategy_realigned_to_manna_snd',
+               invalidation_detail = 'Legacy EMA pending zone cleared after Manna SnD alignment',
+               resolved_at = ?, updated_at = ?
+           WHERE id = ?`,
+          [nowIso, nowIso, r.id]
+        );
+        continue;
       }
       stillOpenByInst.set(r.instrument, r);
     }
   }
 
-  // 2. Dedupe / Supersede / Insert new candidates (matching Intraday dedupeAndSelect rules)
+  // Establish open Dollar-basket leader bias and cross-mode Swing active trades
+  let openEurLeaderBias = deriveEurLeaderBiasFromRows(
+    Array.from(stillOpenByInst.values()).filter((r) => r.market === 'forex')
+  );
+
+  const otherModeActiveSwingInstruments = new Set<string>();
+  if (tradingStyle === 'SWING' && candidates.length > 0) {
+    const otherOpenSwingRows = await queryDb<{ instrument: string; swing_mode: string | null }>(
+      `SELECT instrument, swing_mode FROM mtf_style_setups
+       WHERE trading_style = 'SWING' AND signal_state IN ('active', 'runner')`
+    );
+    for (const row of otherOpenSwingRows) {
+      if (row.swing_mode !== swingMode && row.instrument) {
+        otherModeActiveSwingInstruments.add(row.instrument.toUpperCase());
+      }
+    }
+  }
+
+  const [isHaltEnabled, capSetting, capScope] = candidates.length > 0
+    ? await Promise.all([
+        queries.isConsecutiveLossHaltEnabled('manna_snd'),
+        queries.isDailySignalCapEnabled('manna_snd'),
+        queries.getSignalCapMarketScope('manna_snd')
+      ])
+    : [true, { enabled: false, maxSignals: 2 }, 'forex_only' as const];
+
+  // 2. Dedupe / Supersede / Insert new candidates (matching Intraday PublishGate + dedupeAndSelect rules)
   const nowDate = new Date(nowIso);
   const enforceSessionWindow = process.env.NODE_ENV !== 'test';
+  const todayDay = getETTradingDayAndSession(nowDate)?.tradingDay;
+
   for (const c of candidates) {
     if (enforceSessionWindow && !isTradingSessionActive(c.market === 'forex' ? 'forex' : 'futures', nowDate)) {
       continue;
     }
+
     const existing = stillOpenByInst.get(c.instrument);
 
     if (existing) {
@@ -1145,7 +1287,7 @@ export async function syncMtfSetupsAndGetLiveBoard(
         continue;
       }
 
-      // Existing is awaiting_entry — check if new candidate is a different zone or opposing higher-conviction setup
+      // Existing is awaiting_entry — check if same zone first
       const priceEps = c.market === 'forex' ? (c.instrument.includes('JPY') ? 0.005 : 0.00005) : 0.05;
       const sameZone =
         existing.bias === c.bias &&
@@ -1162,7 +1304,100 @@ export async function syncMtfSetupsAndGetLiveBoard(
         existing.last_price = c.current_price;
         continue;
       }
+    }
 
+    // Dollar-basket pre-insertion check: block contradictory USD exposure against open Forex trades
+    const upperInst = c.instrument.toUpperCase();
+    const isPosDollar = POSITIVE_DOLLAR_PAIRS.includes(upperInst);
+    const isInvDollar = INVERSE_DOLLAR_PAIRS.includes(upperInst);
+    if (c.market === 'forex' && openEurLeaderBias && (isPosDollar || isInvDollar)) {
+      const expectedBias: Bias = isPosDollar
+        ? openEurLeaderBias
+        : (openEurLeaderBias === 'long' ? 'short' : 'long');
+      if (c.bias !== expectedBias) {
+        continue;
+      }
+    }
+
+    // Cross-mode Swing duplicate guard: prevent concurrent active/runner Swing trades on the same instrument
+    if (tradingStyle === 'SWING' && otherModeActiveSwingInstruments.has(upperInst)) {
+      continue;
+    }
+
+    // Post-loss churn guard: wait 15m (Scalp) / 2h (Swing) after an SL before firing again on same asset
+    if (!existing) {
+      const cooldownMs = tradingStyle === 'SCALP' ? 15 * 60 * 1000 : 2 * 60 * 60 * 1000;
+      const recentLosses = await queryDb<{ resolved_at: string | null }>(
+        `SELECT resolved_at FROM mtf_style_setups
+         WHERE trading_style = ? AND instrument = ? AND signal_state = 'resolved' AND outcome_type = 'sl_hit'
+         ORDER BY resolved_at DESC LIMIT 1`,
+        [tradingStyle, c.instrument]
+      );
+      if (recentLosses.length > 0 && recentLosses[0].resolved_at) {
+        const elapsedSinceSl = Date.now() - new Date(recentLosses[0].resolved_at).getTime();
+        if (elapsedSinceSl >= 0 && elapsedSinceSl < cooldownMs) {
+          continue;
+        }
+      }
+    }
+
+    // Smart Consecutive 2-Loss Daily Halt & Daily Signal Cap (matching Intraday PublishGate)
+    const marketName = (c.market || 'futures').toLowerCase();
+    const shouldApplyCapToMarket =
+      capScope === 'all' ||
+      (capScope === 'forex_only' && marketName === 'forex') ||
+      (capScope === 'futures_only' && marketName === 'futures');
+
+    if (shouldApplyCapToMarket && (isHaltEnabled || capSetting.enabled)) {
+      const instRows = await queryDb<{
+        id: string;
+        signal_state: string;
+        outcome_type: string | null;
+        created_at: string;
+      }>(
+        `SELECT id, signal_state, outcome_type, created_at
+         FROM mtf_style_setups
+         WHERE trading_style = ? AND instrument = ?
+         ORDER BY created_at ASC`,
+        [tradingStyle, c.instrument]
+      );
+
+      const todaysRows = instRows.filter((r) => {
+        const rDay = getETTradingDayAndSession(r.created_at)?.tradingDay;
+        return todayDay ? rDay === todayDay : false;
+      });
+
+      if (isHaltEnabled) {
+        let consecutiveLosses = 0;
+        for (const r of todaysRows) {
+          if (r.outcome_type === 'sl_hit') {
+            consecutiveLosses++;
+          } else if (
+            r.outcome_type === 'tp1_hit' ||
+            r.outcome_type === 'tp2_hit' ||
+            r.outcome_type === 'be_hit'
+          ) {
+            consecutiveLosses = 0;
+          }
+        }
+        if (consecutiveLosses >= 2) {
+          continue;
+        }
+      }
+
+      if (capSetting.enabled) {
+        const activeOverride = await queries.getActiveSignalCapOverride(c.instrument, 'manna_snd');
+        const effectiveMaxSignals = activeOverride ? activeOverride.max_signals : capSetting.maxSignals;
+        const countedToday = todaysRows.filter(
+          (r) => r.id !== existing?.id && r.signal_state !== 'superseded' && r.signal_state !== 'invalidated'
+        ).length;
+        if (countedToday >= effectiveMaxSignals) {
+          continue;
+        }
+      }
+    }
+
+    if (existing) {
       const opposingHigher =
         existing.bias !== c.bias && (c.conviction_score || 0) >= (existing.conviction_score || 0);
       const sameDirNewerZone = existing.bias === c.bias;
@@ -1183,23 +1418,6 @@ export async function syncMtfSetupsAndGetLiveBoard(
         stillOpenByInst.delete(c.instrument);
       } else {
         continue;
-      }
-    }
-
-    // Post-loss churn guard: wait 15m (Scalp) / 2h (Swing) after an SL before firing again on same asset
-    if (!existing) {
-      const cooldownMs = tradingStyle === 'SCALP' ? 15 * 60 * 1000 : 2 * 60 * 60 * 1000;
-      const recentLosses = await queryDb<{ resolved_at: string | null }>(
-        `SELECT resolved_at FROM mtf_style_setups
-         WHERE trading_style = ? AND instrument = ? AND signal_state = 'resolved' AND outcome_type = 'sl_hit'
-         ORDER BY resolved_at DESC LIMIT 1`,
-        [tradingStyle, c.instrument]
-      );
-      if (recentLosses.length > 0 && recentLosses[0].resolved_at) {
-        const elapsedSinceSl = Date.now() - new Date(recentLosses[0].resolved_at).getTime();
-        if (elapsedSinceSl >= 0 && elapsedSinceSl < cooldownMs) {
-          continue;
-        }
       }
     }
 
@@ -1263,6 +1481,9 @@ export async function syncMtfSetupsAndGetLiveBoard(
     );
     if (insertedRows.length > 0) {
       stillOpenByInst.set(c.instrument, insertedRows[0]);
+      if (c.market === 'forex' && !openEurLeaderBias && (isPosDollar || isInvDollar)) {
+        openEurLeaderBias = deriveEurLeaderBiasFromRows([insertedRows[0]]);
+      }
     }
 
     if (process.env.NODE_ENV !== 'test') {
@@ -1289,11 +1510,6 @@ export async function syncMtfSetupsAndGetLiveBoard(
   const openRows = Array.from(stillOpenByInst.values());
   const activeAndPending = openRows
     .filter((r) => r.signal_state === 'awaiting_entry' || r.signal_state === 'active')
-    .filter((r) => {
-      if (!edgeScorecards || edgeScorecards.size === 0) return true;
-      const sc = edgeScorecards.get((r.instrument || '').toUpperCase());
-      return evaluateEdgeFinderConfluence(sc, style, (r.bias || 'long') as Bias).approved;
-    })
     .map(rowToMtfSetup)
     .sort((a, b) => b.conviction_score - a.conviction_score);
 
@@ -1413,6 +1629,7 @@ export async function getMtfCalendarOutcomes(): Promise<any[]> {
     const candidate = {
       trading_style: r.trading_style,
       strategy_id: r.strategy_id,
+      metadata: r.metadata,
       market: r.market,
       instrument: r.instrument,
       time_signaled: r.created_at,
@@ -1524,6 +1741,7 @@ export async function getTradingStyleComparisonReport(): Promise<{
     const candidate = {
       trading_style: r.trading_style,
       strategy_id: r.strategy_id,
+      metadata: r.metadata,
       market: r.market,
       instrument: r.instrument,
       time_signaled: r.created_at,

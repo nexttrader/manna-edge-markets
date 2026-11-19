@@ -32,9 +32,6 @@ import { useTaggedSignals } from '../hooks/useTaggedSignals';
 import {
   useConfluenceAnalyticsAccess,
   useEdgeFinderAccess,
-  useEdgeFinderData,
-  findEdgeFinderScorecard,
-  computeSignalEdgeConfluence,
 } from '../hooks/useEdgeFinder';
 import { ConfluencePerformanceTracker } from '../components/edge-finder/ConfluencePerformanceTracker';
 import { useStrategies } from '../hooks/useAdmin';
@@ -77,7 +74,6 @@ export const Dashboard: React.FC = () => {
   const { isTagged, toggleTag } = useTaggedSignals();
   const { canAccessEdgeFinder } = useEdgeFinderAccess();
   const { canAccessConfluenceAnalytics } = useConfluenceAnalyticsAccess();
-  const { snapshot: edgeSnapshot } = useEdgeFinderData(canAccessEdgeFinder);
   const [showConfluenceLab, setShowConfluenceLab] = useState(false);
   const { strategies: visibleStrategies } = useStrategies();
 
@@ -133,23 +129,6 @@ export const Dashboard: React.FC = () => {
     if (!setup) return false;
     const market = (setup.market || 'futures').toLowerCase();
     const stateStr = (setup.signal_state || setup.state || 'awaiting_entry').toLowerCase();
-
-    // On Scalping & Swing live desks ONLY (never Intraday), hide any live signal card where EdgeFinder is Counter Macro Bias or Neutral
-    if (
-      (styleTab === 'scalp' || styleTab === 'swing') &&
-      stateStr !== 'resolved' &&
-      stateStr !== 'invalidated' &&
-      stateStr !== 'superseded' &&
-      edgeSnapshot?.scorecards?.length
-    ) {
-      const sc = findEdgeFinderScorecard(setup.instrument || '', edgeSnapshot.scorecards);
-      if (sc) {
-        const ef = computeSignalEdgeConfluence(setup.bias || 'long', sc);
-        if (ef.state === 'COUNTER' || ef.state === 'NEUTRAL') {
-          return false;
-        }
-      }
-    }
     const biasStr = (setup.bias || 'long').toLowerCase();
     const stratId = (setup.strategy_id || 'sentinel_v2').toLowerCase();
     const currentPrice = setup.current_price;

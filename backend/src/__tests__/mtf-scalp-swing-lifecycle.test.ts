@@ -10,6 +10,7 @@ delete process.env.DATABASE_URL;
 
 import { getTimeframeStopDistance } from '../discovery/stop-loss-rules';
 import { aggregateToFourHourCandles } from '../discovery/yahoo-provider';
+import { MannaSndStrategy } from '../discovery/strategies/manna-snd';
 import {
   ensureMtfTrackerTable,
   evaluateEdgeFinderConfluence,
@@ -21,7 +22,7 @@ import {
 import type { AssetEdgeScorecard } from '../edge-finder/edge-finder-service';
 import { computeBlendedRealizedR } from '../analytics/r-accounting';
 import { queryDb } from '../db/database';
-import type { Candle } from '../discovery/types';
+import type { Candle, KillzoneInfo } from '../discovery/types';
 import type { MtfStyleSetup } from '../discovery/mtf-style-signals';
 
 function makeRow(overrides: Partial<TrackedMtfSetupRow> = {}): TrackedMtfSetupRow {
@@ -319,7 +320,7 @@ async function runTests() {
   assert.strictEqual(calTrade!.realized_r, 2.2, 'Calendar MTF outcome must carry blended +2.2R');
   console.log('✅ TEST 7: 80/20 Blended R Accounting & Calendar MTF Outcomes passed');
 
-  // TEST 8: Inside-zone fill guard, TP1-only BE protection, FX 5M/Swing stop floors, and post-SL cooldown
+  // TEST 8: Inside-zone fill guard, 1.5x ATR displacement, BE modes, FX 5M/Swing stop floors, and post-SL cooldown
   const eurusd5mFloor = getTimeframeStopDistance('EUR/USD', 0.0002, 0.0002, 'forex', '5m');
   assert.ok(eurusd5mFloor >= 0.00085, `FX 5M floor must protect spread (>=8.5p, got ${eurusd5mFloor})`);
   const gbpusd1hFloor = getTimeframeStopDistance('GBP/USD', 0.0008, 0.0010, 'forex', '1h');
@@ -336,6 +337,16 @@ async function runTests() {
   assert.strictEqual(slightlyBelowRes.signal_state, 'awaiting_entry', 'Price strictly below zoneLow must NOT fill Long near SL');
   assert.strictEqual(slightlyBelowRes.entry_price_recorded, null);
 
+  // Within 1.5x ATR (6 <= 7.5) stays awaiting_entry; beyond 1.5x ATR (8 > 7.5) invalidates
+  const withinDispRes = evaluateMtfRowLifecycle(
+    outsideZoneRow,
+    { price: 20994, bid: 20994, ask: 20994.25, spread: 0.25 },
+    [{ open: 20996, high: 20998, low: 20993, close: 20994, volume: 100, timestamp: '2026-11-16T14:02:00.000Z' }],
+    5.0,
+    '2026-11-16T14:02:30.000Z'
+  );
+  assert.strictEqual(withinDispRes.signal_state, 'awaiting_entry', 'Displacement <= 1.5x ATR must remain awaiting_entry');
+
   const displacedRes = evaluateMtfRowLifecycle(
     outsideZoneRow,
     { price: 20992, bid: 20992, ask: 20992.25, spread: 0.25 },
@@ -343,33 +354,52 @@ async function runTests() {
     5.0,
     '2026-11-16T14:02:30.000Z'
   );
-  assert.strictEqual(displacedRes.signal_state, 'invalidated', 'Price displaced > 1x ATR below zone must invalidate pre-entry');
+  assert.strictEqual(displacedRes.signal_state, 'invalidated', 'Price displaced > 1.5x ATR below zone must invalidate pre-entry');
   assert.strictEqual(displacedRes.invalidation_reason, 'price_displaced');
 
-  // Reaching +1.5R before TP1 must NOT choke active trade with premature BE stop
-  const activeNoPrematureBe = makeRow({
-    id: 'test-no-early-be',
+  // 8a. Standard Manna SnD mode (tp1BeOnly: false, beThresholdR: 1.0): +1.1R moves SL to BE and retrace closes at 0.0R
+  const activeBeRow = makeRow({
+    id: 'test-standard-be',
     signal_state: 'active',
     entry_price_recorded: 21010,
     entry_triggered_at: '2026-11-16T14:02:00.000Z',
     filled_at: '2026-11-16T14:02:00.000Z',
     stop: 20985,
     initial_stop: 20985,
-    tp1: 21060,
+    tp1: 21060, // +2R (risk = 25)
     tp2: 21085
   });
-  const noEarlyBeRes = evaluateMtfRowLifecycle(
-    activeNoPrematureBe,
+  const stdBeRes = evaluateMtfRowLifecycle(
+    activeBeRow,
+    { price: 21010, bid: 21010, ask: 21010.25, spread: 0.25 },
+    [
+      // Bar 1 reaches +1.2R (21010 + 30 = 21040) -> locks BE at 21010
+      { open: 21012, high: 21040, low: 21011, close: 21035, volume: 100, timestamp: '2026-11-16T14:05:00.000Z' },
+      // Bar 2 retraces to 21009 -> exits at BE (0.0R) instead of -1.0R
+      { open: 21035, high: 21036, low: 21009, close: 21010, volume: 100, timestamp: '2026-11-16T14:10:00.000Z' }
+    ],
+    5.0,
+    '2026-11-16T14:10:30.000Z',
+    { tp1BeOnly: false, beThresholdR: 1.0 }
+  );
+  assert.strictEqual(stdBeRes.signal_state, 'resolved', 'Standard Manna SnD mode must resolve retraced +1R trade at BE');
+  assert.strictEqual(stdBeRes.outcome_type, 'be_hit');
+  assert.strictEqual(stdBeRes.realized_r, 0.0);
+  assert.strictEqual(stdBeRes.is_breakeven, 1);
+
+  // 8b. TP1-only BE mode (tp1BeOnly: true): reaching +1.6R keeps is_breakeven = 0 and stays active
+  const tp1OnlyBeRes = evaluateMtfRowLifecycle(
+    activeBeRow,
     { price: 21012, bid: 21012, ask: 21012.25, spread: 0.25 },
     [
-      // Rallies +1.6R (21010 + 40 = 21050 < tp1 21060), then pulls back near 21010 without hitting SL
       { open: 21015, high: 21050, low: 21009, close: 21012, volume: 100, timestamp: '2026-11-16T14:05:00.000Z' }
     ],
     5.0,
-    '2026-11-16T14:05:30.000Z'
+    '2026-11-16T14:05:30.000Z',
+    { tp1BeOnly: true, beThresholdR: 1.0 }
   );
-  assert.strictEqual(noEarlyBeRes.signal_state, 'active', 'Pullback after +1.6R (pre-TP1) must remain active, not choke at BE');
-  assert.strictEqual(noEarlyBeRes.is_breakeven, 0);
+  assert.strictEqual(tp1OnlyBeRes.signal_state, 'active', 'TP1-only BE mode must remain active before TP1');
+  assert.strictEqual(tp1OnlyBeRes.is_breakeven, 0);
 
   // Cooldown guard after recent sl_hit on same instrument
   const recentSlAt = new Date(Date.now() - 3 * 60 * 1000).toISOString();
@@ -390,9 +420,9 @@ async function runTests() {
   };
   const boardCooldown = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [cooldownCandidate]);
   assert.ok(!boardCooldown.setups.some((s) => s.id === 'mtf-scalp-COOL-new'), 'Cooldown must block immediate churn re-entry after sl_hit');
-  console.log('✅ TEST 8: Inside-zone fills, TP1-only BE, FX/Swing stop floors, and post-SL cooldown passed');
+  console.log('✅ TEST 8: Inside-zone fills, 1.5x ATR displacement, BE modes, FX/Swing stop floors, and post-SL cooldown passed');
 
-  // TEST 9: EdgeFinder Agreement & Strong Confluence Gate (Scalp & Swing only)
+  // TEST 9: EdgeFinder helper checks & non-gating Manna SnD Parity on Scalp & Swing
   const makeScorecard = (overrides: {
     instrument?: string;
     biasLabel?: any;
@@ -446,7 +476,7 @@ async function runTests() {
   assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'swing', 'long').approved, true);
   assert.strictEqual(evaluateEdgeFinderConfluence(efStrongBull, 'scalp', 'short').approved, false);
 
-  // 9b. Neutral, Counter-Trend, or Counter-Intraday Horizon rejected (so COUNTER MACRO BIAS never renders on Scalp/Swing cards)
+  // 9b. Neutral, Counter-Trend, or Counter-Intraday Horizon rejected by pure helper
   const efNeutral = makeScorecard({
     biasLabel: 'Neutral',
     scalpLabel: 'Buy',
@@ -475,7 +505,7 @@ async function runTests() {
       SWING: { score: 2.0, biasLabel: 'Buy', htfConfluence: 'ALIGNED' } as any
     }
   };
-  assert.strictEqual(evaluateEdgeFinderConfluence(efCounterIntradayHorizon, 'scalp', 'long').approved, false, 'Negative Intraday horizon (-1.0) must reject CL-style Counter Macro Bias on Scalp');
+  assert.strictEqual(evaluateEdgeFinderConfluence(efCounterIntradayHorizon, 'scalp', 'long').approved, false);
 
   // 9c. Overall + horizon agreement without counter-trend approves
   const efAgree = makeScorecard({
@@ -491,33 +521,339 @@ async function runTests() {
   assert.strictEqual(evaluateEdgeFinderConfluence(efAgree, 'scalp', 'long').approved, true);
   assert.strictEqual(evaluateEdgeFinderConfluence(efAgree, 'swing', 'long').approved, true);
 
-  // 9d. Pending awaiting_entry row invalidates when EdgeFinder conflicts, while active row stays open
+  // 9d. Intraday Parity: Manna SnD pending & active setups are preserved even when EdgeFinder conflicts
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price, metadata,
+      created_at, updated_at
+    ) VALUES ('mtf-scalp-EFPEND', 'mtf-scalp-EFPEND', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'EFPEND', 'forex', 'long', 1.1000, 1.1010, 1.1005, 1.0990, 1.0990, 1.1035, 1.1050, 2, 3, 85, 90, 'london', 'awaiting_entry', 0, 0, 1.1020, ?, ?, ?)`,
+    [JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }), baseTime, baseTime]
+  );
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price, entry_price_recorded, entry_triggered_at, metadata,
+      created_at, updated_at
+    ) VALUES ('mtf-scalp-EFACT', 'mtf-scalp-EFACT', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'EFACT', 'forex', 'long', 1.2000, 1.2010, 1.2005, 1.1990, 1.1990, 1.2035, 1.2050, 2, 3, 85, 90, 'london', 'active', 0, 0, 1.2015, 1.2005, ?, ?, ?, ?)`,
+    [baseTime, JSON.stringify({ source: 'mtf_manna_snd', engine: 'manna_snd' }), baseTime, baseTime]
+  );
+  const efMap = new Map<string, AssetEdgeScorecard>([
+    ['EFPEND', makeScorecard({ instrument: 'EFPEND', biasLabel: 'Sell', scalpLabel: 'Sell', allAligned: true, dominantBias: 'Sell', summary: '3/3 ALIGNED BEARISH' })],
+    ['EFACT', makeScorecard({ instrument: 'EFACT', biasLabel: 'Sell', scalpLabel: 'Sell', allAligned: true, dominantBias: 'Sell', summary: '3/3 ALIGNED BEARISH' })]
+  ]);
+  const boardEf = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [], efMap, true);
+  assert.ok(boardEf.setups.some((s) => s.id === 'mtf-scalp-EFPEND'), 'Manna SnD pending setup must remain visible when EdgeFinder conflicts (Intraday parity)');
+  assert.ok(boardEf.setups.some((s) => s.id === 'mtf-scalp-EFACT'), 'Manna SnD active setup must remain visible when EdgeFinder conflicts (Intraday parity)');
+  const efPendAfter = await queryDb<TrackedMtfSetupRow>(`SELECT * FROM mtf_style_setups WHERE id = 'mtf-scalp-EFPEND'`);
+  assert.strictEqual(efPendAfter[0].signal_state, 'awaiting_entry');
+  console.log('✅ TEST 9: EdgeFinder helper & non-gating Intraday parity on Scalp/Swing passed');
+
+  // TEST 10: Manna SnD Multi-Timeframe Parity (Scalp 15M/5M & Swing 1D/4H, 4H/1H)
+  const makeSeries = (
+    bars: Array<[number, number, number, number]>,
+    startMs: number,
+    stepMs: number
+  ): Candle[] =>
+    bars.map(([open, high, low, close], idx) => ({
+      open,
+      high,
+      low,
+      close,
+      volume: 1500,
+      timestamp: new Date(startMs + idx * stepMs).toISOString()
+    }));
+
+  const sndStrategy = new MannaSndStrategy();
+  const testKillzone: KillzoneInfo = {
+    killzone: 'ny_am',
+    name: 'NY_AM',
+    boundaryET: '08:00',
+    boundaryUTC: '2026-11-16T13:00:00.000Z'
+  };
+
+  // 10a. Scalp (15m / 5m) NQ Long via Manna SnD
+  const baseMs = new Date('2026-11-16T10:00:00.000Z').getTime();
+  const nq15mHtf = makeSeries(
+    [
+      [21060, 21062, 21015, 21020], // leg_down
+      [21020, 21024, 21000, 21016], // base (demand proximal 21020, distal 21000)
+      [21016, 21090, 21015, 21088], // leg_up (departure > 24)
+      [21088, 21110, 21085, 21108],
+      [21108, 21130, 21105, 21125],
+      [21125, 21150, 21120, 21145],
+      [21145, 21165, 21140, 21160],
+      [21160, 21180, 21155, 21175],
+      [21175, 21185, 21170, 21180],
+      [21180, 21210, 21178, 21208], // leg_up
+      [21208, 21220, 21202, 21205], // base (supply proximal 21205, distal 21220)
+      [21205, 21206, 21150, 21154], // leg_down
+      [21154, 21156, 21120, 21125],
+      [21125, 21128, 21090, 21095],
+      [21095, 21100, 21060, 21065],
+      [21065, 21070, 21040, 21045]
+    ],
+    baseMs,
+    15 * 60_000
+  );
+  const nq5mLtf = makeSeries(
+    [
+      [21060, 21065, 21055, 21062],
+      [21062, 21068, 21058, 21064],
+      [21064, 21070, 21060, 21066],
+      [21066, 21072, 21062, 21068],
+      [21068, 21074, 21064, 21070],
+      [21070, 21076, 21066, 21072],
+      [21072, 21078, 21068, 21074],
+      [21074, 21080, 21070, 21072],
+      [21072, 21074, 21064, 21066],
+      [21066, 21068, 21060, 21062],
+      [21062, 21064, 21058, 21060],
+      [21060, 21062, 21026, 21028], // leg_down
+      [21028, 21032, 21020, 21030], // base (demand proximal 21030, distal 21020)
+      [21030, 21065, 21029, 21062], // leg_up
+      [21062, 21064, 21042, 21045],
+      [21045, 21052, 21040, 21045]
+    ],
+    baseMs,
+    5 * 60_000
+  );
+
+  const scalpCands = await sndStrategy.evaluateSetupsForTimeframes(
+    testKillzone,
+    'test_scalp_snd',
+    'futures',
+    ['NQ'],
+    { NQ: 'long' },
+    {
+      htf: '15m',
+      ltf: '5m',
+      htfLabel: '15M',
+      ltfLabel: '5M',
+      strategyId: 'manna_scalper',
+      tradingStyle: 'SCALP',
+      sourceTag: 'mtf_manna_snd',
+      candleFetcher: async (_inst, tf) => (tf === '15m' ? nq15mHtf : nq5mLtf),
+      priceFetcher: async () => 21045
+    }
+  );
+  assert.strictEqual(scalpCands.length, 1, 'Scalp Manna SnD must detect valid 15M curve + 5M DBR demand setup');
+  assert.strictEqual(scalpCands[0].strategy_id, 'manna_scalper');
+  assert.strictEqual(scalpCands[0].r_multiple_1, 2);
+  assert.strictEqual(scalpCands[0].r_multiple_2, 3);
+  const scalpMeta = JSON.parse(scalpCands[0].metadata || '{}');
+  assert.strictEqual(scalpMeta.engine, 'manna_snd');
+  assert.strictEqual(scalpMeta.htf, '15M');
+  assert.strictEqual(scalpMeta.ltf, '5M');
+  assert.ok(scalpMeta.htf_demand_proximal > 0 && scalpMeta.atr14 > 0, 'Scalp candidate must include SnD HTF demand & entry ATR14 metadata');
+  assert.strictEqual(scalpMeta.entry_zone_formation, 'Drop-Base-Rally');
+
+  // 10b. Swing (1d / 4h and 4h / 1h) EUR/USD via Manna SnD + choppy rejection
+  const fxScale = (bars: Array<[number, number, number, number]>): Array<[number, number, number, number]> =>
+    bars.map(([o, h, l, c]) => [
+      Number((1.08 + (o - 21000) * 0.0001).toFixed(5)),
+      Number((1.08 + (h - 21000) * 0.0001).toFixed(5)),
+      Number((1.08 + (l - 21000) * 0.0001).toFixed(5)),
+      Number((1.08 + (c - 21000) * 0.0001).toFixed(5))
+    ]);
+
+  const fxHtfD1 = makeSeries(fxScale(nq15mHtf.map(c => [c.open, c.high, c.low, c.close])), baseMs - 20 * 86400_000, 86400_000);
+  const fxLtf4h = makeSeries(fxScale(nq5mLtf.map(c => [c.open, c.high, c.low, c.close])), baseMs - 20 * 4 * 3600_000, 4 * 3600_000);
+  const fxLtf1h = makeSeries(fxScale(nq5mLtf.map(c => [c.open, c.high, c.low, c.close])), baseMs - 20 * 3600_000, 3600_000);
+
+  const swingD1H4Cands = await sndStrategy.evaluateSetupsForTimeframes(
+    testKillzone,
+    'test_swing_d1h4_snd',
+    'forex',
+    ['EUR/USD'],
+    { 'EUR/USD': 'long' },
+    {
+      htf: '1d',
+      ltf: '4h',
+      htfLabel: '1D',
+      ltfLabel: '4H',
+      strategyId: 'manna_swing',
+      tradingStyle: 'SWING',
+      sourceTag: 'mtf_manna_snd',
+      candleFetcher: async (_inst, tf) => (tf === '1d' ? fxHtfD1 : fxLtf4h),
+      priceFetcher: async () => 1.0845
+    }
+  );
+  assert.strictEqual(swingD1H4Cands.length, 1, 'Swing D1/4H Manna SnD must detect valid setup');
+  assert.strictEqual(swingD1H4Cands[0].strategy_id, 'manna_swing');
+  assert.strictEqual(JSON.parse(swingD1H4Cands[0].metadata || '{}').engine, 'manna_snd');
+
+  const swingH4H1Cands = await sndStrategy.evaluateSetupsForTimeframes(
+    testKillzone,
+    'test_swing_h4h1_snd',
+    'forex',
+    ['EUR/USD'],
+    { 'EUR/USD': 'long' },
+    {
+      htf: '4h',
+      ltf: '1h',
+      htfLabel: '4H',
+      ltfLabel: '1H',
+      strategyId: 'manna_swing',
+      tradingStyle: 'SWING',
+      sourceTag: 'mtf_manna_snd',
+      candleFetcher: async (_inst, tf) => (tf === '4h' ? fxHtfD1.map((c, idx) => ({ ...c, timestamp: new Date(baseMs - (20 - idx) * 4 * 3600_000).toISOString() })) : fxLtf1h),
+      priceFetcher: async () => 1.0845
+    }
+  );
+  assert.strictEqual(swingH4H1Cands.length, 1, 'Swing 4H/1H Manna SnD must detect valid setup');
+
+  // Choppy flat bars without imbalance must be skipped (0 candidates)
+  const choppyBars = makeSeries(
+    Array.from({ length: 20 }, (_, i) => [
+      1.0900,
+      1.0905,
+      1.0895,
+      i % 2 === 0 ? 1.0901 : 1.0899
+    ]),
+    baseMs - 20 * 3600_000,
+    3600_000
+  );
+  const choppyCands = await sndStrategy.evaluateSetupsForTimeframes(
+    testKillzone,
+    'test_choppy_snd',
+    'forex',
+    ['EUR/USD'],
+    { 'EUR/USD': 'long' },
+    {
+      htf: '4h',
+      ltf: '1h',
+      htfLabel: '4H',
+      ltfLabel: '1H',
+      strategyId: 'manna_swing',
+      tradingStyle: 'SWING',
+      candleFetcher: async () => choppyBars,
+      priceFetcher: async () => 1.0900
+    }
+  );
+  assert.strictEqual(choppyCands.length, 0, 'Choppy price action with no imbalance zone must produce 0 Manna SnD candidates');
+  console.log('✅ TEST 10: Manna SnD Multi-Timeframe Parity (15M/5M, 1D/4H, 4H/1H & choppy rejection) passed');
+
+  // TEST 11: Lifecycle & Risk Guard Alignment
+  // 11a. Same-bar false-fill-and-SL bug: candle opens below zoneLow and wicks below SL while high touches zoneLow
+  const falseFillRow = makeRow({ id: 'test-false-fill-sl' });
+  const falseFillRes = evaluateMtfRowLifecycle(
+    falseFillRow,
+    { price: 20984, bid: 20984, ask: 20984.25, spread: 0.25 },
+    [
+      // Opens at 20996 (< zoneLow 21000), drops to SL 20984, high touches 21001
+      { open: 20996, high: 21001, low: 20984, close: 20990, volume: 100, timestamp: '2026-11-16T14:02:00.000Z' }
+    ],
+    5.0,
+    '2026-11-16T14:02:30.000Z'
+  );
+  assert.strictEqual(falseFillRes.signal_state, 'invalidated', 'Bar opening below zoneLow & breaching SL must invalidate pre-entry, not fill & SL');
+  assert.strictEqual(falseFillRes.invalidation_reason, 'stop_breached_pre_entry');
+  assert.strictEqual(falseFillRes.entry_triggered_at, null);
+  assert.strictEqual(falseFillRes.realized_r, 0);
+
+  // 11b. Smart Consecutive 2-Loss Daily Halt (even older than 15m cooldown)
+  const oldToday1 = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const oldToday2 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  for (const [idx, ts] of [[1, oldToday1], [2, oldToday2]] as const) {
+    await queryDb(
+      `INSERT INTO mtf_style_setups (
+        id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+        instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+        stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+        killzone_origin, signal_state, is_breakeven, realized_r, last_price,
+        entry_triggered_at, resolved_at, outcome_type, invalidation_reason, created_at, updated_at
+      ) VALUES (?, ?, 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'HALTINST', 'forex', 'long', 1.1, 1.101, 1.1005, 1.099, 1.099, 1.1035, 1.105, 2, 3, 85, 90, 'ny_am', 'resolved', 0, -1, 1.0989, ?, ?, 'sl_hit', 'sl_hit', ?, ?)`,
+      [`mtf-scalp-HALT-${idx}`, `mtf-scalp-HALT-${idx}`, ts, ts, ts, ts]
+    );
+  }
+  const haltCandidate: MtfStyleSetup = {
+    ...pendingCandidate1,
+    id: 'mtf-scalp-HALT-3',
+    instrument: 'HALTINST',
+    market: 'forex',
+    entry_zone_low: 1.1000,
+    entry_zone_high: 1.1010,
+    entry_zone_mid: 1.1005,
+    stop: 1.0990,
+    initial_stop: 1.0990,
+    tp1: 1.1035,
+    tp2: 1.1050,
+    current_price: 1.1020
+  };
+  const boardHalt = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [haltCandidate]);
+  assert.ok(!boardHalt.setups.some((s) => s.id === 'mtf-scalp-HALT-3'), 'Smart 2-Loss Daily Halt must block 3rd signal on same asset today');
+
+  // 11c. Cross-mode Swing duplicate guard (active d1_h4 blocks h4_h1 on same instrument)
   await queryDb(
     `INSERT INTO mtf_style_setups (
       id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
       instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
       stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
       killzone_origin, signal_state, is_breakeven, realized_r, last_price,
-      created_at, updated_at
-    ) VALUES ('mtf-scalp-EFPEND', 'mtf-scalp-EFPEND', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'EFPEND', 'forex', 'long', 1.1000, 1.1010, 1.1005, 1.0990, 1.0990, 1.1035, 1.1050, 2, 3, 85, 90, 'london', 'awaiting_entry', 0, 0, 1.1020, ?, ?)`,
-    [baseTime, baseTime]
+      entry_price_recorded, entry_triggered_at, created_at, updated_at
+    ) VALUES ('mtf-swing-DUP-d1', 'mtf-swing-DUP-d1', 'SWING', 'd1_h4', 'manna_swing', '1D', '4H', 'DUPFX', 'forex', 'long', 1.1, 1.101, 1.1005, 1.096, 1.096, 1.1095, 1.114, 2, 3, 88, 92, 'london', 'active', 0, 0, 1.1020, 1.1005, ?, ?, ?)`,
+    [baseTime, baseTime, baseTime]
   );
-  const efMap = new Map<string, AssetEdgeScorecard>([
-    ['EFPEND', makeScorecard({ instrument: 'EFPEND', biasLabel: 'Sell', scalpLabel: 'Sell', allAligned: true, dominantBias: 'Sell', summary: '3/3 ALIGNED BEARISH' })]
-  ]);
-  const boardEf = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [], efMap);
-  assert.ok(!boardEf.setups.some((s) => s.id === 'mtf-scalp-EFPEND'), 'Conflicting EdgeFinder bias must clear pending awaiting_entry setup');
-  const efPendAfter = await queryDb<TrackedMtfSetupRow>(`SELECT * FROM mtf_style_setups WHERE id = 'mtf-scalp-EFPEND'`);
-  assert.strictEqual(efPendAfter[0].invalidation_reason, 'edgefinder_conflict');
-  console.log('✅ TEST 9: EdgeFinder agreement & strong confluence gate passed');
+  const dupSwingCandidate: MtfStyleSetup = {
+    ...pendingCandidate1,
+    id: 'mtf-swing-DUP-h4',
+    instrument: 'DUPFX',
+    market: 'forex',
+    strategy_id: 'manna_swing',
+    trading_style: 'SWING',
+    context_tf: '4H',
+    entry_tf: '1H',
+    entry_zone_low: 1.1010,
+    entry_zone_high: 1.1020,
+    entry_zone_mid: 1.1015,
+    stop: 1.0990,
+    initial_stop: 1.0990,
+    tp1: 1.1065,
+    tp2: 1.1090,
+    current_price: 1.1030
+  };
+  const boardDupSwing = await syncMtfSetupsAndGetLiveBoard('swing', 'h4_h1', [dupSwingCandidate]);
+  assert.ok(!boardDupSwing.setups.some((s) => s.id === 'mtf-swing-DUP-h4'), 'Active d1_h4 Swing trade must block duplicate h4_h1 Swing trade on same asset');
+
+  // 11d. Legacy mtf_isolated_desk awaiting_entry cleanup vs active preservation
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price, metadata, created_at, updated_at
+    ) VALUES ('mtf-scalp-LEGPEND', 'mtf-scalp-LEGPEND', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'LEGPEND', 'futures', 'long', 100, 101, 100.5, 95, 95, 111.5, 117, 2, 3, 84, 90, 'ny_am', 'awaiting_entry', 0, 0, 102, ?, ?, ?)`,
+    [JSON.stringify({ source: 'mtf_isolated_desk' }), baseTime, baseTime]
+  );
+  await queryDb(
+    `INSERT INTO mtf_style_setups (
+      id, signature, trading_style, swing_mode, strategy_id, context_tf, entry_tf,
+      instrument, market, bias, entry_zone_low, entry_zone_high, entry_zone_mid,
+      stop, initial_stop, tp1, tp2, r_multiple_1, r_multiple_2, conviction_score, liquidity_score,
+      killzone_origin, signal_state, is_breakeven, realized_r, last_price, entry_price_recorded, entry_triggered_at, metadata, created_at, updated_at
+    ) VALUES ('mtf-scalp-LEGACT', 'mtf-scalp-LEGACT', 'SCALP', NULL, 'manna_scalper', '15M', '5M', 'LEGACT', 'futures', 'long', 100, 101, 100.5, 95, 95, 111.5, 117, 2, 3, 84, 90, 'ny_am', 'active', 0, 0, 103, 100.5, ?, ?, ?, ?)`,
+    [baseTime, JSON.stringify({ source: 'mtf_isolated_desk' }), baseTime, baseTime]
+  );
+  const boardLegacy = await syncMtfSetupsAndGetLiveBoard('scalp', 'd1_h4', [], undefined, true);
+  assert.ok(!boardLegacy.setups.some((s) => s.id === 'mtf-scalp-LEGPEND'), 'Legacy awaiting_entry row must be invalidated when didDiscover=true');
+  assert.ok(boardLegacy.setups.some((s) => s.id === 'mtf-scalp-LEGACT'), 'Legacy active row must remain preserved');
+  const legPendAfter = await queryDb<TrackedMtfSetupRow>(`SELECT * FROM mtf_style_setups WHERE id = 'mtf-scalp-LEGPEND'`);
+  assert.strictEqual(legPendAfter[0].invalidation_reason, 'strategy_realigned_to_manna_snd');
+  console.log('✅ TEST 11: Lifecycle & Risk Guard Alignment passed');
 
   console.log('\n🎉 All Scalping, Swing & Chart Lifecycle tests passed!');
 }
 
+let testExitCode = 0;
 runTests()
   .catch((err) => {
     console.error('❌ Test failed:', err);
-    process.exit(1);
+    testExitCode = 1;
   })
   .finally(() => {
     for (const suffix of ['', '-wal', '-shm']) {
@@ -525,4 +861,5 @@ runTests()
         if (fs.existsSync(tempDbPath + suffix)) fs.unlinkSync(tempDbPath + suffix);
       } catch {}
     }
+    process.exit(testExitCode);
   });

@@ -281,6 +281,7 @@ export function isWeekendMarketClosed(
 }
 
 export interface WeekendCheckableTrade extends TradeLike {
+  metadata?: string | Record<string, unknown> | null;
   time_exited?: string;
   execution_time?: string;
   resolved_at?: string;
@@ -313,28 +314,58 @@ export function isWeekendTrade(trade: WeekendCheckableTrade): boolean {
   return false;
 }
 
-export const SCALP_TRACKING_START_DAY = '2026-11-18';
+export const SCALP_TRACKING_START_DAY = '2026-11-19';
+export const SCALP_TRACKING_START_ISO = '2026-11-19T16:15:00.000Z';
 
 /**
- * Excludes historical Scalping trade records before 2026-11-18 (ET trading day),
- * allowing Scalping calendar tracking cleanly from today onwards.
+ * Excludes historical Scalping trade records before the Manna SnD parameter
+ * alignment cutoff (`2026-11-19T16:15:00.000Z`) or with legacy pre-alignment
+ * `mtf_isolated_desk` metadata, allowing Scalping calendar tracking cleanly onwards.
  */
 export function isPreCutoffScalpTrade(
   trade: WeekendCheckableTrade,
-  cutoffDay: string = SCALP_TRACKING_START_DAY
+  cutoff: string = SCALP_TRACKING_START_ISO
 ): boolean {
   if (getTradeStyleCategory(trade) !== 'scalp') return false;
 
-  const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.created_at;
-  if (exitTs) {
-    const td = getETTradingDayAndSession(exitTs);
-    if (td.tradingDay && td.tradingDay < cutoffDay) return true;
+  if (trade.metadata) {
+    const metaStr = typeof trade.metadata === 'string'
+      ? trade.metadata
+      : JSON.stringify(trade.metadata);
+    if (
+      metaStr.includes('mtf_isolated_desk') &&
+      !metaStr.includes('"engine":"manna_snd"') &&
+      !metaStr.includes('mtf_manna_snd')
+    ) {
+      return true;
+    }
   }
 
+  const exitTs = trade.time_exited || trade.execution_time || trade.resolved_at || trade.created_at;
   const sigTs = trade.time_signaled || trade.created_at;
-  if (sigTs) {
-    const td = getETTradingDayAndSession(sigTs);
-    if (td.tradingDay && td.tradingDay < cutoffDay) return true;
+
+  if (cutoff.includes('T')) {
+    const cutoffMs = new Date(cutoff).getTime();
+    if (Number.isFinite(cutoffMs)) {
+      if (exitTs) {
+        const exitMs = new Date(exitTs).getTime();
+        if (Number.isFinite(exitMs) && exitMs < cutoffMs) return true;
+      }
+      if (sigTs) {
+        const sigMs = new Date(sigTs).getTime();
+        if (Number.isFinite(sigMs) && sigMs < cutoffMs) return true;
+      }
+    }
+  } else {
+    if (exitTs) {
+      const td = getETTradingDayAndSession(exitTs);
+      if (td.tradingDay && td.tradingDay < cutoff) return true;
+    }
+
+    if (sigTs) {
+      const td = getETTradingDayAndSession(sigTs);
+      if (td.tradingDay && td.tradingDay < cutoff) return true;
+    }
   }
 
   return false;

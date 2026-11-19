@@ -1,11 +1,12 @@
-import { computeATR } from './atr';
 import { FOREX_INSTRUMENTS, FUTURES_INSTRUMENTS } from './mock-data';
-import { computeConvictionScore, computeLiquidityScore, computeRMultiple } from './scoring';
-import { getInstrumentDecimals, getTimeframeStopDistance } from './stop-loss-rules';
-import { Bias, Candle } from './types';
-import { aggregateToFourHourCandles, getLiveCandles, getLiveQuoteDetails, prefetchLiveQuotes } from './yahoo-provider';
+import { getInstrumentDecimals } from './stop-loss-rules';
+import { Bias, CandidateSetup } from './types';
+import { getLiveQuoteDetails, prefetchLiveQuotes } from './yahoo-provider';
+import { getUnifiedMarketBiasesForTimeframes } from './bias-engine';
+import { MannaSndStrategy, type MannaSndTimeframeConfig } from './strategies/manna-snd';
 import {
   evaluateEdgeFinderConfluence,
+  getOpenMtfLeaderBias,
   syncMtfSetupsAndGetLiveBoard,
   type EdgeFinderConfluenceDecision
 } from './mtf-style-tracker';
@@ -13,9 +14,18 @@ import {
   buildEdgeFinderSnapshot,
   type AssetEdgeScorecard
 } from '../edge-finder/edge-finder-service';
-import { isTradingSessionActive } from '../scheduler/killzone-mapper';
+import { getCurrentKillzone, isTradingSessionActive } from '../scheduler/killzone-mapper';
+import { newsEngine } from '../news/news-engine';
+import * as queries from '../db/queries';
+import { createLogger } from '../telemetry/logger';
 
 export { evaluateEdgeFinderConfluence, type EdgeFinderConfluenceDecision };
+
+const logger = createLogger('MtfStyleSignals');
+const mannaSndEngine = new MannaSndStrategy();
+
+const POSITIVE_DOLLAR_PAIRS = ['GBP/USD', 'AUD/USD', 'NZD/USD'];
+const INVERSE_DOLLAR_PAIRS = ['USD/JPY', 'USD/CAD', 'USD/CHF'];
 
 export type TradingStyleMode = 'scalp' | 'swing';
 export type SwingPairMode = 'd1_h4' | 'h4_h1';
@@ -71,349 +81,144 @@ export interface MtfStyleSnapshot {
   cached: boolean;
 }
 
-const SCALP_TTL_MS = 60_000;
-const SWING_TTL_MS = 120_000;
+const SCALP_TTL_MS = 5 * 60_000;
+const SWING_TTL_MS = 15 * 60_000;
 
 const discoveryCache = new Map<string, { ts: number }>();
 const inflightRequests = new Map<string, Promise<MtfStyleSnapshot>>();
 
-function computeEma(values: number[], period: number): number {
-  if (values.length === 0) return 0;
-  const k = 2 / (period + 1);
-  let ema = values[0];
-  for (let i = 1; i < values.length; i++) {
-    ema = values[i] * k + ema * (1 - k);
+function getTimeframeConfig(style: TradingStyleMode, swingMode: SwingPairMode): MannaSndTimeframeConfig {
+  if (style === 'scalp') {
+    return {
+      htf: '15m',
+      ltf: '5m',
+      htfLabel: '15M',
+      ltfLabel: '5M',
+      strategyId: 'manna_scalper',
+      tradingStyle: 'SCALP',
+      sourceTag: 'mtf_manna_snd'
+    };
   }
-  return ema;
+  if (swingMode === 'h4_h1') {
+    return {
+      htf: '4h',
+      ltf: '1h',
+      htfLabel: '4H',
+      ltfLabel: '1H',
+      strategyId: 'manna_swing',
+      tradingStyle: 'SWING',
+      sourceTag: 'mtf_manna_snd'
+    };
+  }
+  return {
+    htf: '1d',
+    ltf: '4h',
+    htfLabel: '1D',
+    ltfLabel: '4H',
+    strategyId: 'manna_swing',
+    tradingStyle: 'SWING',
+    sourceTag: 'mtf_manna_snd'
+  };
 }
 
-function getActiveSessionNameUTC(): string {
-  const now = new Date();
-  const etHour = Number(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      hour12: false
-    }).format(now)
-  );
-  if (etHour >= 2 && etHour < 8) return 'london';
-  if (etHour >= 8 && etHour < 14) return 'ny_am';
-  if (etHour >= 14 && etHour < 20) return 'ny_pm';
-  return 'asia';
-}
-
-function determineDirectionalBias(
-  contextCandles: Candle[],
-  fastPeriod: number,
-  slowPeriod: number,
-  style: TradingStyleMode
-): { bias: Bias; strength: number } | null {
-  const closes = contextCandles.map((c) => c.close);
-  const emaFast = computeEma(closes, fastPeriod);
-  const emaSlow = computeEma(closes, slowPeriod);
-  const latestClose = closes[closes.length - 1] || 1;
-  const spreadPct = Math.abs(emaFast - emaSlow) / Math.max(latestClose, 1e-6);
-
-  // Reject flat/choppy regimes where fast/slow EMAs have no meaningful separation
-  const minSpreadPct = style === 'scalp' ? 0.0003 : 0.0008;
-  if (spreadPct < minSpreadPct) {
-    return null;
-  }
-
-  const bias: Bias = emaFast >= emaSlow ? 'long' : 'short';
-
-  // Higher-timeframe structure confluence check (HH/HL vs LH/LL over recent 10 bars)
-  const recentCtx = contextCandles.slice(-10);
-  let hhHlCount = 0;
-  let lhLlCount = 0;
-  for (let i = 1; i < recentCtx.length; i++) {
-    if (recentCtx[i].high > recentCtx[i - 1].high && recentCtx[i].low >= recentCtx[i - 1].low) {
-      hhHlCount++;
-    } else if (recentCtx[i].low < recentCtx[i - 1].low && recentCtx[i].high <= recentCtx[i - 1].high) {
-      lhLlCount++;
+function isWithinHighImpactNewsWindow(now: Date): boolean {
+  try {
+    const newsInfo = newsEngine.hasNyAmHighImpactNews(now);
+    if (!newsInfo.hasNews || !newsInfo.events || newsInfo.events.length === 0) {
+      return false;
     }
+    const nowMs = now.getTime();
+    return newsInfo.events.some((ev) => {
+      const evMs = new Date(ev.eventTime).getTime();
+      return Number.isFinite(evMs) && Math.abs(nowMs - evMs) <= 30 * 60 * 1000;
+    });
+  } catch {
+    return false;
   }
-
-  // Never trade against strict opposing context structure
-  if (bias === 'long' && lhLlCount > hhHlCount) {
-    return null;
-  }
-  if (bias === 'short' && hhHlCount > lhLlCount) {
-    return null;
-  }
-
-  const strength = Math.min(1, 0.74 + Math.min(0.24, spreadPct * 80));
-  return { bias, strength };
 }
 
-async function buildSetupForInstrument(
-  instrument: string,
-  market: 'futures' | 'forex',
+async function convertCandidateToMtfSetup(
+  c: CandidateSetup,
   style: TradingStyleMode,
   swingMode: SwingPairMode,
-  edgeScorecard?: AssetEdgeScorecard | null,
-  enforceEdgeFinder = false
+  contextLabel: string,
+  entryLabel: string,
+  nowIso: string
 ): Promise<MtfStyleSetup | null> {
-  const contextTfCode: '15m' | '4h' | '1d' =
-    style === 'scalp' ? '15m' : swingMode === 'd1_h4' ? '1d' : '4h';
-  const entryTfCode: '5m' | '4h' | '1h' =
-    style === 'scalp' ? '5m' : swingMode === 'd1_h4' ? '4h' : '1h';
+  const quote = await getLiveQuoteDetails(c.instrument).catch(() => null);
+  const market = c.market === 'forex' ? 'forex' : 'futures';
+  const decimals = getInstrumentDecimals(c.instrument, market);
+  const round = (v: number) => Number(v.toFixed(decimals));
 
-  const contextLabel =
-    style === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H';
-  const entryLabel =
-    style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';
-
-  const [rawContext, rawEntry, quote] = await Promise.all([
-    getLiveCandles(instrument, contextTfCode, contextTfCode === '4h' ? 120 : 60),
-    getLiveCandles(instrument, entryTfCode, entryTfCode === '4h' ? 120 : 60),
-    getLiveQuoteDetails(instrument).catch(() => null)
-  ]);
-
-  const contextCandles = contextTfCode === '4h' ? aggregateToFourHourCandles(rawContext) : rawContext;
-  const entryCandles = entryTfCode === '4h' ? aggregateToFourHourCandles(rawEntry) : rawEntry;
-
-  if (contextCandles.length < 15 || entryCandles.length < 15) {
-    return null;
-  }
-
-  const currentPrice = (quote?.price && quote.price > 0)
-    ? quote.price
-    : entryCandles[entryCandles.length - 1].close;
+  const currentPrice = quote?.price && quote.price > 0 ? quote.price : c.entry_zone_mid;
   if (!currentPrice || currentPrice <= 0) return null;
 
   const currentBid = quote?.bid && quote.bid > 0 ? quote.bid : currentPrice;
   const currentAsk = quote?.ask && quote.ask > 0 ? quote.ask : currentPrice;
 
-  const atr14 = computeATR(entryCandles, 14);
-  if (!atr14 || atr14 <= 0) return null;
-
-  const biasRes = determineDirectionalBias(
-    contextCandles,
-    style === 'scalp' ? 9 : 12,
-    style === 'scalp' ? 21 : 26,
-    style
-  );
-  if (!biasRes) return null;
-  const { bias, strength } = biasRes;
-
-  const efDecision = enforceEdgeFinder
-    ? evaluateEdgeFinderConfluence(edgeScorecard, style, bias)
-    : null;
-  if (efDecision && !efDecision.approved) {
-    return null;
-  }
-
-  // Reject falling-knife / vertical-squeeze entries where latest completed entry bar closed strongly against bias
-  const prevBar = entryCandles[entryCandles.length - 2] || entryCandles[entryCandles.length - 1];
-  const barBody = Math.abs(prevBar.close - prevBar.open);
-  if (bias === 'long' && prevBar.close < prevBar.open && barBody > atr14 * 0.75) {
-    return null;
-  }
-  if (bias === 'short' && prevBar.close > prevBar.open && barBody > atr14 * 0.75) {
-    return null;
-  }
-
-  const decimals = getInstrumentDecimals(instrument, market);
-  const round = (v: number) => Number(v.toFixed(decimals));
-
-  const zoneOffsetMult = style === 'scalp' ? 0.35 : 0.45;
-  const stopPadMult = style === 'scalp' ? 0.15 : 0.25;
-  const zoneHalfWidthMult = style === 'scalp' ? 0.14 : 0.18;
-
-  // Search true structural swing lookbacks so stops protect beyond real swings, never micro 5-bar noise
-  const candidateLookbacks = style === 'scalp' ? [10, 16, 22] : [8, 14, 20];
-  let selectedZone: {
-    entryLow: number;
-    entryHigh: number;
-    entryMid: number;
-    stop: number;
-    tp1: number;
-    tp2: number;
-    r1: number;
-    r2: number;
-    risk: number;
-    anchorTime: string;
-  } | null = null;
-
-  const defaultSpread = market === 'forex' ? (instrument.includes('JPY') ? 0.015 : 0.00012) : 0.25;
+  const defaultSpread = market === 'forex' ? (c.instrument.includes('JPY') ? 0.015 : 0.00012) : 0.25;
   const effectiveSpread = quote?.spread && quote.spread > 0
     ? Math.min(quote.spread, defaultSpread * 2.5)
     : defaultSpread;
 
-  for (const lookback of candidateLookbacks) {
-    const recentBars = entryCandles.slice(-lookback);
-    if (recentBars.length === 0) continue;
+  const publishedRisk = Math.abs(c.entry_zone_mid - c.stop);
+  if (publishedRisk <= 0) return null;
 
-    let anchorBar = recentBars[0];
-    if (bias === 'long') {
-      for (const b of recentBars) {
-        if (b.low < anchorBar.low) anchorBar = b;
-      }
-    } else {
-      for (const b of recentBars) {
-        if (b.high > anchorBar.high) anchorBar = b;
-      }
-    }
+  // Never allow spread cost to exceed 22% of the stop distance
+  if (effectiveSpread / publishedRisk > 0.22) return null;
 
-    const swingLow = Math.min(...recentBars.map((c) => c.low));
-    const swingHigh = Math.max(...recentBars.map((c) => c.high));
+  const isLong = c.bias === 'long';
+  // Pre-publish Bid/Ask gate: discard setups whose SL is already breached or TP1 already hit
+  const isInvalidLivePrice = isLong
+    ? (currentBid <= c.stop || currentBid >= c.tp1)
+    : (currentAsk >= c.stop || currentAsk <= c.tp1);
+  if (isInvalidLivePrice) return null;
 
-    const rawEntryMid = bias === 'long'
-      ? swingLow + atr14 * zoneOffsetMult
-      : swingHigh - atr14 * zoneOffsetMult;
-    const rawStop = bias === 'long'
-      ? swingLow - atr14 * stopPadMult
-      : swingHigh + atr14 * stopPadMult;
-
-    const rawRisk = Math.abs(rawEntryMid - rawStop);
-    const risk = getTimeframeStopDistance(instrument, atr14, rawRisk, market, entryTfCode);
-
-    const entryMid = round(rawEntryMid);
-    const entryLow = round(rawEntryMid - atr14 * zoneHalfWidthMult);
-    const entryHigh = round(rawEntryMid + atr14 * zoneHalfWidthMult);
-    const stop = round(bias === 'long' ? entryMid - risk : entryMid + risk);
-    const publishedRisk = Math.abs(entryMid - stop);
-    if (publishedRisk <= 0) continue;
-
-    // Never allow spread cost to exceed 22% of the stop distance
-    if (effectiveSpread / publishedRisk > 0.22) continue;
-
-    const tp1 = round(bias === 'long' ? entryMid + publishedRisk * 2.0 : entryMid - publishedRisk * 2.0);
-    const tp2 = round(bias === 'long' ? entryMid + publishedRisk * 3.0 : entryMid - publishedRisk * 3.0);
-
-    // Pre-publish gate: discard setups whose zone is already penetrated past its far edge, TP1 already reached, or SL breached
-    const isValidPrice = bias === 'long'
-      ? (currentBid >= entryLow && currentBid > stop && currentBid < tp1 && (currentPrice - entryHigh) <= atr14 * 3.0)
-      : (currentAsk <= entryHigh && currentAsk < stop && currentAsk > tp1 && (entryLow - currentPrice) <= atr14 * 3.0);
-
-    if (!isValidPrice) continue;
-
-    const r1 = computeRMultiple(entryMid, tp1, stop, bias);
-    const r2 = computeRMultiple(entryMid, tp2, stop, bias);
-    if (r1 < 1.95) continue;
-
-    selectedZone = {
-      entryLow,
-      entryHigh,
-      entryMid,
-      stop,
-      tp1,
-      tp2,
-      r1,
-      r2,
-      risk: publishedRisk,
-      anchorTime: anchorBar.timestamp
-    };
-    break;
-  }
-
-  if (!selectedZone) {
-    return null;
-  }
-
-  const { entryLow, entryHigh, entryMid, stop, tp1, tp2, r1, r2, risk, anchorTime } = selectedZone;
-  const nowIso = new Date().toISOString();
-
-  // Limit fill check at creation: strictly inside [entryLow, entryHigh] so full planned risk stays intact
-  const filledAtCreation = bias === 'long'
-    ? (currentAsk >= entryLow && currentAsk <= entryHigh && currentBid > stop)
-    : (currentBid >= entryLow && currentBid <= entryHigh && currentAsk < stop);
-
-  const signalState: 'active' | 'awaiting_entry' = filledAtCreation ? 'active' : 'awaiting_entry';
-  const entryPriceRecorded = filledAtCreation
-    ? round(Math.max(entryLow, Math.min(entryHigh, bias === 'long' ? currentAsk : currentBid)))
-    : undefined;
-  const entryTriggeredAt = filledAtCreation ? nowIso : undefined;
-
-  const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
+  const zoneLow = Math.min(c.entry_zone_low, c.entry_zone_high);
+  const zoneHigh = Math.max(c.entry_zone_low, c.entry_zone_high);
+  const inZone = currentPrice >= zoneLow && currentPrice <= zoneHigh;
   const distanceRaw = inZone
     ? 0
-    : Math.abs(currentPrice - entryMid) / Math.max(risk, 1e-6);
+    : Math.abs(currentPrice - c.entry_zone_mid) / Math.max(publishedRisk, 1e-6);
   const distanceR = Number(Math.min(9.99, distanceRaw).toFixed(2));
 
-  const unrealizedR = filledAtCreation
-    ? Number(
-        ((bias === 'long' ? currentPrice - (entryPriceRecorded || entryMid) : (entryPriceRecorded || entryMid) - currentPrice) / Math.max(risk, 1e-6)).toFixed(2)
-      )
-    : undefined;
+  const r1 = c.r_multiple_1 ?? 2.0;
+  const r2 = c.r_multiple_2 ?? 3.0;
+  const tp2 = c.tp2 ?? round(isLong ? c.entry_zone_mid + publishedRisk * 3.0 : c.entry_zone_mid - publishedRisk * 3.0);
+  const uniqueId = `mtf-${style}-${style === 'swing' ? swingMode + '-' : ''}${c.instrument.replace('/', '')}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-  const lastVol = entryCandles[entryCandles.length - 1].volume || 10000;
-  const avgVol =
-    entryCandles.reduce((acc, c) => acc + (c.volume || 10000), 0) / entryCandles.length;
-  const spread = quote?.spread && quote.spread > 0
-    ? quote.spread
-    : currentPrice * (market === 'forex' ? 0.0002 : 0.0001);
-  const liquidityScore = computeLiquidityScore(lastVol, avgVol, spread);
-
-  const convictionScore = computeConvictionScore({
-    supportResistanceStrength: 0.84,
-    structureAlignment: strength,
-    volumeProfile: Math.min(0.95, 0.75 + (lastVol / Math.max(avgVol, 1)) * 0.1),
-    killzoneTiming: 0.88,
-    multiTimeframeAlignment: strength,
-    liquidityPoolMagnet: 0.83,
-    fvgDisbalance: 0.81,
-    relativeStrength: 0.84,
-    atrAlignment: 0.85
-  });
-
-  const killzone = getActiveSessionNameUTC();
-  const styleLabel = style === 'scalp' ? 'Scalping' : 'Swing';
-  const efSuffix = efDecision
-    ? ` EdgeFinder: ${efDecision.biasLabel} (${efDecision.score > 0 ? '+' : ''}${efDecision.score}) · ${efDecision.summary}.`
-    : '';
-  const selectionRationale = `${styleLabel} desk (${contextLabel} Context + ${entryLabel} Entry). ${bias.toUpperCase()} structural alignment detected on ${contextLabel} with ${entryLabel} liquidity retrace zone at ${entryMid}. Risk floor calibrated to ${entryLabel} ATR with ${r1.toFixed(2)}R TP1 / ${r2.toFixed(2)}R TP2.${efSuffix}`;
-
-  const uniqueId = `mtf-${style}-${style === 'swing' ? swingMode + '-' : ''}${instrument.replace('/', '')}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
+  // Pending Limit Orders ONLY at creation (matching Intraday PublishGate)
   return {
     id: uniqueId,
-    instrument,
+    instrument: c.instrument,
     market,
     strategy_id: style === 'scalp' ? 'manna_scalper' : 'manna_swing',
     trading_style: style === 'scalp' ? 'SCALP' : 'SWING',
     context_tf: contextLabel,
     entry_tf: entryLabel,
-    bias,
-    signal_state: signalState,
-    state: signalState,
-    entry_zone_low: entryLow,
-    entry_zone_high: entryHigh,
-    entry_zone_mid: entryMid,
-    stop,
-    initial_stop: stop,
-    tp1,
+    bias: c.bias,
+    signal_state: 'awaiting_entry',
+    state: 'awaiting_entry',
+    entry_zone_low: c.entry_zone_low,
+    entry_zone_high: c.entry_zone_high,
+    entry_zone_mid: c.entry_zone_mid,
+    stop: c.stop,
+    initial_stop: c.stop,
+    tp1: c.tp1,
     tp2,
     r_multiple_1: r1,
     r_multiple_2: r2,
-    conviction_score: convictionScore,
-    liquidity_score: liquidityScore,
+    conviction_score: c.conviction_score ?? 85,
+    liquidity_score: c.liquidity_score ?? 85,
     current_price: round(currentPrice),
     distance_to_entry_r: distanceR,
-    unrealizedR,
+    unrealizedR: undefined,
     is_breakeven: 0,
-    entry_price_recorded: entryPriceRecorded,
-    entry_triggered_at: entryTriggeredAt,
+    entry_price_recorded: undefined,
+    entry_triggered_at: undefined,
     created_at: nowIso,
-    killzone_origin: killzone,
-    metadata: JSON.stringify({
-      source: 'mtf_isolated_desk',
-      trading_style: style.toUpperCase(),
-      htf: contextLabel,
-      ltf: entryLabel,
-      context_tf: contextLabel,
-      entry_tf: entryLabel,
-      entry_zone_base_time: anchorTime,
-      order_type: filledAtCreation ? 'MARKET ORDER' : (bias === 'long' ? 'BUY LIMIT' : 'SELL LIMIT'),
-      edgefinder_confluence: efDecision ? {
-        matchType: efDecision.matchType,
-        score: efDecision.score,
-        biasLabel: efDecision.biasLabel,
-        summary: efDecision.summary
-      } : undefined,
-      selection_rationale: selectionRationale
-    })
+    killzone_origin: c.killzone_origin || 'ny_am',
+    metadata: c.metadata || '{}'
   };
 }
 
@@ -447,33 +252,158 @@ export async function getMtfStyleSignals(
     const enforceSessionWindow = process.env.NODE_ENV !== 'test';
     const canScanFutures = !enforceSessionWindow || isTradingSessionActive('futures', now);
     const canScanForex = !enforceSessionWindow || isTradingSessionActive('forex', now);
+    const tfConfig = getTimeframeConfig(style, swingMode);
+    const contextTf = tfConfig.htfLabel || (style === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H');
+    const entryTf = tfConfig.ltfLabel || (style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H');
 
     let discoveredCandidates: MtfStyleSetup[] = [];
+    let didDiscover = false;
+
     if (shouldDiscover && (canScanFutures || canScanForex)) {
-      const targets: Array<{ instrument: string; market: 'futures' | 'forex' }> = [
-        ...(canScanFutures ? FUTURES_INSTRUMENTS.map((instrument) => ({ instrument, market: 'futures' as const })) : []),
-        ...(canScanForex ? FOREX_INSTRUMENTS.map((instrument) => ({ instrument, market: 'forex' as const })) : [])
-      ];
+      didDiscover = true;
+      const killzone = getCurrentKillzone(now);
+      const runId = `mtf_${style}_${swingMode}_${Date.now()}`;
+      const disabledAssets = await queries.getDisabledDisplayAssets(killzone.killzone);
 
-      await prefetchLiveQuotes(targets.map((t) => t.instrument));
+      const targetFutures = canScanFutures
+        ? FUTURES_INSTRUMENTS.filter((i) => !disabledAssets.includes(i))
+        : [];
+      const targetForex = canScanForex
+        ? FOREX_INSTRUMENTS.filter((i) => !disabledAssets.includes(i))
+        : [];
+      const allTargets = [...targetFutures, ...targetForex];
 
-      const settled = await Promise.allSettled(
-        targets.map((t) =>
-          buildSetupForInstrument(
-            t.instrument,
-            t.market,
-            style,
-            swingMode,
-            edgeByInst.get(t.instrument.toUpperCase()) || null,
-            hasEdgeData
+      if (allTargets.length > 0) {
+        await prefetchLiveQuotes(allTargets);
+        const unifiedBiases = await getUnifiedMarketBiasesForTimeframes(allTargets, tfConfig.htf, tfConfig.ltf);
+
+        const futuresCandidates = targetFutures.length > 0
+          ? await mannaSndEngine.evaluateSetupsForTimeframes(
+              killzone,
+              runId,
+              'futures',
+              targetFutures,
+              unifiedBiases,
+              tfConfig
+            )
+          : [];
+
+        const forexCandidates: CandidateSetup[] = [];
+        if (targetForex.length > 0) {
+          const isPreLondonFilterActive = await queries.isPreLondonFilterEnabled('manna_snd');
+          const currentUtcHour = now.getUTCHours();
+          const isPreLondonWindow = killzone.killzone !== 'london' && (currentUtcHour >= 4 && currentUtcHour < 7);
+          const inNewsWindow = isWithinHighImpactNewsWindow(now);
+
+          if (isPreLondonFilterActive && isPreLondonWindow) {
+            logger.info(
+              { style, swingMode, utcHour: currentUtcHour, killzone: killzone.killzone },
+              'Pre-London Forex Filter active: suppressing MTF Forex discovery during pre-session rollover.'
+            );
+          } else if (inNewsWindow) {
+            logger.info(
+              { style, swingMode },
+              'High-impact news window (±30m): suppressing MTF Forex discovery until post-release stabilization.'
+            );
+          } else {
+            // 1. Evaluate EUR/USD first as Macro Dollar Leader
+            let leaderBias: Bias | null = null;
+            const eurCandidates = targetForex.includes('EUR/USD')
+              ? await mannaSndEngine.evaluateSetupsForTimeframes(
+                  killzone,
+                  runId,
+                  'forex',
+                  ['EUR/USD'],
+                  unifiedBiases,
+                  tfConfig
+                )
+              : [];
+
+            if (eurCandidates.length > 0) {
+              leaderBias = eurCandidates[0].bias;
+            }
+
+            if (!leaderBias) {
+              leaderBias = await getOpenMtfLeaderBias(style, swingMode);
+            }
+            if (!leaderBias) {
+              if (unifiedBiases['EUR/USD']) {
+                leaderBias = unifiedBiases['EUR/USD'];
+              } else {
+                const directEur = await getUnifiedMarketBiasesForTimeframes(['EUR/USD'], tfConfig.htf, tfConfig.ltf);
+                leaderBias = directEur['EUR/USD'] || 'long';
+              }
+            }
+
+            // 2. Align Follower Biases with EUR/USD Dollar Leader
+            const followerBiases: Record<string, Bias> = { ...unifiedBiases };
+            if (leaderBias) {
+              for (const inst of targetForex) {
+                const upper = inst.toUpperCase();
+                if (POSITIVE_DOLLAR_PAIRS.includes(upper)) {
+                  followerBiases[inst] = leaderBias;
+                } else if (INVERSE_DOLLAR_PAIRS.includes(upper)) {
+                  followerBiases[inst] = leaderBias === 'long' ? 'short' : 'long';
+                }
+              }
+            }
+
+            // 3. Evaluate non-EUR/USD Forex pairs
+            const nonEurForex = targetForex.filter((i) => i.toUpperCase() !== 'EUR/USD');
+            const rawFollowerCandidates = nonEurForex.length > 0
+              ? await mannaSndEngine.evaluateSetupsForTimeframes(
+                  killzone,
+                  runId,
+                  'forex',
+                  nonEurForex,
+                  followerBiases,
+                  tfConfig
+                )
+              : [];
+
+            // 4. Strict Leader-Correlation Enforcement + Aligned Re-scan
+            const finalFollowerCandidates: CandidateSetup[] = [];
+            for (const cand of rawFollowerCandidates) {
+              const upper = cand.instrument.toUpperCase();
+              const isPositive = POSITIVE_DOLLAR_PAIRS.includes(upper);
+              const isInverse = INVERSE_DOLLAR_PAIRS.includes(upper);
+
+              if (leaderBias && (isPositive || isInverse)) {
+                const expectedBias: Bias = isPositive ? leaderBias : (leaderBias === 'long' ? 'short' : 'long');
+                if (cand.bias !== expectedBias) {
+                  const reevaluated = await mannaSndEngine.evaluateSetupsForTimeframes(
+                    killzone,
+                    runId,
+                    'forex',
+                    [cand.instrument],
+                    { [cand.instrument]: expectedBias },
+                    tfConfig
+                  );
+                  const aligned = reevaluated.find((s) => s.bias === expectedBias);
+                  if (aligned) {
+                    finalFollowerCandidates.push(aligned);
+                  }
+                  continue;
+                }
+              }
+              finalFollowerCandidates.push(cand);
+            }
+
+            forexCandidates.push(...eurCandidates, ...finalFollowerCandidates);
+          }
+        }
+
+        const nowIso = now.toISOString();
+        const converted = await Promise.all(
+          [...futuresCandidates, ...forexCandidates].map((c) =>
+            convertCandidateToMtfSetup(c, style, swingMode, contextTf, entryTf, nowIso)
           )
-        )
-      );
+        );
 
-      discoveredCandidates = settled
-        .filter((r): r is PromiseFulfilledResult<MtfStyleSetup | null> => r.status === 'fulfilled' && r.value !== null)
-        .map((r) => r.value!)
-        .sort((a, b) => b.conviction_score - a.conviction_score);
+        discoveredCandidates = converted
+          .filter((s): s is MtfStyleSetup => s !== null)
+          .sort((a, b) => b.conviction_score - a.conviction_score);
+      }
 
       discoveryCache.set(cacheKey, { ts: Date.now() });
     }
@@ -483,11 +413,9 @@ export async function getMtfStyleSignals(
       style,
       swingMode,
       discoveredCandidates,
-      hasEdgeData ? edgeByInst : undefined
+      hasEdgeData ? edgeByInst : undefined,
+      didDiscover
     );
-
-    const contextTf = style === 'scalp' ? '15M' : swingMode === 'd1_h4' ? '1D' : '4H';
-    const entryTf = style === 'scalp' ? '5M' : swingMode === 'd1_h4' ? '4H' : '1H';
 
     return {
       style,
@@ -533,12 +461,12 @@ export function startMtfDiscoveryWarmup(): void {
 
   mtfScalpWarmupTimer = setInterval(() => {
     runMtfWarmupCycle('scalp', 'd1_h4');
-  }, 55_000);
+  }, 5 * 60_000);
 
   mtfSwingWarmupTimer = setInterval(() => {
     runMtfWarmupCycle('swing', 'd1_h4');
     runMtfWarmupCycle('swing', 'h4_h1');
-  }, 110_000);
+  }, 15 * 60_000);
 }
 
 export function stopMtfDiscoveryWarmup(): void {
