@@ -250,7 +250,7 @@ export function ExpandableCalendar({
 }: ExpandableCalendarProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [internalMarketFilter, setInternalMarketFilter] = useState<'all' | 'forex' | 'futures'>(propsMarketFilter || 'all');
-  const [styleFilter, setStyleFilter] = useState<TradingStyleFilter>('intraday');
+  const [styleFilter, setStyleFilter] = useState<TradingStyleFilter>('all');
   const [exitProfile, setExitProfile] = useState<ExitProfile>('80_20');
   const [selectedDegrees, setSelectedDegrees] = useState<ConfluenceDegreeKey[]>([
     'STRONG_CONFLUENCE',
