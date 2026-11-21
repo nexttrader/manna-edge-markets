@@ -282,6 +282,49 @@ export function computeSignalCardConfluence(
   };
 }
 
+export interface SignalCardConfluenceGateResult {
+  approved: boolean;
+  categoryKey: ConfluenceCategoryKey | 'UNAVAILABLE';
+  badgeText: string;
+  reason: string;
+  classification: SignalCardConfluenceClassification | null;
+}
+
+/**
+ * Single source of truth EdgeFinder Confluence Gate across Scalping, Swing, and Intraday.
+ * Strictly approves ONLY signals classified as STRONG_CONFLUENCE (3/3 TF) or EDGEFINDER_AGREES
+ * on the Signal Card badge. Rejects PARTIAL_CONFLUENCE, EDGEFINDER_NEUTRAL, and COUNTER_MACRO_BIAS.
+ */
+export function evaluateSignalCardConfluenceGate(
+  signalBias: string,
+  scorecard: AssetEdgeScorecard | null | undefined
+): SignalCardConfluenceGateResult {
+  if (!scorecard) {
+    return {
+      approved: false,
+      categoryKey: 'UNAVAILABLE',
+      badgeText: 'NO EDGEFINDER DATA',
+      reason: 'Missing EdgeFinder scorecard',
+      classification: null
+    };
+  }
+
+  const classification = computeSignalCardConfluence(signalBias, scorecard);
+  const approved =
+    classification.categoryKey === 'STRONG_CONFLUENCE' ||
+    classification.categoryKey === 'EDGEFINDER_AGREES';
+
+  return {
+    approved,
+    categoryKey: classification.categoryKey,
+    badgeText: classification.badgeText,
+    reason: approved
+      ? `${classification.badgeText}: ${classification.summaryText}`
+      : `Rejected ${classification.categoryKey}: ${classification.summaryText}`,
+    classification
+  };
+}
+
 let tableEnsured = false;
 
 export async function ensureSignalConfluenceTable(): Promise<void> {

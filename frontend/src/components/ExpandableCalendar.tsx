@@ -72,7 +72,61 @@ interface Outcome {
   invalidation_detail?: string;
   trade_id?: string;
   metadata?: any;
+  confluence_category?: ConfluenceDegreeKey;
+  confluence_badge?: string;
+  confluence_state?: string;
 }
+
+export type ConfluenceDegreeKey =
+  | 'STRONG_CONFLUENCE'
+  | 'EDGEFINDER_AGREES'
+  | 'PARTIAL_CONFLUENCE'
+  | 'EDGEFINDER_NEUTRAL'
+  | 'COUNTER_MACRO_BIAS';
+
+const CONFLUENCE_DEGREE_OPTIONS: Array<{
+  id: ConfluenceDegreeKey;
+  label: string;
+  shortLabel: string;
+  badgeText: string;
+  title: string;
+}> = [
+  {
+    id: 'STRONG_CONFLUENCE',
+    label: '✓ Strong Confluence',
+    shortLabel: '✓ Strong',
+    badgeText: '✓ STRONG CONFLUENCE',
+    title: 'Strong Confluence (3/3 TF): All 3 EdgeFinder horizons (Scalp + Intraday + Swing) align with signal (click to multi-select)',
+  },
+  {
+    id: 'EDGEFINDER_AGREES',
+    label: '✓ EdgeFinder Agrees',
+    shortLabel: '✓ EF Agrees',
+    badgeText: '✓ EDGEFINDER AGREES',
+    title: 'EdgeFinder Agrees: Intraday EdgeFinder agrees or 2+ horizons agree with 0 opposing (click to multi-select)',
+  },
+  {
+    id: 'PARTIAL_CONFLUENCE',
+    label: '◐ Partial Confluence',
+    shortLabel: '◐ Partial',
+    badgeText: '◐ PARTIAL CONFLUENCE',
+    title: 'Partial Confluence: 1 EdgeFinder horizon agrees while wider horizons are mixed (click to multi-select)',
+  },
+  {
+    id: 'EDGEFINDER_NEUTRAL',
+    label: '≈ EdgeFinder Neutral',
+    shortLabel: '≈ EF Neutral',
+    badgeText: '≈ EDGEFINDER NEUTRAL',
+    title: 'EdgeFinder Neutral: EdgeFinder macro & flow scores are neutral/balanced (click to multi-select)',
+  },
+  {
+    id: 'COUNTER_MACRO_BIAS',
+    label: '! Counter Macro Bias',
+    shortLabel: '! Counter Macro',
+    badgeText: '! COUNTER MACRO BIAS',
+    title: 'Counter Macro Bias: Signal opposes Intraday EdgeFinder or 2+ horizons without support (click to multi-select)',
+  },
+];
 
 const EXIT_PROFILE_OPTIONS: Array<{ id: ExitProfile; label: string; title: string }> = [
   {
@@ -198,6 +252,13 @@ export function ExpandableCalendar({
   const [internalMarketFilter, setInternalMarketFilter] = useState<'all' | 'forex' | 'futures'>(propsMarketFilter || 'all');
   const [styleFilter, setStyleFilter] = useState<TradingStyleFilter>('intraday');
   const [exitProfile, setExitProfile] = useState<ExitProfile>('80_20');
+  const [selectedDegrees, setSelectedDegrees] = useState<ConfluenceDegreeKey[]>([
+    'STRONG_CONFLUENCE',
+    'EDGEFINDER_AGREES',
+  ]);
+  const [applyNewScalpRules, setApplyNewScalpRules] = useState<boolean>(true);
+  const [confluenceLookup, setConfluenceLookup] = useState<Record<string, ConfluenceDegreeKey>>({});
+  const [confluenceLoaded, setConfluenceLoaded] = useState<boolean>(false);
   const [internalIncludeFees, toggleInternalFees] = useFeesToggle();
   const activeIncludeFees = propsIncludeFees !== undefined ? propsIncludeFees : internalIncludeFees;
   const handleToggleFees = propsOnToggleFees || toggleInternalFees;
@@ -208,6 +269,39 @@ export function ExpandableCalendar({
   const [copiedTradeId, setCopiedTradeId] = useState<string | null>(null);
   const [riskPerR, setRiskPerR] = useState<number>(100); // User adjustable risk size in USD
   const [liveMacroEvents, setLiveMacroEvents] = useState<LiveFeedEventLike[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/edge-finder/confluence-analytics/report?period=all`, {
+      headers: {
+        'x-user-role': 'super_admin',
+        'x-user-email': 'chadwinsolomon@gmail.com',
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const signals = data?.report?.signals || data?.signals;
+        if (Array.isArray(signals)) {
+          const map: Record<string, ConfluenceDegreeKey> = {};
+          for (const sig of signals) {
+            if (sig?.setupId && sig?.categoryKey) {
+              map[String(sig.setupId)] = sig.categoryKey as ConfluenceDegreeKey;
+            }
+          }
+          setConfluenceLookup(map);
+        }
+      })
+      .catch(() => {
+        // Pre-tagged confluence_category on outcomes still works offline
+      })
+      .finally(() => {
+        if (!cancelled) setConfluenceLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -236,6 +330,65 @@ export function ExpandableCalendar({
   const handleMarketFilterChange = (m: 'all' | 'forex' | 'futures') => {
     setInternalMarketFilter(m);
     if (onMarketFilterChange) onMarketFilterChange(m);
+  };
+
+  const toggleConfluenceDegree = (deg: ConfluenceDegreeKey) => {
+    setSelectedDegrees((prev) =>
+      prev.includes(deg) ? prev.filter((d) => d !== deg) : [...prev, deg]
+    );
+  };
+
+  const hasAnyConfluenceData = useMemo(() => {
+    if (Object.keys(confluenceLookup).length > 0) return true;
+    return (
+      outcomes.some((o) => Boolean(o.confluence_category)) ||
+      mtfOutcomes.some((o) => Boolean(o.confluence_category))
+    );
+  }, [confluenceLookup, outcomes, mtfOutcomes]);
+
+  const getTradeConfluenceDegree = (o: Outcome): ConfluenceDegreeKey | null => {
+    if (o.confluence_category) return o.confluence_category;
+    const rawId = String(o.setup_id || o.trade_id || o.id || '').replace(/^mtf_out_/, '');
+    if (rawId && confluenceLookup[rawId]) return confluenceLookup[rawId];
+    return null;
+  };
+
+  const matchesSelectedDegrees = (o: Outcome): boolean => {
+    if (selectedDegrees.length === 0) return true;
+    if (!hasAnyConfluenceData && !confluenceLoaded) return true;
+    const deg = getTradeConfluenceDegree(o);
+    return deg !== null && selectedDegrees.includes(deg);
+  };
+
+  const matchesNewScalpRules = (o: Outcome): boolean => {
+    if (!applyNewScalpRules) return true;
+    if (getTradeStyleCategory(o) !== 'scalp') return true;
+    let meta: Record<string, any> = {};
+    if (typeof o.metadata === 'string' && o.metadata.trim()) {
+      try {
+        meta = JSON.parse(o.metadata);
+      } catch {
+        meta = {};
+      }
+    } else if (o.metadata && typeof o.metadata === 'object') {
+      meta = o.metadata;
+    }
+    const bias = String(o.bias || 'long').toLowerCase();
+    const trend = String(meta.trendLtf || meta.trend15m || '').toLowerCase();
+    if (trend) {
+      const trendAgrees = bias === 'long' ? trend === 'up' : trend === 'down';
+      if (!trendAgrees) return false;
+    }
+    const curve = String(meta.curveLocation || '').toLowerCase();
+    const formation = String(meta.formation || meta.entry_zone_formation || '');
+    if (bias === 'short' && curve === 'low' && formation === 'Rally-Base-Drop') {
+      return false;
+    }
+    return true;
+  };
+
+  const matchesActivePolicy = (o: Outcome): boolean => {
+    return matchesSelectedDegrees(o) && matchesNewScalpRules(o);
   };
 
   const currentYear = currentDate.getFullYear();
@@ -294,12 +447,13 @@ export function ExpandableCalendar({
     merged.forEach(o => {
       const style = getTradeStyleCategory(o);
       if (style === 'intraday' && !matchesStrategy(o.strategy_id)) return;
+      if (!matchesActivePolicy(o)) return;
       counts[style]++;
       counts.all++;
     });
 
     return { combinedOutcomes: merged, styleCounts: counts };
-  }, [outcomes, mtfOutcomes, enableStyleToggle, strategyFilter]);
+  }, [outcomes, mtfOutcomes, enableStyleToggle, strategyFilter, selectedDegrees, applyNewScalpRules, confluenceLookup, confluenceLoaded, hasAnyConfluenceData]);
 
   const activeStyleFilter: TradingStyleFilter = enableStyleToggle ? styleFilter : 'intraday';
 
@@ -310,11 +464,34 @@ export function ExpandableCalendar({
     return true;
   };
 
-  // 1. Calculate overall Forex vs Futures realized R splits (respecting Style, Exit Profile + Fees toggle)
+  // Count trades per EdgeFinder Confluence Degree for the active Style, Strategy, Market, and New Rules filter
+  const degreeCounts = useMemo(() => {
+    const counts: Record<ConfluenceDegreeKey, number> = {
+      STRONG_CONFLUENCE: 0,
+      EDGEFINDER_AGREES: 0,
+      PARTIAL_CONFLUENCE: 0,
+      EDGEFINDER_NEUTRAL: 0,
+      COUNTER_MACRO_BIAS: 0,
+    };
+    combinedOutcomes.forEach((o) => {
+      if (!matchesActiveStyleAndStrategy(o)) return;
+      if (!matchesNewScalpRules(o)) return;
+      if (currentMarketFilter !== 'all' && getOutcomeMarket(o) !== currentMarketFilter) return;
+      const deg = getTradeConfluenceDegree(o);
+      if (deg && counts[deg] !== undefined) {
+        counts[deg]++;
+      }
+    });
+    return counts;
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter, applyNewScalpRules, confluenceLookup]);
+
+  // 1. Calculate overall Forex vs Futures realized R splits (respecting Style, Confluence Degrees, New Rules, Exit Profile + Fees toggle)
   const {
     totalFuturesR,
     totalForexR,
     totalCombinedR,
+    unfilteredActiveTotalR,
+    confluenceDeltaR,
     baselineDeltaR,
     totalFeesR,
     forexCount,
@@ -322,6 +499,8 @@ export function ExpandableCalendar({
   } = useMemo(() => {
     let fut = 0;
     let fx = 0;
+    let unfiltFut = 0;
+    let unfiltFx = 0;
     let baseFut = 0;
     let baseFx = 0;
     let feesSum = 0;
@@ -333,6 +512,12 @@ export function ExpandableCalendar({
       const r = getEffectiveRealizedR(o, activeIncludeFees, exitProfile);
       const baseR = getEffectiveRealizedR(o, activeIncludeFees, '80_20');
       const mkt = getOutcomeMarket(o);
+      if (mkt === 'forex') {
+        unfiltFx += r;
+      } else {
+        unfiltFut += r;
+      }
+      if (!matchesActivePolicy(o)) return;
       if (mkt === 'forex') {
         fx += r;
         baseFx += baseR;
@@ -348,6 +533,12 @@ export function ExpandableCalendar({
     });
     const activeTotal =
       currentMarketFilter === 'forex' ? fx : currentMarketFilter === 'futures' ? fut : fut + fx;
+    const unfiltActiveTotal =
+      currentMarketFilter === 'forex'
+        ? unfiltFx
+        : currentMarketFilter === 'futures'
+        ? unfiltFut
+        : unfiltFut + unfiltFx;
     const baseTotal =
       currentMarketFilter === 'forex'
         ? baseFx
@@ -359,23 +550,26 @@ export function ExpandableCalendar({
       totalFuturesR: fut,
       totalForexR: fx,
       totalCombinedR: fut + fx,
+      unfilteredActiveTotalR: Number(unfiltActiveTotal.toFixed(2)),
+      confluenceDeltaR: Number((activeTotal - unfiltActiveTotal).toFixed(2)),
       baselineDeltaR: Number((activeTotal - baseTotal).toFixed(2)),
       totalFeesR: feesSum,
       forexCount: fCount,
       futuresCount: futCount
     };
-  }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter, exitProfile]);
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, activeIncludeFees, currentMarketFilter, exitProfile, selectedDegrees, applyNewScalpRules, confluenceLookup, confluenceLoaded, hasAnyConfluenceData]);
 
-  // 2. Filter outcomes by the selected style, strategy and market, mapping them to trading days and sessions
+  // 2. Filter outcomes by the selected style, strategy, market, confluence degrees, and new rules
   const filteredOutcomesList = useMemo(() => {
     return combinedOutcomes.filter(o => {
       if (!matchesActiveStyleAndStrategy(o)) return false;
+      if (!matchesActivePolicy(o)) return false;
       if (currentMarketFilter !== 'all') {
         if (getOutcomeMarket(o) !== currentMarketFilter) return false;
       }
       return true;
     });
-  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter]);
+  }, [combinedOutcomes, strategyFilter, activeStyleFilter, currentMarketFilter, selectedDegrees, applyNewScalpRules, confluenceLookup, confluenceLoaded, hasAnyConfluenceData]);
 
   const processedOutcomes = useMemo(() => {
     // Group by Trading Day
@@ -646,6 +840,84 @@ export function ExpandableCalendar({
     </div>
   );
 
+  const renderConfluenceDegreeToggle = (stopPropagation = false) => {
+    const isAllDegrees = selectedDegrees.length === 0;
+    return (
+      <div
+        className="calendar-confluence-toggle"
+        role="group"
+        aria-label="EdgeFinder confluence degree and rule filter"
+        onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
+      >
+        <button
+          type="button"
+          className="calendar-confluence-btn"
+          data-degree="NEW_RULES"
+          aria-pressed={applyNewScalpRules}
+          title="Reflect live Manna v2 Scalping rules (5M LTF trend must agree + no Rally-Base-Drop short at bottom 33% of 15M curve). Click to toggle raw unfiltered history."
+          onClick={() => setApplyNewScalpRules((prev) => !prev)}
+        >
+          🛡️ Scalp Rules: {applyNewScalpRules ? 'ON' : 'OFF'}
+        </button>
+        <button
+          type="button"
+          className="calendar-confluence-btn"
+          data-degree="ALL"
+          aria-pressed={isAllDegrees}
+          title="Show all EdgeFinder confluence degrees"
+          onClick={() => setSelectedDegrees([])}
+        >
+          All Degrees
+        </button>
+        {CONFLUENCE_DEGREE_OPTIONS.map((opt) => {
+          const isPressed = selectedDegrees.includes(opt.id);
+          const count = degreeCounts[opt.id] ?? 0;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              className="calendar-confluence-btn"
+              data-degree={opt.id}
+              aria-pressed={isPressed}
+              title={opt.title}
+              onClick={() => toggleConfluenceDegree(opt.id)}
+            >
+              {opt.shortLabel} ({count})
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderConfluenceDelta = () => {
+    if (selectedDegrees.length === 0 && !applyNewScalpRules) return null;
+    const parts: string[] = [];
+    if (selectedDegrees.length > 0) {
+      parts.push(
+        CONFLUENCE_DEGREE_OPTIONS.filter((o) => selectedDegrees.includes(o.id))
+          .map((o) => o.shortLabel.replace(/^[✓◐≈!]\s*/, ''))
+          .join(' + ')
+      );
+    }
+    if (applyNewScalpRules && (activeStyleFilter === 'scalp' || activeStyleFilter === 'all')) {
+      parts.push('Scalp v2 Rules');
+    }
+    if (parts.length === 0) return null;
+    return (
+      <>
+        <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+        <span className="calendar-sim-badge">
+          ACTIVE POLICY ({parts.join(' · ')}):{' '}
+          <strong className={getPnlClass(confluenceDeltaR)}>
+            {formatPNLString(confluenceDeltaR)} ({formatCurrency(confluenceDeltaR)})
+          </strong>{' '}
+          vs Raw All-Trades ({formatPNLString(unfilteredActiveTotalR)})
+        </span>
+      </>
+    );
+  };
+
   const renderBaselineDelta = () => {
     if (exitProfile === '80_20') return null;
     const modeLabel = exitProfile === 'all_2r' ? 'All 2R' : 'All 3R';
@@ -737,6 +1009,7 @@ export function ExpandableCalendar({
                   💸 Fees: {activeIncludeFees ? 'ON' : 'OFF'}
                 </button>
                 {renderExitProfileToggle(true)}
+                {renderConfluenceDegreeToggle(true)}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', marginTop: '4px', flexWrap: 'wrap' }}>
                 {currentMarketFilter === 'all' ? (
@@ -759,6 +1032,7 @@ export function ExpandableCalendar({
                     <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
                   </>
                 )}
+                {renderConfluenceDelta()}
                 {renderBaselineDelta()}
                 {activeIncludeFees && totalFeesR > 0 && (
                   <>
@@ -827,6 +1101,7 @@ export function ExpandableCalendar({
                   <span style={{ color: '#ccc' }}><strong className={getPnlClass(totalFuturesR)}>{formatPNLString(totalFuturesR)} ({formatCurrency(totalFuturesR)})</strong> across {futuresCount} trades</span>
                 </>
               )}
+              {renderConfluenceDelta()}
               {renderBaselineDelta()}
               {activeIncludeFees && totalFeesR > 0 && (
                 <>
@@ -956,6 +1231,8 @@ export function ExpandableCalendar({
           </button>
 
           {renderExitProfileToggle(false)}
+
+          {renderConfluenceDegreeToggle(false)}
 
           {/* Risk unit size selection */}
           <div className="risk-input-group">
@@ -1282,6 +1559,20 @@ export function ExpandableCalendar({
                                 <span className={`trade-strat-badge ${trade.bias}`}>
                                   {trade.bias?.toUpperCase()}
                                 </span>
+                                {(() => {
+                                  const deg = getTradeConfluenceDegree(trade);
+                                  const degMeta = deg ? CONFLUENCE_DEGREE_OPTIONS.find((o) => o.id === deg) : null;
+                                  if (!degMeta) return null;
+                                  return (
+                                    <span
+                                      className="trade-confluence-badge"
+                                      data-degree={degMeta.id}
+                                      title={degMeta.title}
+                                    >
+                                      {degMeta.badgeText}
+                                    </span>
+                                  );
+                                })()}
                                 <span 
                                   className="trade-card-id-badge font-mono"
                                   title={`Trade ID: ${trade.setup_id || trade.id}\nClick to copy Trade ID`}

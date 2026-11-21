@@ -4,6 +4,8 @@ import { getUnifiedMarketBiases } from './bias-engine';
 import { strategyRegistry } from './strategies/strategy-registry';
 import { createLogger } from '../telemetry/logger';
 import * as queries from '../db/queries';
+import { buildEdgeFinderSnapshot, findEdgeFinderScorecard } from '../edge-finder/edge-finder-service';
+import { evaluateSignalCardConfluenceGate } from '../edge-finder/confluence-analytics';
 
 const logger = createLogger('UnifiedDiscovery');
 
@@ -205,6 +207,38 @@ export async function discoverUnifiedSetups(
   if (targetStrategyId && targetStrategyId !== 'all') {
     futures = futures.filter(c => (c.strategy_id || 'sentinel_v2') === targetStrategyId);
     forex   = forex.filter(c => (c.strategy_id || 'sentinel_v2') === targetStrategyId);
+  }
+
+  // Strict Signal Card EdgeFinder Confluence Gate (STRONG_CONFLUENCE + EDGEFINDER_AGREES ONLY):
+  // Blocks COUNTER_MACRO_BIAS, EDGEFINDER_NEUTRAL, and PARTIAL_CONFLUENCE across Intraday Futures & Forex.
+  if (process.env.NODE_ENV !== 'test' && (futures.length > 0 || forex.length > 0)) {
+    const edgeSnapshot = await buildEdgeFinderSnapshot(false).catch(() => null);
+    const edgeScorecards = edgeSnapshot?.scorecards || [];
+    if (edgeScorecards.length > 0) {
+      const gateCandidate = (c: CandidateSetup): boolean => {
+        const sc = findEdgeFinderScorecard(c.instrument, edgeScorecards);
+        if (!sc) return true;
+        const gate = evaluateSignalCardConfluenceGate(c.bias, sc);
+        if (!gate.approved) {
+          logger.info(
+            {
+              instrument: c.instrument,
+              market: c.market,
+              bias: c.bias,
+              strategyId: c.strategy_id,
+              categoryKey: gate.categoryKey,
+              reason: gate.reason
+            },
+            `🛡️ Intraday EdgeFinder Confluence Gate blocked ${c.instrument} ${c.bias.toUpperCase()} (${gate.categoryKey})`
+          );
+          return false;
+        }
+        return true;
+      };
+
+      futures = futures.filter(gateCandidate);
+      forex   = forex.filter(gateCandidate);
+    }
   }
 
   return { futures, forex };

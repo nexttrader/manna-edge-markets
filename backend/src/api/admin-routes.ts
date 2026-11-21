@@ -1438,7 +1438,36 @@ router.get('/analytics', async (req: Request, res: Response) => {
     const avgTimeToFill = fillTimeCount > 0 ? Number((totalFillTimeMs / (fillTimeCount * 60000)).toFixed(1)) : 0;
     const avgHoldingDuration = holdingTimeCount > 0 ? Number((totalHoldingTimeMs / (holdingTimeCount * 60000)).toFixed(1)) : 0;
 
-    const mtfOutcomes = await getMtfCalendarOutcomes().catch(() => []);
+    const mtfOutcomesRaw = await getMtfCalendarOutcomes().catch(() => []);
+
+    const confluenceBySetupId = new Map<string, { category_key: string; badge_text: string; confluence_state: string }>();
+    try {
+      const confRows = await queryDb<{ setup_id: string; category_key: string; badge_text: string; confluence_state: string }>(
+        `SELECT setup_id, category_key, badge_text, confluence_state FROM signal_confluence_logs`
+      );
+      for (const r of confRows) {
+        if (r.setup_id) {
+          confluenceBySetupId.set(String(r.setup_id), r);
+        }
+      }
+    } catch {
+      // Table may not exist yet before first confluence report run
+    }
+
+    const attachConfluence = (item: any) => {
+      const rawId = String(item.setup_id || item.trade_id || item.id || '').replace(/^mtf_out_/, '');
+      const conf = confluenceBySetupId.get(rawId);
+      if (!conf) return item;
+      return {
+        ...item,
+        confluence_category: conf.category_key,
+        confluence_badge: conf.badge_text,
+        confluence_state: conf.confluence_state
+      };
+    };
+
+    const recentOutcomesWithConfluence = enrichedOutcomes.map(attachConfluence);
+    const mtfOutcomes = mtfOutcomesRaw.map(attachConfluence);
 
     res.json({
       summary: {
@@ -1483,7 +1512,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       convictionPerformance,
       invalidations: invStats,
       killzones: killzonePerformance,
-      recentOutcomes: enrichedOutcomes,
+      recentOutcomes: recentOutcomesWithConfluence,
       mtfOutcomes
     });
   } catch (error) {

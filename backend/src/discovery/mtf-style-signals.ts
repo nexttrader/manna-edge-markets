@@ -12,8 +12,10 @@ import {
 } from './mtf-style-tracker';
 import {
   buildEdgeFinderSnapshot,
+  findEdgeFinderScorecard,
   type AssetEdgeScorecard
 } from '../edge-finder/edge-finder-service';
+import { evaluateSignalCardConfluenceGate } from '../edge-finder/confluence-analytics';
 import { getCurrentKillzone, isTradingSessionActive } from '../scheduler/killzone-mapper';
 import { newsEngine } from '../news/news-engine';
 import * as queries from '../db/queries';
@@ -240,13 +242,12 @@ export async function getMtfStyleSignals(
     const shouldDiscover = forceRefresh || !existingScan || Date.now() - existingScan.ts >= ttl;
 
     const edgeSnapshot = await buildEdgeFinderSnapshot(false).catch(() => null);
+    const edgeScorecards: AssetEdgeScorecard[] = edgeSnapshot?.scorecards || [];
     const edgeByInst = new Map<string, AssetEdgeScorecard>();
-    if (edgeSnapshot?.scorecards) {
-      for (const sc of edgeSnapshot.scorecards) {
-        edgeByInst.set(sc.instrument.toUpperCase(), sc);
-      }
+    for (const sc of edgeScorecards) {
+      edgeByInst.set(sc.instrument.toUpperCase(), sc);
     }
-    const hasEdgeData = edgeByInst.size > 0;
+    const hasEdgeData = edgeScorecards.length > 0;
 
     const now = new Date();
     const enforceSessionWindow = process.env.NODE_ENV !== 'test';
@@ -400,9 +401,37 @@ export async function getMtfStyleSignals(
           )
         );
 
-        discoveredCandidates = converted
-          .filter((s): s is MtfStyleSetup => s !== null)
-          .sort((a, b) => b.conviction_score - a.conviction_score);
+        const validConverted = converted.filter((s): s is MtfStyleSetup => s !== null);
+
+        // Strict Signal Card EdgeFinder Confluence Gate (STRONG_CONFLUENCE + EDGEFINDER_AGREES ONLY):
+        // Blocks COUNTER_MACRO_BIAS, EDGEFINDER_NEUTRAL, and PARTIAL_CONFLUENCE across Scalping & Swing.
+        const gatedCandidates: MtfStyleSetup[] = [];
+        for (const setup of validConverted) {
+          if (hasEdgeData) {
+            const sc = findEdgeFinderScorecard(setup.instrument, edgeScorecards);
+            if (sc) {
+              edgeByInst.set(setup.instrument.toUpperCase(), sc);
+              const gate = evaluateSignalCardConfluenceGate(setup.bias, sc);
+              if (!gate.approved) {
+                logger.info(
+                  {
+                    style,
+                    swingMode,
+                    instrument: setup.instrument,
+                    bias: setup.bias,
+                    categoryKey: gate.categoryKey,
+                    reason: gate.reason
+                  },
+                  `🛡️ EdgeFinder Confluence Gate blocked ${style.toUpperCase()} ${setup.instrument} ${setup.bias.toUpperCase()} (${gate.categoryKey})`
+                );
+                continue;
+              }
+            }
+          }
+          gatedCandidates.push(setup);
+        }
+
+        discoveredCandidates = gatedCandidates.sort((a, b) => b.conviction_score - a.conviction_score);
       }
 
       discoveryCache.set(cacheKey, { ts: Date.now() });

@@ -590,6 +590,13 @@ export class MannaSndStrategy implements IStrategyEngine {
         const ltfZones = this.findZonesWithIndex(candlesLtf);
         const isLong = allowedAction === 'BUY';
 
+        // Verified Scalping Rule 2: 5M LTF trend must strictly agree with signal bias
+        // (eliminates sideways / counter-5M-trend whipsaws without impacting Intraday or Swing)
+        if (tfConfig?.tradingStyle === 'SCALP') {
+          const ltfTrendAgrees = isLong ? trendLtf === 'up' : trendLtf === 'down';
+          if (!ltfTrendAgrees) continue;
+        }
+
         let selectedZone: Zone | null = null;
         if (isLong) {
           // LTF Entry Zone MUST sit strictly BETWEEN HTF Demand distal and HTF Supply proximal boundaries
@@ -645,6 +652,16 @@ export class MannaSndStrategy implements IStrategyEngine {
 
         // If neither an open-curve LTF zone nor a nested LTF zone in the HTF area qualifies, skip this session
         if (!selectedZone) continue;
+
+        // Verified Scalping Rule 3: Block selling a Rally-Base-Drop reversal zone at the bottom 33% of the 15M demand curve
+        if (
+          tfConfig?.tradingStyle === 'SCALP' &&
+          !isLong &&
+          curveLocation === 'low' &&
+          selectedZone.formation === 'Rally-Base-Drop'
+        ) {
+          continue;
+        }
 
         const bias: Bias = isLong ? 'long' : 'short';
         const initialLevels = this.buildSetupLevels({
