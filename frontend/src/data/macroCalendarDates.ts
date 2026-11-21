@@ -40,10 +40,18 @@ const FOMC_META = {
 
 const ELECTION_META = {
   type: 'ELECTION' as const,
-  label: 'ELECTION',
+  label: 'ELECTION DAY',
   title: 'US Election Day',
   timeET: 'All Day ET',
   impactNote: 'US federal/general Election Day — elevated headline risk, positioning shifts, and overnight/post-election repricing across US indices (NQ/ES/YM), yields, gold, and USD pairs.',
+};
+
+const ELECTION_RESULTS_META = {
+  type: 'ELECTION' as const,
+  label: 'ELECTION RESULTS',
+  title: 'US Election Results',
+  timeET: 'All Day ET',
+  impactNote: 'Day after US Election Day — post-election vote results, macro policy repricing, and heightened cross-asset volatility across US indices (NQ/ES/YM), yields, gold, and USD pairs.',
 };
 
 const MACRO_META_BY_TYPE: Record<MacroEventType, typeof CPI_META | typeof NFP_META | typeof FOMC_META | typeof ELECTION_META> = {
@@ -109,12 +117,32 @@ const FOMC_DATES: readonly { dateStr: string; hasSep: boolean }[] = [
   { dateStr: '2027-11-17', hasSep: false },
 ];
 
-// Official US General Election Days (Tuesday next after the first Monday in November, 2024–2027)
-const ELECTION_DATES: readonly { dateStr: string; title: string }[] = [
-  { dateStr: '2024-11-05', title: 'US Presidential & General Election Day' },
-  { dateStr: '2025-11-04', title: 'US Off-Year General Election Day' },
-  { dateStr: '2026-11-03', title: 'US Midterm General Election Day' },
-  { dateStr: '2027-11-02', title: 'US Off-Year General Election Day' },
+// Official US General Election Days & Next-Day Election Results (Tuesday/Wednesday after first Monday in November, 2024–2027)
+const ELECTION_DATES: readonly { dateStr: string; resultsDateStr: string; title: string; resultsTitle: string }[] = [
+  {
+    dateStr: '2024-11-05',
+    resultsDateStr: '2024-11-06',
+    title: 'US Presidential & General Election Day',
+    resultsTitle: 'US Presidential & General Election Results',
+  },
+  {
+    dateStr: '2025-11-04',
+    resultsDateStr: '2025-11-05',
+    title: 'US Off-Year General Election Day',
+    resultsTitle: 'US Off-Year General Election Results',
+  },
+  {
+    dateStr: '2026-11-03',
+    resultsDateStr: '2026-11-04',
+    title: 'US Midterm General Election Day',
+    resultsTitle: 'US Midterm General Election Results',
+  },
+  {
+    dateStr: '2027-11-02',
+    resultsDateStr: '2027-11-03',
+    title: 'US Off-Year General Election Day',
+    resultsTitle: 'US Off-Year General Election Results',
+  },
 ];
 
 export const STATIC_MACRO_EVENTS_BY_DATE: Record<string, MacroCalendarEvent[]> = (() => {
@@ -140,11 +168,16 @@ export const STATIC_MACRO_EVENTS_BY_DATE: Record<string, MacroCalendarEvent[]> =
         : FOMC_META.title,
     });
   }
-  for (const { dateStr, title } of ELECTION_DATES) {
+  for (const { dateStr, resultsDateStr, title, resultsTitle } of ELECTION_DATES) {
     add({
       dateStr,
       ...ELECTION_META,
       title,
+    });
+    add({
+      dateStr: resultsDateStr,
+      ...ELECTION_RESULTS_META,
+      title: resultsTitle,
     });
   }
 

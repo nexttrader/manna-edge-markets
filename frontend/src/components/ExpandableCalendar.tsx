@@ -1273,9 +1273,9 @@ export function ExpandableCalendar({
             <span className="day-macro-badge macro-fomc">FOMC</span>
             <span className="macro-key-desc">14:00 ET</span>
           </span>
-          <span className="macro-key-item" title="US General & Midterm Election Day">
-            <span className="day-macro-badge macro-election">ELECTION</span>
-            <span className="macro-key-desc">US Vote</span>
+          <span className="macro-key-item" title="US General & Midterm Election Day and Next-Day Election Results">
+            <span className="day-macro-badge macro-election">ELECTION DAY</span>
+            <span className="macro-key-desc">Vote / Results</span>
           </span>
           <span className="macro-legend-divider">|</span>
           <span className="session-legend-group">
